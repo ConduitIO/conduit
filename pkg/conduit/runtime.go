@@ -91,6 +91,11 @@ type Runtime struct {
 	// means no token is configured (only possible on loopback binds).
 	apiToken string
 
+	// apiRejections counts and logs requests refused by the API access
+	// controls; created on first use, shared by the gRPC and HTTP listeners.
+	apiRejectionsOnce sync.Once
+	apiRejectionsVal  *apisec.Rejections
+
 	DB               database.DB
 	Orchestrator     *orchestrator.Orchestrator
 	ProvisionService *provisioning.Service
@@ -1070,6 +1075,13 @@ func (l promLogger) Println(v ...any) {
 	l.logger.Warn(context.Background()).Msg(strings.TrimSpace(fmt.Sprintln(v...)))
 }
 
+func (r *Runtime) apiRejections() *apisec.Rejections {
+	r.apiRejectionsOnce.Do(func() {
+		r.apiRejectionsVal = apisec.NewRejections(r.metricsRegisterer, r.logger)
+	})
+	return r.apiRejectionsVal
+}
+
 func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, error) {
 	unary := []grpc.UnaryServerInterceptor{
 		grpcutil.RequestIDUnaryServerInterceptor(r.logger),
@@ -1079,7 +1091,7 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 	if r.apiToken != "" {
 		// The token check runs before anything else sees the call, and the
 		// stream interceptor also covers server reflection.
-		auth := apisec.NewAuthenticator(r.apiToken, r.logger)
+		auth := apisec.NewAuthenticator(r.apiToken, r.apiRejections())
 		unary = append([]grpc.UnaryServerInterceptor{auth.UnaryInterceptor()}, unary...)
 		stream = append(stream, auth.StreamInterceptor())
 	}
@@ -1289,14 +1301,14 @@ func (r *Runtime) serveHTTPAPI(
 		// protection and the legitimate host names are unknowable.
 		ValidateHost: isLoopbackBind(r.Config.API.HTTP.Address),
 		AllowedHosts: r.Config.API.HTTP.AllowedHosts,
-		Logger:       r.logger,
+		Rejections:   r.apiRejections(),
 	}
 	handler := buildAPIHandler(ctx, gwmux, policy, r.logger)
 	if r.apiToken != "" {
 		// Gates /v1, /openapi, /metrics and the inspector WebSocket. It sits
 		// inside uiMiddleware, so only the embedded UI's static assets are
 		// served without a token.
-		handler = apisec.NewAuthenticator(r.apiToken, r.logger).HTTP(handler)
+		handler = apisec.NewAuthenticator(r.apiToken, r.apiRejections()).HTTP(handler)
 		r.logger.Info(ctx).Msg("API token authentication is enabled for the HTTP and gRPC APIs")
 	} else {
 		r.logger.Info(ctx).Msg("API token authentication is disabled: the loopback-only API accepts any local client; set api.token-file to require a token")

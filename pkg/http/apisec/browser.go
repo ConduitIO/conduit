@@ -23,7 +23,6 @@ import (
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
-	"github.com/conduitio/conduit/pkg/foundation/log"
 )
 
 // BrowserPolicy decides which browser-originated requests may reach the HTTP
@@ -41,7 +40,8 @@ type BrowserPolicy struct {
 	// is set, on top of localhost, 127.0.0.1 and [::1].
 	AllowedHosts []string
 
-	Logger log.CtxLogger
+	// Rejections counts and logs refusals; nil disables both.
+	Rejections *Rejections
 }
 
 // hostName returns the lower-cased host part of an HTTP Host value, without
@@ -147,18 +147,16 @@ func jsonContentType(r *http.Request) bool {
 func (p BrowserPolicy) Guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := p.CheckRequest(r); err != nil {
-			code := ""
 			if ce, ok := conduiterr.Get(err); ok {
-				code = ce.Code.Reason()
+				p.Rejections.Record(r.Context(), ce.Code, r.RemoteAddr, "rejected HTTP request")
 			}
-			p.Logger.Warn(r.Context()).Str("code", code).Str("remote_addr", r.RemoteAddr).
-				Msg("rejected HTTP request")
 			writeHTTPError(w, http.StatusForbidden, err)
 			return
 		}
 		if isMutating(r.Method) && !jsonContentType(r) {
 			ce := conduiterr.New(CodeContentTypeUnsupported, "mutating requests must use Content-Type: application/json")
 			ce.Suggestion = "send the request body as JSON with the header `Content-Type: application/json`"
+			p.Rejections.Record(r.Context(), CodeContentTypeUnsupported, r.RemoteAddr, "rejected HTTP request")
 			writeHTTPError(w, http.StatusUnsupportedMediaType, ce)
 			return
 		}

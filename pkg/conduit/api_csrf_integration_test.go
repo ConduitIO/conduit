@@ -15,10 +15,12 @@
 package conduit
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"testing"
 
+	json "github.com/goccy/go-json"
 	"github.com/gorilla/websocket"
 	"github.com/matryer/is"
 )
@@ -388,4 +390,48 @@ func withDefault(h map[string]string, k, v string) map[string]string {
 		out[k] = v
 	}
 	return out
+}
+
+// Body-less mutating requests need no Content-Type, so the Content-Type rule
+// does not cover them; the Origin rule must. A page on another site must not be
+// able to start, stop or delete anything with a body-less request.
+func TestCSRF_CrossOriginBodylessLifecycleCalls(t *testing.T) {
+	a := startSecureAPI(t, nil)
+	is := is.New(t)
+
+	code, body := a.do(t, "POST", "/v1/pipelines", `{"config":{"name":"victim"}}`, map[string]string{"Content-Type": "application/json"})
+	is.Equal(code, 200)
+	var created struct {
+		ID string `json:"id"`
+	}
+	is.NoErr(json.Unmarshal([]byte(body), &created))
+	is.True(created.ID != "")
+
+	evil := map[string]string{"Origin": "http://evil.example"}
+	for _, c := range []struct{ method, path string }{
+		{"POST", "/v1/pipelines/" + created.ID + "/start"},
+		{"POST", "/v1/pipelines/" + created.ID + "/stop"},
+		{"DELETE", "/v1/pipelines/" + created.ID},
+	} {
+		code, body := a.do(t, c.method, c.path, "", evil)
+		is.Equal(code, 403)
+		is.True(strings.Contains(body, "api.origin_forbidden"))
+	}
+	// Also with the type a form would use and an empty body, and as an opaque origin.
+	code, _ = a.do(t, "POST", "/v1/pipelines/"+created.ID+"/start", "", map[string]string{"Origin": "null"})
+	is.Equal(code, 403)
+	code, _ = a.do(t, "POST", "/v1/pipelines/"+created.ID+"/start", "", map[string]string{"Origin": "http://evil.example", "Content-Type": "application/x-www-form-urlencoded"})
+	is.Equal(code, 403)
+
+	// Nothing happened: the pipeline still exists and never ran.
+	is.Equal(a.pipelineCount(), 1)
+	pl, err := a.r.Orchestrator.Pipelines.Get(context.Background(), created.ID)
+	is.NoErr(err)
+	is.Equal(pl.GetStatus().String(), "UserStopped")
+
+	// The same calls without an Origin (curl, the CLI) reach the handler: the
+	// answer is the handler's, not a guard refusal.
+	code, body = a.do(t, "POST", "/v1/pipelines/"+created.ID+"/start", "", nil)
+	is.True(code != 403 && code != 415)
+	is.True(!strings.Contains(body, "api.origin_forbidden"))
 }

@@ -101,7 +101,7 @@ func TestBrowserPolicy_CheckRequest_HostIsCheckedBeforeSameOrigin(t *testing.T) 
 }
 
 func TestBrowserPolicy_Guard_ContentType(t *testing.T) {
-	p := BrowserPolicy{Logger: log.Nop()}
+	p := BrowserPolicy{Rejections: NewRejections(nil, log.Nop())}
 	next, calls := okHandler()
 	h := p.Guard(next)
 
@@ -155,7 +155,7 @@ func TestBrowserPolicy_Guard_ContentType(t *testing.T) {
 }
 
 func TestBrowserPolicy_Guard_OriginAppliesToEveryMethod(t *testing.T) {
-	p := BrowserPolicy{Logger: log.Nop()}
+	p := BrowserPolicy{Rejections: NewRejections(nil, log.Nop())}
 	next, calls := okHandler()
 	h := p.Guard(next)
 	for _, m := range []string{"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"} {

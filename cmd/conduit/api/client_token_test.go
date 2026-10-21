@@ -41,7 +41,7 @@ const clientTestToken = "0123456789abcdef0123456789abcdef"
 func startGatedServer(t *testing.T) (addr string, seen chan string) {
 	t.Helper()
 	seen = make(chan string, 8)
-	auth := apisec.NewAuthenticator(clientTestToken, log.Nop())
+	auth := apisec.NewAuthenticator(clientTestToken, apisec.NewRejections(nil, log.Nop()))
 	srv := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			func(ctx context.Context, req any, info *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {

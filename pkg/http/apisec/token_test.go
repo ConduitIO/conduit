@@ -170,7 +170,7 @@ func TestAuthenticator_HTTP(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 			next, calls := okHandler()
-			h := NewAuthenticator(goodToken, log.Nop()).HTTP(next)
+			h := NewAuthenticator(goodToken, NewRejections(nil, log.Nop())).HTTP(next)
 			req := httptest.NewRequestWithContext(context.Background(), tc.method, tc.path, nil)
 			for k, v := range tc.headers {
 				req.Header.Set(k, v)
@@ -193,7 +193,7 @@ func TestAuthenticator_DoesNotLogCredentials(t *testing.T) {
 	var sb strings.Builder
 	logger := log.New(zerologNew(&sb))
 	next, _ := okHandler()
-	h := NewAuthenticator(goodToken, logger).HTTP(next)
+	h := NewAuthenticator(goodToken, NewRejections(nil, logger)).HTTP(next)
 	req := httptest.NewRequestWithContext(context.Background(), "GET", "/v1/pipelines", nil)
 	req.Header.Set("Authorization", "Bearer presented-secret-value")
 	h.ServeHTTP(httptest.NewRecorder(), req)
