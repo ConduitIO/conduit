@@ -35,6 +35,7 @@ type secAPI struct {
 	r        *Runtime
 	httpAddr string // host:port
 	grpcAddr string // host:port
+	logs     *lockedBuffer
 }
 
 // startSecureAPI starts a Runtime whose API config is DefaultConfig's, with
@@ -78,6 +79,7 @@ func startSecureAPI(t *testing.T, mutate func(*Config)) *secAPI {
 		r:        r,
 		grpcAddr: waitForAddress(t, logs, "grpc API started"),
 		httpAddr: waitForAddress(t, logs, "http API started"),
+		logs:     logs,
 	}
 }
 
