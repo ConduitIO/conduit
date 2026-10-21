@@ -20,6 +20,7 @@ import (
 
 	"github.com/conduitio/conduit-commons/hostpolicy"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/foundation/urlredact"
 	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 )
 
@@ -133,7 +134,7 @@ func parseAmbientEndpoint(raw string) (hostpolicy.Endpoint, error) {
 	// egress.ParseAllowEntry drops user info, a query and a fragment without
 	// complaint; an allowlist entry carrying them is a mistake, so refuse it.
 	if strings.ContainsAny(raw, "@?#") {
-		return hostpolicy.Endpoint{}, fmt.Errorf("entry %q must be a plain https://host[:port] (no user info, query or fragment)", raw)
+		return hostpolicy.Endpoint{}, fmt.Errorf("entry %q must be a plain https://host[:port] (no user info, query or fragment)", urlredact.String(raw))
 	}
 	e, err := egress.ParseAllowEntry(raw)
 	if err != nil {
