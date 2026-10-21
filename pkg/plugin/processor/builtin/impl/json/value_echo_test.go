@@ -15,9 +15,10 @@
 package json
 
 import (
-	stdjson "encoding/json"
 	"strings"
 	"testing"
+
+	stdjson "github.com/goccy/go-json"
 )
 
 // A number outside the float64 range comes from record data; the error must
