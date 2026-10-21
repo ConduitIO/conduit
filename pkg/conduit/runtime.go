@@ -49,6 +49,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/prometheus"
 	"github.com/conduitio/conduit/pkg/http/api"
+	"github.com/conduitio/conduit/pkg/http/apisec"
 	"github.com/conduitio/conduit/pkg/http/openapi"
 	"github.com/conduitio/conduit/pkg/lifecycle"
 	lifecycle_v2 "github.com/conduitio/conduit/pkg/lifecycle-poc"
@@ -86,6 +87,10 @@ const (
 // Runtime sets up all services for serving and monitoring a Conduit instance.
 type Runtime struct {
 	Config Config
+
+	// apiToken is the bearer token enforced on the HTTP and gRPC APIs; ""
+	// means no token is configured (only possible on loopback binds).
+	apiToken string
 
 	DB               database.DB
 	Orchestrator     *orchestrator.Orchestrator
@@ -367,6 +372,12 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, cerrors.Errorf("invalid config: %w", err)
 	}
+	// Resolved once so every listener enforces the same token, and a token
+	// file that changes after startup cannot make the listeners disagree.
+	apiToken, err := cfg.APIToken()
+	if err != nil {
+		return nil, cerrors.Errorf("invalid config: %w", err)
+	}
 
 	// Process-wide, and before any service exists: conduit-commons caches
 	// parsed schemas, and a schema parsed before this call would keep the
@@ -456,6 +467,8 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 		Config: cfg,
 		DB:     db,
 		Ready:  make(chan struct{}),
+
+		apiToken: apiToken,
 
 		connectorPersister: connectorPersister,
 
@@ -1059,11 +1072,21 @@ func (l promLogger) Println(v ...any) {
 }
 
 func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, error) {
+	unary := []grpc.UnaryServerInterceptor{
+		grpcutil.RequestIDUnaryServerInterceptor(r.logger),
+		grpcutil.LoggerUnaryServerInterceptor(r.logger),
+	}
+	var stream []grpc.StreamServerInterceptor
+	if r.apiToken != "" {
+		// The token check runs before anything else sees the call, and the
+		// stream interceptor also covers server reflection.
+		auth := apisec.NewAuthenticator(r.apiToken, r.logger)
+		unary = append([]grpc.UnaryServerInterceptor{auth.UnaryInterceptor()}, unary...)
+		stream = append(stream, auth.StreamInterceptor())
+	}
 	grpcServer := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(
-			grpcutil.RequestIDUnaryServerInterceptor(r.logger),
-			grpcutil.LoggerUnaryServerInterceptor(r.logger),
-		),
+		grpc.ChainUnaryInterceptor(unary...),
+		grpc.ChainStreamInterceptor(stream...),
 		grpc.StatsHandler(r.metricsGrpcStatsHandler),
 		grpc.MaxRecvMsgSize(10*1024*1024),
 	)
@@ -1152,7 +1175,13 @@ func (r *Runtime) serveHTTPAPI(
 	t *tomb.Tomb,
 	grpcAddr net.Addr,
 ) (net.Addr, error) {
-	conn, err := grpc.NewClient(grpcAddr.String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	dialOpts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	if r.apiToken != "" {
+		// The gateway authenticates the HTTP request itself (see below) and
+		// then calls the gRPC server as a trusted in-process client.
+		dialOpts = append(dialOpts, grpc.WithPerRPCCredentials(apisec.BearerCredentials(r.apiToken)))
+	}
+	conn, err := grpc.NewClient(grpcAddr.String(), dialOpts...)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to dial server: %w", err)
 	}
@@ -1252,6 +1281,15 @@ func (r *Runtime) serveHTTPAPI(
 		}
 	}
 	handler := buildAPIHandler(ctx, gwmux, allowedOrigins, r.logger)
+	if r.apiToken != "" {
+		// Gates /v1, /openapi, /metrics and the inspector WebSocket. It sits
+		// inside uiMiddleware, so only the embedded UI's static assets are
+		// served without a token.
+		handler = apisec.NewAuthenticator(r.apiToken, r.logger).HTTP(handler)
+		r.logger.Info(ctx).Msg("API token authentication is enabled for the HTTP and gRPC APIs")
+	} else {
+		r.logger.Info(ctx).Msg("API token authentication is disabled: the loopback-only API accepts any local client; set api.token-file to require a token")
+	}
 	// UI-7: mount the embedded built-in UI at "/", last, so it can never
 	// shadow any route above (see pkg/conduit/ui.go and
 	// docs/design-documents/20260713-greenfield-built-in-ui.md §7).

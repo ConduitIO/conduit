@@ -58,12 +58,12 @@ func (CommandWithExecuteWithClientDecorator) Decorate(_ *ecdysis.Ecdysis, cmd *c
 			}
 		}
 
-		grpcAddress, err := getGRPCAddress(cmd)
+		grpcAddress, tokenOpt, err := getAPITarget(cmd)
 		if err != nil {
 			return cerrors.Errorf("error reading gRPC address: %w", err)
 		}
 
-		client, err := api.NewClient(cmd.Context(), grpcAddress)
+		client, err := api.NewClient(cmd.Context(), grpcAddress, tokenOpt)
 		if err != nil {
 			return err
 		}
@@ -115,12 +115,12 @@ func (CommandWithExecuteWithClientResultDecorator) Decorate(_ *ecdysis.Ecdysis, 
 			}
 		}
 
-		grpcAddress, err := getGRPCAddress(cmd)
+		grpcAddress, tokenOpt, err := getAPITarget(cmd)
 		if err != nil {
 			return cerrors.Errorf("error reading gRPC address: %w", err)
 		}
 
-		client, err := api.NewClient(cmd.Context(), grpcAddress)
+		client, err := api.NewClient(cmd.Context(), grpcAddress, tokenOpt)
 		if err != nil {
 			return err
 		}
@@ -210,8 +210,12 @@ func ProtoJSONSlice[T proto.Message](ms []T) ([]json.RawMessage, error) {
 	return out, nil
 }
 
-// getGRPCAddress returns the gRPC address configured by the user. If no address is found, the default address is returned.
-func getGRPCAddress(cmd *cobra.Command) (string, error) {
+// getAPITarget returns the gRPC address and token source configured by the
+// user (flag, environment variable or config file). If no address is found, the
+// default address is returned. A token source that cannot be resolved is
+// returned as the client option anyway, so the error surfaces from NewClient
+// with its stable code instead of being swallowed here.
+func getAPITarget(cmd *cobra.Command) (string, api.ClientOption, error) {
 	var (
 		path string
 		err  error
@@ -232,11 +236,15 @@ func getGRPCAddress(cmd *cobra.Command) (string, error) {
 		DefaultValues: defaultConfigValues,
 	}
 
-	// If it can't be parsed, we return the default value
+	// If it can't be parsed, we return the default value (and no explicit
+	// token source: NewClient then falls back to the environment).
 	err = ecdysis.ParseConfig(cfg, cmd)
-	if err != nil || usrCfg.API.GRPC.Address == "" {
-		return defaultConfigValues.API.GRPC.Address, nil
+	if err != nil {
+		return defaultConfigValues.API.GRPC.Address, api.WithTokenSource("", ""), nil
 	}
-
-	return usrCfg.API.GRPC.Address, nil
+	addr := usrCfg.API.GRPC.Address
+	if addr == "" {
+		addr = defaultConfigValues.API.GRPC.Address
+	}
+	return addr, api.WithTokenSource(usrCfg.API.Token, usrCfg.API.TokenFile), nil
 }
