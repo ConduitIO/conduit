@@ -72,6 +72,9 @@ func TestBrowserPolicy_OriginAllowed(t *testing.T) {
 		{"%zz", "127.0.0.1:8080", false},
 		{"https://console.example.evil.example", "127.0.0.1:8080", false},
 		{"https://console.example/", "127.0.0.1:8080", false}, // not canonical
+		{"http://user@127.0.0.1:8080", "127.0.0.1:8080", false}, // userinfo is never in a browser's Origin
+		{"http://127.0.0.1:8080/x", "127.0.0.1:8080", false},
+		{"http://127.0.0.1:8080?x=1", "127.0.0.1:8080", false},
 	} {
 		if got := p.OriginAllowed(tc.origin, tc.host); got != tc.want {
 			t.Errorf("OriginAllowed(%q, %q) = %v, want %v", tc.origin, tc.host, got, tc.want)
