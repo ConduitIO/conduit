@@ -57,8 +57,25 @@ type authManager interface {
 	Deregister(token string)
 }
 
+// SettingsGuard vets the settings of a validation-only Configure call before the
+// plugin sees them. A refusal is returned to the caller as is.
+type SettingsGuard func(plugin string, settings map[string]string) error
+
+// PluginServiceOption configures a PluginService.
+type PluginServiceOption func(*PluginService)
+
+// WithSettingsGuard sets the guard applied by ValidateSourceConfig and
+// ValidateDestinationConfig. Without it settings reach the plugin unvetted, so
+// a validation request could probe the host (the file connector stats its
+// path).
+func WithSettingsGuard(g SettingsGuard) PluginServiceOption {
+	return func(s *PluginService) { s.settingsGuard = g }
+}
+
 type PluginService struct {
 	logger log.CtxLogger
+
+	settingsGuard SettingsGuard
 
 	builtinReg    builtinReg
 	standaloneReg standaloneReg
@@ -70,13 +87,18 @@ func NewPluginService(
 	builtin builtinReg,
 	standalone standaloneReg,
 	authManager authManager,
+	opts ...PluginServiceOption,
 ) *PluginService {
-	return &PluginService{
+	s := &PluginService{
 		logger:        logger.WithComponent("connector.PluginService"),
 		builtinReg:    builtin,
 		standaloneReg: standalone,
 		authManager:   authManager,
 	}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 func (s *PluginService) Init(ctx context.Context, connUtilsAddr string, maxReceiveRecordSize int) {
@@ -124,6 +146,11 @@ func (s *PluginService) List(context.Context) (map[string]pconnector.Specificati
 }
 
 func (s *PluginService) ValidateSourceConfig(ctx context.Context, name string, settings map[string]string) (err error) {
+	if s.settingsGuard != nil {
+		if err := s.settingsGuard(name, settings); err != nil {
+			return err
+		}
+	}
 	d, err := s.NewDispenser(s.logger, name, "validate-source-config")
 	if err != nil {
 		return cerrors.Errorf("couldn't get dispenser: %w", err)
@@ -150,6 +177,11 @@ func (s *PluginService) ValidateSourceConfig(ctx context.Context, name string, s
 }
 
 func (s *PluginService) ValidateDestinationConfig(ctx context.Context, name string, settings map[string]string) (err error) {
+	if s.settingsGuard != nil {
+		if err := s.settingsGuard(name, settings); err != nil {
+			return err
+		}
+	}
 	d, err := s.NewDispenser(s.logger, name, "validate-destination-config")
 	if err != nil {
 		return cerrors.Errorf("couldn't get dispenser: %w", err)

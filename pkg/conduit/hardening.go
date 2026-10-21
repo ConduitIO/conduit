@@ -135,6 +135,23 @@ func (r engineSettingsResolver) ResolveSettings(pluginName string, settings map[
 	return out, nil
 }
 
+// CheckSettings is the connector.PluginService settings guard for validation
+// requests. It applies the file connector's path confinement to a literal path
+// so a validation call cannot probe files outside the allowed directories. A
+// value that still contains a "$" reference is skipped here and checked after
+// expansion when the connector is configured.
+func (r engineSettingsResolver) CheckSettings(pluginName string, settings map[string]string) error {
+	if !isFileConnector(pluginName) {
+		return nil
+	}
+	p, ok := settings[fileConnectorPathSetting]
+	if !ok || strings.Contains(p, "$") {
+		return nil
+	}
+	_, err := r.files.Check("settings."+fileConnectorPathSetting, p)
+	return err //nolint:wrapcheck // coded error with config path
+}
+
 func isFileConnector(pluginName string) bool {
 	n := plugin.FullName(pluginName).PluginName()
 	return n == fileConnectorPluginName || n == fileConnectorModulePluginID
