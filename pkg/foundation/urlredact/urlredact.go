@@ -37,23 +37,75 @@ const (
 	// textual replacement used when the URL cannot be parsed; it matches what
 	// url.URL.Redacted prints for redactedUser.
 	redactedUserinfo = redactedUser + ":xxxxx@"
+	// maskedValue replaces query parameter values and fragments.
+	maskedValue = "xxxxx"
 )
 
-// String returns raw with its user info replaced, using url.URL.Redacted.
-// The user name is replaced as well, because it is often the secret (a token
-// used as the user name), which Redacted alone keeps. A URL without user info
-// is returned unchanged. A URL that url.Parse rejects can still carry
-// credentials, so its user info is cut out textually.
+// String returns raw with its credentials replaced:
+//   - the user info, using url.URL.Redacted; the user name is replaced as well,
+//     because it is often the secret (a token used as the user name), which
+//     Redacted alone keeps;
+//   - every query parameter value and the fragment. Query strings carry
+//     credentials under many names (token, key, sig, X-Amz-Signature,
+//     api_key, ...), so the values are masked whatever the name; the names
+//     are kept.
+//
+// A URL without user info, query or fragment is returned unchanged. A URL
+// that url.Parse rejects can still carry credentials, so it is redacted
+// textually.
 func String(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return userinfoPattern.ReplaceAllString(raw, "${1}"+redactedUserinfo)
+	s := raw
+	if u, err := url.Parse(raw); err != nil {
+		s = userinfoPattern.ReplaceAllString(raw, "${1}"+redactedUserinfo)
+	} else if u.User != nil {
+		u.User = url.UserPassword(redactedUser, "")
+		s = u.Redacted()
 	}
-	if u.User == nil {
-		return raw
+	return maskQueryAndFragment(s)
+}
+
+// maskQueryAndFragment masks the value of every query parameter and the
+// fragment of a URL, working on the text so that it also covers URLs that do
+// not parse.
+func maskQueryAndFragment(s string) string {
+	i := strings.IndexAny(s, "?#")
+	if i < 0 {
+		return s
 	}
-	u.User = url.UserPassword(redactedUser, "")
-	return u.Redacted()
+	head, tail := s[:i], s[i:]
+	var query, fragment string
+	if tail[0] == '?' {
+		query = tail[1:]
+		if j := strings.IndexByte(query, '#'); j >= 0 {
+			query, fragment = query[:j], query[j+1:]
+		}
+	} else {
+		fragment = tail[1:]
+	}
+
+	var b strings.Builder
+	b.WriteString(head)
+	if tail[0] == '?' {
+		b.WriteByte('?')
+		parts := strings.FieldsFunc(query, func(r rune) bool { return r == '&' || r == ';' })
+		sep := "&"
+		if strings.Contains(query, ";") && !strings.Contains(query, "&") {
+			sep = ";"
+		}
+		for k, part := range parts {
+			if k > 0 {
+				b.WriteString(sep)
+			}
+			if eq := strings.IndexByte(part, '='); eq >= 0 {
+				b.WriteString(part[:eq+1])
+			}
+			b.WriteString(maskedValue)
+		}
+	}
+	if fragment != "" {
+		b.WriteString("#" + maskedValue)
+	}
+	return b.String()
 }
 
 // Error returns err with the URLs of every *url.Error in its chain replaced in

@@ -33,7 +33,14 @@ var (
 
 func TestString(t *testing.T) {
 	testCases := []struct{ name, in, want string }{
-		{"no user info", "https://registry.example.com/index.json?x=1", "https://registry.example.com/index.json?x=1"},
+		{"no user info or query", "https://registry.example.com/index.json", "https://registry.example.com/index.json"},
+		{"query values are masked", "https://registry.example.com/i.json?token=abc&X-Amz-Signature=def&flag", "https://registry.example.com/i.json?token=xxxxx&X-Amz-Signature=xxxxx&xxxxx"},
+		{"semicolon separated query", "https://h/p?a=1;b=2", "https://h/p?a=xxxxx;b=xxxxx"},
+		{"empty query", "https://h/p?", "https://h/p?"},
+		{"fragment is masked", "https://h/p#access_token=abc", "https://h/p#xxxxx"},
+		{"query and fragment", "https://h/p?k=v#frag", "https://h/p?k=xxxxx#xxxxx"},
+		{"user info and query", "https://u:p@h/p?sig=abc", "https://redacted:xxxxx@h/p?sig=xxxxx"},
+		{"unparseable with query", "https://u:p@h:bad/p?sig=abc", "https://redacted:xxxxx@h:bad/p?sig=xxxxx"},
 		{"user and password", "https://user:pass@registry.example.com/i.json", "https://redacted:xxxxx@registry.example.com/i.json"},
 		{"token as user name", "https://ghp_TOKEN@registry.example.com", "https://redacted:xxxxx@registry.example.com"},
 		{"password only", "https://:pass@registry.example.com", "https://redacted:xxxxx@registry.example.com"},

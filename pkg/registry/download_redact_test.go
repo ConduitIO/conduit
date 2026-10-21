@@ -60,4 +60,14 @@ func TestDownload_ErrorsDoNotContainUserInfo(t *testing.T) {
 		assert.Contains(t, err.Error(), "unexpected status 500")
 		assert.NotContains(t, err.Error(), "SECRET")
 	})
+	t.Run("query credentials", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+		}))
+		defer srv.Close()
+		_, err := registry.Download(context.Background(), nil, srv.URL+"/a.tgz?X-Amz-Signature=SECRET-sig", dest(t), 10)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unexpected status 403")
+		assert.NotContains(t, err.Error(), "SECRET")
+	})
 }

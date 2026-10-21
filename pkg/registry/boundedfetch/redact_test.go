@@ -61,4 +61,16 @@ func TestFetch_ErrorsDoNotContainUserInfo(t *testing.T) {
 		is.True(strings.Contains(err.Error(), "unexpected status 500"))
 		is.True(!strings.Contains(err.Error(), "SECRET"))
 	})
+	t.Run("query credentials", func(t *testing.T) {
+		is := is.New(t)
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+		}))
+		defer srv.Close()
+		_, err := boundedfetch.Fetch(context.Background(), srv.URL+"/bundle?X-Amz-Signature=SECRET-sig&token=SECRET-token", 10)
+		is.True(err != nil)
+		is.True(strings.Contains(err.Error(), "unexpected status 403"))
+		is.True(strings.Contains(err.Error(), "X-Amz-Signature=xxxxx")) // names stay, values go
+		is.True(!strings.Contains(err.Error(), "SECRET"))
+	})
 }
