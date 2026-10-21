@@ -86,6 +86,13 @@ entry blocks, 2 when one does (or on bad input), 3 when an output file cannot be
 replaces the files of an earlier run in --out, including pipeline files for connectors this
 run no longer has; files migrate did not write are left alone.
 
+A sink's pipeline reads in the consumer group Kafka Connect used for the sink (connect-<name>,
+unless consumer.override.group.id or the worker's consumer.group.id sets another) and starts a
+partition the group has no offset for at the beginning (Kafka Connect's auto.offset.reset=earliest
+unless overridden), so it resumes where the Kafka Connect sink stopped. Stop the Kafka Connect
+connector (stop or delete it; pausing keeps its group membership) and wait until the group has no
+members before starting the pipeline; the report says so as kc.consumer_group_shared.
+
 Connector classes this version migrates: ` + classList() + `.`,
 		Example: "conduit migrate kafka-connect connectors/orders.json\n" +
 			"conduit migrate kafka-connect --worker connect-distributed.properties ./connectors --dry-run\n" +

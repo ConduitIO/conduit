@@ -104,6 +104,11 @@ type nodeStoppedGate struct {
 	watchID   string
 	watched   chan struct{}
 	watchOnce sync.Once
+
+	// held, if set, is closed when the gate first holds a line, so a test can
+	// wait until a node goroutine is actually parked in the gate.
+	held     chan struct{}
+	heldOnce sync.Once
 }
 
 func (w *nodeStoppedGate) Write(p []byte) (int, error) {
@@ -115,6 +120,9 @@ func (w *nodeStoppedGate) Write(p []byte) (int, error) {
 	}
 	if bytes.Contains(p, []byte(`"level":"error"`)) {
 		w.hits.Add(1)
+		if w.held != nil {
+			w.heldOnce.Do(func() { close(w.held) })
+		}
 		select {
 		case <-w.release:
 		case <-w.abort:

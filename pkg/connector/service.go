@@ -220,6 +220,68 @@ func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher Plugin
 	return nil
 }
 
+// Restore puts back an instance that Delete removed, for a caller that rolls
+// back a failed operation after Delete succeeded (#3137). It reinstates the
+// same *Instance rather than creating a new one, so the connector keeps its
+// State (the source position), LastActiveConfig, ProcessorIDs and CreatedAt.
+// Creating a fresh instance instead left the process with a connector that
+// had never run until the next restart.
+//
+// If Delete already delivered the "deleted" lifecycle event to the plugin,
+// the plugin may have released what the position points into: the Postgres
+// connector drops its replication slot, and resuming would recreate it at
+// the current WAL and skip the gap. Clearing the position is not safe either
+// (a Kafka source without one starts at the end). So Restore keeps State and
+// LastActiveConfig unchanged, and the instance stays marked: its next start
+// fails with CodeConnectorDeleteHookRan (invariant 3, fail closed). The mark
+// is in memory only; a process restart loads the instance without it.
+//
+// Restore writes to the store only when ctx carries no transaction. Inside a
+// transaction the caller is rolling back and will discard it, so the store
+// keeps the record the discarded delete never removed, and a write there
+// could fail on a backend that rejects statements in an aborted transaction
+// (Postgres, 25P02). Without a transaction (Service.Import, used by the
+// embed API's Engine.Import) the delete reached the store, and Restore
+// writes the record back.
+//
+// It returns an error, and changes nothing, for a nil or DLQ instance, or if
+// a different instance is registered under the same ID. Restoring an
+// instance that is already registered is a no-op.
+func (s *Service) Restore(ctx context.Context, instance *Instance) error {
+	if instance == nil {
+		return cerrors.New("can't restore a nil connector instance")
+	}
+	if instance.ProvisionedBy == ProvisionTypeDLQ {
+		return cerrors.Errorf("can't restore DLQ connector %v: DLQ connectors are not registered", instance.ID)
+	}
+	if current, ok := s.connectors[instance.ID]; ok {
+		if current == instance {
+			return nil
+		}
+		return cerrors.Errorf("can't restore connector %v: a different instance with that ID exists", instance.ID)
+	}
+
+	// Invariant 2: memory gets back the instance itself, never a fresh one.
+	s.connectors[instance.ID] = instance
+	measure.ConnectorsGauge.WithValues(strings.ToLower(instance.Type.String())).Inc()
+
+	instance.RLock()
+	hookRan := instance.deleteHookRan
+	instance.RUnlock()
+	if hookRan {
+		instance.logger.Warn(ctx).Msg("connector restored after a failed delete whose delete hook had already run; " +
+			"it will refuse to start until it is deleted and created again or Conduit is restarted")
+	}
+
+	if database.TransactionFromContext(ctx) != nil {
+		return nil
+	}
+	if err := s.store.Set(ctx, instance.ID, instance); err != nil {
+		return cerrors.Errorf("could not restore connector instance %v in store: %w", instance.ID, err)
+	}
+	return nil
+}
+
 // Update updates the connector config.
 func (s *Service) Update(ctx context.Context, id string, plugin string, data Config) (*Instance, error) {
 	conn, err := s.Get(ctx, id)
