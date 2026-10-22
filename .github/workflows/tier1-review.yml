@@ -1,0 +1,103 @@
+name: tier1-review
+
+# Commit status `tier1-review` (postmortem action item 9). Decides from the PR
+# body, labels and comments whether the PR has the review CLAUDE.md requires:
+# a declared risk tier; for Tier 1, `Review: approve @ <head sha>` and
+# `Sign-off @ <head sha>`, and no unanswered `Review: changes-needed`. A push
+# changes the head sha, which makes both stale. Rules and limits:
+# .github/scripts/tier1_review.py.
+#
+# Why pull_request_target + issue_comment, and a status instead of a check run:
+#   * verdicts arrive as COMMENTS, and an issue_comment run is attached to the
+#     default branch, not to the PR head. Posting a commit status on the PR's
+#     head sha from both triggers gives one context, `tier1-review`, that a
+#     branch-protection rule can require.
+#   * both triggers run the DEFAULT branch's copy of this workflow and script.
+#     Nothing from the PR is checked out or executed, so a PR cannot edit the
+#     gate that judges it. The PR body and comments are data: they go through
+#     files, never through a shell command line.
+#
+# Same-repo and fork PRs both work (pull_request_target has a write token), but
+# only because no PR code runs. Do not add a checkout of the PR head here.
+#
+# What it trusts: verdict comments only from OWNER, MEMBER or COLLABORATOR
+# (author_association), the newest verdict per author, and a path floor: a PR
+# touching a CODEOWNERS path owned by the signers alone is Tier 1 whatever it
+# declares.
+#
+# KNOWN LIMIT: a required status context can be set by ANY workflow in this
+# repository that has `statuses: write`, so a PR that adds such a workflow could
+# post a green `tier1-review`. CODEOWNERS on `.github/` (DeVaris alone) is the
+# control today. The structural fix is a GitHub App that posts a check run, which
+# only that App can write; do that before treating this gate as more than a
+# guard against mistakes.
+#
+# STATUS: live, NOT in main's required contexts. Requiring it is DeVaris's
+# decision (postmortem, "Branch protection"): with one account opening every
+# PR, the sign-off comment is only as strong as account separation.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled, ready_for_review]
+  issue_comment:
+    types: [created, edited, deleted]
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+  issues: write # apply the do-not-merge label
+
+concurrency:
+  group: tier1-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  tier1-review:
+    name: tier1-review
+    if: ${{ github.event_name == 'pull_request_target' || github.event.issue.pull_request }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number || github.event.issue.number }}
+      SIGNERS: devarismeroxa
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Gate script tests
+        working-directory: .github/scripts
+        run: python3 -m unittest -v test_tier1_review
+
+      - name: Decide and post the status
+        run: |
+          set -uo pipefail
+          # Fetched fresh from the API, not from the event, so a re-run after
+          # an edit or a deleted comment sees the current state.
+          gh api "repos/$REPO/pulls/$PR" > "$RUNNER_TEMP/pr.json"
+          gh api --paginate "repos/$REPO/issues/$PR/comments" --jq '.[]' | jq -s . > "$RUNNER_TEMP/comments.json"
+          gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[]' | jq -s . > "$RUNNER_TEMP/files.json"
+          sha=$(jq -r .head.sha "$RUNNER_TEMP/pr.json")
+
+          # CODEOWNERS comes from the default branch checkout, so a PR cannot
+          # shrink the Tier 1 path list that judges it.
+          python3 .github/scripts/tier1_review.py "$RUNNER_TEMP/pr.json" "$RUNNER_TEMP/comments.json" \
+            --signers "$SIGNERS" --files "$RUNNER_TEMP/files.json" --codeowners .github/CODEOWNERS \
+            > "$RUNNER_TEMP/verdict.json"
+          state=$(jq -r .state "$RUNNER_TEMP/verdict.json")
+          desc=$(jq -r .description "$RUNNER_TEMP/verdict.json")
+          echo "tier1-review: $state: $desc" | tee -a "$GITHUB_STEP_SUMMARY"
+
+          gh api -X POST "repos/$REPO/statuses/$sha" \
+            -f state="$state" -f context=tier1-review -f description="$desc" \
+            -f target_url="$GITHUB_SERVER_URL/$REPO/actions/runs/$GITHUB_RUN_ID"
+
+          # A changes-needed record also applies do-not-merge, which the script
+          # rejects on its own; an approve does not remove it (a human decides).
+          if [ "$(jq -r .label "$RUNNER_TEMP/verdict.json")" = "true" ]; then
+            gh label create do-not-merge --color B60205 --description "A review finding is open" -R "$REPO" 2>/dev/null || true
+            gh pr edit "$PR" -R "$REPO" --add-label do-not-merge || true
+          fi
