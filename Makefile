@@ -42,6 +42,14 @@ release-check:
 	@test -n "$(TAG)" || { echo "usage: make release-check TAG=vX.Y.Z"; exit 2; }
 	python3 .github/scripts/release_fixes.py $(TAG)
 	python3 .github/scripts/release_notes_check.py $(TAG)
+# guardmut removes each `// guard:` marked guard in turn and requires the
+# package tests to fail (tools/guardmut, docs/code_guidelines.md "Guard
+# markers"). Survivors fail unless baselined in .github/guardmut-baseline.txt.
+GUARDMUT_DIRS ?= pkg/connector,pkg/lifecycle,pkg/lifecycle-poc
+.PHONY: guardmut
+guardmut:
+	cd tools && go run ./guardmut -root .. -dirs $(GUARDMUT_DIRS) \
+		-baseline ../.github/guardmut-baseline.txt -parallel 3 -timeout 15m -budget 40m $(GUARDMUT_FLAGS)
 
 .PHONY: coverage
 coverage:

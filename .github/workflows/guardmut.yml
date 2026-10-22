@@ -1,0 +1,73 @@
+name: guardmut
+
+# Guard-mutation gate. Data-path guards are marked with `// guard: <name>`
+# (see docs/code_guidelines.md, "Guard markers"). tools/guardmut removes each
+# marked guard in turn and runs the package's tests; a guard whose removal
+# leaves the tests green SURVIVED, which fails the job unless it is in
+# .github/guardmut-baseline.txt with a written justification. The baseline is
+# a ratchet: a new survivor fails, and a baselined guard that is now killed
+# also fails, so the list only shrinks.
+#
+# Same trigger shape as chaos.yml: the job reports on every PR and gates the
+# expensive part inside it with a fail-closed change detector, so the check
+# could become required later without blocking unrelated PRs. It is NOT in
+# main's required contexts yet; it needs a green history first.
+
+on:
+  schedule:
+    - cron: '25 5 * * *'
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  GOPRIVATE: github.com/conduitio/*
+  GONOSUMDB: github.com/conduitio/*
+
+jobs:
+  guardmut:
+    name: guardmut (marked guards)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect guarded-path changes
+        id: detect
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; echo "reason=event $EVENT_NAME always runs"; exit 0
+          fi
+          base="$BASE_SHA"
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; echo "reason=base ref unavailable, running (fail-closed)"; exit 0
+          fi
+          if ! changed=$(git diff --name-only "$base"...HEAD 2>/dev/null); then
+            echo "run=true" >> "$GITHUB_OUTPUT"; echo "reason=git diff failed, running (fail-closed)"; exit 0
+          fi
+          if echo "$changed" | grep -qE '^(go\.mod$|go\.sum$|pkg/connector/|pkg/lifecycle/|pkg/lifecycle-poc/|tools/guardmut/|\.github/guardmut-baseline\.txt$|\.github/workflows/guardmut\.yml$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; echo "reason=guarded path changed"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"; echo "reason=no guarded path changed, gate passes"
+          fi
+
+      - name: Set up Go
+        if: steps.detect.outputs.run == 'true'
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Test the tool
+        if: steps.detect.outputs.run == 'true'
+        run: cd tools && go test -count=1 ./guardmut
+
+      - name: Remove each marked guard and run its tests
+        if: steps.detect.outputs.run == 'true'
+        run: make guardmut GUARDMUT_FLAGS="-summary $GITHUB_STEP_SUMMARY"

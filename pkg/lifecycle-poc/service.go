@@ -1019,6 +1019,7 @@ func (s *Service) WaitPipeline(id string) error {
 		err := p.t.Wait()
 		// Invariant 7 (#3087): a recovery restart's predecessor can still be
 		// running after the restarted run has died. See runChain.
+		// guard: lifecycle-poc-waitpipeline-chain
 		p.chain.wait()
 		return err
 	}
@@ -1033,6 +1034,7 @@ func (s *Service) WaitPipeline(id string) error {
 	// Invariant 7 (#3087): the entry is deleted before the run is done. Do not
 	// report the pipeline stopped while any of its goroutines still runs.
 	if hasLast {
+		// guard: lifecycle-poc-waitpipeline-last
 		last.wait()
 	}
 	if hasErr {
@@ -1290,6 +1292,7 @@ func (s *Service) checkConnectorsStartable(ctx context.Context, pl *pipeline.Ins
 		if err != nil {
 			return cerrors.Errorf("could not fetch connector: %w", err)
 		}
+		// guard: lifecycle-poc-checkstartable-before-build
 		if err := instance.CheckStartable(); err != nil {
 			return err
 		}

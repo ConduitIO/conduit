@@ -138,6 +138,7 @@ func (i *Instance) Inspect(ctx context.Context) *inspector.Session {
 // If a connector is already running for this Instance this method returns an
 // error.
 func (i *Instance) Connector(ctx context.Context, dispenserFetcher PluginDispenserFetcher) (Connector, error) {
+	// guard: connector-connector-checkstartable
 	if err := i.CheckStartable(); err != nil {
 		return nil, err
 	}
