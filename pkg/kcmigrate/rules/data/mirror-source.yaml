@@ -56,7 +56,7 @@ keys:
         status: unsupported
         blocking: true
         code: kc.key_unsupported
-        reason: SASL_PLAINTEXT sends the SASL credentials without TLS. The Kafka connector (v0.15.0 and later) refuses SASL without TLS, and the migration never writes a plaintext SASL setup by itself.
+        reason: SASL_PLAINTEXT sends the SASL credentials without TLS. The Kafka connector refuses SASL without TLS unless saslAllowPlaintext is set, and the migration never writes a plaintext SASL setup by itself.
         fix: Enable TLS on the cluster and use SASL_SSL, or set saslAllowPlaintext true (with tls.enabled false) on the migrated pipeline by hand, knowing that it exposes the SASL credentials on the network.
       - otherwise: true
         status: unsupported
@@ -110,7 +110,7 @@ keys:
         status: unsupported
         blocking: true
         code: kc.key_unsupported
-        reason: SASL_PLAINTEXT sends the SASL credentials without TLS. The Kafka connector (v0.15.0 and later) refuses SASL without TLS, and the migration never writes a plaintext SASL setup by itself.
+        reason: SASL_PLAINTEXT sends the SASL credentials without TLS. The Kafka connector refuses SASL without TLS unless saslAllowPlaintext is set, and the migration never writes a plaintext SASL setup by itself.
         fix: Enable TLS on the cluster and use SASL_SSL, or set saslAllowPlaintext true (with tls.enabled false) on the migrated pipeline by hand, knowing that it exposes the SASL credentials on the network.
       - otherwise: true
         status: unsupported
@@ -195,7 +195,7 @@ keys:
         status: unsupported
         blocking: true
         code: kc.key_unsupported
-        reason: SASL_PLAINTEXT sends the SASL credentials without TLS. The Kafka connector (v0.15.0 and later) refuses SASL without TLS, and the migration never writes a plaintext SASL setup by itself.
+        reason: SASL_PLAINTEXT sends the SASL credentials without TLS. The Kafka connector refuses SASL without TLS unless saslAllowPlaintext is set, and the migration never writes a plaintext SASL setup by itself.
         fix: Enable TLS on the cluster and use SASL_SSL, or set saslAllowPlaintext true (with tls.enabled false) on the migrated pipeline by hand, knowing that it exposes the SASL credentials on the network.
       - otherwise: true
         status: unsupported
@@ -334,7 +334,7 @@ keys:
         status: unsupported
         blocking: true
         code: kc.key_unsupported
-        reason: SASL_PLAINTEXT sends the SASL credentials without TLS. The Kafka connector (v0.15.0 and later) refuses SASL without TLS, and the migration never writes a plaintext SASL setup by itself.
+        reason: SASL_PLAINTEXT sends the SASL credentials without TLS. The Kafka connector refuses SASL without TLS unless saslAllowPlaintext is set, and the migration never writes a plaintext SASL setup by itself.
         fix: Enable TLS on the cluster and use SASL_SSL, or set saslAllowPlaintext true (with tls.enabled false) on the migrated pipeline by hand, knowing that it exposes the SASL credentials on the network.
       - otherwise: true
         status: unsupported

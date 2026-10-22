@@ -9,9 +9,6 @@ pipelines:
         plugin: builtin:kafka
         settings:
           readFromBeginning: "true"
-          saslMechanism: PLAIN
-          saslPassword: ${KC_MM2_MSC_PLAINTEXT_SOURCE_CLUSTER_SASL_JAAS_CONFIG}
-          saslUsername: example-user
           servers: b-1.source.internal.example:9092
           topics: orders
       - id: destination

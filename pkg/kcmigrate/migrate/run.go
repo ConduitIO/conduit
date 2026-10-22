@@ -293,6 +293,7 @@ func migrateConnector(cl rules.Classified, state string, workerDs []rules.Decisi
 	run.rc.Notes = append(run.rc.Notes, emit.RequireSettings(plan, required)...)
 	run.plan = plan
 	run.rc.Entries = rules.Entries(cl.Decisions) // Apply refines entries in place
+	emit.DropUnprotectedSASL(plan, run.rc.Entries, run.workerEntries)
 	run.rc.Pipeline = plan.File
 	run.rc.Target = &kcmigrate.Target{Source: plan.Plugin(emit.SideSource), Destination: plan.Plugin(emit.SideDestination)}
 	run.rc.Notes = append(run.rc.Notes, converterNotes(cl.Decisions, workerDs)...)

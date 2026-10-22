@@ -24,10 +24,10 @@
   "summary": {
     "connectors": 1,
     "keys": 16,
-    "translated": 15,
+    "translated": 13,
     "approximated": 0,
-    "unsupported": 1,
-    "blocking": 5
+    "unsupported": 3,
+    "blocking": 7
   },
   "connectors": [
     {
@@ -115,35 +115,33 @@
             "pointer": "/source.cluster.security.protocol"
           },
           "code": "kc.key_unsupported",
-          "reason": "SASL_PLAINTEXT sends the SASL credentials without TLS. The Kafka connector (v0.15.0 and later) refuses SASL without TLS, and the migration never writes a plaintext SASL setup by itself.",
+          "reason": "SASL_PLAINTEXT sends the SASL credentials without TLS. The Kafka connector refuses SASL without TLS unless saslAllowPlaintext is set, and the migration never writes a plaintext SASL setup by itself.",
           "fix": "Enable TLS on the cluster and use SASL_SSL, or set saslAllowPlaintext true (with tls.enabled false) on the migrated pipeline by hand, knowing that it exposes the SASL credentials on the network.",
           "blocking": true
         },
         {
           "key": "source.cluster.sasl.mechanism",
-          "status": "translated",
+          "status": "unsupported",
           "origin": {
             "file": "mm2-msc.json",
             "pointer": "/source.cluster.sasl.mechanism"
           },
-          "target": {
-            "configPath": "/pipelines/0/connectors/0/settings/saslMechanism"
-          },
-          "blocking": false
+          "code": "kc.key_unsupported",
+          "reason": "Dropped: Kafka Connect ignores SASL settings unless security.protocol is SASL_SSL or SASL_PLAINTEXT, and here it is PLAINTEXT, SSL or not set, so the running connector does not authenticate with SASL. migrate does not write SASL credentials with TLS off (they would be sent in the clear, and the Kafka connector refuses that).",
+          "fix": "If the cluster needs no SASL, remove the sasl.* keys from the Kafka Connect config. If it does, set security.protocol to SASL_SSL (and enable TLS on the cluster), then re-run.",
+          "blocking": true
         },
         {
           "key": "source.cluster.sasl.jaas.config",
-          "status": "translated",
+          "status": "unsupported",
           "origin": {
             "file": "mm2-msc.json",
             "pointer": "/source.cluster.sasl.jaas.config"
           },
-          "target": {
-            "configPath": "/pipelines/0/connectors/0/settings/saslUsername",
-            "env": "KC_MM2_MSC_PLAINTEXT_SOURCE_CLUSTER_SASL_JAAS_CONFIG"
-          },
-          "reason": "The username is written to saslUsername; saslPassword is ${KC_MM2_MSC_PLAINTEXT_SOURCE_CLUSTER_SASL_JAAS_CONFIG}, to be filled with the password from this JAAS config.",
-          "blocking": false,
+          "code": "kc.key_unsupported",
+          "reason": "Dropped: Kafka Connect ignores SASL settings unless security.protocol is SASL_SSL or SASL_PLAINTEXT, and here it is PLAINTEXT, SSL or not set, so the running connector does not authenticate with SASL. migrate does not write SASL credentials with TLS off (they would be sent in the clear, and the Kafka connector refuses that).",
+          "fix": "If the cluster needs no SASL, remove the sasl.* keys from the Kafka Connect config. If it does, set security.protocol to SASL_SSL (and enable TLS on the cluster), then re-run.",
+          "blocking": true,
           "secret": true
         },
         {

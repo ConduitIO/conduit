@@ -88,7 +88,7 @@ func TestMirror_DestinationServersLayers(t *testing.T) {
 // MirrorMaker's consumer merges source.cluster.* < consumer.* < source.consumer.*.
 func TestMirror_SourceConsumerLayers(t *testing.T) {
 	is := is.New(t)
-	res := mmRun(t, "", "source.cluster.sasl.mechanism=PLAIN\nconsumer.sasl.mechanism=SCRAM-SHA-256\nsource.consumer.sasl.mechanism=SCRAM-SHA-512\n")
+	res := mmRun(t, "", "source.cluster.security.protocol=SASL_SSL\nsource.cluster.sasl.mechanism=PLAIN\nconsumer.sasl.mechanism=SCRAM-SHA-256\nsource.consumer.sasl.mechanism=SCRAM-SHA-512\n")
 	p := file(res, "pipelines/mm.yaml")
 	is.True(strings.Contains(p, "saslMechanism: SCRAM-SHA-512"))
 	e := entryFor(mmConnector(res), "source.cluster.sasl.mechanism")

@@ -76,7 +76,8 @@ func TestSharedRules(t *testing.T) {
 		{"producer keystore", "producer.override.ssl.keystore.location", "/k.jks", kcmigrate.StatusUnsupported, "kc.key_unsupported", true, ""},
 		{"tls", "producer.override.security.protocol", "SASL_SSL", kcmigrate.StatusTranslated, "", false, `tls.enabled: "true"`},
 		{"plaintext", "producer.override.security.protocol", "plaintext", kcmigrate.StatusTranslated, "", false, ""},
-		{"mechanism", "producer.override.sasl.mechanism", "SCRAM-SHA-512", kcmigrate.StatusTranslated, "", false, "saslMechanism: SCRAM-SHA-512"},
+		{"mechanism without a SASL protocol is dropped", "producer.override.sasl.mechanism", "SCRAM-SHA-512", kcmigrate.StatusUnsupported, "kc.key_unsupported", true, ""},
+		{"SASL_PLAINTEXT is blocked", "producer.override.security.protocol", "SASL_PLAINTEXT", kcmigrate.StatusUnsupported, "kc.key_unsupported", true, ""},
 		{"gssapi", "producer.override.sasl.mechanism", "GSSAPI", kcmigrate.StatusUnsupported, "kc.key_unsupported", true, ""},
 		{"kerberos jaas", "producer.override.sasl.jaas.config", `com.sun.security.auth.module.Krb5LoginModule required useKeyTab=true;`, kcmigrate.StatusUnsupported, "kc.key_unsupported", true, ""},
 		{"consumer key on a source", "consumer.override.group.id", "g", kcmigrate.StatusUnsupported, "kc.key_unsupported", false, ""},
@@ -125,7 +126,7 @@ func TestSharedRules(t *testing.T) {
 func TestSharedRules_JAAS(t *testing.T) {
 	is := is.New(t)
 	jaas := `org.apache.kafka.common.security.plain.PlainLoginModule required username="svc" password="CANARY-jaas";`
-	res := runOneWith(t, sharedEngine(t), Request{Inputs: []kcmigrate.Input{in("c.properties", sharedBase+"producer.override.sasl.jaas.config="+jaas+"\n")}})
+	res := runOneWith(t, sharedEngine(t), Request{Inputs: []kcmigrate.Input{in("c.properties", sharedBase+"producer.override.security.protocol=SASL_SSL\nproducer.override.sasl.jaas.config="+jaas+"\n")}})
 	p := file(res, "pipelines/c.yaml")
 	is.True(strings.Contains(p, "saslUsername: svc"))
 	is.True(strings.Contains(p, "saslPassword: ${KC_C_PRODUCER_OVERRIDE_SASL_JAAS_CONFIG}"))
