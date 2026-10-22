@@ -65,6 +65,20 @@ Embedders set `Options.StandalonePluginEnvAllow`.
 allow list); a plugin that cannot start without an allowlisted variable may fail that check and work
 under `conduit run`.
 
+## `HOME` is passed: plugins can read ambient files
+
+`HOME` is in the base set, so a plugin knows where the Conduit user's home directory is, and the
+plugin runs as that user. Stripping the environment therefore does **not** keep a plugin away from
+credentials that live in files below `HOME`: `~/.aws/credentials` and `~/.aws/config` (the AWS SDK
+finds them by itself), `~/.config/gcloud`, `~/.azure`, `~/.kube/config`, `~/.pgpass`, `~/.netrc`,
+`~/.ssh`, `~/.docker/config.json`. Cloud SDKs inside a plugin also reach the instance metadata
+service on their own.
+
+If plugins must not have those, do not give the Conduit user any: run Conduit with `HOME` pointing at
+an empty directory it owns (`HOME=/var/lib/conduit/home conduit run`), keep cloud credentials out of
+that user's files, and block the metadata address for the Conduit user at the host or network. Setting
+`HOME` cannot be done per plugin; the value Conduit has is the value plugins get.
+
 ## What is not covered
 
 - This limits what a plugin inherits from Conduit's environment. A standalone plugin is still native
