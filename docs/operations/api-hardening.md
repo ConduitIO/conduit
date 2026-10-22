@@ -149,16 +149,44 @@ preflight, which is why they are refused.
 
 **Remediation.** Send `Content-Type: application/json`.
 
-## Residual risk
+## Residual risk and decisions
 
-- The token is a shared secret over plaintext HTTP and gRPC. Conduit does not terminate TLS. Over
-  an untrusted network put TLS in front (reverse proxy, service mesh, VPN). There is no mTLS
-  option in Conduit itself.
-- The built-in UI prompts for the token when the API answers 401. It keeps it in `sessionStorage`
-  (this tab only, gone when the tab closes; never `localStorage`, a cookie or a URL), sends it as
-  `Authorization: Bearer`, and on a later 401 clears it and asks again. Anyone with script access to the page
-  (an XSS in the UI) could read it; the UI's static files are served without a token.
-- Any local user or process on the host can reach a loopback-bound API without a token, and the
-  connector utilities server (which serves schema lookups to plugins, with no authentication) is
-  reachable by any local process. Set a token on shared hosts.
-- gRPC server reflection stays enabled; it is behind the token when one is set.
+These are known, accepted limits. They are decisions, not oversights: the default is a loopback bind, and a
+token is required as soon as the API leaves loopback.
+
+1. **A loopback bind with no token trusts every local process.** Any process on the host, as any user, can
+   call the HTTP and gRPC APIs on `127.0.0.1` and control pipelines. The loopback default keeps the API off the
+   network, and the Origin and Host checks keep web pages from reaching it, but they do nothing against local
+   code. On a shared host (multi-user machine, CI runner, a container sharing its network namespace with other
+   workloads, a sidecar you do not trust) set `api.token-file`; with a token set it is enforced on loopback too.
+2. **No TLS and no mTLS in Conduit.** The token is a shared secret sent in clear over plain HTTP and gRPC.
+   Over any network you do not fully trust, terminate TLS (or mTLS) in front of Conduit: a reverse proxy, a
+   service mesh sidecar, or a VPN. The decision to accept "token or mTLS" for a non-loopback bind is
+   implemented as token only; an mTLS proxy in front still needs the token set on Conduit (the proxy can add it).
+3. **gRPC server reflection stays enabled on the API server.** It is behind the token whenever a token is set,
+   and on a loopback bind with no token it is open to local processes like everything else (point 1). The
+   connector utilities server no longer has reflection at all.
+4. **Same-user processes can read a token.** The token lives in the process environment or a file. A process
+   running as the same OS user as Conduit can read the environment of Conduit and of its plugins
+   (`/proc/<pid>/environ`) and so also obtain connector tokens (below). File permissions (`0600`) protect the
+   token file from other users only.
+5. **No request rate limiting.** Guessing is made visible (a counter and a rate-limited warning) but not
+   slowed. Use a 256-bit token (`openssl rand -hex 32`) and, on a network, a proxy that rate limits.
+6. **The UI keeps the token in `sessionStorage`,** readable by any script running in the page. Do not serve
+   untrusted content from the API's origin.
+7. **`/healthz`, `/readyz`, CORS preflights, the gRPC health `Check` and the UI's static files are open** by
+   design (probes and the page that prompts for the token).
+
+### The connector utilities server
+
+Plugins that Conduit starts call a separate gRPC server (schema service) on `127.0.0.1` and an ephemeral port.
+It needs no configuration and cannot be reached from the network. Every call to it, including streams, must
+carry the per-connector token Conduit generated when it started that connector (256 bits from `crypto/rand`,
+passed to the plugin in its environment, sent by the SDK in the `conduit-connector-token` metadata, compared by
+SHA-256 digest, revoked when the connector stops). Other local processes are refused, with `api.unauthenticated`,
+counted in `conduit_api_rejected_requests_total`. Only the health `Check` is open. Design and the
+alternatives considered: `docs/design-documents/20261021-connector-utilities-authentication.md`.
+
+If a plugin logs `missing or invalid connector token`: it was started outside Conduit, or it outlived its
+connector (the token is revoked at teardown), or its SDK predates the schema service. Plugins built on a
+supported SDK need no change.
