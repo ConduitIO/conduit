@@ -1010,7 +1010,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (116)
+## 3. Error codes (117)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -1073,6 +1073,7 @@ Author: Meroxa, Inc.
 | `pipelines.init_template_version_mismatch` | FailedPrecondition | CodeTemplateVersionMismatch is raised when an embedded template's pinned connector settings no longer match the parameter shape of the built-in connector actually compiled into this binary. This is a packaging bug in the vendored template (the fixture drifted from the connector version this release ships), not a user config error — refusing up front here is strictly better than scaffolding a pipeline that parses fine but fails far away, and confusingly, at `conduit run` (templates workstream doc §7's "version-pinned mismatch" row). codes.FailedPrecondition classifies to exitcode.Validation (2). |
 | `pipelines.init_unknown_template` | InvalidArgument | CodeUnknownTemplate is raised by `pipelines init --template <name>` when name doesn't match any entry in the embedded template gallery (see template_gallery.go). codes.InvalidArgument classifies to exitcode.Validation (2): the fix is on the caller's side (a typo, or a template that doesn't exist yet), not the environment. |
 | `plugin.standalone_env_passed` | FailedPrecondition | CodeEnvPassedToPlugins is the stable code carried by the startup log event and by the `plugins.standalone_env` doctor finding when the host environment contains variables that standalone connector plugin processes will inherit and whose names look like credentials or configuration secrets. Operators can alert on the log field `code` or on the doctor finding code. By design this is a log/finding code, not an error code: no API or CLI call fails with it. It is registered in conduiterr so the code set that llms.txt publishes, and that alerting can rely on, stays complete. |
+| `plugin.standalone_env_stripped` | FailedPrecondition | CodeEnvStripped is the stable code on the startup log event that lists the host environment variable names standalone plugins no longer receive. Like CodeEnvPassedToPlugins it is a log/finding code, not an API error code. |
 | `processor.instance_not_found` | NotFound | CodeProcessorNotFound is raised when a referenced processor instance cannot be located. |
 | `processor.plugin_not_found` | NotFound | CodeProcessorPluginNotFound is raised when a referenced processor plugin cannot be located. |
 | `provisioning.live_apply_unauthorized` | FailedPrecondition | CodeLiveApplyUnauthorized is raised by ApplyPlanLive when it refuses to apply a restart-class (EffectRestart) change to a currently-running pipeline because the caller did not authorize it — see ApplyPlanLive's allowRestartOnRunning parameter and docs/design-documents/20260708-live-server-deploy-apply.md, "Item 6 (reworked conservative): the data-path gate". The authorization is a process-level operator flag (conduit.Config.API.AllowLiveRestartApply), never a value the RPC caller/agent can set directly — see pkg/http/api/pipeline_v1.go's ApplyPipeline handler, the only caller that can set allowRestartOnRunning to true. |

@@ -142,7 +142,7 @@ func DefaultChecks(cfg conduit.Config, logger log.CtxLogger, opts Options) []che
 		pluginsDirCheck{name: NamePluginsConnectorsDir, path: cfg.Connectors.Path, configKey: configKeyConnectorsPath},
 		pluginsDirCheck{name: NamePluginsProcessorsDir, path: cfg.Processors.Path, configKey: "processors.path"},
 		pluginsBuiltinCheck{cfg: cfg},
-		standaloneEnvCheck{connectorsDir: cfg.Connectors.Path, enabled: cfg.Connectors.Standalone.EnvWarning, redact: opts.RedactEnvNames, environ: opts.Environ},
+		standaloneEnvCheck{connectorsDir: cfg.Connectors.Path, enabled: cfg.Connectors.Standalone.EnvWarning, allow: cfg.Connectors.Standalone.Env.Allow, redact: opts.RedactEnvNames, environ: opts.Environ},
 		engineReachableCheck{cfg: cfg, requireServer: opts.RequireServer},
 	)
 

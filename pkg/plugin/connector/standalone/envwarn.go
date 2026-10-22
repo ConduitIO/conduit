@@ -226,23 +226,35 @@ func (s SensitiveEnv) NonStandardSummary() string {
 	return fmt.Sprintf("%d variable(s) with non-standard names", s.NonStandard)
 }
 
-// warnSensitiveEnv logs the warning at most once per process. It logs names
-// only, never values.
-func warnSensitiveEnv(ctx context.Context, logger log.CtxLogger, environ []string) {
+// warnStrippedEnv logs, once per process, which host environment variables
+// standalone plugin processes no longer receive, and which sensitive-looking
+// ones the operator allowlisted. It logs names only, never values.
+func warnStrippedEnv(ctx context.Context, logger log.CtxLogger, policy EnvPolicy, environ []string) {
 	envWarnOnce.Do(func() {
-		found := classifyEnv(environ)
-		if found.Total() == 0 {
-			return
+		passed, stripped, nonStandard := policy.Filter(environ)
+		if len(stripped)+nonStandard > 0 {
+			ev := logger.Warn(ctx).
+				Str("code", CodeEnvStripped.Reason()).
+				Strs("env_names_stripped", stripped)
+			if nonStandard > 0 {
+				ev = ev.Int("env_non_standard_names_stripped", nonStandard)
+			}
+			ev.Str("config", EnvAllowConfigPath).
+				Str("docs", EnvWarningDocsPath).
+				Msg("standalone plugin processes no longer inherit the engine's environment: the variables listed are not passed to them " +
+					"(earlier versions passed everything); a plugin that needs one must be given it with " + EnvAllowConfigPath +
+					" (set connectors.standalone.env-warning=false to silence this after reviewing the list)")
 		}
-		ev := logger.Warn(ctx).
-			Str("code", CodeEnvPassedToPlugins.Reason()).
-			Strs("env_names", found.Names)
-		if found.NonStandard > 0 {
-			ev = ev.Int("env_non_standard_names", found.NonStandard)
+		if sens := classifyEnv(passed); sens.Total() > 0 {
+			ev := logger.Warn(ctx).
+				Str("code", CodeEnvPassedToPlugins.Reason()).
+				Strs("env_names", sens.Names)
+			if sens.NonStandard > 0 {
+				ev = ev.Int("env_non_standard_names", sens.NonStandard)
+			}
+			ev.Str("docs", EnvWarningDocsPath).
+				Msg("sensitive-looking host environment variables are passed to standalone plugin processes because " +
+					EnvAllowConfigPath + " lists them")
 		}
-		ev.Str("docs", EnvWarningDocsPath).
-			Msg("host environment variables are passed to standalone plugin processes; " +
-				"a future release will restrict the plugin environment to an allowlist " +
-				"(set connectors.standalone.env-warning=false to silence this after reviewing the list)")
 	})
 }

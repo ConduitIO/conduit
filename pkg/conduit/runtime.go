@@ -546,6 +546,11 @@ func createServices(r *Runtime) error {
 	tokenService := connutils.NewAuthManager()
 	connSchemaService := connutils.NewSchemaService(r.logger, schemaRegistry, tokenService)
 
+	standaloneEnv, err := r.Config.StandaloneEnvPolicy()
+	if err != nil {
+		return cerrors.Errorf("invalid %s config: %w", conn_standalone.EnvAllowConfigPath, err)
+	}
+
 	connPluginService := conn_plugin.NewPluginService(
 		r.logger,
 		conn_builtin.NewRegistry(
@@ -557,6 +562,7 @@ func createServices(r *Runtime) error {
 			r.logger,
 			r.Config.Connectors.Path,
 			conn_standalone.WithEnvWarning(r.Config.Connectors.Standalone.EnvWarning),
+			conn_standalone.WithEnvPolicy(standaloneEnv),
 		),
 		tokenService,
 	)
