@@ -162,7 +162,7 @@ func TestClassifyEnv(t *testing.T) {
 		},
 		{
 			name:    "benign and excluded",
-			environ: []string{"PATH=/bin", "HOME=/root", "LANG=C", "KEYBOARD=us", "PWD=/tmp", "OLDPWD=/", "TOKENIZERS_PARALLELISM=false", "tokenizers_parallelism=false", "GOPATH=/g"},
+			environ: []string{envPath + "=/bin", "HOME=/root", "LANG=C", "KEYBOARD=us", "PWD=/tmp", "OLDPWD=/", "TOKENIZERS_PARALLELISM=false", "tokenizers_parallelism=false", "GOPATH=/g"},
 			want:    []string{},
 		},
 		{
@@ -227,47 +227,73 @@ func assertNoSentinels(t *testing.T, out string, sentinels []string) {
 	}
 }
 
-// TestWarnSensitiveEnv_NamesNotValues is the sentinel test: variable names are
+// TestWarnStrippedEnv_NamesNotValues is the sentinel test: variable names are
 // logged, values never are. It uses a fixed fake environment.
-func TestWarnSensitiveEnv_NamesNotValues(t *testing.T) {
+func TestWarnStrippedEnv_NamesNotValues(t *testing.T) {
 	is := is.New(t)
 	resetEnvWarnOnce(t)
 
 	environ, sentinels := fakeEnviron()
+	policy, err := NewEnvPolicy(nil)
+	is.NoErr(err)
 	var buf bytes.Buffer
-	warnSensitiveEnv(context.Background(), bufLogger(&buf), environ)
+	warnStrippedEnv(context.Background(), bufLogger(&buf), policy, environ)
 
 	out := buf.String()
 	is.True(strings.Contains(out, `"level":"warn"`))
 	for _, name := range []string{"AAA_FIRST_TOKEN", "AWS_SECRET_ACCESS_KEY", "SENTINEL_API_TOKEN", "SENTINEL_SECRET_X", "POSTGRES_URL", "zzz_last_password"} {
-		is.True(strings.Contains(out, `"`+name+`"`)) // as a name
+		is.True(strings.Contains(out, `"`+name+`"`)) // as a stripped name
 	}
-	is.True(!strings.Contains(out, `"HOME"`)) // benign names are not echoed
-	is.True(strings.Contains(out, CodeEnvPassedToPlugins.Reason()))
-	is.True(strings.Contains(out, "a future release will restrict"))
+	is.True(!strings.Contains(out, `"HOME"`)) // passed, so not listed
+	is.True(!strings.Contains(out, `"PATH"`))
+	is.True(strings.Contains(out, CodeEnvStripped.Reason()))
+	is.True(!strings.Contains(out, CodeEnvPassedToPlugins.Reason())) // nothing sensitive is passed
+	is.True(strings.Contains(out, EnvAllowConfigPath))
 	is.True(strings.Contains(out, EnvWarningDocsPath))
 	assertNoSentinels(t, out, sentinels)
 }
 
-func TestWarnSensitiveEnv_OncePerProcess(t *testing.T) {
+// A sensitive-looking name the operator allowlisted is passed, and the second
+// warning says so.
+func TestWarnStrippedEnv_AllowlistedSensitiveIsReported(t *testing.T) {
 	is := is.New(t)
 	resetEnvWarnOnce(t)
 
+	environ, sentinels := fakeEnviron()
+	policy, err := NewEnvPolicy([]string{"SENTINEL_API_TOKEN"})
+	is.NoErr(err)
+	var buf bytes.Buffer
+	warnStrippedEnv(context.Background(), bufLogger(&buf), policy, environ)
+
+	out := buf.String()
+	is.True(strings.Contains(out, CodeEnvPassedToPlugins.Reason()))
+	is.True(strings.Contains(out, `"env_names":["SENTINEL_API_TOKEN"]`))
+	// and it is no longer in the stripped list
+	is.True(!strings.Contains(out, `"AAA_FIRST_TOKEN","AWS_SECRET_ACCESS_KEY","SENTINEL_API_TOKEN"`))
+	assertNoSentinels(t, out, sentinels)
+}
+
+func TestWarnStrippedEnv_OncePerProcess(t *testing.T) {
+	is := is.New(t)
+	resetEnvWarnOnce(t)
+
+	policy, _ := NewEnvPolicy(nil)
 	var buf bytes.Buffer
 	l := bufLogger(&buf)
 	env := []string{"A_TOKEN=1"}
 	for i := 0; i < 5; i++ {
-		warnSensitiveEnv(context.Background(), l, env)
+		warnStrippedEnv(context.Background(), l, policy, env)
 	}
-	is.Equal(strings.Count(buf.String(), CodeEnvPassedToPlugins.Reason()), 1)
+	is.Equal(strings.Count(buf.String(), CodeEnvStripped.Reason()), 1)
 }
 
-func TestWarnSensitiveEnv_NothingSensitiveNoLog(t *testing.T) {
+func TestWarnStrippedEnv_NothingStrippedNoLog(t *testing.T) {
 	is := is.New(t)
 	resetEnvWarnOnce(t)
 
+	policy, _ := NewEnvPolicy(nil)
 	var buf bytes.Buffer
-	warnSensitiveEnv(context.Background(), bufLogger(&buf), []string{"PATH=/bin"})
+	warnStrippedEnv(context.Background(), bufLogger(&buf), policy, []string{envPath + "=/bin", "HOME=/h", "LC_ALL=C"})
 	is.Equal(buf.String(), "")
 }
 
@@ -285,7 +311,7 @@ func TestRegistryInit_EnvWarning(t *testing.T) {
 		r := NewRegistry(bufLogger(&buf), testPluginDir, WithEnvWarning(true), fake)
 		r.Init(context.Background(), ":12345", server.DefaultMaxReceiveRecordSize)
 		r.Init(context.Background(), ":12345", server.DefaultMaxReceiveRecordSize)
-		is.Equal(strings.Count(buf.String(), CodeEnvPassedToPlugins.Reason()), 1)
+		is.Equal(strings.Count(buf.String(), CodeEnvStripped.Reason()), 1)
 		is.True(strings.Contains(buf.String(), `"AAA_FIRST_TOKEN"`))
 		is.True(strings.Contains(buf.String(), `"zzz_last_password"`))
 		assertNoSentinels(t, buf.String(), sentinels)
@@ -297,7 +323,7 @@ func TestRegistryInit_EnvWarning(t *testing.T) {
 		var buf bytes.Buffer
 		r := NewRegistry(bufLogger(&buf), testPluginDir, WithEnvWarning(false), fake)
 		r.Init(context.Background(), ":12345", server.DefaultMaxReceiveRecordSize)
-		is.True(!strings.Contains(buf.String(), CodeEnvPassedToPlugins.Reason()))
+		is.True(!strings.Contains(buf.String(), CodeEnvStripped.Reason()))
 		is.True(strings.Contains(buf.String(), "standalone connector plugins initialized"))
 	})
 
@@ -307,7 +333,7 @@ func TestRegistryInit_EnvWarning(t *testing.T) {
 		var buf bytes.Buffer
 		r := NewRegistry(bufLogger(&buf), t.TempDir(), WithEnvWarning(true), fake)
 		r.Init(context.Background(), ":12345", server.DefaultMaxReceiveRecordSize)
-		is.True(!strings.Contains(buf.String(), CodeEnvPassedToPlugins.Reason()))
+		is.True(!strings.Contains(buf.String(), CodeEnvStripped.Reason()))
 	})
 }
 
@@ -339,15 +365,16 @@ func TestRegistryInit_DefaultEnvironIsProcessEnvironment(t *testing.T) {
 	}
 }
 
-func TestWarnSensitiveEnv_NonStandardNamesCountedOnly(t *testing.T) {
+func TestWarnStrippedEnv_NonStandardNamesCountedOnly(t *testing.T) {
 	is := is.New(t)
 	resetEnvWarnOnce(t)
 
+	policy, _ := NewEnvPolicy(nil)
 	var buf bytes.Buffer
-	warnSensitiveEnv(context.Background(), bufLogger(&buf), []string{"EVIL\x1b[2J_TOKEN=x", "OK_TOKEN=y"})
+	warnStrippedEnv(context.Background(), bufLogger(&buf), policy, []string{"EVIL\x1b[2J_TOKEN=x", "OK_TOKEN=y"})
 	out := buf.String()
 	is.True(strings.Contains(out, "OK_TOKEN"))
-	is.True(strings.Contains(out, `"env_non_standard_names":1`))
+	is.True(strings.Contains(out, `"env_non_standard_names_stripped":1`))
 	is.True(!strings.Contains(out, "EVIL"))
 	is.True(!strings.Contains(out, "\x1b"))
 }

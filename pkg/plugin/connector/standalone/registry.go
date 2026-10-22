@@ -45,6 +45,9 @@ type Registry struct {
 	// that standalone plugin processes inherit. Advisory only; it never changes
 	// the environment plugins receive.
 	envWarning bool
+	// envPolicy decides which host environment variables plugin processes
+	// receive. The zero value passes only the base set (PATH, HOME, ...).
+	envPolicy EnvPolicy
 	// environ returns the host environment that the startup warning
 	// classifies. It defaults to os.Environ and is replaced only to supply a
 	// fixed environment in tests.
@@ -87,10 +90,19 @@ func WithEnviron(environ func() []string) RegistryOption {
 	}
 }
 
+// WithEnvPolicy sets which host environment variables standalone plugin
+// processes receive (connectors.standalone.env.allow). Without it plugins get
+// only the base set.
+func WithEnvPolicy(p EnvPolicy) RegistryOption {
+	return func(r *Registry) { r.envPolicy = p }
+}
+
 func NewRegistry(logger log.CtxLogger, pluginDir string, opts ...RegistryOption) *Registry {
+	base, _ := NewEnvPolicy(nil)
 	r := &Registry{
-		logger:  logger.WithComponentFromType(Registry{}),
-		environ: os.Environ,
+		logger:    logger.WithComponentFromType(Registry{}),
+		environ:   os.Environ,
+		envPolicy: base,
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -125,7 +137,7 @@ func (r *Registry) Init(ctx context.Context, connUtilsAddr string, maxReceiveRec
 		Msg("standalone connector plugins initialized")
 
 	if r.envWarning && count > 0 {
-		warnSensitiveEnv(ctx, r.logger, r.environ())
+		warnStrippedEnv(ctx, r.logger, r.envPolicy, r.environ())
 	}
 }
 
@@ -210,6 +222,7 @@ func (r *Registry) loadSpecifications(pluginPath string) (pconnector.Specificati
 	dispenser, err := NewDispenser(
 		zerolog.Nop(),
 		pluginPath,
+		r.envPolicy.ClientOption(os.Environ()),
 		client.WithEnvVar(pconnutils.EnvConduitConnectorUtilitiesGRPCTarget, r.connUtilsAddr),
 		client.WithEnvVar(pconnutils.EnvConduitConnectorToken, "irrelevant-token"),
 		client.WithEnvVar(pconnector.EnvConduitConnectorID, "load-specifications"),
@@ -266,6 +279,7 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, 
 	return NewDispenser(
 		logger.ZerologWithComponent(),
 		bp.Path,
+		r.envPolicy.ClientOption(os.Environ()), // first: the WithEnvVar options below append to its environment
 		client.WithEnvVar(pconnutils.EnvConduitConnectorUtilitiesGRPCTarget, r.connUtilsAddr),
 		client.WithEnvVar(pconnutils.EnvConduitConnectorToken, cfg.Token),
 		client.WithEnvVar(pconnector.EnvConduitConnectorID, cfg.ConnectorID),

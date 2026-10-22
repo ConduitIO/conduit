@@ -109,6 +109,7 @@ func TestDoctor_StandaloneEnv_NamesNotReturned(t *testing.T) {
 
 	cfg := conduit.DefaultConfigWithBasePath(t.TempDir())
 	cfg.Connectors.Path = t.TempDir()
+	cfg.Connectors.Standalone.Env.Allow = []string{"AAA_FIRST_TOKEN", "SENTINEL_API_TOKEN", "SENTINEL_ONLY_NAME_PASSWORD", "zzz_last_password"} // only allowlisted names are passed
 	is.NoErr(os.WriteFile(filepath.Join(cfg.Connectors.Path, "conduit-connector-fake"), []byte("#!/bin/sh\n"), 0o755))
 
 	cs := connectTestClient(t, NewServer(Config{StoreConfig: cfg, environ: func() []string { return fake }}))
@@ -150,6 +151,7 @@ func TestDoctor_StandaloneEnv_DefaultEnvironIsProcessEnvironment(t *testing.T) {
 
 	cfg := conduit.DefaultConfigWithBasePath(t.TempDir())
 	cfg.Connectors.Path = t.TempDir()
+	cfg.Connectors.Standalone.Env.Allow = []string{name}
 	is.NoErr(os.WriteFile(filepath.Join(cfg.Connectors.Path, "conduit-connector-fake"), []byte("#!/bin/sh\n"), 0o755))
 
 	cs := connectTestClient(t, NewServer(Config{StoreConfig: cfg}))

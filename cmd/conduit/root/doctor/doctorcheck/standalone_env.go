@@ -44,6 +44,9 @@ type standaloneEnvCheck struct {
 	redact        bool
 	// environ returns the environment to classify; nil means os.Environ.
 	environ func() []string
+	// allow is connectors.standalone.env.allow: the only extra variables
+	// plugins receive.
+	allow []string
 }
 
 func (c standaloneEnvCheck) Name() string { return NamePluginsStandaloneEnv }
@@ -87,17 +90,27 @@ func (c standaloneEnvCheck) Run(context.Context) check.CheckResult {
 	if c.environ != nil {
 		environ = c.environ
 	}
-	found := standalone.ClassifyEnv(environ())
+	policy, perr := standalone.NewEnvPolicy(c.allow)
+	if perr != nil {
+		return check.CheckResult{
+			Status:     check.StatusFail,
+			Category:   CategoryPlugins,
+			ConfigPath: standalone.EnvAllowConfigPath,
+			Message:    perr.Error(),
+		}
+	}
+	passed, _, _ := policy.Filter(environ())
+	found := standalone.ClassifyEnv(passed)
 	if found.Total() == 0 {
 		return check.CheckResult{
 			Status:     check.StatusPass,
 			Category:   CategoryPlugins,
 			ConfigPath: configKeyStandaloneEnv,
-			Message:    "no sensitive host environment variables will be passed to standalone plugins",
+			Message:    "no sensitive host environment variables are passed to standalone plugins (only PATH, HOME, TMPDIR, TZ, locale and " + standalone.EnvAllowConfigPath + ")",
 		}
 	}
 
-	suggestion := "install only trusted plugins, or start Conduit with a minimal environment; " +
+	suggestion := "remove names a plugin does not need from " + standalone.EnvAllowConfigPath + "; " +
 		"after reviewing the list, set " + configKeyStandaloneEnv + "=false to silence this (see " + standalone.EnvWarningDocsPath + ")"
 
 	if c.redact {
@@ -106,10 +119,10 @@ func (c standaloneEnvCheck) Run(context.Context) check.CheckResult {
 			Category:   CategoryPlugins,
 			Code:       standalone.CodeEnvPassedToPlugins.Reason(),
 			ConfigPath: configKeyStandaloneEnv,
-			Message: fmt.Sprintf("%d host environment variable(s) with sensitive-looking names will be passed to standalone plugin processes "+
+			Message: fmt.Sprintf("%d host environment variable(s) with sensitive-looking names are passed to standalone plugin processes because "+
+				standalone.EnvAllowConfigPath+" lists them "+
 				"(names withheld from this interface; run 'conduit doctor' locally for names; "+
-				"this is the environment of this process, which may differ from the engine's); "+
-				"a future release will restrict the plugin environment to an allowlist", found.Total()),
+				"this is the environment of this process, which may differ from the engine's)", found.Total()),
 			Suggestion: suggestion,
 		}
 	}
@@ -126,8 +139,8 @@ func (c standaloneEnvCheck) Run(context.Context) check.CheckResult {
 		Category:   CategoryPlugins,
 		Code:       standalone.CodeEnvPassedToPlugins.Reason(),
 		ConfigPath: configKeyStandaloneEnv,
-		Message: fmt.Sprintf("%d host environment variable(s) will be passed to standalone plugin processes: %s; "+
-			"a future release will restrict the plugin environment to an allowlist", found.Total(), list),
+		Message: fmt.Sprintf("%d host environment variable(s) are passed to standalone plugin processes because "+
+			standalone.EnvAllowConfigPath+" lists them: %s", found.Total(), list),
 		Suggestion: suggestion,
 	}
 }

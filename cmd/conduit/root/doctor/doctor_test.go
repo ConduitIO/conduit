@@ -307,6 +307,9 @@ func TestDoctor_StandaloneEnv_JSON(t *testing.T) {
 	is := is.New(t)
 	args, dir := tempConfigArgs(t)
 	installFakePlugin(t, dir)
+	for _, n := range []string{"AAA_FIRST_TOKEN", "AWS_SECRET_ACCESS_KEY", "SENTINEL_API_TOKEN", "POSTGRES_URL", "zzz_last_password"} {
+		args = append(args, "--connectors.standalone.env.allow", n) // only allowlisted names are passed, so only they are reported
+	}
 
 	finding, out := standaloneEnvFinding(t, args) // also asserts no sentinel value appears in out
 	is.Equal(finding["status"], "warn")
@@ -318,6 +321,18 @@ func TestDoctor_StandaloneEnv_JSON(t *testing.T) {
 	}
 	is.True(strings.Contains(msg, "5 host environment variable(s)"))
 	is.True(!strings.Contains(out, "HOME")) // benign names are neither flagged nor echoed
+}
+
+// Without an allowlist nothing sensitive is passed, so the finding passes.
+func TestDoctor_StandaloneEnv_NothingPassedByDefault(t *testing.T) {
+	is := is.New(t)
+	args, dir := tempConfigArgs(t)
+	installFakePlugin(t, dir)
+
+	finding, _ := standaloneEnvFinding(t, args)
+	is.Equal(finding["status"], "pass")
+	msg, _ := finding["message"].(string)
+	is.True(strings.Contains(msg, "no sensitive host environment variables are passed"))
 }
 
 func TestDoctor_StandaloneEnv_Silenced(t *testing.T) {
@@ -349,7 +364,7 @@ func TestDoctor_StandaloneEnv_DefaultEnvironIsProcessEnvironment(t *testing.T) {
 	t.Setenv(name, value)
 	args, dir := tempConfigArgs(t)
 	installFakePlugin(t, dir)
-	args = append(args, "--json", "--check", doctorcheck.NamePluginsStandaloneEnv)
+	args = append(args, "--connectors.standalone.env.allow", name, "--json", "--check", doctorcheck.NamePluginsStandaloneEnv)
 
 	out, _, err := runDoctorEnv(t, nil, args...)
 	is.NoErr(err)
