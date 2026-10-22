@@ -94,3 +94,27 @@ func TestService_SettingsResolverReachesInstances(t *testing.T) {
 	_, err = i3.resolveSettings(map[string]string{"k": "${A}"})
 	is.True(err != nil)
 }
+
+// With an allowlisted reference, lifecycle events carry the resolved value, the
+// same one Configure gets.
+func TestSource_OnDelete_CarriesResolvedSettings(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	t.Setenv("ALLOWED_PASSWORD", "pw-1")
+
+	src, sourceMock := newTestSource(ctx, t, gomock.NewController(t))
+	allow, err := env.NewAllowlist([]string{"ALLOWED_PASSWORD"})
+	is.NoErr(err)
+	src.Instance.settingsResolver = EnvSettingsResolver{Allow: allow}
+	src.Instance.LastActiveConfig.Settings = map[string]string{"password": "${ALLOWED_PASSWORD}"}
+
+	var got map[string]string
+	sourceMock.EXPECT().LifecycleOnDeleted(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req pconnector.SourceLifecycleOnDeletedRequest) (pconnector.SourceLifecycleOnDeletedResponse, error) {
+			got = req.Config
+			return pconnector.SourceLifecycleOnDeletedResponse{}, nil
+		})
+	sourceMock.EXPECT().Teardown(gomock.Any(), gomock.Any()).Return(pconnector.SourceTeardownResponse{}, nil)
+	is.NoErr(src.OnDelete(ctx))
+	is.Equal(got, map[string]string{"password": "pw-1"})
+}

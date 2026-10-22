@@ -134,6 +134,43 @@ pipelines:
 		is.True(strings.Contains(logs.String(), "is not allowed: the path is outside every allowed directory"))
 	})
 
+	t.Run("generator file format cannot read outside the file directory", func(t *testing.T) {
+		is := is.New(t)
+		var genOut string
+		_, _, logs := startRuntime(t, func(dataDir, filesDir string) string {
+			outsideDir := filepath.Join(dataDir, "outside")
+			is.NoErr(os.MkdirAll(outsideDir, 0o755))
+			is.NoErr(os.MkdirAll(filesDir, 0o755))
+			outsideSecret := filepath.Join(outsideDir, "secret.txt")
+			is.NoErr(os.WriteFile(outsideSecret, []byte("outside-file-"+secret+"\n"), 0o600))
+			genOut = filepath.Join(filesDir, "gen.out")
+			return fmt.Sprintf(`version: 2.2
+pipelines:
+  - id: gen-file
+    status: running
+    name: gen-file
+    connectors:
+      - id: src
+        type: source
+        plugin: builtin:generator
+        settings:
+          rate: "20"
+          operations: create
+          format.type: file
+          format.options.path: %[1]s
+      - id: dst
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: %[2]s
+`, outsideSecret, genOut)
+		})
+		if b, err := os.ReadFile(genOut); err == nil {
+			is.Equal(strings.TrimSpace(string(b)), "") // the generator must not turn the outside file into records
+		}
+		is.True(strings.Contains(logs.String(), "is not allowed: the path is outside every allowed directory"))
+	})
+
 	t.Run("env reference does not expand the engine environment", func(t *testing.T) {
 		is := is.New(t)
 		_, filesDir, logs := startRuntime(t, func(_, filesDir string) string {

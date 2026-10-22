@@ -18,10 +18,12 @@ package custom
 
 import (
 	"context"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -136,12 +138,10 @@ func (p *JavascriptProcessor) Configure(ctx context.Context, c config.Config) er
 	case cfg.ScriptPath != "":
 		// Invariant (security boundary): script.path is API-influenced, so it is
 		// confined to the operator's script directories after symlink
-		// resolution, and the resolved path is what gets read.
-		resolved, err := p.files.ScriptDirs.Check("settings.script.path", cfg.ScriptPath)
-		if err != nil {
-			return err
-		}
-		file, err := os.ReadFile(resolved)
+		// resolution, and enforced again when the file is opened (no symlink
+		// below the allowed directory is followed, so a swap after the check
+		// cannot redirect the read).
+		file, err := p.readFile(cfg.ScriptPath)
 		if err != nil {
 			return cerrors.Errorf("error reading script from path %v: %w", cfg.ScriptPath, err)
 		}
@@ -381,18 +381,31 @@ func (p *JavascriptProcessor) toSDKRecords(v goja.Value) (sdk.ProcessedRecord, e
 // hard error (not "module not found", which the resolver would swallow and keep
 // searching).
 func (fa FileAccess) requireLoader(path string) ([]byte, error) {
-	resolved, err := fa.RequireDirs.Check("processors.javascript.allowed-dirs", filepath.FromSlash(path))
+	f, err := fa.RequireDirs.OpenFile("processors.javascript.allowed-dirs", filepath.FromSlash(path), os.O_RDONLY, 0)
+	switch {
+	case err == nil:
+	case cerrors.Is(err, fs.ErrNotExist), cerrors.Is(err, syscall.ENOTDIR):
+		return nil, require.ModuleFileDoesNotExistError
+	default:
+		return nil, err // includes a refusal (config.path_not_allowed): never "module not found"
+	}
+	defer f.Close()
+	fi, err := f.Stat()
 	if err != nil {
 		return nil, err
 	}
-	fi, err := os.Stat(resolved)
-	switch {
-	case cerrors.Is(err, fs.ErrNotExist):
-		return nil, require.ModuleFileDoesNotExistError
-	case err != nil:
-		return nil, err
-	case fi.IsDir():
+	if fi.IsDir() {
 		return nil, require.ModuleFileDoesNotExistError
 	}
-	return os.ReadFile(resolved)
+	return io.ReadAll(f)
+}
+
+// readFile reads script.path through the open-time enforced policy.
+func (p *JavascriptProcessor) readFile(path string) ([]byte, error) {
+	f, err := p.files.ScriptDirs.OpenFile("settings.script.path", path, os.O_RDONLY, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
 }

@@ -111,22 +111,63 @@ func (p *Policy) Dirs() []string {
 // The error names the supplied path only, never the symlink target it
 // resolved to, so a refusal does not describe the host's file system.
 func (p *Policy) Check(configPath, path string) (string, error) {
+	resolved, _, err := p.check(configPath, path)
+	return resolved, err
+}
+
+// check is Check that also returns the allowed directory containing the path.
+func (p *Policy) check(configPath, path string) (resolved, root string, err error) {
 	if path == "" || strings.ContainsRune(path, 0) {
-		return "", p.refuse(configPath, path, "the path is empty or contains a NUL byte")
+		return "", "", p.refuse(configPath, path, "the path is empty or contains a NUL byte")
 	}
 	if p == nil || len(p.dirs) == 0 {
-		return "", p.refuse(configPath, path, "no directory is allowed")
+		return "", "", p.refuse(configPath, path, "no directory is allowed")
 	}
-	resolved, err := resolve(path, 0)
+	resolved, err = resolve(path, 0)
 	if err != nil {
-		return "", p.refuse(configPath, path, "the path cannot be resolved")
+		return "", "", p.refuse(configPath, path, "the path cannot be resolved")
 	}
 	for _, d := range p.dirs {
 		if contains(d, resolved) {
-			return resolved, nil
+			return resolved, d, nil
 		}
 	}
-	return "", p.refuse(configPath, path, "the path is outside every allowed directory")
+	return "", "", p.refuse(configPath, path, "the path is outside every allowed directory")
+}
+
+// OpenFile checks path like [Policy.Check] and then opens it, enforcing the
+// policy again at open time so that a symlink swapped in after the check cannot
+// redirect the open. On Unix the file is opened relative to the allowed
+// directory without following a symlink in any component (openat2 with
+// RESOLVE_BENEATH|RESOLVE_NO_SYMLINKS where the kernel has it, otherwise one
+// openat per component with O_NOFOLLOW). The check has already resolved every
+// symlink, so a legitimate path has none left to follow. Directories above the
+// allowed directory are the operator's and are not re-validated.
+//
+// On Windows there is no equivalent in the standard library; the open is the
+// checked path opened normally, which narrows but does not close the window.
+func (p *Policy) OpenFile(configPath, path string, flag int, perm os.FileMode) (*os.File, error) {
+	resolved, root, err := p.check(configPath, path)
+	if err != nil {
+		return nil, err
+	}
+	rel, err := filepath.Rel(root, resolved)
+	if err != nil {
+		return nil, p.refuse(configPath, path, "the path cannot be resolved")
+	}
+	return openBeneath(root, resolved, rel, flag, perm)
+}
+
+// splitRel splits a relative path into components and rejects ".", ".." and
+// empty ones: a component that climbs would defeat openat-relative walking.
+func splitRel(rel string) ([]string, error) {
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	for _, c := range parts {
+		if c == "" || c == "." || c == ".." {
+			return nil, fmt.Errorf("invalid path component %q", c)
+		}
+	}
+	return parts, nil
 }
 
 func (p *Policy) refuse(configPath, path, why string) error {

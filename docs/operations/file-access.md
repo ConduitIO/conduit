@@ -26,6 +26,33 @@ processors:
     allowed-dirs: [/etc/conduit/js]   # also turns require() on, limited to these directories
 ```
 
+## Which settings are covered
+
+| Plugin | Setting | Policy |
+| --- | --- | --- |
+| `file` (source, destination) | `path` | `connectors.file.allowed-dirs` |
+| `generator` | `format.options.path`, `collections.<name>.format.options.path` (the `file` record format reads the file and uses it as every record's payload) | `connectors.file.allowed-dirs` |
+| `postgres` (source, destination) | `sslcert`, `sslkey`, `sslrootcert`, `sslcrl`, `passfile`, `servicefile` inside the connection string `url`, in URL form or key/value form (`sslrootcert=system` is not a file) | `secrets.allowed-dirs` |
+| `custom.javascript` | `script.path`, `require()` | `processors.javascript.allowed-dirs` |
+
+Kafka's `caCert`, `clientCert` and `clientKey` are PEM text, not paths, and S3 reads no file named by
+a setting. A test (`TestBuiltinConnectorFileParams`) fails when a built-in connector gains a
+parameter that looks like it names a file and is not in the table or in a reviewed non-file list, so
+bumping a connector cannot silently add an uncovered file setting.
+
+TLS and credential files get their own list, `secrets.allowed-dirs`, instead of sharing the data-file
+list, because they live somewhere else (`/etc/ssl`, mounted secrets) and allowing those directories
+to the file connector would make them readable as data. The default is `<data dir>/secrets` plus the
+system CA directories (`/etc/ssl`, `/etc/pki`, `/etc/ca-certificates`, `/usr/share/ca-certificates`,
+`/usr/local/share/ca-certificates`, `/run/secrets`). It does not include the data dir itself (it holds
+`conduit.db` and `conduit.yaml`) or the Kubernetes service account directory. Setting
+`secrets.allowed-dirs` replaces the default, so list the system directories again if you still need
+them.
+
+| Key | Env | Default |
+| --- | --- | --- |
+| `secrets.allowed-dirs` | `CONDUIT_SECRETS_ALLOWED_DIRS` | `<data dir>/secrets` and the system CA directories |
+
 ## How a path is checked
 
 The path is made absolute and cleaned, symlinks are resolved (`filepath.EvalSymlinks`), and the result
@@ -35,9 +62,26 @@ is checked through its nearest existing parent; a dangling symlink is followed t
 relative paths are all judged on where they really point. `${VAR}` in a path is expanded first (it must
 be in `env.allow`), and the expanded value is what is checked. The connector receives the resolved path.
 
-The check runs when the connector or processor is configured, and on validation requests (`POST /v1/connectors/validate` and connector creation) for a literal `path`, so a validation call cannot be used to probe which files exist on the host. A `path` that still holds a `${VAR}` reference is checked after expansion. It cannot stop a local user who can
-modify the allowed directory from swapping a directory for a symlink afterwards, so keep allowed
-directories writable by the Conduit user only.
+The check runs when the connector or processor is configured, when a lifecycle event (created,
+updated, deleted) is sent to a plugin, and on validation requests (`POST /v1/connectors/validate`
+and connector creation) for a literal path, so a validation call cannot be used to probe which files
+exist on the host. Lifecycle events carry the same resolved settings Configure gets; if a reference
+cannot be resolved (a variable that is no longer allowed or set), the event fails with the coded
+error, including the delete hook, so fix the configuration and retry the delete.
+
+**Open time.** Where Conduit itself opens the file it enforces the policy again at `open(2)`:
+`custom.javascript` (`script.path` and `require()`) opens relative to the allowed directory without
+following a symlink in any component (`openat2` with `RESOLVE_BENEATH|RESOLVE_NO_SYMLINKS` on Linux,
+one `openat` per component with `O_NOFOLLOW` elsewhere on Unix), so a symlink swapped in after the
+check cannot redirect the read. The file destination does the same when the engine supplies its open
+function (`file.WithOpener`, `conduit-connector-file` v0.11.0 or later). On Windows the open is the
+checked path opened normally.
+
+Not enforced at open time, because the connector or a library opens the path itself: the file
+**source** (`github.com/nxadm/tail`), the generator's file format (`os.ReadFile` inside the connector)
+and the Postgres certificate files (pgx). For those the check is at configure time only, and a local
+user who can replace a directory component with a symlink in an allowed directory between the check
+and the open can still redirect it. Keep allowed directories writable only by the Conduit user.
 
 ## `custom.javascript`
 
@@ -59,6 +103,7 @@ service reads the file, create it first with the mode you want.
 | --- | --- | --- |
 | `config.path_not_allowed` | `path "..." is not allowed: the path is outside every allowed directory`, config path `settings.path` or `settings.script.path` | Move the file into an allowed directory, or add its directory to the key named in the suggestion and restart |
 
-Standalone connectors are not path-checked unless they are named `file`; they are installed by the
-operator and run as separate processes. Other connector settings that name files, such as TLS
-certificate paths, are not covered.
+The path controls cover **built-in** connectors (and a standalone connector that carries the same
+name as one of the plugins in the table). A standalone connector is native code running as the
+Conduit user; it opens whatever its own code opens. What it inherits from Conduit's environment is
+limited separately, see [standalone plugin environment](standalone-plugin-environment.md).

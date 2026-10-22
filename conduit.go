@@ -125,6 +125,13 @@ type Options struct {
 	// connectors.file.allowed-dirs in the CLI.
 	FileAllowedDirs []string
 
+	// SecretsAllowedDirs lists the directories connector settings may read TLS
+	// and credential files from (for Postgres, sslcert, sslkey, sslrootcert and
+	// the like in the connection string). The zero value keeps DefaultConfig's
+	// default: a "secrets" directory under the working directory and the system
+	// CA directories. Equivalent to secrets.allowed-dirs in the CLI.
+	SecretsAllowedDirs []string
+
 	// JavaScriptAllowedDirs lists the directories custom.javascript may load
 	// script.path and require() modules from. The zero value allows script.path
 	// only from a "scripts" directory under the working directory and disables
@@ -396,6 +403,9 @@ func New(_ context.Context, opts Options) (*Engine, error) {
 	cfg.Env.Allow = opts.EnvAllow
 	if len(opts.FileAllowedDirs) > 0 {
 		cfg.Connectors.File.AllowedDirs = opts.FileAllowedDirs
+	}
+	if len(opts.SecretsAllowedDirs) > 0 {
+		cfg.Secrets.AllowedDirs = opts.SecretsAllowedDirs
 	}
 	cfg.Processors.JavaScript.AllowedDirs = opts.JavaScriptAllowedDirs
 	cfg.Processors.Egress.BuiltinAllow = opts.BuiltinEgressAllow

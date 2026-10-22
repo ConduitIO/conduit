@@ -68,13 +68,20 @@ pipeline must not thereby act as the Conduit host.
 - A local Ollama needs `processors.egress.builtin-allow: ["http://127.0.0.1:11434"]`. Corporate proxies
   are no longer honoured by built-in HTTP processors; a proxy hop cannot be validated by a dial
   guard.
-- The path check runs when settings are resolved, not at `open(2)`. A local user who can swap a
-  directory component for a symlink between the two can still redirect the open. The resolved path
-  is passed to the plugin to narrow this; the allowed directories should be writable by the Conduit
-  user only. Standalone connectors other than one named `file` are not path-checked: they are
+- For the plugins that open paths themselves the check is at configure time, not `open(2)`. A local
+  user who can swap a directory component for a symlink in between can still redirect the open. The
+  resolved path is passed to the plugin to narrow this; the allowed directories should be writable
+  by the Conduit user only. Standalone connectors other than one named `file` are not path-checked: they are
   installed by the operator and run as separate processes.
-- Connector settings other than `path` that name files (for example TLS certificate paths) are not
-  covered by this ADR.
+- Other settings that name files are covered by a table (`fileRefs`) plus a test that fails when a
+  built-in connector gains an unlisted file-looking parameter: the generator's file format
+  (`connectors.file.allowed-dirs`) and Postgres' TLS and credential file parameters
+  (`secrets.allowed-dirs`, separate from the data-file list because certificate material lives
+  outside the data directories, default `<data dir>/secrets` plus the system CA directories).
+- Lifecycle events and validation requests go through the same resolver and path policy as Configure.
+- Where Conduit opens the file (`custom.javascript`, and the file destination through
+  `file.WithOpener`) the policy is enforced again at open time without following symlinks. The file
+  source, the generator and pgx open paths themselves; those stay configure-time checks.
 - `$$` in YAML is collapsed by the parser (`envDecoderHook`) before the runtime resolver sees the
   text, so it cannot be used to write a literal `${VAR}`; such a value is now refused instead of
   silently expanded. Fixing the escape is separate work.
