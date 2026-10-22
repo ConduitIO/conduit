@@ -72,6 +72,16 @@ class Gate(unittest.TestCase):
         cs = [comment("Review: changes-needed @ abcdef1", 1, who="drive-by", assoc="NONE")]
         self.assertEqual(g.evaluate([pr(7, comments=cs)]), [])
 
+    def test_trusted_login_counts_even_without_association(self):
+        cs = [comment("Review: changes-needed @ abcdef1", 1, who="devarismeroxa", assoc="NONE")]
+        self.assertEqual(g.evaluate([pr(7, comments=cs)]), [])
+        self.assertEqual(len(g.evaluate([pr(7, comments=cs)], {"devarismeroxa"})), 1)
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "prs.json")
+            json.dump([pr(7, comments=cs)], open(p, "w"))
+            self.assertEqual(g.main(["evaluate", p]), 0)
+            self.assertEqual(g.main(["evaluate", p, "--trusted", "devarismeroxa"]), 1)
+
     def test_open_or_closed_unmerged_prs_are_not_counted(self):
         def gh(*a):
             path = next(x for x in a[1:] if x.startswith("repos/"))

@@ -27,6 +27,10 @@ on:
         description: The tag being released. Defaults to the ref name that triggered the caller.
         type: string
         default: ''
+      trusted-logins:
+        description: Comma-separated logins whose review verdicts count whatever their author_association.
+        type: string
+        default: devarismeroxa
 
 permissions:
   contents: read
@@ -44,6 +48,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
       TAG: ${{ inputs.tag || github.ref_name }}
+      TRUSTED: ${{ inputs.trusted-logins }}
     steps:
       - name: Checkout the connector (tags needed)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -79,7 +84,7 @@ jobs:
           python3 .conduit-gates/.github/scripts/connector_release_gate.py \
             collect "$REPO" "${{ steps.prev.outputs.prev }}" "$TAG" "$RUNNER_TEMP/prs.json"
           python3 .conduit-gates/.github/scripts/connector_release_gate.py \
-            evaluate "$RUNNER_TEMP/prs.json" | tee -a "$GITHUB_STEP_SUMMARY"
+            evaluate "$RUNNER_TEMP/prs.json" --trusted "$TRUSTED" | tee -a "$GITHUB_STEP_SUMMARY"
           exit "${PIPESTATUS[0]}"
 
       - name: First release

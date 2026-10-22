@@ -22,12 +22,14 @@ Used from connector repositories through the reusable workflow
 Usage:
   connector_release_gate.py prev TAG < tags       (previous stable tag below TAG)
   connector_release_gate.py collect REPO PREV_TAG HEAD_REF OUT.json
-  connector_release_gate.py evaluate PRS.json
+  connector_release_gate.py evaluate PRS.json [--trusted login,login]
 
 Only PRs that are MERGED count (the commit-to-PR API also lists open PRs that
 contain the commit), and only verdict comments from OWNER, MEMBER or
-COLLABORATOR authors (tier1_review.TRUSTED), so a drive-by comment can neither
-block nor clear a tag.
+COLLABORATOR authors (tier1_review.TRUSTED) or from the logins passed with
+--trusted (the signers: author_association can read NONE or CONTRIBUTOR for a
+private org member, so trust must not depend on it alone), so a drive-by
+comment can neither block nor clear a tag.
 """
 
 import json
@@ -108,14 +110,14 @@ def collect(repo, prev_tag, head_ref, gh=run_gh):
     return out
 
 
-def evaluate(prs):
+def evaluate(prs, trusted_logins=frozenset()):
     """Return a list of problems; empty means the tag may be cut."""
     problems = []
     for pr in prs:
         labels = {l["name"] if isinstance(l, dict) else l for l in pr.get("labels", [])}
         if BLOCK_LABEL in labels:
             problems.append(f"#{pr['number']} {pr.get('title','')!r} was merged with the {BLOCK_LABEL} label")
-        pending = tier1_review.unresolved_changes_needed(pr.get("comments", []))
+        pending = tier1_review.unresolved_changes_needed(pr.get("comments", []), frozenset(trusted_logins))
         if pending:
             problems.append(f"#{pr['number']} {pr.get('title','')!r} has an unanswered `Review: changes-needed @ {pending[0][:7]}`")
     return problems
@@ -133,12 +135,13 @@ def main(argv=None, gh=run_gh):
                 json.dump(prs, f)
             print(f"connector release gate: {len(prs)} PRs merged since {argv[2]}.")
             return 0
-        if argv[:1] == ["evaluate"] and len(argv) == 2:
+        if argv[:1] == ["evaluate"] and len(argv) in (2, 4) and (len(argv) == 2 or argv[2] == "--trusted"):
+            trusted = {x.strip() for x in argv[3].split(",") if x.strip()} if len(argv) == 4 else set()
             with open(argv[1]) as f:
                 prs = json.load(f)
             if not isinstance(prs, list):
                 raise GateError("PR list is not a list")
-            problems = evaluate(prs)
+            problems = evaluate(prs, trusted)
             if problems:
                 print("connector release gate: FAILED. Resolve these before tagging:")
                 for p in problems:
