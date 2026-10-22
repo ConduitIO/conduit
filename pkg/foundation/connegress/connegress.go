@@ -195,60 +195,111 @@ type Target struct {
 func (t Target) String() string { return net.JoinHostPort(t.Host, t.Port) }
 
 // Check returns nil if the connector may use t, else a coded error whose config
-// path is configPath. With resolve, a host name is looked up and every address
-// is held to the same rules as the name; without it (validation requests, which
-// must not be a way to probe the network) only the name is checked.
-func (p *Policy) Check(ctx context.Context, configPath string, t Target, resolve bool) error {
+// path is configPath. A host name is looked up and every address is held to the
+// same rules as the name, so a name cannot lead somewhere the rules do not allow.
+// This is the authoritative decision; [Policy.Hint] is not.
+func (p *Policy) Check(ctx context.Context, configPath string, t Target) error {
 	p = p.orZero()
 	host := normalizeHost(t.Host)
+	if done, err := p.checkLiteral(configPath, t, host); done {
+		return err
+	}
+	return p.checkName(ctx, configPath, t, host)
+}
 
-	if strings.HasPrefix(host, "/") || strings.HasPrefix(host, "@") {
-		if p.Restricted() {
-			return refuse(configPath, t, "unix sockets are not allowed while connectors.egress.allow is set")
+// Hint is the name-only check for validation requests, which must not be a way
+// to make the engine look up names. It refuses what is certainly refused (a
+// metadata name or address, a literal outside the allowlist, a name no entry
+// could cover). deferred reports that the decision depends on what the name
+// resolves to and was NOT made: a caller that connects must not treat nil as
+// permission, it has to call [Policy.Check] (or dial through [Policy.DialContext],
+// which always does) before it connects.
+func (p *Policy) Hint(configPath string, t Target) (deferred bool, err error) {
+	p = p.orZero()
+	host := normalizeHost(t.Host)
+	if done, err := p.checkLiteral(configPath, t, host); done {
+		return false, err
+	}
+	if p.Restricted() && !p.allowsName(host, t.Port) {
+		if !p.hasAddrEntries(t.Port) {
+			return false, refuse(configPath, t, "the target is not in connectors.egress.allow")
 		}
+		return true, nil // allowed only if it resolves into a listed address
+	}
+	return !p.Restricted(), nil // unrestricted: the metadata check on the addresses is still to come
+}
+
+// CheckUnvettable is the answer for a target that cannot be vetted at all: no
+// host (a local socket or PGHOST), an endpoint the client library chooses by
+// itself. With an allowlist set it always refuses; without one there is nothing
+// to enforce and it allows.
+func (p *Policy) CheckUnvettable(configPath, what string) error {
+	if !p.Restricted() {
 		return nil
 	}
+	ce := conduiterr.New(CodeEgressBlocked, "the connection target cannot be checked against connectors.egress.allow: "+what)
+	ce.ConfigPath = configPath
+	ce.Suggestion = "name the target explicitly so it can be matched against " + AllowConfigPath +
+		" (see docs/operations/connector-egress.md)"
+	return ce
+}
+
+// checkLiteral decides what the host string alone decides: sockets, metadata
+// names, IP literals. done is false for a plain host name.
+func (p *Policy) checkLiteral(configPath string, t Target, host string) (done bool, err error) {
+	if host == "" {
+		return true, p.CheckUnvettable(configPath, "no host")
+	}
+	if strings.HasPrefix(host, "/") || strings.HasPrefix(host, "@") {
+		if p.Restricted() {
+			return true, refuse(configPath, t, "unix sockets are not allowed while connectors.egress.allow is set")
+		}
+		return true, nil
+	}
 	if IsMetadataHost(host) {
-		return refuse(configPath, t, "the target is a cloud metadata endpoint, which connectors may never reach")
+		return true, refuse(configPath, t, "the target is a cloud metadata endpoint, which connectors may never reach")
 	}
 	if ip := ParseIPLoose(host); ip != nil {
 		if IsMetadataIP(ip) {
-			return refuse(configPath, t, "the target is a cloud metadata address, which connectors may never reach")
+			return true, refuse(configPath, t, "the target is a cloud metadata address, which connectors may never reach")
 		}
 		if p.Restricted() && !p.allowsIP(ip, t.Port) {
-			return refuse(configPath, t, "the target is not in connectors.egress.allow")
+			return true, refuse(configPath, t, "the target is not in connectors.egress.allow")
 		}
-		return nil
+		return true, nil
 	}
-
-	return p.checkName(ctx, configPath, t, host, resolve)
+	return false, nil
 }
 
-// checkName vets a host name (not an address, not a metadata name).
-func (p *Policy) checkName(ctx context.Context, configPath string, t Target, host string, resolve bool) error {
+// checkName vets a host name (not an address, not a metadata name): it is
+// resolved and every address is checked.
+func (p *Policy) checkName(ctx context.Context, configPath string, t Target, host string) error {
 	nameAllowed := !p.Restricted() || p.allowsName(host, t.Port)
-	if !resolve {
-		if !nameAllowed && !p.hasAddrEntries(t.Port) {
-			return refuse(configPath, t, "the target is not in connectors.egress.allow")
-		}
-		return nil
-	}
 	rctx, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
 	addrs, err := p.resolver.LookupIPAddr(rctx, host)
 	if err != nil || len(addrs) == 0 {
 		// Nothing to dial now; the connector reports the failure itself. The
-		// name still has to be allowed.
+		// name still has to be allowed. (A dial never gets here: see DialContext.)
 		if !nameAllowed {
 			return refuse(configPath, t, "the target is not in connectors.egress.allow")
 		}
 		return nil
 	}
-	for _, a := range addrs {
-		if IsMetadataIP(a.IP) {
+	ips := make([]net.IP, len(addrs))
+	for i, a := range addrs {
+		ips[i] = a.IP
+	}
+	return p.vetIPs(configPath, t, nameAllowed, ips)
+}
+
+// vetIPs applies the rules to the addresses a name resolved to.
+func (p *Policy) vetIPs(configPath string, t Target, nameAllowed bool, ips []net.IP) error {
+	for _, ip := range ips {
+		if IsMetadataIP(ip) {
 			return refuse(configPath, t, "the host name resolves to a cloud metadata address, which connectors may never reach")
 		}
-		if p.Restricted() && !nameAllowed && !p.allowsIP(a.IP, t.Port) {
+		if p.Restricted() && !nameAllowed && !p.allowsIP(ip, t.Port) {
 			return refuse(configPath, t, "the target is not in connectors.egress.allow and the host name resolves outside it")
 		}
 	}

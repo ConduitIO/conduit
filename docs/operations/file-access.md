@@ -30,7 +30,8 @@ processors:
 | --- | --- | --- |
 | `file` (source, destination) | `path` | `connectors.file.allowed-dirs` |
 | `generator` | `format.options.path`, `collections.<name>.format.options.path` (the `file` record format reads the file and uses it as every record's payload) | `connectors.file.allowed-dirs` |
-| `postgres` (source, destination) | `sslcert`, `sslkey`, `sslrootcert`, `sslcrl`, `passfile`, `servicefile` inside the connection string `url`, in URL form or key/value form (`sslrootcert=system` is not a file) | `secrets.allowed-dirs` |
+| `postgres` (source, destination) | `sslcert`, `sslkey`, `sslrootcert`, `sslcrl` inside the connection string `url`, in URL form or key/value form (`sslrootcert=system` is not a file) | `secrets.allowed-dirs` |
+| `postgres` (source, destination) | `passfile`, `servicefile` and `service` in `url` are **refused outright**, whatever the path: pgx reads those files as credentials and as connection settings (a service file can redirect the host and turn TLS off). When `url` does not set them, Conduit sets `passfile`, `sslcert` and `sslkey` to the empty string, so pgx does not fall back to `~/.pgpass`, `~/.postgresql/postgresql.crt` or `.key` of the user Conduit runs as | none (not accepted) |
 | `custom.javascript` | `script.path`, `require()` | `processors.javascript.allowed-dirs` |
 
 Kafka's `caCert`, `clientCert` and `clientKey` are PEM text, not paths, and S3 reads no file named by
@@ -42,7 +43,7 @@ TLS and credential files get their own list, `secrets.allowed-dirs`, instead of 
 list, because they live somewhere else (`/etc/ssl`, mounted secrets) and allowing those directories
 to the file connector would make them readable as data. The default is `<data dir>/secrets` plus the
 system CA directories (`/etc/ssl`, `/etc/pki`, `/etc/ca-certificates`, `/usr/share/ca-certificates`,
-`/usr/local/share/ca-certificates`, `/run/secrets`). It does not include the data dir itself (it holds
+`/usr/local/share/ca-certificates`). `/run/secrets` is not in the default: name the individual directory you need. It does not include the data dir itself (it holds
 `conduit.db` and `conduit.yaml`) or the Kubernetes service account directory. Setting
 `secrets.allowed-dirs` replaces the default, so list the system directories again if you still need
 them.
@@ -50,6 +51,10 @@ them.
 | Key | Env | Default |
 | --- | --- | --- |
 | `secrets.allowed-dirs` | `CONDUIT_SECRETS_ALLOWED_DIRS` | `<data dir>/secrets` and the system CA directories |
+
+These defaults hold on every start path, including `conduit run` with no flags: an unset repeatable
+flag does not replace them (`TestRunDefaultsFileAccess` drives the real command). A flag, the
+config file or the environment replaces only its own key.
 
 ## How a path is checked
 

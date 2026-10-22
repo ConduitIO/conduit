@@ -17,7 +17,10 @@ package connegress
 import (
 	"context"
 	"net"
+	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 
@@ -106,9 +109,19 @@ func mustPolicy(t *testing.T, r Resolver, entries ...string) *Policy {
 	return New(es).WithResolver(r)
 }
 
+// check runs the authoritative Check, or the name-only Hint.
+func check(p *Policy, host, port string, resolve bool) error {
+	t := Target{host, port}
+	if resolve {
+		return p.Check(context.Background(), "settings.url", t)
+	}
+	_, err := p.Hint("settings.url", t)
+	return err
+}
+
 func checkRefused(t *testing.T, p *Policy, host, port string, resolve bool) {
 	t.Helper()
-	err := p.Check(context.Background(), "settings.url", Target{host, port}, resolve)
+	err := check(p, host, port, resolve)
 	ce, ok := conduiterr.Get(err)
 	if !ok || ce.Code != CodeEgressBlocked || ce.ConfigPath != "settings.url" || ce.Suggestion == "" {
 		t.Errorf("%s:%s: err = %v, want a coded refusal", host, port, err)
@@ -117,7 +130,7 @@ func checkRefused(t *testing.T, p *Policy, host, port string, resolve bool) {
 
 func checkAllowed(t *testing.T, p *Policy, host, port string, resolve bool) {
 	t.Helper()
-	if err := p.Check(context.Background(), "settings.url", Target{host, port}, resolve); err != nil {
+	if err := check(p, host, port, resolve); err != nil {
 		t.Errorf("%s:%s refused: %v", host, port, err)
 	}
 }
@@ -200,5 +213,192 @@ func TestCheck_NilPolicy(t *testing.T) {
 	checkRefused(t, p, "169.254.169.254", "80", false)
 	if p.Restricted() {
 		t.Fatal("nil policy is restricted")
+	}
+}
+
+func TestCheckUnvettable(t *testing.T) {
+	addrOnly := mustPolicy(t, stubResolver{}, "10.0.0.0/8:*", "192.168.0.0/16:5432")
+	if err := addrOnly.CheckUnvettable("settings.url", "no host"); err == nil {
+		t.Fatal("an unvettable target was allowed under an allowlist")
+	}
+	if err := New(nil).CheckUnvettable("settings.url", "no host"); err != nil {
+		t.Fatalf("no allowlist, nothing to enforce: %v", err)
+	}
+	var nilPolicy *Policy
+	if err := nilPolicy.CheckUnvettable("k", "x"); err != nil {
+		t.Fatal(err)
+	}
+	// an empty host through Check is unvettable too, even though entries with a
+	// wildcard port would "cover" any name
+	for _, tt := range []Target{{"", "0"}, {"", "5432"}} {
+		if err := addrOnly.Check(context.Background(), "settings.url", tt); err == nil {
+			t.Errorf("empty host %v allowed", tt)
+		}
+		if _, err := addrOnly.Hint("settings.url", tt); err == nil {
+			t.Errorf("empty host %v allowed by Hint", tt)
+		}
+	}
+}
+
+// A hint can defer; a deferral is never permission.
+func TestHint_DeferralIsNotPermission(t *testing.T) {
+	res := stubResolver{"db.test": {"172.16.5.5"}}
+	p := mustPolicy(t, res, "10.0.0.0/8:5432")
+
+	deferred, err := p.Hint("settings.url", Target{"db.test", "5432"})
+	if err != nil || !deferred {
+		t.Fatalf("Hint = %v, %v; want a deferral", deferred, err)
+	}
+	// the authoritative check, and a dial, both refuse it
+	checkRefused(t, p, "db.test", "5432", true)
+	if c, err := p.DialContext(context.Background(), "tcp", "db.test:5432"); err == nil {
+		c.Close()
+		t.Fatal("a deferred target connected without being re-checked")
+	}
+	// a name no entry could cover is refused by the hint already
+	if _, err := p.Hint("settings.url", Target{"db.test", "9999"}); err == nil {
+		t.Fatal("hint allowed a name no entry covers")
+	}
+	// unrestricted: the hint still defers the address check, and says so
+	if deferred, err := New(nil).Hint("settings.url", Target{"db.test", "1"}); err != nil || !deferred {
+		t.Fatalf("unrestricted Hint = %v, %v", deferred, err)
+	}
+}
+
+func listener(t *testing.T) (port string, accepted chan struct{}) {
+	t.Helper()
+	l, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skip("cannot listen:", err)
+	}
+	accepted = make(chan struct{}, 8)
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			accepted <- struct{}{}
+			c.Close()
+		}
+	}()
+	t.Cleanup(func() { l.Close() })
+	_, port, _ = net.SplitHostPort(l.Addr().String())
+	return port, accepted
+}
+
+// flipDNS answers with its current answer, which a test changes.
+type flipDNS struct{ ips []string }
+
+func (f *flipDNS) LookupIPAddr(context.Context, string) ([]net.IPAddr, error) {
+	var out []net.IPAddr
+	for _, i := range f.ips {
+		out = append(out, net.IPAddr{IP: net.ParseIP(i)})
+	}
+	return out, nil
+}
+
+// Every dial hook the built-in connectors' client libraries have goes through the
+// same guard: a resolved address that is not allowed is not connected to.
+func TestDialGuard_PerClientAdapter(t *testing.T) {
+	port, accepted := listener(t)
+	res := stubResolver{"db.test": {"127.0.0.1"}}
+	outside := mustPolicy(t, res, "10.0.0.0/8:*", "db.other:5432") // 127.0.0.1 is not listed
+	inside := mustPolicy(t, res, "127.0.0.0/8:*")
+
+	dials := map[string]func(p *Policy, addr string) (net.Conn, error){
+		"postgres (pgx DialFunc)": func(p *Policy, addr string) (net.Conn, error) {
+			return p.PGXDialFunc()(context.Background(), "tcp", addr)
+		},
+		"kafka (franz-go Dialer)": func(p *Policy, addr string) (net.Conn, error) {
+			return p.KafkaDialer()(context.Background(), "tcp", addr)
+		},
+		"mysql (driver DialContext)": func(p *Policy, addr string) (net.Conn, error) {
+			return p.MySQLDialContext("tcp")(context.Background(), addr)
+		},
+		"s3 (http.Transport)": func(p *Policy, addr string) (net.Conn, error) {
+			return p.HTTPTransport().DialContext(context.Background(), "tcp", addr)
+		},
+	}
+	for name, dial := range dials {
+		for _, addr := range []string{"127.0.0.1:" + port, "db.test:" + port, "localhost:" + port} {
+			if c, err := dial(outside, addr); err == nil {
+				c.Close()
+				t.Errorf("%s: %s connected although its resolved address is not allowed", name, addr)
+			}
+		}
+		if c, err := dial(inside, "127.0.0.1:"+port); err != nil {
+			t.Errorf("%s: allowed dial failed: %v", name, err)
+		} else {
+			c.Close()
+		}
+		if c, err := dial(inside, "db.test:"+port); err != nil {
+			t.Errorf("%s: allowed name failed: %v", name, err)
+		} else {
+			c.Close()
+		}
+	}
+	// the refusals never reached the listener
+	select {
+	case <-accepted:
+	default:
+		t.Fatal("setup: allowed dials did not arrive")
+	}
+}
+
+func TestDialGuard_HTTPClient(t *testing.T) {
+	port, _ := listener(t)
+	p := mustPolicy(t, stubResolver{}, "10.0.0.0/8:*")
+	client := &http.Client{Transport: p.HTTPTransport(), Timeout: 2 * time.Second}
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://127.0.0.1:"+port+"/", http.NoBody)
+	resp, err := client.Do(req)
+	if err == nil {
+		resp.Body.Close()
+		t.Fatal("the HTTP client connected to an address outside the allowlist")
+	}
+	if !strings.Contains(err.Error(), "not allowed") {
+		t.Fatalf("not a policy refusal: %v", err)
+	}
+}
+
+// What the name resolves to at the dial is what counts, not what it resolved to
+// when the setting was checked (DNS rebinding), and the connection goes to the
+// vetted address.
+func TestDialGuard_RebindingAndUnvettable(t *testing.T) {
+	port, _ := listener(t)
+	dns := &flipDNS{ips: []string{"127.0.0.1"}}
+	p := mustPolicy(t, dns, "127.0.0.0/8:*")
+
+	checkAllowed(t, p, "db.test", port, true)
+	dns.ips = []string{"169.254.169.254"}
+	if c, err := p.DialContext(context.Background(), "tcp", "db.test:"+port); err == nil {
+		c.Close()
+		t.Fatal("rebinding to the metadata address connected")
+	}
+	dns.ips = []string{"127.0.0.1", "169.254.169.254"}
+	if c, err := p.DialContext(context.Background(), "tcp", "db.test:"+port); err == nil {
+		c.Close()
+		t.Fatal("a metadata address among the answers connected")
+	}
+
+	// cannot be vetted: no host, no port, unresolvable, a socket
+	for _, addr := range []string{":" + port, "noport", ""} {
+		if c, err := p.DialContext(context.Background(), "tcp", addr); err == nil {
+			c.Close()
+			t.Errorf("%q connected", addr)
+		}
+	}
+	if c, err := mustPolicy(t, stubResolver{}, "127.0.0.0/8:*").DialContext(context.Background(), "tcp", "unresolvable.test:"+port); err == nil {
+		c.Close()
+		t.Error("an unresolvable name connected")
+	}
+	if c, err := p.DialContext(context.Background(), "unix", "/var/run/postgresql/.s.PGSQL.5432"); err == nil {
+		c.Close()
+		t.Error("a unix socket connected under an allowlist")
+	}
+	// metadata is refused for an unrestricted policy too
+	if c, err := New(nil).WithResolver(dns).DialContext(context.Background(), "tcp", "db.test:"+port); err == nil {
+		c.Close()
+		t.Error("unrestricted policy connected to a metadata answer")
 	}
 }

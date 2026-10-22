@@ -1010,7 +1010,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (118)
+## 3. Error codes (119)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -1024,6 +1024,7 @@ Author: Meroxa, Inc.
 | `config.id_duplicate` | InvalidArgument | config: id duplicate |
 | `config.parse_error` | InvalidArgument | CodeParseError is raised when a pipeline config document can't be parsed at all (invalid YAML, unrecognized version). It exists for offline consumers (cmd/conduit/internal/validate) that need a stable code for parser failures, which the parser itself returns as plain errors since it has no per-field configPath to attach at that stage. |
 | `config.path_not_allowed` | PermissionDenied | CodePathNotAllowed is raised when a path in a setting is outside every directory the operator allows for it (or no directory is allowed). The fix is for an operator to allow the directory in conduit.yaml and restart; it cannot be changed through the API. |
+| `connector.egress_blocked` | PermissionDenied | CodeEgressBlocked is raised when a connector setting names a target that is not allowed. It cannot be changed through the API: a metadata endpoint is never allowed, and the allowlist is the operator's. |
 | `connector.external_unreachable` | Unavailable | CodeExternalConnectorUnreachable is raised when an external connector's dialed address (pkg/plugin/connector/external, embed Slice 2) cannot be reached - at registration time (fail fast, never discovered on the first pipeline record) or when the connection is lost. |
 | `connector.external_version_mismatch` | FailedPrecondition | CodeExternalConnectorVersionMismatch is raised when an external connector's dialed address does not implement the pconnector protocol version pkg/plugin/connector/external's Dispenser hard-coded (go-plugin performs no version negotiation on the Reattach path, so this package must verify it explicitly via a Specify round trip). |
 | `connector.instance_not_found` | NotFound | CodeConnectorNotFound is raised when a referenced connector instance cannot be located. |

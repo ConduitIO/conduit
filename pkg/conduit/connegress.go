@@ -15,6 +15,7 @@
 package conduit
 
 import (
+	"context"
 	"net"
 	"net/url"
 	"strconv"
@@ -43,6 +44,10 @@ type egressRef struct {
 	// connection string that relies on the local socket or PGHOST): with an
 	// allowlist the target cannot be vetted.
 	missingHost bool
+	// unvettable, when set, is why the targets cannot be known from the
+	// settings (the client library chooses them): with an allowlist the setting
+	// is refused.
+	unvettable string
 }
 
 // egressRefs lists the network targets named by the settings of a built-in
@@ -52,7 +57,8 @@ type egressRef struct {
 //     pgx itself so the check sees what pgx will dial (including fallbacks and
 //     PG* environment defaults);
 //   - kafka: the brokers in `servers`;
-//   - s3: `aws.endpoint`, or the regional endpoint when it is empty.
+//   - s3: `aws.endpoint` (only vettable with aws.pathStyle=true; otherwise the
+//     client chooses the host and, under an allowlist, the setting is refused).
 //
 // The generator, file and log connectors do not connect anywhere. A test fails
 // when a built-in connector gains a parameter that looks like an address and is
@@ -120,14 +126,18 @@ func kafkaEgress(servers string) egressRef {
 func s3Egress(settings map[string]string) egressRef {
 	ref := egressRef{key: s3EndpointSetting}
 	ep := strings.TrimSpace(settings[s3EndpointSetting])
+	// The AWS SDK, not this code, decides where it connects: the regional
+	// endpoint or its FIPS and dual-stack variants, other partitions (cn, gov),
+	// AWS_ENDPOINT_URL* variables, and, in virtual-hosted style, a subdomain
+	// named after the bucket. Guessing any of that here would let the check
+	// approve one host while the SDK dials another. So an endpoint is only
+	// vettable when it is given explicitly and the bucket stays in the path.
 	if ep == "" {
-		region := strings.TrimSpace(settings["aws.region"])
-		host := "s3.amazonaws.com"
-		if region != "" {
-			host = "s3." + region + ".amazonaws.com"
-		}
-		ref.targets = []connegress.Target{{Host: host, Port: "443"}}
+		ref.unvettable = "no aws.endpoint is set, so the S3 client chooses the host (regional, FIPS or dual-stack endpoint, bucket subdomain); set aws.endpoint explicitly and aws.pathStyle=true"
 		return ref
+	}
+	if strings.TrimSpace(settings["aws.pathStyle"]) != strconv.FormatBool(true) {
+		ref.unvettable = "aws.pathStyle is not true, so the S3 client dials a subdomain named after the bucket; set aws.pathStyle=true"
 	}
 	if !strings.Contains(ep, "://") {
 		ep = "https://" + ep
@@ -145,4 +155,10 @@ func s3Egress(settings map[string]string) egressRef {
 	}
 	ref.targets = []connegress.Target{{Host: u.Hostname(), Port: port}}
 	return ref
+}
+
+// withEgressPolicy is the context decorator that hands a built-in connector the
+// operator's connector egress policy.
+func withEgressPolicy(p *connegress.Policy) func(context.Context) context.Context {
+	return func(ctx context.Context) context.Context { return connegress.WithPolicy(ctx, p) }
 }
