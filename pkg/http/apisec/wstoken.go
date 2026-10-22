@@ -18,6 +18,8 @@ import (
 	"encoding/base64"
 	"net/http"
 	"strings"
+
+	"github.com/gorilla/websocket"
 )
 
 const (
@@ -33,8 +35,13 @@ const (
 	WebSocketTokenPrefix = "conduit.token."
 )
 
+// isWebSocketUpgrade decides whether r is a WebSocket handshake. It must agree
+// with the proxy that performs the upgrade (grpcutil.webSocketProxy uses the
+// same function), or a request could be authenticated as a handshake here and
+// served as a plain request there. The carrier is only honored on GET, the only
+// method a handshake may use.
 func isWebSocketUpgrade(r *http.Request) bool {
-	return strings.EqualFold(r.Header.Get("Upgrade"), "websocket")
+	return r.Method == http.MethodGet && websocket.IsWebSocketUpgrade(r)
 }
 
 // EncodeWebSocketToken returns the carrier subprotocol for token.

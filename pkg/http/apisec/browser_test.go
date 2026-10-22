@@ -71,17 +71,29 @@ func TestBrowserPolicy_OriginAllowed(t *testing.T) {
 		{"http://", "", false}, // host-less origin never matches an empty Host
 		{"%zz", "127.0.0.1:8080", false},
 		{"https://console.example.evil.example", "127.0.0.1:8080", false},
-		{"https://console.example/", "127.0.0.1:8080", false},   // not canonical
+		{"https://console.example/", "127.0.0.1:8080", false}, // not canonical
+		{"ftp://127.0.0.1:8080", "127.0.0.1:8080", false},     // the scheme is compared: only http(s) is a web origin
+		{"chrome-extension://127.0.0.1:8080", "127.0.0.1:8080", false},
 		{"http://user@127.0.0.1:8080", "127.0.0.1:8080", false}, // userinfo is never in a browser's Origin
 		{"http://127.0.0.1:8080/x", "127.0.0.1:8080", false},
 		{"http://127.0.0.1:8080?x=1", "127.0.0.1:8080", false},
 	} {
-		if got := p.OriginAllowed(tc.origin, tc.host); got != tc.want {
+		if got := p.OriginAllowed(tc.origin, tc.host, false); got != tc.want {
 			t.Errorf("OriginAllowed(%q, %q) = %v, want %v", tc.origin, tc.host, got, tc.want)
 		}
 	}
-	is.New(t).True(BrowserPolicy{AllowedOrigins: []string{"*"}}.OriginAllowed("http://anything.example", "127.0.0.1:8080"))
-	is.New(t).True(BrowserPolicy{AllowedOrigins: []string{"null"}}.OriginAllowed("null", "127.0.0.1:8080"))
+	is.New(t).True(BrowserPolicy{AllowedOrigins: []string{"*"}}.OriginAllowed("http://anything.example", "127.0.0.1:8080", false))
+	is.New(t).True(BrowserPolicy{AllowedOrigins: []string{"null"}}.OriginAllowed("null", "127.0.0.1:8080", false))
+}
+
+func TestBrowserPolicy_OriginAllowed_SchemeFollowsTransport(t *testing.T) {
+	p := BrowserPolicy{}
+	// Plain HTTP backend: an https origin is a TLS terminating proxy in front.
+	is.New(t).True(p.OriginAllowed("http://conduit.example", "conduit.example", false))
+	is.New(t).True(p.OriginAllowed("https://conduit.example", "conduit.example", false))
+	// The request arrived over TLS: an http origin is a downgraded page.
+	is.New(t).True(!p.OriginAllowed("http://conduit.example", "conduit.example", true))
+	is.New(t).True(p.OriginAllowed("https://conduit.example", "conduit.example", true))
 }
 
 func TestBrowserPolicy_CheckRequest_HostIsCheckedBeforeSameOrigin(t *testing.T) {

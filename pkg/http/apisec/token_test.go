@@ -57,6 +57,16 @@ func TestResolveToken(t *testing.T) {
 		{name: "short file", file: write("short", "tiny\n"), wantCode: &CodeTokenInvalid, wantPath: ConfigPathToken, leakCheck: "tiny"},
 		{name: "empty file", file: write("empty", " \n"), wantCode: &CodeTokenInvalid, wantPath: ConfigPathTokenFile},
 		{name: "missing file", file: filepath.Join(dir, "missing"), wantCode: &CodeTokenInvalid, wantPath: ConfigPathTokenFile},
+		{name: "whitespace-only inline token is not 'unset'", token: "                  ", wantCode: &CodeTokenInvalid, wantPath: ConfigPathToken},
+		{name: "tab-only inline token", token: "\t\t", wantCode: &CodeTokenInvalid, wantPath: ConfigPathToken},
+		{name: "space inside inline", token: "0123456789 abcdefghij", wantCode: &CodeTokenInvalid, wantPath: ConfigPathToken, leakCheck: "abcdefghij"},
+		{name: "tab inside inline", token: "0123456789\tabcdefghij", wantCode: &CodeTokenInvalid, wantPath: ConfigPathToken, leakCheck: "abcdefghij"},
+		{name: "newline inside inline", token: "0123456789\nabcdefghij", wantCode: &CodeTokenInvalid, wantPath: ConfigPathToken, leakCheck: "abcdefghij"},
+		{name: "NUL inside inline", token: "0123456789\x00abcdefghij", wantCode: &CodeTokenInvalid, wantPath: ConfigPathToken, leakCheck: "abcdefghij"},
+		{name: "DEL inside inline", token: "0123456789\x7fabcdefghij", wantCode: &CodeTokenInvalid, wantPath: ConfigPathToken, leakCheck: "abcdefghij"},
+		{name: "no-break space inside inline", token: "0123456789\u00a0abcdefghij", wantCode: &CodeTokenInvalid, wantPath: ConfigPathToken, leakCheck: "abcdefghij"},
+		{name: "space inside file token", file: write("inner", "0123456789 abcdefghij\n"), wantCode: &CodeTokenInvalid, wantPath: ConfigPathToken, leakCheck: "abcdefghij"},
+		{name: "two lines in a file", file: write("twolines", "0123456789abcdef\nsecondline-abcdef\n"), wantCode: &CodeTokenInvalid, wantPath: ConfigPathToken, leakCheck: "secondline"},
 		{name: "both set", token: goodToken, file: write("both", goodToken), wantCode: &CodeTokenInvalid, wantPath: ConfigPathTokenFile},
 	}
 	for _, tc := range testCases {

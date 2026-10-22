@@ -1327,6 +1327,9 @@ func (r *Runtime) serveHTTPAPI(
 	// Outermost: Host, Origin and Content-Type are checked before anything
 	// else, including the UI and the token gate, on every method.
 	handler = policy.Guard(handler)
+	// Outermost of all: framing, CSP, nosniff and referrer headers on every
+	// response, including the guard's refusals.
+	handler = apisec.SecurityHeaders(handler)
 
 	addr, err := r.serveHTTP(
 		ctx,

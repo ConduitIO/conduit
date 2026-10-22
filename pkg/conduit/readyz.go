@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/http/apisec"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	json "github.com/goccy/go-json"
 )
@@ -59,10 +60,18 @@ type PipelineReadiness struct {
 // orchestrators to gate traffic. It returns 503 only while the engine is still
 // starting up or if its state store is unavailable; once the engine can serve it
 // returns 200, with any degraded pipelines listed in the body rather than treated
-// as not-ready. See docs/design-documents/20260704-phase-1-execution-plan.md.
+// as not-ready. When an API token is configured, only a caller presenting it
+// sees the pipeline summary and error text; anyone else gets the status alone.
+// See docs/design-documents/20260704-phase-1-execution-plan.md.
 func (r *Runtime) readyzHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		resp, code := r.readiness(req.Context())
+		if r.apiToken != "" && !apisec.HasValidToken(req, r.apiToken) {
+			// /readyz is open so orchestrator probes work without the token, but
+			// the body names pipelines, their errors and the state store's
+			// error text. An anonymous caller gets only ready / not ready.
+			resp = ReadinessResponse{Status: resp.Status}
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(code)
 		_ = json.NewEncoder(w).Encode(resp)
