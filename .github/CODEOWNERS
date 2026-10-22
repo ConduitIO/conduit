@@ -25,6 +25,10 @@
 /pkg/provisioning/                  @devarismeroxa
 /pkg/plugin/connector/              @devarismeroxa
 /pkg/schemaregistry/                @devarismeroxa
+/pkg/processor/                     @devarismeroxa
+/pkg/kcmigrate/                     @devarismeroxa
+/pkg/inspector/                     @devarismeroxa
+/pkg/foundation/atomicfile/         @devarismeroxa
 
 # The suites that prove the data-path invariants.
 /tests/chaos/                       @devarismeroxa
@@ -35,3 +39,6 @@
 /.github/                           @devarismeroxa
 /CLAUDE.md                          @devarismeroxa
 /Makefile                           @devarismeroxa
+/go.mod                             @devarismeroxa
+/go.sum                             @devarismeroxa
+/tools/                             @devarismeroxa
