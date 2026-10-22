@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"unicode"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"google.golang.org/grpc"
@@ -55,7 +56,16 @@ const (
 // the token). It returns "" and no error when neither is set. Setting both is
 // an error: two sources would make it unclear which one is enforced.
 func ResolveToken(token, tokenFile string) (string, error) {
+	rawInline := token
 	token = strings.TrimSpace(token)
+	if rawInline != "" && token == "" {
+		// A whitespace-only token must not read as "no token configured": the
+		// operator meant to set one and would get an open API.
+		ce := conduiterr.New(CodeTokenInvalid, "api.token is only whitespace")
+		ce.ConfigPath = ConfigPathToken
+		ce.Suggestion = "set api.token to a random token without whitespace, for example the output of `openssl rand -hex 32`, or unset it"
+		return "", ce
+	}
 	switch {
 	case token != "" && tokenFile != "":
 		ce := conduiterr.New(CodeTokenInvalid, "both api.token and api.token-file are set")
@@ -82,6 +92,16 @@ func ResolveToken(token, tokenFile string) (string, error) {
 	}
 	if token == "" {
 		return "", nil
+	}
+	if i := strings.IndexFunc(token, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }); i >= 0 {
+		// Leading and trailing whitespace is trimmed above (a token file ends
+		// in a newline). Anything inside would be sent in an HTTP header or a
+		// WebSocket subprotocol and is almost certainly a paste error. The
+		// character itself is not echoed.
+		ce := conduiterr.New(CodeTokenInvalid, "the API token contains whitespace or a control character")
+		ce.ConfigPath = ConfigPathToken
+		ce.Suggestion = "use a token made of printable characters without spaces, for example the output of `openssl rand -hex 32`"
+		return "", ce
 	}
 	if len(token) < MinTokenLength {
 		ce := conduiterr.New(CodeTokenInvalid, "the API token is shorter than the 16 character minimum")
@@ -223,4 +243,15 @@ func remoteOf(ctx context.Context) string {
 		return p.Addr.String()
 	}
 	return ""
+}
+
+// HasValidToken reports whether r carries the bearer token (Authorization
+// header, or the WebSocket subprotocol carrier on a WebSocket upgrade). It does
+// not modify r. Used for endpoints that are open to everyone but return more to
+// an authenticated caller.
+func HasValidToken(r *http.Request, token string) bool {
+	if presented, ok := bearerToken(r.Header.Get("Authorization")); ok {
+		return tokensEqual(presented, token)
+	}
+	return false
 }

@@ -17,6 +17,9 @@ package conduit
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -365,4 +368,92 @@ func TestAPIToken_UILoadsWithoutTokenAndPromptsViaScript(t *testing.T) {
 
 	code, _ = a.do(t, "GET", "/v1/pipelines", "", nil)
 	is.Equal(code, 401)
+}
+
+// /readyz stays open for probes, but with a token set an anonymous caller must
+// get only ready / not ready, not pipeline names, counts or error text.
+func TestAPIToken_ReadyzDetailNeedsTheToken(t *testing.T) {
+	is := is.New(t)
+	a := startSecureAPI(t, withToken)
+	code, _ := a.do(t, "POST", "/v1/pipelines", `{"config":{"name":"secret-pipeline-name"}}`,
+		map[string]string{"Content-Type": "application/json", "Authorization": "Bearer " + testToken})
+	is.Equal(code, 200)
+
+	code, body := a.do(t, "GET", "/readyz", "", nil)
+	is.Equal(code, 200)
+	is.Equal(strings.TrimSpace(body), `{"status":"ready"}`)
+	is.True(!strings.Contains(body, "pipelines") && !strings.Contains(body, "secret-pipeline-name"))
+
+	// A wrong token is anonymous too.
+	_, body = a.do(t, "GET", "/readyz", "", bearer("wrong-token-wrong-token"))
+	is.Equal(strings.TrimSpace(body), `{"status":"ready"}`)
+
+	code, body = a.do(t, "GET", "/readyz", "", bearer(testToken))
+	is.Equal(code, 200)
+	is.True(strings.Contains(body, `"pipelines"`) && strings.Contains(body, `"total":1`))
+}
+
+// Without a token configured (loopback, no gate) the body is unchanged.
+func TestReadyz_NoTokenKeepsTheDetail(t *testing.T) {
+	is := is.New(t)
+	a := startSecureAPI(t, nil)
+	_, body := a.do(t, "GET", "/readyz", "", nil)
+	is.True(strings.Contains(body, `"pipelines"`))
+}
+
+// The UI, its bundle, conduit-auth.js and a gate refusal all carry the framing,
+// CSP, nosniff and referrer headers, and the CSP still lets the UI load: the
+// page references only same-origin scripts (no inline script, no eval).
+func TestAPIToken_SecurityHeadersAndUIStillLoads(t *testing.T) {
+	is := is.New(t)
+	a := startSecureAPI(t, withToken)
+
+	get := func(path string) (*http.Response, string) {
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://"+a.httpAddr+path, nil)
+		is.NoErr(err)
+		resp, err := http.DefaultClient.Do(req)
+		is.NoErr(err)
+		defer resp.Body.Close()
+		b, err := io.ReadAll(resp.Body)
+		is.NoErr(err)
+		return resp, string(b)
+	}
+	checkHeaders := func(resp *http.Response) {
+		is.Equal(resp.Header.Get("X-Frame-Options"), "DENY")
+		is.Equal(resp.Header.Get("X-Content-Type-Options"), "nosniff")
+		is.Equal(resp.Header.Get("Referrer-Policy"), "no-referrer")
+		csp := resp.Header.Get("Content-Security-Policy")
+		is.True(strings.Contains(csp, "frame-ancestors 'none'"))
+		is.True(strings.Contains(csp, "script-src 'self';"))
+	}
+
+	resp, page := get("/")
+	is.Equal(resp.StatusCode, 200)
+	checkHeaders(resp)
+	// Every <script> on the page is an external same-origin file.
+	scripts := regexp.MustCompile(`(?is)<script\b[^>]*>`).FindAllString(page, -1)
+	is.True(len(scripts) >= 2)
+	for _, s := range scripts {
+		is.True(strings.Contains(s, "src="))
+	}
+	is.True(!regexp.MustCompile(`(?is)<script\b[^>]*>\s*[^<\s]`).MatchString(page)) // no inline body
+
+	resp, js := get("/conduit-auth.js")
+	is.Equal(resp.StatusCode, 200)
+	checkHeaders(resp)
+	is.True(strings.Contains(js, "sessionStorage"))
+
+	// The bundle the page points at is served, with the headers.
+	m := regexp.MustCompile(`src="(\.?/?assets/[^"]+\.js)"`).FindStringSubmatch(page)
+	is.True(m != nil)
+	resp, bundle := get("/" + strings.TrimPrefix(strings.TrimPrefix(m[1], "."), "/"))
+	is.Equal(resp.StatusCode, 200)
+	checkHeaders(resp)
+	is.True(len(bundle) > 1000)
+	is.True(!strings.Contains(bundle, "new Function("))
+
+	// A gate refusal is covered too.
+	resp, _ = get("/v1/pipelines")
+	is.Equal(resp.StatusCode, 401)
+	checkHeaders(resp)
 }

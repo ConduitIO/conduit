@@ -69,11 +69,11 @@ func (p BrowserPolicy) HostAllowed(host string) bool {
 }
 
 // OriginAllowed reports whether origin (an Origin header value) may call the
-// API given the request's Host: it is allowlisted, or it names the same host
+// API given the request's Host and whether it arrived over TLS: it is allowlisted, or it names the same host
 // and port the request was addressed to. The Host comparison is only
 // meaningful after HostAllowed, which is why CheckRequest runs them in that
 // order.
-func (p BrowserPolicy) OriginAllowed(origin, host string) bool {
+func (p BrowserPolicy) OriginAllowed(origin, host string, secure bool) bool {
 	for _, a := range p.AllowedOrigins {
 		if a == "*" || a == origin {
 			return true
@@ -83,7 +83,17 @@ func (p BrowserPolicy) OriginAllowed(origin, host string) bool {
 	// userinfo, a path, a query or a fragment is not a browser's and is not
 	// treated as same-origin.
 	u, err := url.Parse(origin)
-	return err == nil && u.Host != "" && u.User == nil && (u.Path == "" || u.Path == "/") &&
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return false
+	}
+	// Conduit itself serves plain HTTP, so an https Origin can only be a TLS
+	// terminating proxy in front of it and is accepted. But when the request did
+	// arrive over TLS (secure), an http Origin is a downgraded page, not the
+	// same origin.
+	if secure && u.Scheme != "https" {
+		return false
+	}
+	return u.Host != "" && u.User == nil && (u.Path == "" || u.Path == "/") &&
 		u.RawQuery == "" && u.Fragment == "" && strings.EqualFold(u.Host, host)
 }
 
@@ -99,7 +109,7 @@ func (p BrowserPolicy) CheckRequest(r *http.Request) error {
 		ce.Suggestion = "address the API as localhost, 127.0.0.1 or [::1], or add the host name to api.http.allowed-hosts"
 		return ce
 	}
-	if origin := r.Header.Get("Origin"); origin != "" && !p.OriginAllowed(origin, r.Host) {
+	if origin := r.Header.Get("Origin"); origin != "" && !p.OriginAllowed(origin, r.Host, r.TLS != nil) {
 		ce := conduiterr.New(CodeOriginForbidden, "the request Origin is not allowed")
 		ce.ConfigPath = ConfigPathAllowedOrigins
 		ce.Suggestion = "serve the page from the API's own origin, or add its exact origin (scheme://host[:port]) to api.http.cors.allowed-origins"

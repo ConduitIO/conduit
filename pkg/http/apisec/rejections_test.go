@@ -150,6 +150,22 @@ func TestAuthenticator_WebSocketSubprotocolCarrier(t *testing.T) {
 			r.URL.RawQuery = "access_token=" + goodToken + "&token=" + goodToken
 			return r
 		}, 401},
+		"carrier on a non-GET request is ignored": {func() *http.Request {
+			r := wsUpgradeRequest("conduit", EncodeWebSocketToken(goodToken))
+			r.Method = http.MethodPost
+			return r
+		}, 401},
+		"Upgrade without Connection: Upgrade is not a handshake": {func() *http.Request {
+			r := wsUpgradeRequest("conduit", EncodeWebSocketToken(goodToken))
+			r.Header.Del("Connection")
+			return r
+		}, 401},
+		"Upgrade token list is parsed like the proxy does": {func() *http.Request {
+			r := wsUpgradeRequest("conduit", EncodeWebSocketToken(goodToken))
+			r.Header.Set("Upgrade", "h2c, WebSocket")
+			r.Header.Set("Connection", "keep-alive, Upgrade")
+			return r
+		}, 200},
 		"carrier on a plain (non-upgrade) request is ignored": {func() *http.Request {
 			r := wsUpgradeRequest("conduit", EncodeWebSocketToken(goodToken))
 			r.Header.Del("Upgrade")
