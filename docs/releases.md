@@ -19,6 +19,17 @@ The human-readable release notes for each release live in `docs/releases/vX.Y.Z.
 and in the GitHub release body. The GitHub release's changelog is generated from conventional commits; the notes
 file is the curated summary a human would actually want to read.
 
+## Release gates
+
+`make release-check TAG=vX.Y.Z` runs in the `release-check` job of `release.yml` before anything is published
+(nightly tags skip it). A failure stops the GitHub release and the Docker image.
+
+- **Fixes the release must contain** (`.github/scripts/release_fixes.py`). `.github/release-fixes.txt` on the release
+  branch lists `module | commit | note` per fix; `conduit` means this repository. Each commit must be an ancestor of
+  the tag of that module's version in `go.mod` (or of the release commit). A patch release (`vX.Y.Z`, Z > 0) must
+  have at least one entry. An unresolvable module, tag or commit fails. The gate lives in the tagged commit's
+  `release.yml`, so a release branch has it only once this change is backported to it.
+
 ## Nightly builds
 
 We provide nightly builds (binaries and Docker images). The last 5 nightly releases are kept, and nightly Docker images
