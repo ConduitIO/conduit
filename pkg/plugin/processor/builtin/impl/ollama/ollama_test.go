@@ -231,7 +231,7 @@ func TestOllamaProcessor_Failure(t *testing.T) {
 					},
 				},
 			},
-			wantErr: cerrors.New("error sending the ollama request ollama request returned status code 500"),
+			wantErr: cerrors.New("error sending the ollama request: ollama request returned status code 500"),
 		},
 		{
 			name: "invalid model pass through",

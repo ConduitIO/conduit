@@ -139,7 +139,7 @@ func (p *OllamaProcessor) processRecord(ctx context.Context, rec opencdc.Record,
 
 	resp, err := p.sendOllamaRequest(ctx, reqBody)
 	if err != nil {
-		return nil, cerrors.Errorf("error sending the ollama request %s", err)
+		return nil, cerrors.Errorf("error sending the ollama request: %w", err)
 	}
 
 	respData, err := processOllamaResponse(resp)

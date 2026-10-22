@@ -27,6 +27,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/tplerr"
 )
 
 type SetProcessor struct {
@@ -94,7 +95,7 @@ func (p *SetProcessor) Process(_ context.Context, records []opencdc.Record) []sd
 		// evaluate the new value
 		err := p.tmpl.Execute(&b, rec)
 		if err != nil {
-			return append(out, sdk.ErrorRecord{Error: err})
+			return append(out, sdk.ErrorRecord{Error: tplerr.Exec(err)})
 		}
 		ref, err := p.referenceResolver.Resolve(&rec)
 		if err != nil {

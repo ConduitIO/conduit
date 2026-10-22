@@ -113,3 +113,39 @@ func TestHTTPProcessor_RetryLogDoesNotContainTheBody(t *testing.T) {
 	is.True(strings.Contains(logs, "error status code 500"))
 	is.True(!strings.Contains(logs, "SECRET"))
 }
+
+// Sprig's must* functions return the error of the parser they call, which
+// quotes the record field; text/template puts it into the execution error.
+func TestHTTPProcessor_TemplateErrorsDoNotContainRecordValues(t *testing.T) {
+	ctx := context.Background()
+	rec := opencdc.Record{
+		Metadata: opencdc.Metadata{"d": "customer-SECRET-4711"},
+		Payload:  opencdc.Change{After: opencdc.RawData("x")},
+	}
+	for name, cfg := range map[string]config.Config{
+		"body": {"request.url": "http://127.0.0.1:1/x", "request.method": "POST", "request.body": `{{ mustToDate "2006-01-02" (index .Metadata "d") }}`},
+		"url":  {"request.url": `http://127.0.0.1:1/{{ mustToDate "2006-01-02" (index .Metadata "d") }}`, "request.method": "POST"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			p := NewHTTPProcessor(log.Nop())
+			is.NoErr(p.Configure(ctx, cfg))
+			out := p.Process(ctx, []opencdc.Record{rec})
+			er, ok := out[0].(sdk.ErrorRecord)
+			is.True(ok)
+			is.True(strings.Contains(er.Error.Error(), "template execution failed at line 1"))
+			is.True(!strings.Contains(er.Error.Error(), "SECRET"))
+		})
+	}
+}
+
+// The configured URL can carry credentials; the preflight error must not
+// repeat it.
+func TestHTTPProcessor_ConfigurationCheckDoesNotContainTheURL(t *testing.T) {
+	is := is.New(t)
+	p := NewHTTPProcessor(log.Nop())
+	err := p.Configure(context.Background(), config.Config{"request.url": "http://SECRET-user:SECRET-pass@host:" + "badport/x", "request.method": "POST"})
+	is.True(err != nil)
+	is.True(strings.Contains(err.Error(), "configuration check failed"))
+	is.True(!strings.Contains(err.Error(), "SECRET"))
+}

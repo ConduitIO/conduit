@@ -33,6 +33,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/tplerr"
 	"github.com/jpillora/backoff"
 )
 
@@ -189,7 +190,7 @@ func (p *HTTPProcessor) Configure(ctx context.Context, c config.Config) error {
 	// preflight check
 	_, err = http.NewRequestWithContext(ctx, p.config.Method, p.config.URL, bytes.NewReader([]byte{}))
 	if err != nil {
-		return cerrors.Errorf("configuration check failed: %w", err)
+		return cerrors.Errorf("configuration check failed: %w", errCause(err))
 	}
 
 	p.backoffCfg = &backoff.Backoff{
@@ -329,7 +330,7 @@ func (p *HTTPProcessor) evaluateURL(rec opencdc.Record) (string, error) {
 	var b bytes.Buffer
 	err := p.urlTmpl.Execute(&b, rec)
 	if err != nil {
-		return "", cerrors.Errorf("error while evaluating URL template: %w", err)
+		return "", cerrors.Errorf("error while evaluating URL template: %w", tplerr.Exec(err))
 	}
 	u, err := url.Parse(b.String())
 	if err != nil {
@@ -358,7 +359,7 @@ func (p *HTTPProcessor) requestBody(r opencdc.Record) ([]byte, error) {
 	var b bytes.Buffer
 	err := p.requestBodyTmpl.Execute(&b, r)
 	if err != nil {
-		return nil, cerrors.Errorf("error while evaluating request body template: %w", err)
+		return nil, cerrors.Errorf("error while evaluating request body template: %w", tplerr.Exec(err))
 	}
 
 	return b.Bytes(), nil

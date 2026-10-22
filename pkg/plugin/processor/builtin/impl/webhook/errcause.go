@@ -45,6 +45,11 @@ func errCause(err error) error {
 	if !cerrors.As(err, &ue) {
 		return err
 	}
+	if ue.Op == "parse" {
+		// the cause quotes parts of the URL (the port, an escape), and the URL
+		// can carry credentials
+		return &requestError{kind: "the URL cannot be parsed (details not shown)", err: err}
+	}
 	return &requestError{kind: netKind(ue.Err), err: err}
 }
 
