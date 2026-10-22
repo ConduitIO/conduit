@@ -586,7 +586,11 @@ func (e *Engine) Run(ctx context.Context) (*Handle, error) {
 // error without blocking forever; the underlying drain continues in the
 // background (Runtime.Run's own registerCleanup timeout, exitTimeout, still
 // applies) — a subsequent Stop call returns the same timeout result rather
-// than re-waiting, per the idempotency guarantee above.
+// than re-waiting, per the idempotency guarantee above. A ctx that is already
+// done when Stop is called gets that timeout result without waiting at all,
+// even if the drain finishes in the meantime: the engine is still told to
+// stop, but the result no longer depends on which of two ready channels
+// select picks.
 func (h *Handle) Stop(ctx context.Context) error {
 	if h == nil {
 		return conduiterr.New(conduiterr.CodeInvalidArgument, "conduit: Stop called on a nil *Handle")
@@ -594,6 +598,11 @@ func (h *Handle) Stop(ctx context.Context) error {
 
 	h.stopOnce.Do(func() {
 		h.cancel()
+		if err := ctx.Err(); err != nil {
+			h.stopErr = conduiterr.Wrap(conduiterr.CodeInvalidArgument,
+				"conduit: timed out waiting for the engine to stop", err)
+			return
+		}
 		select {
 		case h.stopErr = <-h.done:
 			if h.stopErr != nil && cerrors.Is(h.stopErr, context.Canceled) {

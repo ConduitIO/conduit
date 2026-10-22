@@ -16,6 +16,7 @@ package conduit_test
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -227,6 +228,37 @@ func TestStop_DeadlineExceeded(t *testing.T) {
 	ce, ok := conduiterr.Get(err)
 	is.True(ok)
 	is.Equal(ce.Code, conduiterr.CodeInvalidArgument)
+}
+
+// TestStop_ExpiredContext_TimesOutEvenIfTheEngineAlreadyStopped is the
+// deterministic form of TestStop_DeadlineExceeded. The engine is stopped
+// first, so its done channel is ready when Stop is called with an expired
+// ctx: Stop used to pick between the two ready channels at random, and the
+// test above failed in CI whenever the drain won the race.
+func TestStop_ExpiredContext_TimesOutEvenIfTheEngineAlreadyStopped(t *testing.T) {
+	// Several engines, so a random pick between the two ready channels fails
+	// at least one of them with near certainty.
+	for i := 0; i < 12; i++ {
+		t.Run(fmt.Sprint(i), func(t *testing.T) {
+			t.Parallel()
+			is := is.New(t)
+			e := newTestEngine(t, conduit.Options{})
+
+			runCtx, stopRun := context.WithCancel(context.Background())
+			h, err := e.Run(runCtx)
+			is.NoErr(err)
+			stopRun() // the engine shuts down on its own
+			time.Sleep(500 * time.Millisecond)
+
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			err = h.Stop(ctx)
+			is.True(err != nil)
+			ce, ok := conduiterr.Get(err)
+			is.True(ok)
+			is.Equal(ce.Code, conduiterr.CodeInvalidArgument)
+		})
+	}
 }
 
 // TestNew_StoreAlreadyOpen_ReturnsCodedError proves failure mode 4: two
