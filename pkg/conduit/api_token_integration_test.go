@@ -168,9 +168,11 @@ func TestAPIToken_GRPC(t *testing.T) {
 		is := is.New(t)
 		stream, err := grpc_reflection_v1.NewServerReflectionClient(dial(t)).ServerReflectionInfo(ctx)
 		is.NoErr(err)
-		is.NoErr(stream.Send(&grpc_reflection_v1.ServerReflectionRequest{
+		// The server may reject the stream before Send runs (Send then returns
+		// io.EOF); the status is what Recv reports either way.
+		_ = stream.Send(&grpc_reflection_v1.ServerReflectionRequest{
 			MessageRequest: &grpc_reflection_v1.ServerReflectionRequest_ListServices{ListServices: ""},
-		}))
+		})
 		_, err = stream.Recv()
 		is.Equal(status.Code(err), codes.Unauthenticated)
 
