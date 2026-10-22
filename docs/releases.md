@@ -33,6 +33,11 @@ file is the curated summary a human would actually want to read.
   (its `replace` lines count, and a `use` of anything but the root needs `waive-replace | go.work | <reason>`). An unresolvable module, tag or commit fails. The
   gate lives in the tagged commit's
   `release.yml`, so a release branch has it only once this change is backported to it.
+- **Hand-written notes on patch releases** (`.github/scripts/release_notes_check.py`). A stable `vX.Y.Z` with Z > 0
+  needs `docs/releases/vX.Y.Z.md` in the tagged commit, not a draft, with a `## Fixed` section of bullets, prose
+  beyond lists, and not mostly generated changelog lines (`fix(scope): ... by @user in #123`). Every fix listed in
+  `.github/release-fixes.txt` must appear in `## Fixed` (by its first 7 commit characters or its note), so the notes
+  and the fixes gate describe the same set.
 
 ## Nightly builds
 

@@ -41,6 +41,7 @@ COVER_OUT ?= cover.out
 release-check:
 	@test -n "$(TAG)" || { echo "usage: make release-check TAG=vX.Y.Z"; exit 2; }
 	python3 .github/scripts/release_fixes.py $(TAG)
+	python3 .github/scripts/release_notes_check.py $(TAG)
 
 .PHONY: coverage
 coverage:
