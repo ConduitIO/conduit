@@ -441,7 +441,7 @@ The release quiet window is measured on the release branch, not on `main`.
   hiding it behind an opt-in. Fix it, fail closed, or block the release.
 - Never recreate, assume or "continue with a warning" at a point where an external resource is
   missing, replaced or unverifiable and continuing could skip, duplicate or change records.
-- Never merge a PR whose Tier 1 review verdict is `changes-needed` at its head, or one that has no
-  verdict at all.
+- Never merge a Tier 1 PR that has a `changes-needed` verdict at any head with no later `approve`, or
+  one that has no `approve` and sign-off at its current head.
 - Never take a design premise about an external system from a comment or documentation alone; run it
   against a real server and cite the result.
