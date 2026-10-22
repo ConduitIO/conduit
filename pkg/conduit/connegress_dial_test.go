@@ -24,10 +24,10 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit-commons/dialer"
-	"github.com/conduitio/conduit-connector-kafka"
-	"github.com/conduitio/conduit-connector-postgres"
+	kafka "github.com/conduitio/conduit-connector-kafka"
+	postgres "github.com/conduitio/conduit-connector-postgres"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
-	"github.com/conduitio/conduit-connector-s3"
+	s3 "github.com/conduitio/conduit-connector-s3"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/connegress"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -73,7 +73,7 @@ type acceptCounter struct {
 
 func newAcceptCounter(t *testing.T) *acceptCounter {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
