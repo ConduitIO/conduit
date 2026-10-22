@@ -79,4 +79,16 @@ func TestFetch_ErrorsDoNotContainUserInfo(t *testing.T) {
 		is.True(err != nil)
 		is.True(!strings.Contains(err.Error(), "SECRET"))
 	})
+	t.Run("malformed Location header", func(t *testing.T) {
+		is := is.New(t)
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Location", "http://SECRET-user:SECRET-pass@127.0.0.1:badport/x;jsessionid=SECRET-sid")
+			w.WriteHeader(http.StatusFound)
+		}))
+		defer srv.Close()
+		_, err := boundedfetch.Fetch(context.Background(), srv.URL+"/bundle", 10)
+		is.True(err != nil)
+		is.True(strings.Contains(err.Error(), "Location header"))
+		is.True(!strings.Contains(err.Error(), "SECRET"))
+	})
 }
