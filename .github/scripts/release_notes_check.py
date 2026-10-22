@@ -44,6 +44,12 @@ class GateError(Exception):
     pass
 
 
+def strip_comments(text):
+    """Drop HTML comments (multi-line; an unclosed one runs to the end) so a
+    hidden draft marker, Fixed section or prefix cannot satisfy or dodge a rule."""
+    return re.sub(r"<!--.*?-->", "", text, flags=re.S).split("<!--", 1)[0]
+
+
 def fixed_section(text):
     m = re.search(r"(?ms)^##\s+Fixed\s*$(.*?)(?=^##\s|\Z)", text)
     return m.group(1) if m else None
@@ -59,6 +65,7 @@ def names_fix(fixed, commit, note):
 
 
 def problems_for(text, fixes):
+    text = strip_comments(text)
     out = []
     if DRAFT.search(text):
         out.append('still marked "draft, not yet released"')
