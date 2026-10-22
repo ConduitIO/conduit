@@ -58,8 +58,8 @@ github.com/bufbuild/protocompile v0.14.2-0.20260127163740-a85d2ef77713 h1:owghT7
 github.com/bufbuild/protocompile v0.14.2-0.20260127163740-a85d2ef77713/go.mod h1:cxhE8h+14t0Yxq2H9MV/UggzQ1L0gh0t2tJobITWsBE=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
-github.com/conduitio/conduit-commons v0.12.0 h1:tzJt78/tnM5hQyvwCVNtXF06cDcVGOXna5GWCSN9rwk=
-github.com/conduitio/conduit-commons v0.12.0/go.mod h1:I5BjvJ7rZzNbELaqR2rbls4Tu2o88cOcSMewLKM8pQw=
+github.com/conduitio/conduit-commons v0.12.1 h1:Y62xsshB0v0DUhDqeNsZXCkDChoj/F+Oa6Ce4KTPrzs=
+github.com/conduitio/conduit-commons v0.12.1/go.mod h1:I5BjvJ7rZzNbELaqR2rbls4Tu2o88cOcSMewLKM8pQw=
 github.com/conduitio/conduit-connector-file v0.10.10 h1:CSAGOgDRvzXUokxQvtCTu3oh3V/uWqD0zdSW6JV9ro8=
 github.com/conduitio/conduit-connector-file v0.10.10/go.mod h1:nYhAcrSHhYMnXPezqWOXYcV0THACWG7YT8Jye2WXBZA=
 github.com/conduitio/conduit-connector-generator v0.10.8 h1:jXn3hSe1zyehDxYmg80uuO5dqi/BwiaFQOXMmk8LrHQ=
