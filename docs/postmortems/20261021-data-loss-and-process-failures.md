@@ -306,7 +306,8 @@ into any connector repository.
 2. **`.github/release-fixes.txt` per release branch.** For each planned patch, the fixes it must carry as module plus
    commit. `release-check` resolves each module's version in `go.mod` to its tag and checks every listed commit is an
    ancestor (`git merge-base --is-ancestor`) before anything is published. A patch release must list at least one
-   fix newer than the previous tag, so a trivial old entry does not satisfy it. First entry for `release/v0.20.x`:
+   fix newer than the previous tag, so a trivial old entry does not satisfy it. First entry for the v0.20
+   line:
    commons v0.7.2 with the four fixes the v0.20.3 plan named.
 3. **Connector release gate.** Before a connector tag, list the merged PRs since the last stable tag that carry
    `do-not-merge` or a `changes-needed` record without a later `approve`; fail if there are any.
