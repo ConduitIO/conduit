@@ -1,6 +1,6 @@
 module github.com/conduitio/conduit/benchi/v021-cdc-parity/loader
 
-go 1.26.9
+go 1.26.10
 
 require github.com/jackc/pgx/v5 v5.9.2
 
