@@ -21,6 +21,7 @@ import (
 	"github.com/conduitio/conduit-commons/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/errsafe"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/conduitio/conduit/pkg/schemaregistry/toschema"
 	"github.com/twmb/franz-go/pkg/sr"
@@ -63,7 +64,7 @@ func (d *Decoder) Decode(ctx context.Context, b opencdc.RawData) (opencdc.Struct
 
 	var out opencdc.StructuredData
 	if err := serde.Unmarshal(data, &out); err != nil {
-		return nil, cerrors.Errorf("failed to unmarshal data with schema (ID: %v): %w", id, err)
+		return nil, cerrors.Errorf("failed to unmarshal data with schema (ID: %v): %w", id, errsafe.Opaque(err))
 	}
 
 	return out, nil

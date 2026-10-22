@@ -21,6 +21,7 @@ import (
 	"github.com/conduitio/conduit-commons/schema"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/errsafe"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/conduitio/conduit/pkg/schemaregistry/toschema"
 	"github.com/twmb/franz-go/pkg/sr"
@@ -59,7 +60,7 @@ func (e *Encoder) Encode(ctx context.Context, sd opencdc.StructuredData) (opencd
 
 	data, err := s.Marshal(sd)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to marshal data with schema (ID: %v, subject: %v, version: %v): %w", s.ID, s.Subject, s.Version, err)
+		return nil, cerrors.Errorf("failed to marshal data with schema (ID: %v, subject: %v, version: %v): %w", s.ID, s.Subject, s.Version, errsafe.Opaque(err))
 	}
 
 	return append(header, data...), nil

@@ -27,6 +27,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/errsafe"
 )
 
 type ConvertProcessor struct {
@@ -107,11 +108,11 @@ func (p *ConvertProcessor) stringToType(value, typ string) (any, error) {
 	case "string":
 		return value, nil
 	case "int":
-		return strconv.Atoi(value)
+		return errsafeResult(strconv.Atoi(value))
 	case "float":
-		return strconv.ParseFloat(value, 64)
+		return errsafeResult(strconv.ParseFloat(value, 64))
 	case "bool":
-		return strconv.ParseBool(value)
+		return errsafeResult(strconv.ParseBool(value))
 	case "time":
 		// see if it's a number
 		unixnano, err := strconv.Atoi(value)
@@ -120,7 +121,7 @@ func (p *ConvertProcessor) stringToType(value, typ string) (any, error) {
 			return time.Unix(0, int64(unixnano)).UTC(), nil
 		}
 		// try to parse it as a time string
-		return time.Parse(time.RFC3339Nano, value)
+		return errsafeResult(time.Parse(time.RFC3339Nano, value))
 	default:
 		return nil, cerrors.Errorf("undefined type %q", typ)
 	}
@@ -151,4 +152,10 @@ func (p *ConvertProcessor) boolToStringNumber(b bool) string {
 		return "1"
 	}
 	return "0"
+}
+
+// errsafeResult passes a parse result through, replacing an error that quotes
+// the parsed value by one that does not.
+func errsafeResult[T any](v T, err error) (any, error) {
+	return v, errsafe.Sanitize(err)
 }

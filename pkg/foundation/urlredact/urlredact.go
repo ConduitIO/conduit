@@ -135,6 +135,20 @@ func maskQueryAndFragment(s string) string {
 // urlStartSeparators are the characters an absolute URL can follow in a message.
 const urlStartSeparators = " \t\r\n,;\"'()<>[]{}="
 
+// urlListSeparators also start a URL ("url:https://...", "a|https://..."), but
+// only when no URL is being read: inside one, the same characters are part of
+// a user name or password ("https://user:pass://x@host").
+const urlListSeparators = ":|"
+
+// schemelessUserinfo matches user:password@ without a scheme in free text. The
+// password can hold anything but a line break, and the match runs to the last
+// '@' of the line: a password can contain '@', '/', spaces and quotes, and
+// nothing in the text tells where it ends, so the whole stretch up to the last
+// '@' is hidden. This can hide text between two credentials ("a:p@x b:q@y"),
+// which is the safe side of the trade. The text after the colon must not start
+// with a space ("error: contact me@x") to keep ordinary sentences out of it.
+var schemelessUserinfo = regexp.MustCompile(`[A-Za-z0-9._~%+-]+:(?:[^\s@][^\r\n]*)?@`)
+
 // schemeStart finds where an absolute URL starts in free text.
 var schemeStart = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://`)
 
@@ -154,15 +168,18 @@ func Text(s string) string {
 	// separator, never right after a character a URL itself contains.
 	var starts [][]int
 	for _, m := range all {
-		if m[0] == 0 || strings.ContainsRune(urlStartSeparators, rune(s[m[0]-1])) {
+		switch {
+		case m[0] == 0, strings.ContainsRune(urlStartSeparators, rune(s[m[0]-1])):
+			starts = append(starts, m)
+		case strings.ContainsRune(urlListSeparators, rune(s[m[0]-1])) && !insideURL(s, starts, m[0]):
 			starts = append(starts, m)
 		}
 	}
-	if len(starts) == 0 {
-		return s
-	}
 	var b strings.Builder
-	b.WriteString(s[:starts[0][0]])
+	if len(starts) == 0 {
+		return redactSchemeless(s)
+	}
+	b.WriteString(redactSchemeless(s[:starts[0][0]]))
 	for i, m := range starts {
 		end := len(s)
 		if i+1 < len(starts) {
@@ -174,15 +191,30 @@ func Text(s string) string {
 			b.WriteString(redactedUserinfo)
 			rest = rest[at+1:]
 		}
-		var opener byte
-		if m[0] > 0 {
-			opener = s[m[0]-1]
-		}
-		cut := urlProperEnd(rest, opener)
+		cut := urlProperEnd(rest, openerOf(s, m[0]))
 		b.WriteString(maskQueryAndFragment(rest[:cut]))
-		b.WriteString(rest[cut:])
+		b.WriteString(redactSchemeless(rest[cut:]))
 	}
 	return b.String()
+}
+
+// insideURL reports whether position pos of s is inside the URL that the last
+// of starts began: nothing that ends a URL lies between them.
+func insideURL(s string, starts [][]int, pos int) bool {
+	if len(starts) == 0 {
+		return false
+	}
+	last := starts[len(starts)-1]
+	return urlProperEnd(s[last[1]:pos], openerOf(s, last[0])) == pos-last[1]
+}
+
+// openerOf returns the character in front of position pos of s (0 at the
+// start of the text).
+func openerOf(s string, pos int) byte {
+	if pos == 0 {
+		return 0
+	}
+	return s[pos-1]
 }
 
 // closers maps the character a URL can be opened with in a message to the one
@@ -234,6 +266,11 @@ func urlProperEnd(rest string, opener byte) int {
 		cut = len(rest)
 	}
 	return cut
+}
+
+// redactSchemeless masks user:password@ that has no scheme in front of it.
+func redactSchemeless(s string) string {
+	return schemelessUserinfo.ReplaceAllString(s, redactedUserinfo)
 }
 
 // Error returns err with the URLs of every *url.Error in its chain replaced in

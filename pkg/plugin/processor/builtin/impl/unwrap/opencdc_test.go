@@ -209,7 +209,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 				Position: []byte("test position"),
 			},
 			want: sdk.ErrorRecord{
-				Error: cerrors.New("failed unmarshalling record: failed unmarshalling operation: invalid operation \"foobar\""),
+				Error: cerrors.New("failed unmarshalling record: failed unmarshalling operation: invalid operation (a 6 byte value that is not a known operation)"),
 			},
 		},
 		{
@@ -274,7 +274,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 				},
 				Position: []byte("test-pos"),
 			},
-			want: sdk.ErrorRecord{Error: cerrors.New("failed to unmarshal raw data as JSON: invalid character 'h' in literal true (expecting 'r')")},
+			want: sdk.ErrorRecord{Error: cerrors.New("failed to unmarshal raw data as JSON: invalid JSON syntax at offset 2")},
 		},
 		{
 			name:   "create with structured data",

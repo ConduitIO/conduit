@@ -25,6 +25,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/foundation/urlredact"
 	"github.com/goccy/go-json"
 	"github.com/twmb/franz-go/pkg/sr"
 	"github.com/twmb/go-cache/cache"
@@ -129,7 +130,7 @@ func NewClient(logger log.CtxLogger, opts ...sr.ClientOpt) (*Client, error) {
 
 	client, err := sr.NewClient(append(defaultOpts, opts...)...)
 	if err != nil {
-		return nil, cerrors.Errorf("failed to create schema registry client: %w", err)
+		return nil, cerrors.Errorf("failed to create schema registry client: %w", urlredact.Error(err))
 	}
 
 	return &Client{
@@ -161,7 +162,7 @@ func (c *Client) CreateSchema(ctx context.Context, subject string, schema sr.Sch
 
 		ss, err := c.client.CreateSchema(ctx, subject, schema)
 		if err != nil {
-			return ss, cerrors.Errorf("failed to create schema with subject %q: %w", subject, err)
+			return ss, cerrors.Errorf("failed to create schema with subject %q: %w", subject, urlredact.Error(err))
 		}
 
 		if !subjectExists {
@@ -170,7 +171,7 @@ func (c *Client) CreateSchema(ctx context.Context, subject string, schema sr.Sch
 			for _, res := range result {
 				if res.Err != nil {
 					// only log error, don't return it
-					c.logger.Warn(ctx).Err(res.Err).Str("subject", subject).Msg("failed to set compatibility to none, might create issues if an incompatible schema change happens in the future")
+					c.logger.Warn(ctx).Err(urlredact.Error(res.Err)).Str("subject", subject).Msg("failed to set compatibility to none, might create issues if an incompatible schema change happens in the future")
 				}
 			}
 		}
@@ -198,7 +199,7 @@ func (c *Client) SchemaByID(ctx context.Context, id int) (sr.Schema, error) {
 		logEvent = nil // disable output for hit
 		ss, err := c.client.SchemaByID(ctx, id)
 		if err != nil {
-			return sr.Schema{}, cerrors.Errorf("failed to get schema with ID %q: %w", id, err)
+			return sr.Schema{}, cerrors.Errorf("failed to get schema with ID %q: %w", id, urlredact.Error(err))
 		}
 		return ss, nil
 	})
@@ -223,7 +224,7 @@ func (c *Client) SchemaBySubjectVersion(ctx context.Context, subject string, ver
 		logEvent = nil // disable output for hit
 		ss, err := c.client.SchemaByVersion(ctx, subject, version)
 		if err != nil {
-			return ss, cerrors.Errorf("failed to get schema with subject %q and version %q: %w", subject, version, err)
+			return ss, cerrors.Errorf("failed to get schema with subject %q and version %q: %w", subject, version, urlredact.Error(err))
 		}
 		c.idCache.Set(ss.ID, ss.Schema)
 		c.subjectDigestCache.Set(newSubjectDigest(ss.Subject, ss.Schema), ss)
@@ -239,5 +240,5 @@ func (c *Client) SchemaBySubjectVersion(ctx context.Context, subject string, ver
 // Check checks if the schema registry is reachable.
 func (c *Client) Check(ctx context.Context) error {
 	_, err := c.client.Subjects(ctx) // just check if we can list subjects
-	return err
+	return urlredact.Error(err)
 }

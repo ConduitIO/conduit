@@ -26,6 +26,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/errsafe"
 	"github.com/goccy/go-json"
 )
 
@@ -102,12 +103,12 @@ func (u *OpenCDCProcessor) processRecord(rec opencdc.Record) (sdk.ProcessedRecor
 	case opencdc.RawData:
 		// unmarshal raw data to structured
 		if err := json.Unmarshal(v.Bytes(), &data); err != nil {
-			return nil, cerrors.Errorf("failed to unmarshal raw data as JSON: %w", err)
+			return nil, cerrors.Errorf("failed to unmarshal raw data as JSON: %w", errsafe.Sanitize(err))
 		}
 	case string:
 		// unmarshal raw data to structured
 		if err := json.Unmarshal([]byte(v), &data); err != nil {
-			return nil, cerrors.Errorf("failed to unmarshal raw data as JSON: %w", err)
+			return nil, cerrors.Errorf("failed to unmarshal raw data as JSON: %w", errsafe.Sanitize(err))
 		}
 	case opencdc.StructuredData:
 		data = v
@@ -170,7 +171,7 @@ func (u *OpenCDCProcessor) unmarshalOperation(structData opencdc.StructuredData)
 		operation = opType
 	case string:
 		if err := operation.UnmarshalText([]byte(opType)); err != nil {
-			return operation, cerrors.Errorf("invalid operation %q", opType)
+			return operation, cerrors.Errorf("invalid operation (a %d byte value that is not a known operation)", len(opType))
 		}
 	default:
 		return operation, cerrors.Errorf("expected a opencdc.Operation or a string, got %T", opType)
@@ -221,7 +222,7 @@ func (u *OpenCDCProcessor) convertData(m map[string]interface{}, key string) (op
 		decoded := make([]byte, base64.StdEncoding.DecodedLen(len(d)))
 		n, err := base64.StdEncoding.Decode(decoded, []byte(d))
 		if err != nil {
-			return nil, cerrors.Errorf("couldn't decode payload %s: %w", err, key)
+			return nil, cerrors.Errorf("couldn't decode payload: %w", err)
 		}
 		return opencdc.RawData(decoded[:n]), nil
 	default:

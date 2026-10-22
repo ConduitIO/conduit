@@ -159,7 +159,7 @@ func TestDecodeJSON_Process(t *testing.T) {
 			record: opencdc.Record{
 				Key: opencdc.RawData(`"invalid":"json"`),
 			},
-			want: sdk.ErrorRecord{Error: cerrors.New("failed to unmarshal raw data as JSON: invalid character ':' looking for beginning of value")},
+			want: sdk.ErrorRecord{Error: cerrors.New("failed to unmarshal raw data as JSON: invalid JSON syntax at offset 9")},
 		},
 	}
 	for _, tc := range testCases {

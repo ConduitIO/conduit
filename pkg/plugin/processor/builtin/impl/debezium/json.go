@@ -26,6 +26,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/goccy/go-json"
 )
 
@@ -314,7 +315,11 @@ func asFloat(v any, bits int) (float64, error) {
 	case json.Number:
 		x, err := f.Float64()
 		if err != nil {
-			return 0, err
+			// strconv's error quotes the number: report only why it failed
+			if ne := (*strconv.NumError)(nil); cerrors.As(err, &ne) {
+				return 0, fmt.Errorf("float field is not a number the type holds: %w", ne.Err)
+			}
+			return 0, cerrors.New("float field is not a number")
 		}
 		return x, nil
 	default:
@@ -387,12 +392,12 @@ func writeVariableScaleDecimal(b *bytes.Buffer, v any) error {
 func decimalUnscaled(s string, scale int) (*big.Int, error) {
 	r, ok := new(big.Rat).SetString(s)
 	if !ok {
-		return nil, fmt.Errorf("decimal %q is not a number", s)
+		return nil, fmt.Errorf("a %d byte decimal literal is not a number", len(s))
 	}
 	p := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(scale)), nil)
 	r.Mul(r, new(big.Rat).SetInt(p))
 	if !r.IsInt() {
-		return nil, fmt.Errorf("decimal %q has more than %d fractional digits", s, scale)
+		return nil, fmt.Errorf("a %d byte decimal literal has more than %d fractional digits", len(s), scale)
 	}
 	return new(big.Int).Set(r.Num()), nil
 }
@@ -402,7 +407,7 @@ func decimalUnscaled(s string, scale int) (*big.Int, error) {
 // scale and the unscaled value.
 func variableScaleDecimal(s string) (int, *big.Int, error) {
 	if !validJSONNumber(s) {
-		return 0, nil, fmt.Errorf("decimal %q is not a number", s)
+		return 0, nil, fmt.Errorf("a %d byte decimal literal is not a number", len(s))
 	}
 	neg := false
 	body := s
@@ -416,7 +421,7 @@ func variableScaleDecimal(s string) (int, *big.Int, error) {
 	if !hasDot {
 		n, ok := new(big.Int).SetString(s, 10)
 		if !ok {
-			return 0, nil, fmt.Errorf("decimal %q is not a number", s)
+			return 0, nil, fmt.Errorf("a %d byte decimal literal is not a number", len(s))
 		}
 		return 0, n, nil
 	}
@@ -431,7 +436,7 @@ func variableScaleDecimal(s string) (int, *big.Int, error) {
 	}
 	n, ok := new(big.Int).SetString(digits, 10)
 	if !ok {
-		return 0, nil, fmt.Errorf("decimal %q is not a number", s)
+		return 0, nil, fmt.Errorf("a %d byte decimal literal is not a number", len(s))
 	}
 	return scale, n, nil
 }
