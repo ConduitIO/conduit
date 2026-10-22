@@ -154,3 +154,37 @@ func TestJSProcessor_DataPropertiesAreKept(t *testing.T) {
 	err = scriptError(t, `new Date(NaN).toISOString();`)
 	is.True(strings.HasPrefix(err.Error(), "RangeError: Invalid time value"))
 }
+
+// Object.getOwnPropertyDescriptor returns a descriptor with no "value" for an
+// accessor, and reading "value" off it walks the prototype chain: a getter or
+// a value the script put on Object.prototype was read as the message.
+func TestJSProcessor_PrototypeValueIsNotReadAsTheMessage(t *testing.T) {
+	for name, body := range map[string]string{
+		"getter on Object.prototype": `Object.defineProperty(Object.prototype, "value", {get: function() { return "Invalid time value"; }, configurable: true});
+			throw {name: "TypeError", get message() { return "x"; }};`,
+		"data on Object.prototype": `Object.defineProperty(Object.prototype, "value", {value: "Invalid time value", configurable: true});
+			throw {name: "TypeError", get message() { return "x"; }};`,
+		"getter on the name": `Object.defineProperty(Object.prototype, "value", {get: function() { return "TypeError"; }, configurable: true});
+			throw {get name() { return "x"; }, get message() { return "Invalid time value"; }};`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			err := scriptError(t, body)
+			is.True(err != nil)
+			// The accessor is not read, so the name stays Error. A data
+			// message is withheld here too: the poisoned prototype makes the
+			// engine's descriptor lose its "value", which is the safe side.
+			is.True(strings.HasPrefix(err.Error(), "Error: "+messageWithheld))
+		})
+	}
+}
+
+// Code run with eval is positioned in the evaluated text, which can be a
+// record value: the line and column in the error must be the script's own.
+func TestJSProcessor_EvalPositionIsNotReported(t *testing.T) {
+	is := is.New(t)
+	err := scriptError(t, `return eval("1;      zzz()");`)
+	is.True(strings.Contains(err.Error(), "ReferenceError"))
+	is.True(!strings.Contains(err.Error(), "column 12")) // the column in the evaluated text
+	is.True(strings.Contains(err.Error(), "(at line 1, column "))
+}

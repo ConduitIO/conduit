@@ -108,10 +108,14 @@ func ownString(rt *goja.Runtime, getOwn goja.Callable, obj *goja.Object, key str
 				return
 			}
 			if desc, isObj := d.(*goja.Object); isObj {
-				v := desc.Get("value") // own data property of a fresh descriptor
-				if v == nil {
+				// Desc.Get walks the prototype chain: a descriptor of an
+				// accessor has no "value" of its own, and a script can define
+				// a getter or a value on Object.prototype that Get would then
+				// run or return. Only an own "value" counts.
+				if !hasOwnKey(desc, "value") {
 					return // an accessor: do not run it
 				}
+				v := desc.Get("value")
 				if _, isObj := v.(*goja.Object); isObj {
 					return
 				}
@@ -127,6 +131,18 @@ func ownString(rt *goja.Runtime, getOwn goja.Callable, obj *goja.Object, key str
 		return "", false
 	}
 	return s, ok
+}
+
+// hasOwnKey reports whether the plain object desc, a descriptor made by the
+// engine, has its own enumerable property key. It does not read the prototype
+// chain and runs no script code.
+func hasOwnKey(desc *goja.Object, key string) bool {
+	for _, k := range desc.Keys() {
+		if k == key {
+			return true
+		}
+	}
+	return false
 }
 
 // sanitizeJSError turns a goja exception into an error that keeps the
@@ -161,9 +177,16 @@ func sanitizeJSError(rt *goja.Runtime, getOwn goja.Callable, err error) error {
 		}
 	}
 	where := ""
-	if st := ex.Stack(); len(st) > 0 {
-		p := st[0].Position()
+	// Code compiled from a string (eval, new Function) is positioned in that
+	// string, which can be a record value: its line and column say something
+	// about the record. Report the first frame of the script itself.
+	for _, f := range ex.Stack() {
+		if f.SrcName() == "<eval>" {
+			continue
+		}
+		p := f.Position()
 		where = fmt.Sprintf(" (at line %d, column %d)", p.Line, p.Column)
+		break
 	}
 	return &jsError{msg: name + ": " + out + where, err: err}
 }
