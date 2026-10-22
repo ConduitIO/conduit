@@ -156,7 +156,7 @@ func TestClient_JAASThatCannotBeSplitBlocks(t *testing.T) {
 		})
 	}
 	is := is.New(t)
-	res := clientRun(t, "bootstrap.servers=k:9092\n"+conv, source+`producer.override.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required  username = svc password="p w" ;`+"\n")
+	res := clientRun(t, "bootstrap.servers=k:9092\n"+conv, source+"producer.override.security.protocol=SASL_SSL\n"+`producer.override.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required  username = svc password="p w" ;`+"\n")
 	is.True(!entryFor(res.Report.Connectors[1], "producer.override.sasl.jaas.config").Blocking)
 	is.True(strings.Contains(file(res, "pipelines/c.yaml"), "saslUsername: svc"))
 }

@@ -94,7 +94,7 @@ func mm2Offsets(p *Plan, _ rules.Action) ([]kcmigrate.Note, error) {
 	var start string
 	src := p.connector(SideSource)
 	switch v, ok := src.Settings["readFromBeginning"]; {
-	case ok && v == "true":
+	case ok && v == tlsOn:
 		start = "The pipeline reads every partition from the beginning (readFromBeginning: true), so the records MirrorMaker already copied are copied again."
 	case ok && v == "false":
 		start = "The pipeline starts every partition at the end (readFromBeginning: false, from auto.offset.reset=latest), so the records written before it starts are skipped."
