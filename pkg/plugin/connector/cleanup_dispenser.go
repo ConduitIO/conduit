@@ -27,6 +27,12 @@ type cleanupDispenser struct {
 	cleanup func()
 }
 
+// DispenserWithCleanup wraps d so cleanup runs after a dispensed source or
+// destination is torn down, and also when a Dispense call fails (a plugin that
+// failed to dispense is never torn down). The dispenser is therefore single-use
+// after a failed dispense: cleanup has already run (for the connector token,
+// revoked), so dispensing again from the same dispenser is not supported. Get a
+// new dispenser instead. A nil cleanup returns d unchanged.
 func DispenserWithCleanup(d Dispenser, cleanup func()) Dispenser {
 	if cleanup == nil {
 		return d

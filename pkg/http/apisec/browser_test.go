@@ -78,22 +78,19 @@ func TestBrowserPolicy_OriginAllowed(t *testing.T) {
 		{"http://127.0.0.1:8080/x", "127.0.0.1:8080", false},
 		{"http://127.0.0.1:8080?x=1", "127.0.0.1:8080", false},
 	} {
-		if got := p.OriginAllowed(tc.origin, tc.host, false); got != tc.want {
+		if got := p.OriginAllowed(tc.origin, tc.host); got != tc.want {
 			t.Errorf("OriginAllowed(%q, %q) = %v, want %v", tc.origin, tc.host, got, tc.want)
 		}
 	}
-	is.New(t).True(BrowserPolicy{AllowedOrigins: []string{"*"}}.OriginAllowed("http://anything.example", "127.0.0.1:8080", false))
-	is.New(t).True(BrowserPolicy{AllowedOrigins: []string{"null"}}.OriginAllowed("null", "127.0.0.1:8080", false))
+	is.New(t).True(BrowserPolicy{AllowedOrigins: []string{"*"}}.OriginAllowed("http://anything.example", "127.0.0.1:8080"))
+	is.New(t).True(BrowserPolicy{AllowedOrigins: []string{"null"}}.OriginAllowed("null", "127.0.0.1:8080"))
 }
 
-func TestBrowserPolicy_OriginAllowed_SchemeFollowsTransport(t *testing.T) {
+func TestBrowserPolicy_OriginAllowed_HTTPSOriginBehindProxy(t *testing.T) {
 	p := BrowserPolicy{}
-	// Plain HTTP backend: an https origin is a TLS terminating proxy in front.
-	is.New(t).True(p.OriginAllowed("http://conduit.example", "conduit.example", false))
-	is.New(t).True(p.OriginAllowed("https://conduit.example", "conduit.example", false))
-	// The request arrived over TLS: an http origin is a downgraded page.
-	is.New(t).True(!p.OriginAllowed("http://conduit.example", "conduit.example", true))
-	is.New(t).True(p.OriginAllowed("https://conduit.example", "conduit.example", true))
+	// Conduit serves plain HTTP; an https Origin is a TLS terminating proxy in front.
+	is.New(t).True(p.OriginAllowed("http://conduit.example", "conduit.example"))
+	is.New(t).True(p.OriginAllowed("https://conduit.example", "conduit.example"))
 }
 
 func TestBrowserPolicy_CheckRequest_HostIsCheckedBeforeSameOrigin(t *testing.T) {
