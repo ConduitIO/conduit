@@ -44,6 +44,9 @@ type Service struct {
 
 	instances     map[string]*Instance
 	instanceNames map[string]bool
+
+	// configWriteTimeout overrides configWriteTimeout when set (tests).
+	configWriteTimeout time.Duration
 }
 
 // NewService initializes and returns a pipeline Service.
@@ -138,7 +141,7 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config, p Provision
 		DLQ:           DefaultDLQ,
 	}
 
-	err = s.store.Set(ctx, pl.ID, pl)
+	err = s.persist(ctx, pl)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
 	}
@@ -180,7 +183,7 @@ func (s *Service) Update(ctx context.Context, pipelineID string, cfg Config) (*I
 	pl.UpdatedAt = time.Now()
 	// update the name in the names set
 	s.instanceNames[cfg.Name] = true
-	err = s.store.Set(ctx, pl.ID, pl)
+	err = s.persist(ctx, pl)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
 	}
@@ -210,7 +213,7 @@ func (s *Service) UpdateDLQ(ctx context.Context, pipelineID string, cfg DLQ) (*I
 
 	pl.DLQ = cfg
 	pl.UpdatedAt = time.Now()
-	err = s.store.Set(ctx, pl.ID, pl)
+	err = s.persist(ctx, pl)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
 	}
@@ -226,7 +229,7 @@ func (s *Service) AddConnector(ctx context.Context, pipelineID string, connector
 	}
 	pl.ConnectorIDs = append(pl.ConnectorIDs, connectorID)
 	pl.UpdatedAt = time.Now()
-	err = s.store.Set(ctx, pl.ID, pl)
+	err = s.persist(ctx, pl)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
 	}
@@ -254,7 +257,7 @@ func (s *Service) RemoveConnector(ctx context.Context, pipelineID string, connec
 	pl.ConnectorIDs = pl.ConnectorIDs[:connectorIndex+copy(pl.ConnectorIDs[connectorIndex:], pl.ConnectorIDs[connectorIndex+1:])]
 	pl.UpdatedAt = time.Now()
 
-	err = s.store.Set(ctx, pl.ID, pl)
+	err = s.persist(ctx, pl)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
 	}
@@ -270,7 +273,7 @@ func (s *Service) AddProcessor(ctx context.Context, pipelineID string, processor
 	}
 	pl.ProcessorIDs = append(pl.ProcessorIDs, processorID)
 	pl.UpdatedAt = time.Now()
-	err = s.store.Set(ctx, pl.ID, pl)
+	err = s.persist(ctx, pl)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
 	}
@@ -298,7 +301,7 @@ func (s *Service) RemoveProcessor(ctx context.Context, pipelineID string, proces
 	pl.ProcessorIDs = pl.ProcessorIDs[:processorIndex+copy(pl.ProcessorIDs[processorIndex:], pl.ProcessorIDs[processorIndex+1:])]
 	pl.UpdatedAt = time.Now()
 
-	err = s.store.Set(ctx, pl.ID, pl)
+	err = s.persist(ctx, pl)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
 	}
@@ -312,7 +315,7 @@ func (s *Service) Delete(ctx context.Context, pipelineID string) error {
 	if err != nil {
 		return err
 	}
-	err = s.store.Delete(ctx, pl.ID)
+	err = s.persistDelete(ctx, pl.ID)
 	if err != nil {
 		return cerrors.Errorf("could not delete pipeline instance from store: %w", err)
 	}
@@ -400,4 +403,82 @@ func (s *Service) updateNewStatusMetrics(pl *Instance) {
 	status := strings.ToLower(pl.GetStatus().String())
 	measure.PipelinesGauge.WithValues(status).Inc()
 	measure.PipelineStatusGauge.WithValues(pl.Config.Name).Set(float64(pl.GetStatus()))
+}
+
+// configWriteTimeout bounds one attempt of a pipeline config write (create,
+// update, delete) made outside a transaction. Same value as the lifecycle's
+// statusWriteTimeout.
+const configWriteTimeout = 30 * time.Second
+
+func (s *Service) writeTimeout() time.Duration {
+	if s.configWriteTimeout > 0 {
+		return s.configWriteTimeout
+	}
+	return configWriteTimeout
+}
+
+// persist writes pl to the store. See writeConfig.
+func (s *Service) persist(ctx context.Context, pl *Instance) error {
+	return s.writeConfig(ctx, pl.ID, func(ctx context.Context) error {
+		return s.store.Set(ctx, pl.ID, pl)
+	})
+}
+
+// persistDelete deletes pipeline id from the store. See writeConfig.
+func (s *Service) persistDelete(ctx context.Context, id string) error {
+	return s.writeConfig(ctx, id, func(ctx context.Context) error {
+		return s.store.Delete(ctx, id)
+	})
+}
+
+// writeConfig runs a pipeline config write so that its error means what it
+// says (#2964).
+//
+// Inside a transaction (orchestrator, provisioning) the write is only staged
+// and the transaction's Commit decides; it runs on ctx unchanged.
+//
+// Outside one, the write is detached from ctx's cancellation and bounded by
+// configWriteTimeout instead. A backend that honours the context can return
+// an error after the write was handed over and may still apply it (badger:
+// ErrWriteAbandoned). For Create and Delete that would leave the store and
+// memory disagreeing: the API reports a failure, memory is unchanged, and the
+// next boot loads the pipeline the store did (or did not) keep. So:
+//
+//   - An API client that disconnects no longer cancels the write.
+//   - If the write runs out of time, it is retried once. The write is
+//     idempotent, and badger orders it behind the abandoned one for the same
+//     key, so a successful retry means the store holds exactly this write.
+//   - If the retry runs out of time too, the outcome is unknown and the
+//     error carries CodeConfigPersistUnknown. Create and Delete leave memory
+//     unchanged; the update methods have already changed it, as they do on
+//     any failed write.
+func (s *Service) writeConfig(ctx context.Context, id string, write func(context.Context) error) error {
+	if database.TransactionFromContext(ctx) != nil {
+		return write(ctx)
+	}
+	// WithoutCancel keeps ctx's values (logger fields, and a transaction if
+	// one is added later) but not its deadline or cancellation.
+	base := context.WithoutCancel(ctx)
+	attempt := func() error {
+		wctx, cancel := context.WithTimeout(base, s.writeTimeout())
+		defer cancel()
+		return write(wctx)
+	}
+
+	err := attempt()
+	if !cerrors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	s.logger.Warn(ctx).Err(err).Str(log.PipelineIDField, id).
+		Dur(log.DurationField, s.writeTimeout()).
+		Msg("pipeline config write timed out, retrying once so the outcome is known")
+	err = attempt()
+	if !cerrors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	cerr := conduiterr.Wrap(CodeConfigPersistUnknown,
+		fmt.Sprintf("pipeline %q: config write timed out twice, it may or may not have been stored: %v", id, err), err)
+	cerr.Suggestion = "check the database (/healthz, free disk). Until the next start this instance's view of the pipeline " +
+		"may differ from the store; the next start loads what the store holds, so get the pipeline then and repeat the change if needed"
+	return cerr
 }

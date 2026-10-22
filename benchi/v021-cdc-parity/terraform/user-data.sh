@@ -27,7 +27,7 @@ apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io
 systemctl enable --now docker
 
 # Go (the loader + conduit image build use it).
-GO_VERSION="1.26.9"
+GO_VERSION="1.26.10"
 curl -fsSL "https://go.dev/dl/go$${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tgz
 rm -rf /usr/local/go
 tar -C /usr/local -xzf /tmp/go.tgz

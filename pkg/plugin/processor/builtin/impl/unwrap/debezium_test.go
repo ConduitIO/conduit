@@ -47,7 +47,7 @@ func TestDebeziumProcessor_Configure(t *testing.T) {
 		{
 			name:    "invalid field",
 			config:  config.Config{"field": ".Key"},
-			wantErr: `config invalid: error validating "field": ".Key" should match the regex "^.Payload": regex validation failed`,
+			wantErr: `config invalid: error validating "field": value should match the regex "^.Payload": regex validation failed`,
 		},
 	}
 

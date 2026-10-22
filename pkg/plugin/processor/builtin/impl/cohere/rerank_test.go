@@ -45,7 +45,7 @@ func TestRerankProcessor_Configure(t *testing.T) {
 				"query":              "some query text",
 				"backoffRetry.count": "not-a-number",
 			},
-			wantErr: `failed to parse configuration: config invalid: error validating "backoffRetry.count": "not-a-number" value is not a float: invalid parameter type`,
+			wantErr: `failed to parse configuration: config invalid: error validating "backoffRetry.count": value is not a float: invalid parameter type`,
 		},
 		{
 			name: "invalid backoffRetry.min returns error",
@@ -55,7 +55,7 @@ func TestRerankProcessor_Configure(t *testing.T) {
 				"backoffRetry.count": "1",
 				"backoffRetry.min":   "not-a-duration",
 			},
-			wantErr: `failed to parse configuration: config invalid: error validating "backoffRetry.min": "not-a-duration" value is not a duration: invalid parameter type`,
+			wantErr: `failed to parse configuration: config invalid: error validating "backoffRetry.min": value is not a duration: invalid parameter type`,
 		},
 		{
 			name: "invalid backoffRetry.max returns error",
@@ -65,7 +65,7 @@ func TestRerankProcessor_Configure(t *testing.T) {
 				"backoffRetry.count": "1",
 				"backoffRetry.max":   "not-a-duration",
 			},
-			wantErr: `failed to parse configuration: config invalid: error validating "backoffRetry.max": "not-a-duration" value is not a duration: invalid parameter type`,
+			wantErr: `failed to parse configuration: config invalid: error validating "backoffRetry.max": value is not a duration: invalid parameter type`,
 		},
 		{
 			name: "invalid backoffRetry.factor returns error",
@@ -75,7 +75,7 @@ func TestRerankProcessor_Configure(t *testing.T) {
 				"backoffRetry.count":  "1",
 				"backoffRetry.factor": "not-a-number",
 			},
-			wantErr: `failed to parse configuration: config invalid: error validating "backoffRetry.factor": "not-a-number" value is not a float: invalid parameter type`,
+			wantErr: `failed to parse configuration: config invalid: error validating "backoffRetry.factor": value is not a float: invalid parameter type`,
 		},
 		{
 			name: "success",
