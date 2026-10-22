@@ -49,3 +49,32 @@ func TestExec_DropsTheValuesTheFunctionsQuote(t *testing.T) {
 		})
 	}
 }
+
+// A record value that a template error quotes can look like the part of the
+// message the function name is read from.
+func TestExec_ValueCannotSupplyTheFunctionName(t *testing.T) {
+	for name, tc := range map[string]struct {
+		tmpl, value string
+		wantFn      string
+	}{
+		"range over a string":   {`{{ range .s }}{{ end }}`, "q error calling SECRET_TOKEN: x", ""},
+		"value with a prefix":   {`{{ range .s }}{{ end }}`, `x" at <.s>: error calling SECRET_TOKEN: x`, ""},
+		"index with a bad key":  {`{{ index .a .s }}`, "q error calling SECRET_TOKEN: x", "index"},
+		"real function, bad in": {`{{ mustFromJson .s }}`, "error calling SECRET_TOKEN: x", "mustFromJson"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			tpl, err := template.New("").Funcs(sprig.FuncMap()).Parse(tc.tmpl)
+			is.NoErr(err)
+			err = tpl.Execute(&strings.Builder{}, map[string]any{"s": tc.value, "a": []string{"x"}})
+			is.True(err != nil)
+			got := Exec(err).Error()
+			is.True(!strings.Contains(got, "SECRET"))
+			if tc.wantFn == "" {
+				is.True(!strings.Contains(got, "in function"))
+			} else {
+				is.True(strings.Contains(got, "in function "+tc.wantFn))
+			}
+		})
+	}
+}

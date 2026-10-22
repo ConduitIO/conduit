@@ -28,7 +28,12 @@ import (
 
 var (
 	position = regexp.MustCompile(`^template: [^:]*:(\d+):(\d+): `)
-	function = regexp.MustCompile(`error calling ([A-Za-z0-9_]+):`)
+	// function is anchored right after the "executing ... at <expression>: "
+	// prefix text/template writes: what follows can quote a record value
+	// (range can't iterate over <value>), which can contain "error calling X:"
+	// as well. The expression is template source and has no '>' to confuse the
+	// prefix; one that has is reported without a function.
+	function = regexp.MustCompile(`^template: [^:]*:\d+:\d+: executing "[^"]*" at <[^>]*>: error calling ([A-Za-z0-9_]+):`)
 )
 
 type safeError struct {
