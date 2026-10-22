@@ -16,15 +16,17 @@ package ollama
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
@@ -37,7 +39,7 @@ func TestOllamaProcessor_RequestErrorDoesNotContainTheURL(t *testing.T) {
 	is := is.New(t)
 	client := setupHTTPMockClient(t)
 	client.EXPECT().Do(gomock.Any()).DoAndReturn(func(*http.Request) (*http.Response, error) {
-		return nil, &url.Error{Op: "Post", URL: "http://SECRET-user:SECRET-pass@ollama.internal:11434/api/generate", Err: cerrors.New("connection refused")}
+		return nil, &url.Error{Op: "Post", URL: "http://SECRET-user:SECRET-pass@ollama.internal:11434/api/generate", Err: &net.OpError{Op: "dial", Net: "tcp", Err: os.NewSyscallError("connect", syscall.ECONNREFUSED)}}
 	})
 
 	ctx := context.Background()
@@ -49,4 +51,23 @@ func TestOllamaProcessor_RequestErrorDoesNotContainTheURL(t *testing.T) {
 	is.True(ok)
 	is.True(strings.Contains(er.Error.Error(), "connection refused"))
 	is.True(!strings.Contains(er.Error.Error(), "SECRET"))
+	is.True(!strings.Contains(er.Error.Error(), "ollama.internal")) // the host can come from record data
+}
+
+// The record's JSON is data: a syntax error keeps its offset, not the text.
+func TestOllamaProcessor_InvalidRecordJSONDoesNotContainTheValue(t *testing.T) {
+	p := NewOllamaProcessor(log.Nop()).(*OllamaProcessor)
+	for name, in := range map[string]any{
+		"raw":    opencdc.RawData(`{"a": customer-SECRET-4711}`),
+		"string": `{"a": customer-SECRET-4711}`,
+		"bytes":  []byte(`{"a": customer-SECRET-4711}`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			_, err := p.structuredData(in)
+			is.True(err != nil)
+			is.True(strings.Contains(err.Error(), "invalid JSON syntax at offset"))
+			is.True(!strings.Contains(err.Error(), "SECRET"))
+		})
+	}
 }

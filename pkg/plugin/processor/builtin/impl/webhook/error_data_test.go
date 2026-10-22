@@ -73,7 +73,8 @@ func TestHTTPProcessor_ErrorsDoNotContainTheURLOrTheBody(t *testing.T) {
 		url := srv.URL
 		srv.Close() // nothing listens any more
 		err := process(t, url+"/{{ index .Metadata \"id\" }}?token=SECRET-token")
-		is.True(strings.Contains(err.Error(), "error executing HTTP request"))
+		is.True(strings.Contains(err.Error(), "error executing HTTP request: connection refused")) // the kind, not the host and port
+		is.True(!strings.Contains(err.Error(), "127.0.0.1"))
 		is.True(!strings.Contains(err.Error(), "SECRET"))
 		is.True(!strings.Contains(err.Error(), "token="))
 	})

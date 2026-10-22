@@ -278,7 +278,7 @@ func TestOllamaProcessor_Failure(t *testing.T) {
 					},
 				},
 			},
-			wantErr: cerrors.New("cannot process response: invalid JSON in ollama response: invalid character 'h' looking for beginning of value"),
+			wantErr: cerrors.New("cannot process response: invalid JSON in ollama response: invalid JSON syntax at offset 1"),
 		},
 	}
 

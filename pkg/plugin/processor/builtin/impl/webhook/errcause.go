@@ -15,18 +15,59 @@
 package webhook
 
 import (
+	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"net"
 	"net/url"
+	"syscall"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
 
-// errCause returns the reason of a *url.Error without the URL it repeats. The
-// URL can carry record fields (it is a template) and credentials, and errors
-// reach the DLQ, the API and CLI output.
+// requestError is a request failure without the text of its cause. The cause
+// of a *url.Error names the host and port (a DNS error, a dial error), and the
+// URL is a template over record fields, so the text is not passed on; the kind
+// is. The original error stays in the chain.
+type requestError struct {
+	kind string
+	err  error
+}
+
+func (e *requestError) Error() string { return e.kind }
+func (e *requestError) Unwrap() error { return e.err }
+
+// errCause reduces a *url.Error to the kind of failure: DNS lookup, connection
+// refused, timeout, TLS, canceled, or a generic request failure. Anything that
+// is not a *url.Error is returned as it is.
 func errCause(err error) error {
 	var ue *url.Error
-	if cerrors.As(err, &ue) {
-		return ue.Err
+	if !cerrors.As(err, &ue) {
+		return err
 	}
-	return err
+	return &requestError{kind: netKind(ue.Err), err: err}
+}
+
+func netKind(err error) string {
+	var (
+		dns     *net.DNSError
+		unknown x509.UnknownAuthorityError
+		invalid x509.CertificateInvalidError
+		host    x509.HostnameError
+		tlsHdr  tls.RecordHeaderError
+		nerr    net.Error
+	)
+	switch {
+	case cerrors.As(err, &dns):
+		return "DNS lookup failed"
+	case cerrors.Is(err, syscall.ECONNREFUSED):
+		return "connection refused"
+	case cerrors.Is(err, context.Canceled):
+		return "request canceled"
+	case cerrors.Is(err, context.DeadlineExceeded), cerrors.As(err, &nerr) && nerr.Timeout():
+		return "timeout"
+	case cerrors.As(err, &unknown), cerrors.As(err, &invalid), cerrors.As(err, &host), cerrors.As(err, &tlsHdr):
+		return "TLS error"
+	}
+	return "request failed (details not shown: they can name the host)"
 }
