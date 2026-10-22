@@ -139,7 +139,7 @@ func (p *CommandProcessor) Process(ctx context.Context, records []opencdc.Record
 		if record.Key != nil {
 			key = record.Key.Bytes()
 		}
-		p.logger.Trace(ctx).Bytes("record_key", key).Msg("processing record")
+		p.logger.Trace(ctx).Int("record_key_size", len(key)).Str("record_key_hash", log.KeyHash(key)).Msg("processing record")
 
 		requestRef, err := p.requestBodyRef.Resolve(&record)
 		if err != nil {

@@ -249,7 +249,7 @@ func (p *HTTPProcessor) processRecord(ctx context.Context, r opencdc.Record) (sd
 	if r.Key != nil {
 		key = r.Key.Bytes()
 	}
-	p.logger.Trace(ctx).Bytes("record_key", key).Msg("processing record")
+	p.logger.Trace(ctx).Int("record_key_size", len(key)).Str("record_key_hash", log.KeyHash(key)).Msg("processing record")
 
 	req, err := p.buildRequest(ctx, r)
 	if err != nil {
