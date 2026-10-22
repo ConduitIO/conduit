@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/conduitio/conduit-commons/database"
@@ -42,6 +43,10 @@ type Service struct {
 
 	store *Store
 
+	// mu guards instances and instanceNames. A pipeline that fails while the
+	// provisioner is still creating the next one reads the map (UpdateStatus ->
+	// Get) from the lifecycle goroutine while Create writes it.
+	mu            sync.RWMutex
 	instances     map[string]*Instance
 	instanceNames map[string]bool
 
@@ -72,11 +77,15 @@ func (s *Service) Init(ctx context.Context) error {
 		return cerrors.Errorf("could not retrieve pipeline instances from store: %w", err)
 	}
 
+	s.mu.Lock()
 	s.instances = instances
+	for _, instance := range instances {
+		s.instanceNames[instance.Config.Name] = true
+	}
+	s.mu.Unlock()
 
 	// some instances may be in a running state, put them in StatusSystemStopped state for now
 	for _, instance := range instances {
-		s.instanceNames[instance.Config.Name] = true
 		if instance.GetStatus() == StatusRunning {
 			// change status to "systemStopped" to mark which pipeline was running
 			instance.SetStatus(StatusSystemStopped)
@@ -85,13 +94,16 @@ func (s *Service) Init(ctx context.Context) error {
 		s.updateNewStatusMetrics(instance)
 	}
 
-	s.logger.Info(ctx).Int("count", len(s.instances)).Msg("pipelines initialized")
+	s.logger.Info(ctx).Int("count", len(instances)).Msg("pipelines initialized")
 
 	return err
 }
 
 // List returns all pipeline instances in the Service.
 func (s *Service) List(context.Context) map[string]*Instance {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	if len(s.instances) == 0 {
 		return nil
 	}
@@ -107,7 +119,9 @@ func (s *Service) List(context.Context) map[string]*Instance {
 
 // Get will return a single pipeline instance or an error.
 func (s *Service) Get(_ context.Context, id string) (*Instance, error) {
+	s.mu.RLock()
 	p, ok := s.instances[id]
+	s.mu.RUnlock()
 	if !ok {
 		// Invariant: errors.Is(err, ErrInstanceNotFound) still holds — the sentinel
 		// is wrapped, and the ConduitError adds the machine-actionable code.
@@ -146,8 +160,10 @@ func (s *Service) Create(ctx context.Context, id string, cfg Config, p Provision
 		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
 	}
 
+	s.mu.Lock()
 	s.instances[pl.ID] = pl
 	s.instanceNames[cfg.Name] = true
+	s.mu.Unlock()
 
 	s.updateNewStatusMetrics(pl)
 
@@ -169,7 +185,7 @@ func (s *Service) Update(ctx context.Context, pipelineID string, cfg Config) (*I
 	}
 
 	// delete the old name from the names set
-	exists := s.instanceNames[cfg.Name]
+	exists := s.nameTaken(cfg.Name)
 	if exists && pl.Config.Name != cfg.Name {
 		// Invariant: errors.Is(err, ErrNameAlreadyExists) still holds — sentinel
 		// wrapped, ConduitError adds the code.
@@ -178,11 +194,13 @@ func (s *Service) Update(ctx context.Context, pipelineID string, cfg Config) (*I
 		return nil, err
 	}
 
+	s.mu.Lock()
 	delete(s.instanceNames, pl.Config.Name) // delete the old name
 	pl.Config = cfg
 	pl.UpdatedAt = time.Now()
 	// update the name in the names set
 	s.instanceNames[cfg.Name] = true
+	s.mu.Unlock()
 	err = s.persist(ctx, pl)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
@@ -320,12 +338,21 @@ func (s *Service) Delete(ctx context.Context, pipelineID string) error {
 		return cerrors.Errorf("could not delete pipeline instance from store: %w", err)
 	}
 
+	s.mu.Lock()
 	delete(s.instances, pl.ID)
 	delete(s.instanceNames, pl.Config.Name)
+	s.mu.Unlock()
 
 	s.updateOldStatusMetrics(pl)
 
 	return nil
+}
+
+// nameTaken reports whether a pipeline with this name exists.
+func (s *Service) nameTaken(name string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.instanceNames[name]
 }
 
 func (s *Service) validatePipeline(cfg Config, id string) error {
@@ -339,7 +366,7 @@ func (s *Service) validatePipeline(cfg Config, id string) error {
 		nameMissingErr.Suggestion = "provide a non-empty pipeline name"
 		errs = append(errs, nameMissingErr)
 	}
-	if s.instanceNames[cfg.Name] {
+	if s.nameTaken(cfg.Name) {
 		// Invariant: errors.Is(err, ErrNameAlreadyExists) still holds — sentinel
 		// wrapped, ConduitError adds the code.
 		nameExistsErr := conduiterr.Wrap(CodePipelineNameAlreadyExists, "pipeline name already exists", ErrNameAlreadyExists)
