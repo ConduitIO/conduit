@@ -110,6 +110,13 @@ error output — otherwise cobra prints a duplicate `Error:` line over the repor
 and, under `--json`, corrupts the single-object stdout with a stderr `Error:`.
 Fold this into the shared offline `CommandWithResult` decorator so it is structural.
 
+Silencing cobra also silences what it rejects before the command runs: flag parse
+errors, positional-argument checks, `PreRunE` and missing required flags. The
+decorator renders those itself, like any other hard failure: the envelope under
+`--json` (found in the raw arguments when the bad flag stopped parsing before it),
+a finding on stderr otherwise, with code `cli.invalid_usage` and exit code 2. An
+argument check that returns its own coded error keeps that code (#3086).
+
 Under `--json`, commands MUST NOT stream human progress/`✓` lines (they would
 precede/corrupt the single JSON object) — capture progress in `result.steps[]`.
 
@@ -132,6 +139,14 @@ envelope.
   `processorplugins list|describe`. This is confirmed correct, intentional, load-bearing
   behavior (see `cmd/conduit/root/pipelines/list_test.go`'s own doc comment), not a bug or a
   migration backlog item — scripts and the MCP layer already consume this shape.
+
+**Errors under `--json` (v0.21 addendum, #2989).** Until v0.21 a failing Family B command printed
+cobra's plain `Error: rpc error: ...` line on stderr and nothing on stdout, so the stable code the server
+attached was only reachable by parsing text. A failing Family B command now prints one object on stdout,
+`{"error": {"code", "message", "suggestion", "configPath", "fix"}}` (the envelope's `ResultError` fields,
+empty ones omitted), decoded from the gRPC status's Conduit `ErrorInfo` detail, and cobra's error and usage
+output are silenced for that run. The exit code is unchanged. Success output is still the raw result value.
+This is not the Family A envelope (no `command`/`ok`), so the schema-golden classification is unaffected.
 
 Forcing one schema across both was considered and rejected: Family B's payloads are
 heterogeneous proto/API messages whose shape is dictated by the gRPC/HTTP API contract, not this
