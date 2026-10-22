@@ -42,6 +42,10 @@ func (c *cleanupDispenser) DispenseSpecifier() (SpecifierPlugin, error) {
 func (c *cleanupDispenser) DispenseSource() (SourcePlugin, error) {
 	plugin, err := c.target.DispenseSource()
 	if err != nil {
+		// A plugin that failed to dispense (for example, its process did not
+		// start or crashed during the handshake) is never torn down, so the
+		// token handed to it is revoked here.
+		c.cleanup()
 		return nil, err
 	}
 
@@ -54,6 +58,10 @@ func (c *cleanupDispenser) DispenseSource() (SourcePlugin, error) {
 func (c *cleanupDispenser) DispenseDestination() (DestinationPlugin, error) {
 	plugin, err := c.target.DispenseDestination()
 	if err != nil {
+		// A plugin that failed to dispense (for example, its process did not
+		// start or crashed during the handshake) is never torn down, so the
+		// token handed to it is revoked here.
+		c.cleanup()
 		return nil, err
 	}
 

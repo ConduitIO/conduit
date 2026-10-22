@@ -408,7 +408,11 @@ func TestAPIToken_SecurityHeadersAndUIStillLoads(t *testing.T) {
 	is := is.New(t)
 	a := startSecureAPI(t, withToken)
 
-	get := func(path string) (*http.Response, string) {
+	type result struct {
+		status int
+		header http.Header
+	}
+	get := func(path string) (result, string) {
 		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://"+a.httpAddr+path, nil)
 		is.NoErr(err)
 		resp, err := http.DefaultClient.Do(req)
@@ -416,19 +420,19 @@ func TestAPIToken_SecurityHeadersAndUIStillLoads(t *testing.T) {
 		defer resp.Body.Close()
 		b, err := io.ReadAll(resp.Body)
 		is.NoErr(err)
-		return resp, string(b)
+		return result{resp.StatusCode, resp.Header}, string(b)
 	}
-	checkHeaders := func(resp *http.Response) {
-		is.Equal(resp.Header.Get("X-Frame-Options"), "DENY")
-		is.Equal(resp.Header.Get("X-Content-Type-Options"), "nosniff")
-		is.Equal(resp.Header.Get("Referrer-Policy"), "no-referrer")
-		csp := resp.Header.Get("Content-Security-Policy")
+	checkHeaders := func(resp result) {
+		is.Equal(resp.header.Get("X-Frame-Options"), "DENY")
+		is.Equal(resp.header.Get("X-Content-Type-Options"), "nosniff")
+		is.Equal(resp.header.Get("Referrer-Policy"), "no-referrer")
+		csp := resp.header.Get("Content-Security-Policy")
 		is.True(strings.Contains(csp, "frame-ancestors 'none'"))
 		is.True(strings.Contains(csp, "script-src 'self';"))
 	}
 
 	resp, page := get("/")
-	is.Equal(resp.StatusCode, 200)
+	is.Equal(resp.status, 200)
 	checkHeaders(resp)
 	// Every <script> on the page is an external same-origin file.
 	scripts := regexp.MustCompile(`(?is)<script\b[^>]*>`).FindAllString(page, -1)
@@ -439,7 +443,7 @@ func TestAPIToken_SecurityHeadersAndUIStillLoads(t *testing.T) {
 	is.True(!regexp.MustCompile(`(?is)<script\b[^>]*>\s*[^<\s]`).MatchString(page)) // no inline body
 
 	resp, js := get("/conduit-auth.js")
-	is.Equal(resp.StatusCode, 200)
+	is.Equal(resp.status, 200)
 	checkHeaders(resp)
 	is.True(strings.Contains(js, "sessionStorage"))
 
@@ -447,13 +451,13 @@ func TestAPIToken_SecurityHeadersAndUIStillLoads(t *testing.T) {
 	m := regexp.MustCompile(`src="(\.?/?assets/[^"]+\.js)"`).FindStringSubmatch(page)
 	is.True(m != nil)
 	resp, bundle := get("/" + strings.TrimPrefix(strings.TrimPrefix(m[1], "."), "/"))
-	is.Equal(resp.StatusCode, 200)
+	is.Equal(resp.status, 200)
 	checkHeaders(resp)
 	is.True(len(bundle) > 1000)
 	is.True(!strings.Contains(bundle, "new Function("))
 
 	// A gate refusal is covered too.
 	resp, _ = get("/v1/pipelines")
-	is.Equal(resp.StatusCode, 401)
+	is.Equal(resp.status, 401)
 	checkHeaders(resp)
 }

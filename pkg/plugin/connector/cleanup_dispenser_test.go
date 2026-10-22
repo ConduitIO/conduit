@@ -43,7 +43,7 @@ func TestCleanupDispenser_DispenseSource_Fail(t *testing.T) {
 
 	_, err := underTest.DispenseSource()
 	is.True(cerrors.Is(err, wantErr))
-	is.True(!called)
+	is.True(called) // a failed dispense is never torn down, so the token is revoked now
 }
 
 func TestCleanupDispenser_Source_Teardown(t *testing.T) {
@@ -112,7 +112,7 @@ func TestCleanupDispenser_DispenseDestination_Fail(t *testing.T) {
 
 	_, err := underTest.DispenseDestination()
 	is.True(cerrors.Is(err, wantErr))
-	is.True(!called)
+	is.True(called) // a failed dispense is never torn down, so the token is revoked now
 }
 
 func TestCleanupDispenser_Destination_Teardown(t *testing.T) {
