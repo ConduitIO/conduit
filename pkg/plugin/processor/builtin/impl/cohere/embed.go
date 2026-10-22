@@ -167,7 +167,7 @@ func (p *EmbedProcessor) Process(ctx context.Context, records []opencdc.Record) 
 		batchRecords := records[i:end]
 		batchResults, err := p.processBatch(ctx, batchRecords)
 		if err != nil {
-			return append(out, sdk.ErrorRecord{Error: err})
+			return append(out, sdk.ErrorRecord{Error: sanitizeAPIError(err)})
 		}
 		out = append(out, batchResults...)
 	}
@@ -204,9 +204,7 @@ func (p *EmbedProcessor) processBatch(ctx context.Context, records []opencdc.Rec
 
 		if err != nil {
 			switch {
-			case cerrors.As(err, &cohere.GatewayTimeoutError{}),
-				cerrors.As(err, &cohere.InternalServerError{}),
-				cerrors.As(err, &cohere.ServiceUnavailableError{}):
+			case isRetryable(err):
 				if attempt < p.config.BackoffRetryCount {
 					p.logger.Debug(ctx).Str("error_type", fmt.Sprintf("%T", err)).Float64("attempt", attempt).
 						Float64("backoffRetry.count", p.config.BackoffRetryCount).
@@ -219,12 +217,12 @@ func (p *EmbedProcessor) processBatch(ctx context.Context, records []opencdc.Rec
 						continue
 					}
 				} else {
-					return out, cerrors.Errorf("failed to get embeddings: %w", err)
+					return out, cerrors.Errorf("failed to get embeddings: %w", sanitizeAPIError(err))
 				}
 			default:
 				// BadRequestError, ClientClosedRequestError, ForbiddenError, InvalidTokenError,
 				// NotFoundError, NotImplementedError, TooManyRequestsError, UnauthorizedError, UnprocessableEntityError
-				return out, cerrors.Errorf("failed to get embeddings: %w", err)
+				return out, cerrors.Errorf("failed to get embeddings: %w", sanitizeAPIError(err))
 			}
 		}
 

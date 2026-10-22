@@ -33,19 +33,19 @@ import (
 type unavailableCommand struct{}
 
 func (unavailableCommand) command(context.Context, string) (string, error) {
-	return "", api.ServiceUnavailableError{APIError: core.NewAPIError(503, cerrors.New("upstream said: customer-SECRET-4711"))}
+	return "", &api.ServiceUnavailableError{APIError: core.NewAPIError(503, cerrors.New("upstream said: customer-SECRET-4711"))}
 }
 
 type unavailableRerank struct{}
 
 func (unavailableRerank) rerank(context.Context, []string) ([]RerankResult, error) {
-	return nil, api.ServiceUnavailableError{APIError: core.NewAPIError(503, cerrors.New("upstream said: customer-SECRET-4711"))}
+	return nil, &api.ServiceUnavailableError{APIError: core.NewAPIError(503, cerrors.New("upstream said: customer-SECRET-4711"))}
 }
 
 type unavailableEmbed struct{}
 
 func (unavailableEmbed) embed(context.Context, []string) ([][]float64, error) {
-	return nil, api.ServiceUnavailableError{APIError: core.NewAPIError(503, cerrors.New("upstream said: customer-SECRET-4711"))}
+	return nil, &api.ServiceUnavailableError{APIError: core.NewAPIError(503, cerrors.New("upstream said: customer-SECRET-4711"))}
 }
 
 // The SDK's error text can carry what the API answered, which can repeat the
@@ -110,7 +110,7 @@ func TestProcessors_RetryLogDoesNotContainSDKErrorText(t *testing.T) {
 			is.NoErr(run(log.New(zerolog.New(&buf).Level(zerolog.DebugLevel))))
 			out := buf.String()
 			is.True(strings.Contains(out, "retrying Cohere HTTP request"))
-			is.True(strings.Contains(out, `"error_type":"api.ServiceUnavailableError"`))
+			is.True(strings.Contains(out, `"error_type":"*api.ServiceUnavailableError"`))
 			is.True(!strings.Contains(out, "SECRET"))
 		})
 	}
