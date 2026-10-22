@@ -50,6 +50,15 @@ import re
 import sys
 
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
+
+
+def strip_comments(text):
+    """Remove HTML comments, multi-line included. An unclosed `<!--` hides
+    everything after it (that is how a renderer treats it), so it is stripped to
+    the end rather than left as visible text."""
+    return HTML_COMMENT.sub("", text or "").split("<!--", 1)[0]
+
+
 TIER = re.compile(r"(?i)risk\s+tier[^A-Za-z0-9\n]*tier\s*([123])\b")
 VERDICT = re.compile(r"(?im)^[ \t>*-]*Review:\s*(approve|changes-needed)\s*@\s*([0-9a-f]{7,40})\b")
 SIGNOFF = re.compile(r"(?im)^[ \t>*-]*Sign-off\s*@\s*([0-9a-f]{7,40})\b")
@@ -65,8 +74,10 @@ def declared_tier(body, labels):
     label forces Tier 1 whatever the body says."""
     if "tier-1" in labels:
         return 1
-    m = TIER.search(HTML_COMMENT.sub("", body or ""))
-    return int(m.group(1)) if m else None
+    tiers = [int(t) for t in TIER.findall(strip_comments(body))]
+    # More than one declaration: the riskiest (lowest number, Tier 1) wins, so a
+    # second line cannot lower the tier.
+    return min(tiers) if tiers else None
 
 
 def same_sha(a, b):
@@ -87,7 +98,7 @@ def verdicts(comments, trusted_logins=frozenset()):
         if c.get("author_association") not in TRUSTED and author not in trusted_logins:
             continue
         when = (c.get("updated_at") or c.get("created_at") or "", c.get("id", 0))
-        body = HTML_COMMENT.sub("", c.get("body") or "")
+        body = strip_comments(c.get("body"))
         for m in VERDICT.finditer(body):
             out.append((m.group(1).lower(), m.group(2), author, when))
         for m in SIGNOFF.finditer(body):
@@ -209,7 +220,8 @@ def main(argv=None):
         files, paths = [], []
         if a.files:
             with open(a.files) as f:
-                files = [x["filename"] for x in json.load(f)]
+                # A rename out of a Tier 1 path touches that path too.
+                files = [n for x in json.load(f) for n in (x["filename"], x.get("previous_filename")) if n]
         if a.codeowners:
             with open(a.codeowners) as f:
                 paths = tier1_patterns(f.read(), signers)

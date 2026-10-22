@@ -154,6 +154,31 @@ class Tier1(unittest.TestCase):
         cs = []  # the finding was deleted and nothing else exists
         self.assertEqual(t.decide(pr(), cs, S)["state"], "failure")  # still no approve or sign-off
 
+    def test_unclosed_and_multiline_comments_are_stripped(self):
+        self.assertEqual(t.decide(pr(body="Risk tier: Tier 3\n<!--\nRisk tier: Tier 1\n-->"), [], S)["state"], "success")
+        # An unclosed comment hides the rest, so the Tier 3 line after it does not count.
+        self.assertEqual(t.decide(pr(body="Risk tier: Tier 1\n<!-- Risk tier: Tier 3"), [], S)["state"], "failure")
+        self.assertIsNone(t.declared_tier("<!-- Risk tier: Tier 1", set()))
+        cs = [c(f"<!--\nReview: approve @ {HEAD[:7]}\n", "r", at(1)), c(f"Sign-off @ {HEAD[:7]}", at=at(2))]
+        self.assertEqual(t.decide(pr(), cs, S)["state"], "failure")
+
+    def test_multiple_declarations_take_the_highest_risk(self):
+        body = "Risk tier: Tier 3\nRisk tier: Tier 1\nRisk tier: Tier 2"
+        self.assertEqual(t.declared_tier(body, set()), 1)
+        self.assertEqual(t.decide(pr(body=body), [], S)["state"], "failure")
+
+    def test_rename_out_of_a_tier1_path_counts(self):
+        import json as j, os as o, tempfile as tf
+        with tf.TemporaryDirectory() as d:
+            files, owners, prj, cm = (o.path.join(d, n) for n in ("f", "o", "p", "c"))
+            j.dump([{"filename": "docs/moved.go", "previous_filename": "pkg/connector/x.go"}], open(files, "w"))
+            open(owners, "w").write("/pkg/connector/ @devarismeroxa\n")
+            j.dump(pr(body="Risk tier: Tier 3"), open(prj, "w"))
+            j.dump([], open(cm, "w"))
+            self.assertEqual(t.main([prj, cm, "--files", files, "--codeowners", owners]), 1)
+            j.dump([{"filename": "docs/moved.go"}], open(files, "w"))
+            self.assertEqual(t.main([prj, cm, "--files", files, "--codeowners", owners]), 0)
+
     def test_cli_fails_closed_on_bad_input(self):
         with tempfile.TemporaryDirectory() as d:
             p, q = os.path.join(d, "p"), os.path.join(d, "q")
