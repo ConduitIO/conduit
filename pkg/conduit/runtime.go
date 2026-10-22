@@ -556,7 +556,11 @@ func createServices(r *Runtime) error {
 		return cerrors.Errorf("invalid processor egress config: %w", err)
 	}
 
-	settingsResolver := engineSettingsResolver{files: filePolicy}
+	secretsPolicy, err := r.Config.secretsPolicy()
+	if err != nil {
+		return cerrors.Errorf("invalid %s config: %w", SecretsAllowedDirsKey, err)
+	}
+	settingsResolver := engineSettingsResolver{files: filePolicy, secrets: secretsPolicy}
 
 	procPluginService := proc_plugin.NewPluginService(
 		r.logger,

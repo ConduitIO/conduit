@@ -50,3 +50,12 @@ func (i *Instance) resolveSettings(settings map[string]string) (map[string]strin
 	}
 	return r.ResolveSettings(i.Plugin, settings)
 }
+
+// resolveEventSettings resolves settings for a lifecycle event. nil stays nil:
+// it is how the event kind (created / updated / deleted) is told apart.
+func (i *Instance) resolveEventSettings(settings map[string]string) (map[string]string, error) {
+	if settings == nil {
+		return nil, nil
+	}
+	return i.resolveSettings(settings)
+}

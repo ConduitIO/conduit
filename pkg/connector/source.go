@@ -1150,6 +1150,18 @@ func (s *Source) triggerLifecycleEvent(ctx context.Context, oldConfig, newConfig
 		return false, nil // nothing to do, last active config is the same as current one
 	}
 
+	// Invariant (settings boundary): the plugin gets the same vetted, resolved
+	// settings it gets in Configure, never the raw stored text. A refusal here
+	// (for example a ${VAR} the operator has not allowed) fails the event.
+	oldConfig, err = s.Instance.resolveEventSettings(oldConfig)
+	if err != nil {
+		return false, cerrors.Errorf("could not resolve the previous connector settings for the lifecycle event: %w", err)
+	}
+	newConfig, err = s.Instance.resolveEventSettings(newConfig)
+	if err != nil {
+		return false, cerrors.Errorf("could not resolve the connector settings for the lifecycle event: %w", err)
+	}
+
 	defer func() {
 		// Older connectors that predate the lifecycle methods return an
 		// "Unimplemented" gRPC status, which the protocol client unwraps into

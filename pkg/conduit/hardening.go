@@ -21,7 +21,6 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/pathpolicy"
-	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
 	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 )
@@ -40,6 +39,25 @@ const (
 // confined to.
 func (c Config) fileConnectorPolicy() (*pathpolicy.Policy, error) {
 	return pathpolicy.New(FileAllowedDirsKey, c.Connectors.File.AllowedDirs)
+}
+
+// SecretsAllowedDirsKey is the operator key for TLS and credential files named
+// by connector settings.
+const SecretsAllowedDirsKey = "secrets.allowed-dirs"
+
+// systemCertDirs are the conventional locations of system CA bundles and
+// container secrets, allowed for cert material by default. They are read-only
+// public trust anchors on a normal host; a Kubernetes service account token
+// directory is deliberately not among them.
+var systemCertDirs = []string{
+	"/etc/ssl", "/etc/pki", "/etc/ca-certificates", "/usr/share/ca-certificates",
+	"/usr/local/share/ca-certificates", "/run/secrets",
+}
+
+// secretsPolicy returns the directories TLS and credential files named by
+// connector settings may be read from.
+func (c Config) secretsPolicy() (*pathpolicy.Policy, error) {
+	return pathpolicy.New(SecretsAllowedDirsKey, c.Secrets.AllowedDirs)
 }
 
 // ensureDefaultFilesDir creates <data dir>/files (0700) when it is still one of
@@ -97,6 +115,9 @@ func (c Config) validateHardeningConfig() error {
 	if _, err := c.fileConnectorPolicy(); err != nil {
 		return cerrors.Errorf("invalid %s: %w", FileAllowedDirsKey, err)
 	}
+	if _, err := c.secretsPolicy(); err != nil {
+		return cerrors.Errorf("invalid %s: %w", SecretsAllowedDirsKey, err)
+	}
 	if _, err := c.javascriptFileAccess(); err != nil {
 		return cerrors.Errorf("invalid %s: %w", JavaScriptAllowedDirsKey, err)
 	}
@@ -107,13 +128,22 @@ func (c Config) validateHardeningConfig() error {
 }
 
 // engineSettingsResolver is the connector.SettingsResolver the runtime
-// installs. It confines the file connector's path setting to the operator's
-// directories.
+// installs. It confines every setting that names a file (see fileRefs) to the
+// operator's directories: data files to connectors.file.allowed-dirs, TLS and
+// credential material to secrets.allowed-dirs.
 type engineSettingsResolver struct {
-	files *pathpolicy.Policy
+	files   *pathpolicy.Policy
+	secrets *pathpolicy.Policy
 }
 
 var _ connector.SettingsResolver = engineSettingsResolver{}
+
+func (r engineSettingsResolver) policyFor(ref fileRef) *pathpolicy.Policy {
+	if ref.secret {
+		return r.secrets
+	}
+	return r.files
+}
 
 // ResolveSettings implements connector.SettingsResolver.
 func (r engineSettingsResolver) ResolveSettings(pluginName string, settings map[string]string) (map[string]string, error) {
@@ -123,38 +153,31 @@ func (r engineSettingsResolver) ResolveSettings(pluginName string, settings map[
 	}
 	// Tier 1 (configure path): the resolved (symlink-free) path replaces the
 	// supplied one so the plugin opens the path that was checked.
-	if isFileConnector(pluginName) {
-		if p, ok := out[fileConnectorPathSetting]; ok {
-			resolved, err := r.files.Check("settings."+fileConnectorPathSetting, p)
-			if err != nil {
-				return nil, err //nolint:wrapcheck // coded error with config path
-			}
-			out[fileConnectorPathSetting] = resolved
+	for _, ref := range fileRefs(pluginName, out) {
+		resolved, err := r.policyFor(ref).Check("settings."+ref.key, ref.path)
+		if err != nil {
+			return nil, err //nolint:wrapcheck // coded error with config path
+		}
+		if ref.set != nil {
+			ref.set(out, resolved)
 		}
 	}
 	return out, nil
 }
 
 // CheckSettings is the connector.PluginService settings guard for validation
-// requests. It applies the file connector's path confinement to a literal path
-// so a validation call cannot probe files outside the allowed directories. A
-// value that still contains a "$" reference is skipped here and checked after
-// expansion when the connector is configured.
+// requests. It applies the same confinement to literal paths so a validation
+// call cannot probe files outside the allowed directories.
 func (r engineSettingsResolver) CheckSettings(pluginName string, settings map[string]string) error {
-	if !isFileConnector(pluginName) {
-		return nil
+	for _, ref := range fileRefs(pluginName, settings) {
+		if strings.Contains(ref.path, "$") {
+			continue
+		}
+		if _, err := r.policyFor(ref).Check("settings."+ref.key, ref.path); err != nil {
+			return err //nolint:wrapcheck // coded error with config path
+		}
 	}
-	p, ok := settings[fileConnectorPathSetting]
-	if !ok || strings.Contains(p, "$") {
-		return nil
-	}
-	_, err := r.files.Check("settings."+fileConnectorPathSetting, p)
-	return err //nolint:wrapcheck // coded error with config path
-}
-
-func isFileConnector(pluginName string) bool {
-	n := plugin.FullName(pluginName).PluginName()
-	return n == fileConnectorPluginName || n == fileConnectorModulePluginID
+	return nil
 }
 
 // splitList flattens a repeatable flag / yaml list / comma-separated env value
