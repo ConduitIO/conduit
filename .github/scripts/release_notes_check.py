@@ -15,10 +15,12 @@ tagged commit that:
     conventional-commit prefix (`fix:`, `feat(scope):`) or end in a PR link
     pattern like `by @user in #123`, which is the shape GoReleaser generates.
 
-And, if `.github/release-fixes.txt` lists fixes, every listed commit's first
-7 characters or its note must appear in the Fixed section, so the notes and the
-gate in release_fixes.py describe the same set. A fix that is in the tag but
-not in the notes, or the reverse, fails.
+And, if `.github/release-fixes.txt` lists fixes, each one must be NAMED in the
+Fixed section: by its commit prefix (the first 7 hex characters, as a whole
+token), or by its note as a whole phrase of at least 12 characters. A raw
+substring match does not count (a short note such as "slot" would match any
+sentence). This keeps the notes and the gate in release_fixes.py describing the
+same set.
 
 Minor and pre-release tags are not checked (their notes are reviewed as a
 document). FAILS CLOSED: an unreadable file is a failure.
@@ -47,6 +49,15 @@ def fixed_section(text):
     return m.group(1) if m else None
 
 
+def names_fix(fixed, commit, note):
+    """True if the Fixed section names the fix by commit prefix or by a
+    whole-word note of at least 12 characters."""
+    if re.search(r"(?<!\w)" + re.escape(commit[:7]) + r"[0-9a-f]*(?!\w)", fixed, re.I):
+        return True
+    note = (note or "").strip()
+    return len(note) >= 12 and re.search(r"(?<!\w)" + re.escape(note) + r"(?!\w)", fixed, re.I) is not None
+
+
 def problems_for(text, fixes):
     out = []
     if DRAFT.search(text):
@@ -71,8 +82,9 @@ def problems_for(text, fixes):
         out.append(f"{len(gen)} of {len(all_bullets)} bullets look like generated changelog lines")
     if fixed is not None and fixes:
         for module, commit, note in fixes:
-            if commit[:7] not in fixed and not (note and note in fixed):
-                out.append(f"listed fix {commit[:7]} ({module}) is not in the Fixed section")
+            if not names_fix(fixed, commit, note):
+                out.append(f"listed fix {commit[:7]} ({module}) is not named in the Fixed section "
+                           "(use its 7-character commit prefix, or its note as a whole phrase of 12+ characters)")
     return out
 
 
@@ -98,7 +110,7 @@ def main(argv=None):
         fixes = []
         if os.path.exists(a.fixes):
             with open(a.fixes) as f:
-                fixes = release_fixes.parse_fixes(f.read())
+                fixes, _ = release_fixes.parse_fixes(f.read())
         problems = problems_for(text, fixes)
     except (GateError, release_fixes.GateError) as e:
         print(f"release notes: FAILED: {e}")

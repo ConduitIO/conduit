@@ -65,6 +65,26 @@ class Notes(unittest.TestCase):
         fixes = "github.com/conduitio/conduit-connector-postgres | abc1234ffff | slot\n"
         self.assertEqual(self.run_check("v0.20.6", GOOD, fixes), 0)
 
+    def test_short_note_is_not_a_name(self):
+        # "slot" appears in GOOD's prose-ish text, but a 4-character note must not count.
+        fixes = "github.com/conduitio/conduit-connector-postgres | 9999999aaaa | slot\n"
+        self.assertEqual(self.run_check("v0.20.6", GOOD, fixes), 1)
+
+    def test_note_as_substring_of_a_longer_word_is_not_a_name(self):
+        fixes = "github.com/conduitio/conduit-commons | 9999999aaaa | evicted object\n"
+        text = GOOD.replace("- S3 resume", "- Prevented preevicted objects from vanishing; S3 resume")
+        self.assertEqual(self.run_check("v0.20.6", text, fixes), 1)
+
+    def test_whole_phrase_note_of_12_chars_is_a_name(self):
+        fixes = "github.com/conduitio/conduit-commons | 9999999aaaa | last object of a batch\n"
+        self.assertEqual(self.run_check("v0.20.6", GOOD, fixes), 0)
+
+    def test_commit_prefix_must_be_a_whole_token(self):
+        fixes = "github.com/conduitio/conduit-commons | abc1234ffff | n\n"
+        embedded = GOOD.replace("(abc1234)", "(xabc1234)")
+        self.assertEqual(self.run_check("v0.20.6", embedded, fixes), 1)
+        self.assertEqual(self.run_check("v0.20.6", GOOD, fixes), 0)
+
     def test_minor_and_prerelease_are_not_checked(self):
         self.assertEqual(self.run_check("v0.21.0"), 0)
         self.assertEqual(self.run_check("v0.20.6-rc.1"), 0)
