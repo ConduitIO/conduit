@@ -46,12 +46,12 @@ jobs:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - name: Checkout the connector (tags needed)
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Checkout the gate scripts
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ConduitIO/conduit
           ref: main
@@ -66,11 +66,9 @@ jobs:
         id: prev
         run: |
           set -euo pipefail
-          # Stable tags only (no -rc, -nightly), version-sorted; the one just
-          # below the tag being released. Nightly and pre-release tags are not
-          # releases, so PRs merged "since" one of them still count.
-          prev=$( { git tag --list 'v[0-9]*' | grep -Ev -e '-' | grep -Fxv "$TAG" || true; echo "$TAG"; } \
-            | sort -V | awk -v t="$TAG" '$0 == t { print p; exit } { p = $0 }')
+          # Highest stable tag strictly below the one being released, by semver
+          # (an rc sorts below its release; `sort -V` gets that wrong).
+          prev=$(git tag --list 'v[0-9]*' | python3 .conduit-gates/.github/scripts/connector_release_gate.py prev "$TAG")
           echo "prev=$prev" >> "$GITHUB_OUTPUT"
           echo "previous stable tag: ${prev:-none}"
 

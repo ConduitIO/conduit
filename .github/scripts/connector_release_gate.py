@@ -20,11 +20,18 @@ Used from connector repositories through the reusable workflow
 `.github/workflows/connector-release-gate.yml`.
 
 Usage:
+  connector_release_gate.py prev TAG < tags       (previous stable tag below TAG)
   connector_release_gate.py collect REPO PREV_TAG HEAD_REF OUT.json
   connector_release_gate.py evaluate PRS.json
+
+Only PRs that are MERGED count (the commit-to-PR API also lists open PRs that
+contain the commit), and only verdict comments from OWNER, MEMBER or
+COLLABORATOR authors (tier1_review.TRUSTED), so a drive-by comment can neither
+block nor clear a tag.
 """
 
 import json
+import re
 import subprocess
 import sys
 
@@ -42,6 +49,28 @@ def run_gh(*args):
     if r.returncode != 0:
         raise GateError(f"gh {' '.join(args[:2])} failed: {r.stderr.strip()[:200]}")
     return r.stdout
+
+
+_SEMVER = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.\-]+))?$")
+
+
+def _key(tag):
+    m = _SEMVER.match(tag)
+    if not m:
+        return None
+    pre = m.group(4)
+    ids = () if pre is None else tuple((0, int(i), "") if i.isdigit() else (1, 0, i) for i in pre.split("."))
+    # A release sorts after its own pre-releases (semver), which `sort -V` gets wrong.
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3)), 1 if pre is None else 0, ids)
+
+
+def previous_stable(tag, tags):
+    """The highest stable tag strictly below `tag` (an rc counts as below its release)."""
+    k = _key(tag)
+    if k is None:
+        raise GateError(f"not a release tag: {tag!r}")
+    below = [t for t in tags if _SEMVER.match(t) and "-" not in t and _key(t) < k]
+    return max(below, key=_key) if below else ""
 
 
 def json_stream(text):
@@ -71,6 +100,8 @@ def collect(repo, prev_tag, head_ref, gh=run_gh):
     out = []
     for num in sorted(seen):
         pr = json.loads(gh("api", f"repos/{repo}/pulls/{num}"))
+        if not pr.get("merged"):
+            continue
         comments = json_stream(gh("api", "--paginate", f"repos/{repo}/issues/{num}/comments", "--jq", ".[]"))
         out.append({"number": num, "title": pr.get("title", ""), "labels": [l["name"] for l in pr.get("labels", [])],
                     "comments": comments})
@@ -93,6 +124,9 @@ def evaluate(prs):
 def main(argv=None, gh=run_gh):
     argv = list(sys.argv[1:] if argv is None else argv)
     try:
+        if argv[:1] == ["prev"] and len(argv) == 2:
+            print(previous_stable(argv[1], sys.stdin.read().split()))
+            return 0
         if argv[:1] == ["collect"] and len(argv) == 5:
             prs = collect(argv[1], argv[2], argv[3], gh=gh)
             with open(argv[4], "w") as f:

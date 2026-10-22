@@ -6,8 +6,9 @@ import unittest
 import connector_release_gate as g
 
 
-def comment(body, n, who="r"):
-    return {"id": n, "body": body, "created_at": f"2026-10-21T00:00:{n:02d}Z", "user": {"login": who}}
+def comment(body, n, who="r", assoc="MEMBER"):
+    return {"id": n, "body": body, "created_at": f"2026-10-21T00:00:{n:02d}Z", "author_association": assoc,
+            "user": {"login": who}}
 
 
 def pr(num, labels=(), comments=()):
@@ -55,7 +56,7 @@ class Gate(unittest.TestCase):
             if path.endswith("/pulls") and "/commits/" in path:
                 return json.dumps([{"number": 9}])
             if path.endswith("/pulls/9"):
-                return json.dumps({"title": "t", "labels": [{"name": "do-not-merge"}]})
+                return json.dumps({"title": "t", "merged": True, "labels": [{"name": "do-not-merge"}]})
             if path.endswith("/comments"):
                 return json.dumps(comment("Review: changes-needed @ abcdef1", 1)) + "\n" + json.dumps(comment("hi", 2)) + "\n"
             raise AssertionError(a)
@@ -66,6 +67,40 @@ class Gate(unittest.TestCase):
             prs = json.load(open(out))
         self.assertEqual([p["number"] for p in prs], [9])  # deduplicated across commits
         self.assertEqual(len(g.evaluate(prs)), 2)
+
+    def test_untrusted_commenter_cannot_block_a_tag(self):
+        cs = [comment("Review: changes-needed @ abcdef1", 1, who="drive-by", assoc="NONE")]
+        self.assertEqual(g.evaluate([pr(7, comments=cs)]), [])
+
+    def test_open_or_closed_unmerged_prs_are_not_counted(self):
+        def gh(*a):
+            path = next(x for x in a[1:] if x.startswith("repos/"))
+            if "/compare/" in path:
+                return json.dumps({"n": 1, "c": ["s1"]})
+            if "/commits/" in path:
+                return json.dumps([{"number": 5}, {"number": 6}])
+            if path.endswith("/pulls/5"):
+                return json.dumps({"title": "open", "merged": False, "labels": [{"name": "do-not-merge"}]})
+            if path.endswith("/pulls/6"):
+                return json.dumps({"title": "merged", "merged": True, "labels": []})
+            if path.endswith("/comments"):
+                return ""
+            raise AssertionError(a)
+
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "o.json")
+            self.assertEqual(g.main(["collect", "o/r", "v1", "HEAD", out], gh=gh), 0)
+            self.assertEqual([p["number"] for p in json.load(open(out))], [6])
+
+    def test_previous_stable_tag_for_release_candidates(self):
+        tags = ["v0.1.0", "v0.2.0", "v0.2.0-rc.1", "v0.10.0", "v0.11.0-nightly.1", "v0.9.0"]
+        self.assertEqual(g.previous_stable("v0.2.0-rc.1", tags), "v0.1.0")  # not the release it precedes
+        self.assertEqual(g.previous_stable("v0.2.0", tags), "v0.1.0")
+        self.assertEqual(g.previous_stable("v0.10.0", tags), "v0.9.0")
+        self.assertEqual(g.previous_stable("v0.1.0", tags), "")
+        self.assertEqual(g.previous_stable("v0.11.0-rc.1", tags), "v0.10.0")
+        with self.assertRaises(g.GateError):
+            g.previous_stable("nightly", tags)
 
     def test_truncated_compare_fails_closed(self):
         def gh(*a):
