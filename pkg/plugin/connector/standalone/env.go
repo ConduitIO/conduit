@@ -54,10 +54,12 @@ var CodeEnvStripped = conduiterr.Register("plugin.standalone_env_stripped", code
 // registry sets the CONDUIT_CONNECTOR_* variables the SDK reads. A test starts
 // a real plugin with exactly this environment.
 const (
-	envPath     = "PATH"
-	envHome     = "HOME"
-	envLang     = "LANG"
-	goosWindows = "windows"
+	envPath       = "PATH"
+	envHome       = "HOME"
+	envLang       = "LANG"
+	envHTTPProxy  = "HTTP_PROXY"
+	envHTTPSProxy = "HTTPS_PROXY"
+	goosWindows   = "windows"
 )
 
 var baseEnvNames = []string{
@@ -68,7 +70,7 @@ var baseEnvNames = []string{
 	// proxy URL may carry credentials: the operator chose to set it for the
 	// engine, and a plugin needs it to connect the same way).
 	"SSL_CERT_FILE", "SSL_CERT_DIR",
-	"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
+	envHTTPProxy, envHTTPSProxy, "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
 }
 
 var windowsEnvNames = []string{"SYSTEMROOT", "WINDIR"}

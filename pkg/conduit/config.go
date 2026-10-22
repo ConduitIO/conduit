@@ -159,7 +159,7 @@ type Config struct {
 			// plugin processes receive. Exact names. Default none: plugins no
 			// longer inherit the engine's environment.
 			Env struct {
-				Allow []string `long:"connectors.standalone.env.allow" mapstructure:"allow" usage:"host environment variables, beyond PATH, HOME, TMPDIR, TZ and locale, that standalone connector plugins receive (repeatable, exact names, default none)"`
+				Allow []string `long:"connectors.standalone.env.allow" mapstructure:"allow" usage:"host environment variables, beyond PATH, HOME, TMPDIR, TZ, locale, SSL_CERT_FILE/SSL_CERT_DIR and the proxy variables, that standalone connector plugins receive (repeatable, exact names, default none)"`
 			} `mapstructure:"env"`
 		}
 	}
