@@ -174,15 +174,66 @@ func Text(s string) string {
 			b.WriteString(redactedUserinfo)
 			rest = rest[at+1:]
 		}
-		// the URL proper ends at the first space, quote or bracket
-		cut := strings.IndexAny(rest, " \t\r\n\"'<>")
-		if cut < 0 {
-			cut = len(rest)
+		var opener byte
+		if m[0] > 0 {
+			opener = s[m[0]-1]
 		}
+		cut := urlProperEnd(rest, opener)
 		b.WriteString(maskQueryAndFragment(rest[:cut]))
 		b.WriteString(rest[cut:])
 	}
 	return b.String()
+}
+
+// closers maps the character a URL can be opened with in a message to the one
+// that closes it.
+var closers = map[byte]byte{'"': '"', '\'': '\'', '<': '>', '(': ')', '[': ']', '{': '}'}
+
+// urlProperEnd returns where the URL proper ends in rest, the text after its
+// scheme. opener is the character in front of the URL (0 at the start of the
+// text).
+//
+//   - A URL that was opened with a quote or a bracket ends at the matching
+//     closer, which is not escaped with a backslash and, for a quote, is
+//     followed by the end of the text or by punctuation (an unencoded quote in
+//     a value does not end the URL). Without a closer it runs to the end of the
+//     line.
+//   - Any other URL ends at the first space, quote or bracket, unless it has a
+//     query, a fragment or a path parameter. Their values can hold unencoded
+//     spaces ("token=a b c"), and there is no telling where such a value ends,
+//     so the URL then runs to the end of the line. This hides the words that
+//     follow the URL on that line, which is the safe side of the trade.
+func urlProperEnd(rest string, opener byte) int {
+	line := strings.IndexAny(rest, "\r\n")
+	if line < 0 {
+		line = len(rest)
+	}
+	if c, ok := closers[opener]; ok {
+		for i := 0; i < line; i++ {
+			if rest[i] != c || (i > 0 && rest[i-1] == '\\') {
+				continue
+			}
+			if c == '"' || c == '\'' {
+				if i+1 < line && !strings.ContainsRune(" \t:,;.)]}>", rune(rest[i+1])) {
+					continue
+				}
+			}
+			return i
+		}
+		return line
+	}
+	word := rest[:line]
+	if sp := strings.IndexAny(word, " \t"); sp >= 0 {
+		word = word[:sp]
+	}
+	if strings.ContainsAny(word, "?#") || matrixParam.MatchString(word) {
+		return line
+	}
+	cut := strings.IndexAny(rest, " \t\r\n\"'<>")
+	if cut < 0 {
+		cut = len(rest)
+	}
+	return cut
 }
 
 // Error returns err with the URLs of every *url.Error in its chain replaced in
