@@ -55,14 +55,15 @@ func String(raw string) string {
 	s := raw
 	u, err := url.Parse(raw)
 	switch {
-	case err == nil && u.User != nil && u.Scheme != "" && u.Host != "":
+	case err == nil && u.User != nil && u.Scheme != "" && u.Host != "" && strings.Count(raw, "@") == 1:
 		u.User = url.UserPassword(redactedUser, "")
 		s = u.Redacted()
 	case strings.Contains(raw, "@"):
-		// A password with an unencoded '/', '?' or '#', a URL without a scheme
-		// ("user:pass@host") or one that does not parse: url.Parse does not
-		// find the user info, or finds only part of it. Cut everything up to
-		// the last '@'. This can hide more than the credentials (an '@' in a
+		// A password with an unencoded '/', '?' or '#' (also when the URL
+		// parses and keeps the tail of the password in its path), a URL without
+		// a scheme ("user:pass@host"), or one that does not parse: url.Parse
+		// does not find the user info, or finds only part of it. More than one
+		// '@' is read the same way. Cut everything up to the last '@'. This can hide more than the credentials (an '@' in a
 		// path), which is the safe side of the trade.
 		s = cutUserinfo(raw)
 	}
@@ -123,12 +124,45 @@ func maskQueryAndFragment(s string) string {
 	return b.String()
 }
 
-// urlInText finds absolute URLs in free text.
-var urlInText = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s"'<>]+`)
+// schemeStart finds where an absolute URL starts in free text.
+var schemeStart = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://`)
 
-// Text returns s with every absolute URL in it redacted by String.
+// Text returns s with the credentials of every absolute URL in it redacted.
+//
+// Free text has no reliable end of a URL: a password can hold spaces, quotes,
+// '<' or ',' and URLs can be joined by a comma. Each URL is therefore read up
+// to the start of the next one (or the end of the text). If that stretch has
+// an '@', everything up to the last '@' is the user info and is cut; the rest
+// of the URL up to the next space, quote or bracket gets its query and
+// fragment masked. This can hide more than the credentials (an '@' later in
+// the message), which is the safe side of the trade.
 func Text(s string) string {
-	return urlInText.ReplaceAllStringFunc(s, String)
+	starts := schemeStart.FindAllStringIndex(s, -1)
+	if len(starts) == 0 {
+		return s
+	}
+	var b strings.Builder
+	b.WriteString(s[:starts[0][0]])
+	for i, m := range starts {
+		end := len(s)
+		if i+1 < len(starts) {
+			end = starts[i+1][0]
+		}
+		scheme, rest := s[m[0]:m[1]], s[m[1]:end]
+		b.WriteString(scheme)
+		if at := strings.LastIndex(rest, "@"); at >= 0 {
+			b.WriteString(redactedUserinfo)
+			rest = rest[at+1:]
+		}
+		// the URL proper ends at the first space, quote or bracket
+		cut := strings.IndexAny(rest, " \t\r\n\"'<>")
+		if cut < 0 {
+			cut = len(rest)
+		}
+		b.WriteString(maskQueryAndFragment(rest[:cut]))
+		b.WriteString(rest[cut:])
+	}
+	return b.String()
 }
 
 // Error returns err with the URLs of every *url.Error in its chain replaced in

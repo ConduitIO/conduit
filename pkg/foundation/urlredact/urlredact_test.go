@@ -57,7 +57,10 @@ func TestString(t *testing.T) {
 		{"no scheme with port and path", "user:pass@host:5432/db", "redacted:xxxxx@host:5432/db"},
 		{"several at signs", "https://user:p@ss@host/p", "https://redacted:xxxxx@host/p"},
 		{"token only, no scheme", "ghp_TOKEN@host/p", "redacted:xxxxx@host/p"},
-		{"at sign in a later query", "https://user:pass@host/p?mail=a@b.example", "https://redacted:xxxxx@host/p?mail=xxxxx"},
+		{"at sign in a later query", "https://user:pass@host/p?mail=a@b.example", "https://redacted:xxxxx@b.example"},
+		{"password with at sign and slash", "https://user:p@ss/word@host/p", "https://redacted:xxxxx@host/p"},
+		{"password with at sign and question mark", "https://user:p@ss?word@host/p", "https://redacted:xxxxx@host/p"},
+		{"password with at sign and hash", "https://user:p@ss#word@host/p", "https://redacted:xxxxx@host/p"},
 		{"at sign in a path, no credentials", "https://host/@scope/pkg", "https://redacted:xxxxx@scope/pkg"}, // over-redacts, on purpose
 	}
 	for _, tc := range testCases {
@@ -129,4 +132,26 @@ func TestError_RedactsURLsTheLibraryFormattedItself(t *testing.T) {
 	got := Error(err)
 	is.True(!strings.Contains(got.Error(), "SECRET"))
 	is.True(cerrors.Is(got, err))
+}
+
+func TestText_Shapes(t *testing.T) {
+	for name, tc := range map[string]struct{ in, want string }{
+		"comma joined urls": {
+			"tried https://u1:p1@h1/x,https://u2:p2@h2/y failed",
+			"tried https://redacted:xxxxx@h1/x,https://redacted:xxxxx@h2/y failed",
+		},
+		"password with a single quote":   {`GET "http://u:pa'ss@h/p": refused`, `GET "http://redacted:xxxxx@h/p": refused`},
+		"password with a double quote":   {`GET http://u:pa"ss@h/p refused`, `GET http://redacted:xxxxx@h/p refused`},
+		"password with a space":          {`GET http://u:pa ss@h/p refused`, `GET http://redacted:xxxxx@h/p refused`},
+		"password with an angle bracket": {`GET http://u:pa<ss@h/p refused`, `GET http://redacted:xxxxx@h/p refused`},
+		"query masked":                   {`GET http://h/p?token=abc refused`, `GET http://h/p?token=xxxxx refused`},
+		"no url":                         {"connection refused", "connection refused"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			got := Text(tc.in)
+			is.Equal(got, tc.want)
+			is.True(!strings.Contains(got, "p1") && !strings.Contains(got, "p2") && !strings.Contains(got, "ss@"))
+		})
+	}
 }
