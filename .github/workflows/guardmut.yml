@@ -62,7 +62,10 @@ jobs:
           fi
           # 2. Guard list: no removed name unless the PR body says why.
           removed=$(comm -23 <(show .github/guardmut-guards.txt | names) <(names < .github/guardmut-guards.txt) || true)
-          if [ -n "$removed" ] && ! printf '%s' "$PR_BODY" | sed 's/<!--.*-->//' | grep -Eq '^[[:space:]]*guardmut-removed:[[:space:]]*[^[:space:]]+'; then
+          # Strip HTML comments (multi-line, and an unclosed one runs to the end)
+          # before looking for the waiver: template text must not waive anything.
+          clean=$(printf '%s' "$PR_BODY" | python3 -c 'import re,sys; t=sys.stdin.read(); t=re.sub(r"<!--.*?-->","",t,flags=re.S); print(t.split("<!--",1)[0])')
+          if [ -n "$removed" ] && ! printf '%s\n' "$clean" | grep -Eq '^[[:space:]]*guardmut-removed:[[:space:]]*[^[:space:]]+'; then
             echo "::error::guardmut guard list lost entries: $removed. A guard may be removed only with a line 'guardmut-removed: <reason>' in the PR body."
             fail=1
           fi
@@ -85,7 +88,7 @@ jobs:
           if ! changed=$(git diff --name-only "$base"...HEAD 2>/dev/null); then
             echo "run=true" >> "$GITHUB_OUTPUT"; echo "reason=git diff failed, running (fail-closed)"; exit 0
           fi
-          if echo "$changed" | grep -qE '^(go\.mod$|go\.sum$|pkg/connector/|pkg/lifecycle/|pkg/lifecycle-poc/|tools/guardmut/|\.github/guardmut-baseline\.txt$|\.github/guardmut-guards\.txt$|\.github/workflows/guardmut\.yml$)'; then
+          if echo "$changed" | grep -qE '^(go\.mod$|go\.sum$|pkg/connector/|pkg/lifecycle/|pkg/lifecycle-poc/|Makefile$|tools/go\.(mod|sum)$|tools/guardmut/|\.github/guardmut-baseline\.txt$|\.github/guardmut-guards\.txt$|\.github/workflows/guardmut\.yml$)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"; echo "reason=guarded path changed"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"; echo "reason=no guarded path changed, gate passes"
