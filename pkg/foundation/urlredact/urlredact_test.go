@@ -154,4 +154,12 @@ func TestText_Shapes(t *testing.T) {
 			is.True(!strings.Contains(got, "p1") && !strings.Contains(got, "p2") && !strings.Contains(got, "ss@"))
 		})
 	}
+
+func TestError_PasswordWithAtSignAndDelimiter(t *testing.T) {
+	is := is.New(t)
+	err := &url.Error{Op: "Get", URL: "https://user:p@ss/word@host/p", Err: cerrors.New("connection refused")}
+	got := Error(err)
+	is.True(strings.Contains(got.Error(), "connection refused"))
+	is.True(!strings.Contains(got.Error(), "ss/word"))
+	is.True(strings.Contains(got.Error(), "redacted:xxxxx@host/p"))
 }
