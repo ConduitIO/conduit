@@ -157,7 +157,7 @@ func (p *JavascriptProcessor) Process(_ context.Context, records []opencdc.Recor
 		jsRecs := p.toJSRecord(g.runtime, rec)
 		result, err := g.function(goja.Undefined(), jsRecs)
 		if err != nil {
-			return append(out, sdk.ErrorRecord{Error: err})
+			return append(out, sdk.ErrorRecord{Error: sanitizeJSError(err)})
 		}
 
 		proc, err := p.toSDKRecords(result)
@@ -296,7 +296,7 @@ func (p *JavascriptProcessor) toSDKRecords(v goja.Value) (sdk.ProcessedRecord, e
 	var op opencdc.Operation
 	err := op.UnmarshalText([]byte(jsr.Operation))
 	if err != nil {
-		return nil, cerrors.Errorf("could not unmarshal operation: %w", err)
+		return nil, cerrors.Errorf("could not unmarshal operation (a %d byte value that is not a known operation)", len(jsr.Operation))
 	}
 
 	// Invariant 3: a record the engine cannot safely hold must fail like any
