@@ -63,6 +63,7 @@ func TestEnvPolicy_Filter(t *testing.T) {
 
 	environ := []string{
 		envPath + "=/bin", envHome + "=/h", "TMPDIR=/t", "TEMP=/t", "TMP=/t", "TZ=UTC", "LANG=C", "LANGUAGE=en", "LC_ALL=C", "LC_CTYPE=C",
+		"SSL_CERT_FILE=/ca.pem", "SSL_CERT_DIR=/cas", "HTTP_PROXY=http://p:3128", "HTTPS_PROXY=http://p:3128", "NO_PROXY=.internal", "http_proxy=http://p", "https_proxy=http://p", "no_proxy=x", "ALL_PROXY=http://other",
 		"EXTRA=1", "AWS_SECRET_ACCESS_KEY=s", "USER=u", "SHELL=/bin/sh", "path=/lower", "extra=lower",
 		"CONDUIT_CONNECTOR_TOKEN=host", "PLUGIN_MIN_PORT=1", "SYSTEMROOT=C:\\\\Windows",
 		"EVIL\x1b[2J=x", "=C:=C:\\\\dir", "NOEQUALS",
@@ -78,11 +79,14 @@ func TestEnvPolicy_Filter(t *testing.T) {
 		return out
 	}
 	got := names(passed)
-	for _, want := range []string{"PATH", "HOME", "TMPDIR", "TEMP", "TMP", "TZ", envLang, "LANGUAGE", "LC_ALL", "LC_CTYPE", "EXTRA"} {
+	for _, want := range []string{
+		"PATH", "HOME", "TMPDIR", "TEMP", "TMP", "TZ", envLang, "LANGUAGE", "LC_ALL", "LC_CTYPE", "EXTRA",
+		"SSL_CERT_FILE", "SSL_CERT_DIR", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
+	} {
 		is.True(has(got, want))
 	}
 	if runtime.GOOS != goosWindows {
-		for _, bad := range []string{"AWS_SECRET_ACCESS_KEY", "USER", "SHELL", "path", "extra", "CONDUIT_CONNECTOR_TOKEN", "PLUGIN_MIN_PORT", "SYSTEMROOT"} {
+		for _, bad := range []string{"AWS_SECRET_ACCESS_KEY", "USER", "SHELL", "path", "extra", "CONDUIT_CONNECTOR_TOKEN", "PLUGIN_MIN_PORT", "SYSTEMROOT", "ALL_PROXY"} {
 			is.True(!has(got, bad)) // case-sensitive on Unix; reserved never; SYSTEMROOT only on Windows
 			is.True(has(stripped, bad))
 		}

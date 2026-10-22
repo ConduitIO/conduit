@@ -42,6 +42,8 @@ var CodeEnvStripped = conduiterr.Register("plugin.standalone_env_stripped", code
 //     its unix socket directory.
 //   - TZ, LANG, LANGUAGE, LC_*: time zone and locale, so formatting and
 //     collation match what the operator sees.
+//   - SSL_CERT_FILE, SSL_CERT_DIR, HTTP_PROXY, HTTPS_PROXY, NO_PROXY and their
+//     lower-case forms: private CAs and proxies.
 //
 // On Windows also SYSTEMROOT and WINDIR: the Go runtime and Winsock fail to
 // initialise without SYSTEMROOT.
@@ -58,7 +60,16 @@ const (
 	goosWindows = "windows"
 )
 
-var baseEnvNames = []string{envPath, envHome, "TMPDIR", "TEMP", "TMP", "TZ", envLang, "LANGUAGE"}
+var baseEnvNames = []string{
+	envPath, envHome, "TMPDIR", "TEMP", "TMP", "TZ", envLang, "LANGUAGE",
+	// private-CA and proxy deployments: without these a plugin cannot verify
+	// the server certificate of an internal endpoint or reach the network at
+	// all. They name a file, a directory and proxy addresses, not secrets (a
+	// proxy URL may carry credentials: the operator chose to set it for the
+	// engine, and a plugin needs it to connect the same way).
+	"SSL_CERT_FILE", "SSL_CERT_DIR",
+	"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
+}
 
 var windowsEnvNames = []string{"SYSTEMROOT", "WINDIR"}
 
