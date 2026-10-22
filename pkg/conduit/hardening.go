@@ -185,15 +185,34 @@ func (r engineSettingsResolver) policyFor(ref fileRef) *pathpolicy.Policy {
 }
 
 // checkEgress applies the connector egress policy to the targets in settings.
-// Validation requests pass resolve=false: they must not be a way to make the
-// engine look up names.
+//
+// With resolve it is the configure-time decision: names are looked up and every
+// address is checked. Without it (validation requests, which must not be a way
+// to make the engine look up names) only a name-level hint is taken and nothing
+// is ever treated as permission to connect. Either way it is an early answer:
+// what a client library really dials is decided at the dial (see
+// connegress.Policy.DialContext).
 func (r engineSettingsResolver) checkEgress(pluginName string, settings map[string]string, resolve bool) error {
 	for _, ref := range egressRefs(pluginName, settings) {
-		if r.egress.Restricted() && ref.missingHost {
-			return r.egress.Check(context.Background(), "settings."+ref.key, connegress.Target{Host: "(no host: local socket or PGHOST)", Port: "0"}, false)
+		key := "settings." + ref.key
+		if ref.unvettable != "" {
+			if err := r.egress.CheckUnvettable(key, ref.unvettable); err != nil {
+				return err //nolint:wrapcheck // coded error with config path
+			}
+		}
+		if ref.missingHost {
+			if err := r.egress.CheckUnvettable(key, "the setting names no host (a local socket or PGHOST)"); err != nil {
+				return err //nolint:wrapcheck // coded error with config path
+			}
 		}
 		for _, t := range ref.targets {
-			if err := r.egress.Check(context.Background(), "settings."+ref.key, t, resolve); err != nil {
+			var err error
+			if resolve {
+				err = r.egress.Check(context.Background(), key, t)
+			} else {
+				_, err = r.egress.Hint(key, t)
+			}
+			if err != nil {
 				return err //nolint:wrapcheck // coded error with config path
 			}
 		}

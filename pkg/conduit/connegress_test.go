@@ -52,6 +52,9 @@ func targets(refs []egressRef) []string {
 		if r.missingHost {
 			out = append(out, r.key+"=(no host)")
 		}
+		if r.unvettable != "" {
+			out = append(out, r.key+"=(unvettable)")
+		}
 	}
 	return out
 }
@@ -71,10 +74,11 @@ func TestEgressRefs_Extraction(t *testing.T) {
 		{"builtin:postgres", map[string]string{"url": "postgres://u@10.0.0.1:5432,10.0.0.2:5433/app"}, []string{"url=10.0.0.1:5432", "url=10.0.0.2:5433"}},
 		{"builtin:postgres", map[string]string{"url": "postgres://u@/app?host=/var/run/postgresql"}, []string{"url=/var/run/postgresql:5432"}},
 		{"builtin:kafka", map[string]string{"servers": "k1.example.com:9093, k2.example.com ,[fd00::9]:9092"}, []string{"servers=k1.example.com:9093", "servers=k2.example.com:9092", "servers=[fd00::9]:9092"}},
-		{"builtin:s3", map[string]string{"aws.region": "eu-west-1", "aws.bucket": "b"}, []string{"aws.endpoint=s3.eu-west-1.amazonaws.com:443"}},
-		{"builtin:s3", map[string]string{"aws.endpoint": "http://minio.internal:9000"}, []string{"aws.endpoint=minio.internal:9000"}},
-		{"builtin:s3", map[string]string{"aws.endpoint": "https://s3.example.com"}, []string{"aws.endpoint=s3.example.com:443"}},
-		{"builtin:s3", map[string]string{"aws.endpoint": "minio.internal:9000"}, []string{"aws.endpoint=minio.internal:9000"}},
+		{"builtin:s3", map[string]string{"aws.region": "eu-west-1", "aws.bucket": "b"}, []string{"aws.endpoint=(unvettable)"}},
+		{"builtin:s3", map[string]string{"aws.endpoint": "http://minio.internal:9000", "aws.pathStyle": "true"}, []string{"aws.endpoint=minio.internal:9000"}},
+		{"builtin:s3", map[string]string{"aws.endpoint": "http://minio.internal:9000"}, []string{"aws.endpoint=minio.internal:9000", "aws.endpoint=(unvettable)"}},
+		{"builtin:s3", map[string]string{"aws.endpoint": "https://s3.example.com", "aws.pathStyle": "true"}, []string{"aws.endpoint=s3.example.com:443"}},
+		{"builtin:s3", map[string]string{"aws.endpoint": "minio.internal:9000", "aws.pathStyle": "true"}, []string{"aws.endpoint=minio.internal:9000"}},
 		{"builtin:file", map[string]string{"path": "/x"}, nil},
 		{"builtin:generator", map[string]string{"rate": "5"}, nil},
 		{"builtin:log", map[string]string{"level": "debug"}, nil},
@@ -151,8 +155,7 @@ func TestConnectorEgress_Allowlist(t *testing.T) {
 		{"builtin:postgres", map[string]string{"url": "postgres://u@db.example.com:5432/app"}},
 		{"builtin:postgres", map[string]string{"url": "postgres://u@db.example.com/app"}},
 		{"builtin:kafka", map[string]string{"servers": "10.5.0.7:9092,k1.example.com:9092"}},
-		{"builtin:s3", map[string]string{"aws.region": "eu-west-1"}},
-		{"builtin:s3", map[string]string{"aws.endpoint": "http://minio.internal:9000"}},
+		{"builtin:s3", map[string]string{"aws.endpoint": "http://minio.internal:9000", "aws.pathStyle": "true"}},
 		{"builtin:file", map[string]string{"path": f.files + "/x"}},
 		{"builtin:log", map[string]string{"level": "debug"}},
 	}
@@ -167,8 +170,12 @@ func TestConnectorEgress_Allowlist(t *testing.T) {
 	f.refusesEgress(t, "builtin:postgres", map[string]string{"url": "postgres://u@10.1.2.3:5432/app"}, "url") // the address is not listed, only the name
 	f.refusesEgress(t, "builtin:postgres", map[string]string{"url": "postgres:///app"}, "url")                // socket / PGHOST cannot be vetted
 	f.refusesEgress(t, "builtin:kafka", map[string]string{"servers": "10.5.0.7:9092,10.6.0.1:9092"}, "servers")
-	f.refusesEgress(t, "builtin:s3", map[string]string{"aws.region": "us-east-1"}, "aws.endpoint")
-	f.refusesEgress(t, "builtin:s3", map[string]string{"aws.endpoint": "https://attacker.example.net"}, "aws.endpoint")
+	f.refusesEgress(t, "builtin:s3", map[string]string{"aws.endpoint": "https://attacker.example.net", "aws.pathStyle": "true"}, "aws.endpoint")
+	// the S3 client chooses the host (region, FIPS, dual-stack, bucket subdomain):
+	// not vettable from the settings, so refused under an allowlist even when the
+	// guessed regional host is listed
+	f.refusesEgress(t, "builtin:s3", map[string]string{"aws.region": "eu-west-1"}, "aws.endpoint")
+	f.refusesEgress(t, "builtin:s3", map[string]string{"aws.region": "eu-west-1", "aws.endpoint": "http://minio.internal:9000"}, "aws.endpoint") // virtual-hosted style
 
 	// the validate path checks names only (no lookups) and skips references
 	if err := f.r.CheckSettings("builtin:kafka", map[string]string{"servers": "10.6.0.1:9092"}); err == nil {
@@ -226,5 +233,57 @@ func TestBuiltinConnectorNetworkParams(t *testing.T) {
 		for key := range spec.DestinationParams {
 			check("destination", key)
 		}
+	}
+}
+
+// An allowlist with address entries only (a wildcard port among them) used to
+// "cover" any name at the hint stage, so a connection string with no host failed
+// open. It is refused, with and without PGHOST, and the validate path agrees.
+func TestConnectorEgress_NoHostWithAddressOnlyAllowlist(t *testing.T) {
+	f := egressFixture(t, mapDNS{"pg.example.com": {"10.9.9.9"}}, "10.0.0.0/8:*", "192.168.0.0/16:5432")
+
+	t.Setenv("PGHOST", "")
+	for _, u := range []string{"postgres:///app", "user=u dbname=app", "postgres://u@/app?sslmode=disable"} {
+		f.refusesEgress(t, "builtin:postgres", map[string]string{"url": u}, "url")
+		if err := f.r.CheckSettings("builtin:postgres", map[string]string{"url": u}); err == nil {
+			t.Errorf("validate path accepted %q", u)
+		}
+	}
+
+	// PGHOST names the host: it is a target like any other and must be listed
+	t.Setenv("PGHOST", "pg.example.com") // resolves inside 10.0.0.0/8: allowed
+	if _, err := f.r.ResolveSettings("builtin:postgres", map[string]string{"url": "postgres:///app"}); err != nil {
+		t.Errorf("PGHOST inside the allowlist refused: %v", err)
+	}
+	t.Setenv("PGHOST", "elsewhere.example.org") // unresolvable and unlisted
+	f.refusesEgress(t, "builtin:postgres", map[string]string{"url": "postgres:///app"}, "url")
+	t.Setenv("PGHOST", "169.254.169.254")
+	f.refusesEgress(t, "builtin:postgres", map[string]string{"url": "postgres:///app"}, "url")
+
+	// no allowlist: a socket connection is fine
+	g := egressFixture(t, nil)
+	t.Setenv("PGHOST", "")
+	if _, err := g.r.ResolveSettings("builtin:postgres", map[string]string{"url": "postgres:///app"}); err != nil {
+		t.Errorf("socket refused without an allowlist: %v", err)
+	}
+}
+
+// The validate path takes hints only: nothing it lets through is permission to
+// connect, and a deferred name is refused by the configure-time check.
+func TestConnectorEgress_ValidateIsOnlyAHint(t *testing.T) {
+	f := egressFixture(t, mapDNS{"db.example.com": {"172.16.0.9"}}, "10.0.0.0/8:5432")
+	s := map[string]string{"url": "postgres://u@db.example.com:5432/app"}
+	if err := f.r.CheckSettings("builtin:postgres", s); err != nil {
+		t.Fatalf("hint should defer a name an address entry could cover: %v", err)
+	}
+	f.refusesEgress(t, "builtin:postgres", s, "url") // resolved: outside the allowlist
+}
+
+// The context decorator hands the policy to the connectors that connect.
+func TestEgressPolicyRidesOnTheConnectorContext(t *testing.T) {
+	p := connegress.New(nil)
+	ctx := withEgressPolicy(p)(context.Background())
+	if connegress.PolicyFrom(ctx) != p {
+		t.Fatal("the policy is not on the context")
 	}
 }

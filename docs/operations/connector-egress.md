@@ -56,8 +56,15 @@ When the list is set, **every** built-in connector target must match an entry:
   string and pgx's fallbacks, taken from pgx's own parse of the string and the `PG*` environment;
   a string with no host (local socket, `PGHOST`) and unix sockets are refused;
 - every Kafka broker in `servers` (port 9092 when none is given);
-- the S3 endpoint; with no `aws.endpoint` that is `s3.<aws.region>.amazonaws.com:443`, so list it.
-  Virtual-hosted bucket names add a subdomain of that host that Conduit does not check separately.
+- the S3 endpoint, but only when it can be known from the settings: `aws.endpoint` set and
+  `aws.pathStyle: true`. The AWS client chooses the host itself otherwise (regional, FIPS and
+  dual-stack endpoints, other partitions such as `cn` and `gov`, `AWS_ENDPOINT_URL*` variables, and in
+  virtual-hosted style a subdomain named after the bucket), and a guess here could approve one host
+  while the client dials another. With an allowlist set, an S3 connector without an explicit
+  `aws.endpoint` and `aws.pathStyle: true` is refused (`connector.egress_blocked`, "cannot be
+  checked"). Without an allowlist nothing about S3 changes except the metadata refusal.
+- a Postgres connection string with no host (a local socket or `PGHOST`) is a target that cannot be
+  named; with an allowlist set it is refused unless `PGHOST` names a listed host.
 
 A host name matches an entry by name, or, when the name is not listed, if **every** address it
 resolves to is inside a listed address or CIDR for that port. The metadata refusal applies to the
@@ -65,14 +72,35 @@ resolved addresses either way. A name that cannot be resolved is allowed only if
 
 An invalid entry is a startup error. The list cannot be changed through the API.
 
+## Two levels: the setting check and the dial
+
+1. **The setting check** (what runs today). When a connector is configured, and on its lifecycle
+   events, Conduit reads the targets out of the settings, looks names up, and applies the rules. It
+   is an early, helpful answer, not the enforcement: it can disagree with what the client library
+   later dials. Validation requests take a name-only hint that defers anything depending on what a
+   name resolves to; a deferral is never treated as permission to connect.
+2. **The dial guard** (`connegress.Policy.DialContext`). The rules applied at the moment of the dial:
+   the name is resolved there, every address is checked (metadata addresses always; with an allowlist
+   the name or all of its addresses must be listed), a target that cannot be vetted is refused, and
+   the connection is made to the vetted address, so a second DNS answer cannot redirect it. Adapters
+   fit it to the dial hooks of the client libraries: pgx `DialFunc`, franz-go `Dialer`, the AWS SDK's
+   `http.Transport`, a MySQL driver's `DialContext`. The engine puts the policy on the call context
+   of the Postgres, Kafka and S3 connectors (`connegress.PolicyFrom(ctx)`).
+
+**The built-in connectors do not use the dial guard yet.** They take no dial hook from the engine at
+the versions Conduit ships; that needs a seam in `conduit-commons` (next to the ambient-credentials
+policy) and a release of each connector. Until then the setting check is the only enforcement in a
+running engine, and the limits below apply in full.
+
 ## What this does not do
 
-- It checks the settings when the connector is configured (and on lifecycle events). A connector
-  resolves the name again when it dials, so DNS rebinding after the check is possible for a name
-  that is allowed by name. List addresses or CIDRs, or names you trust to resolve sanely.
+- Until the connectors use the dial guard, the check is made when the connector is configured (and on
+  lifecycle events). A connector resolves the name again when it dials, so DNS rebinding after the
+  check is possible for a name that is allowed by name. List addresses or CIDRs, or names you trust to
+  resolve sanely.
 - It does not intercept what a connector does after it connected: redirects, a Kafka cluster that
   advertises other brokers, a Postgres server that points elsewhere.
 - Standalone connectors are separate processes the operator installed and are not checked.
-- Validation requests (`POST /v1/connectors/validate`-style calls) check names only and do no DNS
-  lookups, so they cannot be used to probe the network.
+- Validation requests check names only and do no DNS lookups, so they cannot be used to probe the
+  network.
 - The processors' outbound HTTP has its own guard: [outbound-http-egress.md](outbound-http-egress.md).

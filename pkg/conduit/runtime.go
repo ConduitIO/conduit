@@ -613,6 +613,12 @@ func createServices(r *Runtime) error {
 			r.Config.ConnectorPlugins,
 			connSchemaService,
 			conn_builtin.WithAmbientCredentialsPolicy(ambientPolicy),
+			// The egress policy rides on the call context of the connectors that
+			// connect somewhere, for the dial-time guard (see
+			// connegress.Policy.DialContext).
+			conn_builtin.WithContextDecorator("postgres", withEgressPolicy(connEgress)),
+			conn_builtin.WithContextDecorator("kafka", withEgressPolicy(connEgress)),
+			conn_builtin.WithContextDecorator("s3", withEgressPolicy(connEgress)),
 		),
 		conn_standalone.NewRegistry(
 			r.logger,
