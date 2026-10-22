@@ -41,7 +41,7 @@ GUARDMUT_DIRS ?= pkg/connector,pkg/lifecycle,pkg/lifecycle-poc
 .PHONY: guardmut
 guardmut:
 	cd tools && go run ./guardmut -root .. -dirs $(GUARDMUT_DIRS) \
-		-baseline ../.github/guardmut-baseline.txt -parallel 3 -timeout 15m -budget 40m $(GUARDMUT_FLAGS)
+		-baseline ../.github/guardmut-baseline.txt -guards ../.github/guardmut-guards.txt -parallel 3 -timeout 15m -budget 40m $(GUARDMUT_FLAGS)
 
 .PHONY: coverage
 coverage:
