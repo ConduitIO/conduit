@@ -102,7 +102,7 @@ func (a *acceptCounter) port() string {
 func openSource(t *testing.T, reg *conn_builtin.Registry, pluginName string, settings map[string]string) error {
 	t.Helper()
 	is := is.New(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 
 	d, err := reg.NewDispenser(log.Nop(), plugin.FullName("builtin:"+pluginName), pconnector.PluginConfig{})
