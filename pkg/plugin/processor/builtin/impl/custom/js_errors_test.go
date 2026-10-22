@@ -47,24 +47,64 @@ func scriptError(t *testing.T, body string) error {
 	return er.Error
 }
 
-// The engine quotes the value it fails on ("Value is not an object: <value>"),
-// and errors reach the DLQ, the API and CLI output: the exception type, the
-// position in the script and the message template stay, the value goes.
+// Every leak found in the engine's messages: the value of the record is in
+// the message. Each of them must come back without it, whatever template it
+// came from.
 func TestJSProcessor_EngineErrorsDoNotContainRecordValues(t *testing.T) {
+	for name, body := range map[string]string{
+		"call a string":        `return rec.Payload.After.ssn();`,
+		"instanceof":           `return rec.Payload.After.ssn instanceof rec.Payload.After.ssn;`,
+		"map receiver":         `return new Map().get.call(rec.Payload.After.ssn);`,
+		"property of undef":    `return rec.Payload.After["SECRET-key"].x;`,
+		"JSON.parse syntax":    `return JSON.parse(rec.Payload.After.ssn);`,
+		"JSON.parse the end":   `return JSON.parse('{"a":1} ' + rec.Payload.After.ssn);`,
+		"Object.create":        `return Object.create(rec.Payload.After.ssn);`,
+		"setPrototypeOf":       `return Object.setPrototypeOf({}, rec.Payload.After.ssn);`,
+		"toFixed":              `return Number.prototype.toFixed.call(rec.Payload.After.ssn);`,
+		"defineProperty":       `return Object.defineProperty({}, "x", rec.Payload.After.ssn);`,
+		"eval identifier":      `return eval(rec.Payload.After.ssn);`,
+		"invalid code point":   `return String.fromCodePoint(rec.Payload.After.ssn + "1");`,
+		"invalid hint":         `return Date.prototype[Symbol.toPrimitive].call(new Date(), rec.Payload.After.ssn);`,
+		"thrown with name":     `throw {name: rec.Payload.After.ssn, message: rec.Payload.After.ssn};`,
+		"thrown error":         `throw new Error("bad record " + rec.Payload.After.ssn);`,
+		"thrown primitive":     `throw rec.Payload.After.ssn;`,
+		"thrown name and kind": `var e = new TypeError(rec.Payload.After.ssn); e.name = rec.Payload.After.ssn; throw e;`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			err := scriptError(t, body)
+			is.True(!strings.Contains(err.Error(), "SECRET"))
+			is.True(strings.Contains(err.Error(), "(at line "))
+		})
+	}
+}
+
+// Messages on the allowlist keep their template, with a value in it replaced.
+func TestJSProcessor_KnownMessagesKeepTheirTemplate(t *testing.T) {
 	for name, tc := range map[string]struct{ body, want string }{
 		"call a string":     {`return rec.Payload.After.ssn();`, "TypeError: Value is not an object: <value>"},
-		"instanceof":        {`return rec.Payload.After.ssn instanceof rec.Payload.After.ssn;`, "TypeError: Value is not an object: <value>"},
-		"map receiver":      {`return new Map().get.call(rec.Payload.After.ssn);`, "TypeError: Value is not an object: <value>"},
 		"property of undef": {`return rec.Payload.After["SECRET-key"].x;`, "TypeError: Cannot read property '<name>' of undefined"},
+		"bad URI":           {`return decodeURIComponent("%" + rec.Payload.After.ssn);`, "URIError: Malformed URI"},
+		"bad count":         {`return rec.Payload.After.ssn.repeat(-1);`, "RangeError: Invalid count value"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			is := is.New(t)
 			err := scriptError(t, tc.body)
 			is.True(strings.Contains(err.Error(), tc.want))
-			is.True(strings.Contains(err.Error(), "(at line "))
 			is.True(!strings.Contains(err.Error(), "SECRET"))
 		})
 	}
+}
+
+// A message that is not on the allowlist is withheld, and so is the name of a
+// thrown object that is not a known exception type.
+func TestJSProcessor_UnknownMessageIsWithheld(t *testing.T) {
+	is := is.New(t)
+	err := scriptError(t, `throw new RangeError("some message nobody has listed");`)
+	is.Equal(strings.Split(err.Error(), " (at line")[0], "RangeError: "+messageWithheld)
+
+	err = scriptError(t, `throw {name: "Whatever", message: "x"};`)
+	is.True(strings.HasPrefix(err.Error(), "Error: "+messageWithheld))
 }
 
 func TestJSProcessor_UnknownOperationDoesNotContainTheValue(t *testing.T) {
@@ -72,17 +112,6 @@ func TestJSProcessor_UnknownOperationDoesNotContainTheValue(t *testing.T) {
 	err := scriptError(t, `rec.Operation = rec.Payload.After.ssn; return rec;`)
 	is.True(strings.Contains(err.Error(), "could not unmarshal operation"))
 	is.True(!strings.Contains(err.Error(), "SECRET"))
-}
-
-// An error the script throws is passed through, cut to a bound: the script
-// author owns it. docs/operations/js-processor-output.md says not to put
-// record data in it.
-func TestJSProcessor_ThrownErrorsPassThroughCut(t *testing.T) {
-	is := is.New(t)
-	err := scriptError(t, `throw new Error("custom failure " + "x".repeat(500));`)
-	is.True(strings.HasPrefix(err.Error(), "Error: custom failure "))
-	is.True(strings.Contains(err.Error(), "(cut)"))
-	is.True(len(err.Error()) < 300)
 }
 
 func TestSanitizeJSError_OtherErrorsAreReturnedAsTheyAre(t *testing.T) {
