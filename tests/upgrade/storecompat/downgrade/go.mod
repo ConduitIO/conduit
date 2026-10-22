@@ -1,10 +1,10 @@
 module github.com/conduitio/conduit/tests/upgrade/storecompat/downgrade
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/conduitio/conduit v0.0.0
-	github.com/conduitio/conduit-commons v0.12.0
+	github.com/conduitio/conduit-commons v0.12.1
 	github.com/matryer/is v1.4.1
 	github.com/rs/zerolog v1.35.1
 )
