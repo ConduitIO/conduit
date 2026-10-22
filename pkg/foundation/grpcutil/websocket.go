@@ -225,7 +225,8 @@ func (p *webSocketProxy) readFromHTTPResponse(ctx context.Context, responseReade
 			continue
 		}
 
-		p.logger.Trace(ctx).Msgf("[write] scanned %v", scanner.Text())
+		// Never log the message itself: inspector streams carry record data.
+		p.logger.Trace(ctx).Int("size", len(scanner.Bytes())).Msg("[write] scanned message")
 		c <- scanner.Bytes()
 	}
 
@@ -235,6 +236,21 @@ func (p *webSocketProxy) readFromHTTPResponse(ctx context.Context, responseReade
 	}
 
 	p.logger.Debug(ctx).Msg("scanner reached end of input data")
+}
+
+// logWriteFailure logs a failed write of message to the client. Only the size
+// of the message is logged: inspector messages are records.
+func (p *webSocketProxy) logWriteFailure(ctx context.Context, message []byte, err error) {
+	// NB: if this connection has been closed by the client
+	// then that will cancel the request context, which in turn
+	// makes the request return `{"code":1,"message":"context canceled","details":[]}`.
+	// This proxy will try to write that, but will fail,
+	// because the connection has already been closed.
+	e := p.logger.Warn(ctx)
+	if string(message) == `{"code":1,"message":"context canceled","details":[]}` {
+		e = p.logger.Trace(ctx)
+	}
+	e.Int("message_size", len(message)).Err(err).Msg("failed writing websocket message")
 }
 
 func (p *webSocketProxy) startWebSocketWrite(ctx context.Context, messages chan []byte, conn *websocket.Conn, cancelFn func()) {
@@ -261,16 +277,7 @@ func (p *webSocketProxy) startWebSocketWrite(ctx context.Context, messages chan 
 			}
 
 			if err := conn.WriteMessage(websocket.TextMessage, message); err != nil {
-				// NB: if this connection has been closed by the client
-				// then that will cancel the request context, which in turn
-				// makes the request return `{"code":1,"message":"context canceled","details":[]}`.
-				// This proxy will try to write that, but will fail,
-				// because the connection has already been closed.
-				e := p.logger.Warn(ctx)
-				if string(message) == `{"code":1,"message":"context canceled","details":[]}` {
-					e = p.logger.Trace(ctx)
-				}
-				e.Bytes("message", message).Err(err).Msg("failed writing websocket message")
+				p.logWriteFailure(ctx, message, err)
 				return
 			}
 		case <-ticker.C:
