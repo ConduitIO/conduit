@@ -169,7 +169,7 @@ func (p *RerankProcessor) Process(ctx context.Context, records []opencdc.Record)
 				cerrors.As(err, &cohere.ServiceUnavailableError{}):
 
 				if attempt < p.config.BackoffRetryCount {
-					p.logger.Debug(ctx).Err(err).Float64("attempt", attempt).
+					p.logger.Debug(ctx).Str("error_type", fmt.Sprintf("%T", err)).Float64("attempt", attempt).
 						Float64("backoffRetry.count", p.config.BackoffRetryCount).
 						Int64("backoffRetry.duration", duration.Milliseconds()).
 						Msg("retrying Cohere HTTP request")
