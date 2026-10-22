@@ -14,11 +14,14 @@ page describes how the API is protected, what each refusal means and how to fix 
 | API token | When `api.token` or `api.token-file` is set, every HTTP request (including `/metrics`, `/openapi/` and the inspector WebSocket) and every gRPC call (including server reflection) must send `Authorization: Bearer <token>`. It is enforced on loopback too. |
 | Origin check | A request with an `Origin` header that is neither in `api.http.cors.allowed-origins` nor the API's own origin gets `403 api.origin_forbidden`, on every method, including `OPTIONS` and WebSocket upgrades. |
 | Content type | `POST`, `PUT`, `PATCH` and `DELETE` requests with a body must use `Content-Type: application/json` (`415 api.content_type_unsupported`). A request with no body needs no type. |
-| Host check | On a loopback bind the `Host` header must be `localhost`, `127.0.0.1`, `[::1]` or a name in `api.http.allowed-hosts`; otherwise `403 api.host_forbidden` (DNS rebinding protection). |
+| Host check | On a loopback bind the `Host` header must be `localhost`, `127.0.0.1`, `[::1]` or a name in `api.http.allowed-hosts`; otherwise `403 api.host_forbidden` (DNS rebinding protection). **It is off on any non-loopback bind, including the container image's `0.0.0.0`; there only the token stops DNS rebinding** (see _Running in a container_). |
+| Response headers | Every HTTP response carries `X-Frame-Options: DENY`, `Content-Security-Policy` with `frame-ancestors 'none'` and `script-src 'self'` (no inline script, no `eval`), `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`. The UI bundle and `conduit-auth.js` are same-origin files and load under it. |
 | Connector utilities server | The internal gRPC server plugins use binds `127.0.0.1` on an ephemeral port instead of all interfaces. |
 | Container image | Runs as the non-root user `conduit` (uid/gid 10001) and listens on `0.0.0.0` inside the container. |
 
-Open without a token, deliberately: `GET /healthz`, `GET /readyz`, CORS preflights (`OPTIONS` with
+Open without a token, deliberately: `GET /healthz`, `GET /readyz` (when a token is set, an unauthenticated
+caller gets only `{"status":"ready"}` or the not-ready status; the pipeline summary, pipeline IDs and error
+text need the token), CORS preflights (`OPTIONS` with
 `Access-Control-Request-Method`; they carry no data) and the gRPC `grpc.health.v1.Health/Check`
 method, so orchestrator probes keep working. The embedded UI's static files are also served without
 a token, since they contain no instance data.
@@ -35,7 +38,9 @@ CONDUIT_API_TOKEN_FILE=/etc/conduit/api-token conduit run
 CONDUIT_API_TOKEN="$(cat /etc/conduit/api-token)" conduit run
 ```
 
-The token must be at least 16 characters. Setting both `api.token` and `api.token-file` is an
+The token must be at least 16 characters and must not contain whitespace or control characters (leading
+and trailing whitespace, such as a file's final newline, is trimmed). A whitespace-only `api.token` is an
+error, not "no token". Setting both `api.token` and `api.token-file` is an
 error. The token is read once at startup; restart Conduit to rotate it. `conduit config` prints it
 as `[redacted]`.
 
@@ -59,7 +64,14 @@ Clients:
 ## Running in a container
 
 The image listens on `0.0.0.0` inside the container, so it needs a token, and the ports should be
-published on the host's loopback unless an authenticating proxy sits in front:
+published on the host's loopback unless an authenticating proxy sits in front.
+
+**Because the bind is not loopback, the Host header check is off in the container, and the token is the only
+thing that stops DNS rebinding.** A page that rebinds a name to the published port can reach the API
+exactly as far as it can guess or obtain the token. The Origin and content-type checks still apply. Keep
+the token secret, use a random 256-bit value, and do not reuse it. Without TLS the token travels in
+plaintext on every request: publish on loopback only, or put a TLS-terminating proxy in front, before
+using it across a network.
 
 ```sh
 docker run \
@@ -99,7 +111,8 @@ still set a token and have the proxy send it as `Authorization: Bearer ...`.
 ### `api.token_invalid`: Conduit exits at startup
 
 **Diagnosis.** The token file cannot be read or is empty, the token is shorter than 16 characters,
-or both `api.token` and `api.token-file` are set. The message never contains the token.
+is only whitespace, contains whitespace or a control character (a paste error, for example a line break
+in the middle), or both `api.token` and `api.token-file` are set. The message never contains the token.
 
 **Remediation.** Fix the file path and permissions (readable by the Conduit user), use a longer
 token (`openssl rand -hex 32`), and set only one source.
@@ -138,8 +151,14 @@ listed name. Typical causes: a DNS-rebinding attack, or a legitimate local rever
 `/etc/hosts` alias that forwards a different name.
 
 **Remediation.** Address the API by a loopback name, or list the name (host only, no port) in
-`api.http.allowed-hosts`. The check does not run on non-loopback binds, where the token protects
-the API.
+`api.http.allowed-hosts`. The check does not run on non-loopback binds (including the container image),
+where the token alone protects the API.
+
+The check fails closed. These are refused: an empty or missing `Host`; `localhost.` and any other name
+with a trailing dot; any loopback address other than `127.0.0.1` and `::1` (`127.0.0.2`,
+`[::ffff:127.0.0.1]`, `0.0.0.0`); and names with spaces, commas or other characters. Comparison is
+case-insensitive and ignores the port. `api.http.allowed-hosts` entries are matched exactly (host only), so
+list `conduit.internal`, not `conduit.internal.`.
 
 ### `api.content_type_unsupported`: HTTP 415
 
@@ -183,10 +202,11 @@ Plugins that Conduit starts call a separate gRPC server (schema service) on `127
 It needs no configuration and cannot be reached from the network. Every call to it, including streams, must
 carry the per-connector token Conduit generated when it started that connector (256 bits from `crypto/rand`,
 passed to the plugin in its environment, sent by the SDK in the `conduit-connector-token` metadata, compared by
-SHA-256 digest, revoked when the connector stops). Other local processes are refused, with `api.unauthenticated`,
+SHA-256 digest, revoked when the connector stops or its plugin fails to start). Other local processes are refused, with `api.unauthenticated`,
 counted in `conduit_api_rejected_requests_total`. Only the health `Check` is open. Design and the
 alternatives considered: `docs/design-documents/20261021-connector-utilities-authentication.md`.
 
 If a plugin logs `missing or invalid connector token`: it was started outside Conduit, or it outlived its
-connector (the token is revoked at teardown), or its SDK predates the schema service. Plugins built on a
+connector (the token is revoked when the connector is torn down, when its plugin fails to start, and
+when Conduit cannot create the plugin at all), or its SDK predates the schema service. Plugins built on a
 supported SDK need no change.

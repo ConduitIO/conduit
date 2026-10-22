@@ -811,9 +811,12 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 	}
 	defer cleanup()
 
-	t, ctx := tomb.WithContext(ctx)
+	t, ctx, setupDone := newRunTomb(ctx)
 
 	defer func() {
+		// Setup is over (or failed): the tomb may now end once its goroutines
+		// do. Must run before the Dying wait below.
+		close(setupDone)
 		if err != nil {
 			// This means run failed, we kill the tomb to stop any goroutines
 			// that might have been already started.
@@ -859,6 +862,37 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 
 	close(r.Ready)
 	return nil
+}
+
+// newRunTomb returns the tomb Run hangs every service goroutine on, and the
+// context derived from it. It also starts one long-lived goroutine that holds
+// the tomb alive until the tomb is dying AND setupDone is closed. It is also
+// the parent-context watcher that tomb.WithContext would have started.
+//
+// Why: a tomb with no live goroutine is dead, and tomb.Go on a dead tomb panics
+// ("tomb.Go called after all goroutines terminated"). With tomb.WithContext the
+// only goroutine is the one that watches the parent context, so a parent
+// canceled at any point during Run's setup (the embed API hands Run caller
+// contexts, e.g. one with a deadline) kills the tomb and the next t.Go in
+// initServices or serveGRPCAPI panics. The goroutine is started before the
+// parent is attached, so the tomb has a live goroutine from its first instant,
+// however early the parent is canceled.
+func newRunTomb(parent context.Context) (t *tomb.Tomb, ctx context.Context, setupDone chan<- struct{}) {
+	t = &tomb.Tomb{}
+	done := make(chan struct{})
+	t.Go(func() error {
+		// Also the watcher tomb.WithContext would have started: parent
+		// canceled means the tomb is dying.
+		select {
+		case <-t.Dying():
+		case <-parent.Done():
+			t.Kill(parent.Err())
+		}
+		<-done
+		return nil
+	})
+	ctx = t.Context(parent)
+	return t, ctx, done
 }
 
 func (r *Runtime) initProfiling(ctx context.Context) (deferred func(), err error) {

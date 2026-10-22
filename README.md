@@ -169,7 +169,10 @@ docker run \
 The API listens on all interfaces inside the container, so Conduit requires an
 API token there (`CONDUIT_API_TOKEN`, or `CONDUIT_API_TOKEN_FILE` for a mounted
 secret) and refuses to start without one. Publish the port on `127.0.0.1` as
-above; `-p 8080:8080` publishes it on every host interface. The image runs as
+above; `-p 8080:8080` publishes it on every host interface. Because the bind is
+not loopback, the Host header check is off in the container and only the token
+stops DNS rebinding; the token is sent in plaintext without TLS, so put a
+TLS-terminating proxy in front for anything beyond your own machine. The image runs as
 the non-root user `conduit` (uid 10001). See
 [API hardening](docs/operations/api-hardening.md).
 
@@ -189,7 +192,8 @@ docker compose down            # add -v to delete the state volume
 ```
 
 The API and UI are on <http://localhost:8080>, published on loopback only and requires
-`Authorization: Bearer $CONDUIT_API_TOKEN`. Swap `pipelines/quickstart.yaml` for your own pipeline to go
+`Authorization: Bearer $CONDUIT_API_TOKEN`. The container binds `0.0.0.0`, so the
+Host check is off and only that token stops DNS rebinding; it is plaintext without TLS. Swap `pipelines/quickstart.yaml` for your own pipeline to go
 further. CI runs this stack end to end (`deploy-quickstart`).
 
 [`deploy/`](deploy) also has systemd, ECS and Nomad examples. They are examples, not

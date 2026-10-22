@@ -15,6 +15,7 @@
 package apisec
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -31,7 +32,7 @@ func TestSecurityHeaders(t *testing.T) {
 				w.WriteHeader(status)
 			}))
 			rec := httptest.NewRecorder()
-			h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+			h.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil))
 			is.Equal(rec.Code, status)
 			is.Equal(rec.Header().Get("X-Frame-Options"), "DENY")
 			is.Equal(rec.Header().Get("X-Content-Type-Options"), "nosniff")

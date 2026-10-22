@@ -99,6 +99,8 @@ func (s *PluginService) NewDispenser(logger log.CtxLogger, name string, connecto
 
 	dispenser, err := s.newDispenser(logger, name, cfg)
 	if err != nil {
+		// No plugin was started, so no Teardown will ever revoke the token.
+		s.authManager.Deregister(cfg.Token)
 		return nil, err
 	}
 
