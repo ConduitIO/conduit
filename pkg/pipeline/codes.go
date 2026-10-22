@@ -48,10 +48,8 @@ var (
 	// the pipeline's previous run has stopped but is still writing its
 	// terminal status. Starting a new run in that window would let the old
 	// run's status overwrite the new run's. Unavailable: retry the start
-	// shortly. The window lasts until one status write completes, which is
-	// bounded (30s) on databases that honour request contexts (SQLite,
-	// Postgres); badger ignores the context, so a hung write there can hold
-	// it longer.
+	// shortly. The window lasts until one status write returns, which is
+	// bounded (30s) on every database.
 	CodePipelineStopping = conduiterr.Register("pipeline.stopping", codes.Unavailable)
 	// CodePipelineConfigChanging is raised when a pipeline start is refused
 	// because an update, delete or connector/processor change on that pipeline
@@ -69,4 +67,12 @@ var (
 	// Check the database (/healthz, free disk) and whether position writes
 	// are failing too. Unavailable: the store may accept the write later.
 	CodeStatusPersistFailed = conduiterr.Register("pipeline.status_persist_failed", codes.Unavailable)
+	// CodeConfigPersistUnknown is raised when a pipeline create, update or
+	// delete could not be confirmed in the pipeline store: the write timed
+	// out, was retried once, and timed out again. The store may or may not
+	// hold the change, and until the next start this instance's view of the
+	// pipeline may differ from it; the next start loads what the store holds.
+	// Unavailable: check the database, then get the pipeline after the next
+	// start and repeat the change if it is missing.
+	CodeConfigPersistUnknown = conduiterr.Register("pipeline.config_persist_unknown", codes.Unavailable)
 )
