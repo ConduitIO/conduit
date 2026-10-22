@@ -1,0 +1,16 @@
+{
+    "name": "mm2-sasl-without-protocol",
+    "connector.class": "org.apache.kafka.connect.mirror.MirrorSourceConnector",
+    "source.cluster.alias": "msksource",
+    "target.cluster.alias": "mskdest",
+    "source.cluster.bootstrap.servers": "b-1.source.internal.example:9092",
+    "target.cluster.bootstrap.servers": "b-1.target.internal.example:9092",
+    "topics": "orders",
+    "tasks.max": "1",
+    "key.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+    "value.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+    "source.cluster.sasl.mechanism": "PLAIN",
+    "source.cluster.sasl.jaas.config": "org.apache.kafka.common.security.plain.PlainLoginModule required username=\"example-user\" password=\"PLACEHOLDER_SECRET_SASL_PASSWORD\";",
+    "target.cluster.sasl.mechanism": "PLAIN",
+    "target.cluster.sasl.jaas.config": "org.apache.kafka.common.security.plain.PlainLoginModule required username=\"example-user\" password=\"PLACEHOLDER_SECRET_SASL_PASSWORD\";"
+}

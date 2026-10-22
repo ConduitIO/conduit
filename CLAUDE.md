@@ -187,6 +187,16 @@ protocol, serialization formats):
 - Chaos + upgrade tests updated or explicitly justified as unaffected.
 - PR description includes a **failure-mode analysis**: what could this break, which metric/alert
   would show it, how do we roll back.
+- **The review examines existing behaviour on the touched path, not only the diff.** The reviewer
+  lists the callers, defaults and fail-open branches already on the path and says what each does
+  with the change. A review that read only the changed lines has not reviewed the change.
+- **Premises about an external system are verified against a real server and cited** in the design
+  doc or PR (version, command, output). A comment, a README or the author's memory is not evidence.
+- **Data-path guards are marked `// guard: <name>`** next to the invariant comment, and the guard
+  mutation gate must kill the mutant that removes each one (see _Process maturity_).
+- **The review verdict is on the PR, at the head SHA** (`Review: approve|changes-needed @ <sha>`).
+  A verdict that lives only in a session's notes does not exist for the next session. A
+  `changes-needed` verdict means the PR is not merged until a later `approve`, even if CI is green.
 - Merges freeze 48h before a release cut.
 
 **Tier 2 — Features** (connectors, processors, CLI, UI, registry, docs-adjacent):
@@ -217,6 +227,36 @@ uncertainty about behavior under failure is stated, not assumed away.
 **Regression response:** any regression that reaches a release triggers a blameless postmortem
 in `docs/postmortems/` and produces at least one new automated check.
 
+### Rules from the October 2026 data-loss incidents
+
+From `docs/postmortems/20261021-data-loss-and-process-failures.md`. These hold for every repo in the
+org.
+
+- **"Documented limitation" is never an acceptable resolution for data loss or exposure.** A gap
+  that can drop, duplicate or silently change a record, or expose data, is fixed, or the path is
+  made to fail closed with a coded error, or the release that carries it is blocked. A README
+  paragraph, a design item for a later version and an opt-in flag that is off by default are not
+  resolutions. A session may not offer "document and defer" for such a gap. Only DeVaris can accept
+  a deferral, in writing on the PR, and it still needs a fail-closed interim.
+- **Fail closed at decision points.** Where code cannot tell whether continuing is safe (a missing or
+  replaced external resource, a state it did not create, a guard it cannot evaluate), the default is
+  to stop with a coded error, never to recreate, assume or log a warning and go on. The unsafe path
+  is an explicit, loudly named opt-in (`logrepl.allowWALGap` is the model). Choosing availability
+  over safety at such a point needs a design doc and DeVaris's approval.
+- **Catalogue external-state failures.** A connector design doc lists what can happen to the system
+  behind it while Conduit is not looking (resource dropped, recreated, invalidated, restored from a
+  snapshot, failed over; privilege revoked; connection half-open; shared by a pooler) and points to
+  a test for each. A case that cannot be fixed yet stays in the suite as an expected failure.
+- **A guard that no test needs is not a guard.** Mark data-path guards `// guard: <name> tests=<regexp>`,
+  naming the test that must fail without them. If removing one leaves that test green, write the
+  test. The guardmut baseline is empty and the workflow fails any PR that adds a line to it, so a
+  baseline entry can never be how a gate passes.
+- **Rebases and bumps.** Before merging a rebased PR, look at the diff against `main` for lines the PR
+  did not intend to touch, especially `go.mod` and `go.sum`; a version that goes down is a revert.
+- **Stopping mid-task.** A session that stops with PRs unfinished labels each `do-not-merge` and
+  leaves a one-line status comment. A session that cannot read the decision log opens PRs and does not
+  merge or tag.
+
 ### Process maturity (be honest about which gates are actually live)
 
 Do not claim a bar is met when it structurally isn't. Mark PRs against what's real today.
@@ -234,6 +274,11 @@ Do not claim a bar is met when it structurally isn't. Mark PRs against what's re
 | Chaos suite (`tests/chaos`) nightly | **live now + REQUIRED** (`.github/workflows/chaos.yml`) — nightly + every PR via the always-report/fail-closed detector (the job runs on all PRs; the SIGKILL/FIFO-ack no-infra suite executes only when a data-path tree changed, fail-closed on any diff ambiguity). `tests/chaos (race, x3)` **is** in `main`'s required branch-protection contexts (blocking) — the earlier "not yet required" note was stale. `bundle-e2e` **is now required too**. `rag-e2e` **is now required too** (verified against the live branch-protection API 2026-08-21; the earlier "one toggle away, held for a de-flake soak" note was stale). `rag-template-e2e` IS path-filtered, so it cannot become required until it is restructured to the always-report/fail-closed pattern; a path-filtered workflow never reports on unrelated PRs and would block every merge permanently. Required contexts on `main` today: `test`, `golangci-lint`, `validate-generated-files`, `build (linux/386)`, `docker build`, `tests/chaos (race, x3)`, `bundle-e2e`, `rag-e2e`, `coverage (engine ratchet)` |
 | Migration harness (`tests/migrate`, #3010) | **live (pending), NOT required** (`.github/workflows/migrate-harness.yml`, job `migrate-harness`, added 2026-10-15). Runs on every PR (always-report/fail-closed detector over the migrate surfaces), on push to `main` and nightly. The corpus checks (manifests, provenance and licenses, scrub-v1, certification entries) also run in `test` and are blocking there. Every check that runs `conduit migrate kafka-connect` reports **pending** until the rule data covers its case; pending is counted in the job summary and never reported as passing. Pending ends per family: a case becomes required when `pkg/kcmigrate/rules/data` has its family's class file (the shared file for unsupported-class cases, the worker file for `--worker` cases), so the command landing with every class unsupported (#3074) stays green and pending, and each family's rule-file PR turns its cases on and carries their goldens. MCP parity becomes required for ready cases once the MCP adapter's source registers `kc_migrate`. The certification gate runs over the plugins the ready cases actually emit. Becomes required (decided by DeVaris, 2026-10-15) once the `migrate kafka-connect` command has landed, goldens are committed for every case, and it has 10 consecutive green nightly and `main` runs; then add `migrate-harness` to `main`'s required contexts and move this row to REQUIRED. Also decided: the `pending` tier in `tests/migrate/corpus/certification.yaml` (the release gate requires `certified`) and the additive `case.yaml` fields (`provenance.license`/`copyright`/`modifications`, `expect.entries`/`error`/`pipelines`) |
 | Multi-pipeline value correctness (`tests/valuecorrectness`) | **live now, not yet required** (`.github/workflows/value-correctness.yml`, added after `conduit-commons#305`) — nightly + every PR via the same always-report/fail-closed detector as chaos.yml (the suite runs when a data-path tree, `go.mod`/`go.sum`, or the suite itself changed). Several pipelines in one process with registered Avro schemas that share type names with different definitions (record field order, enum symbol order, decimal scale), through `avro.encode` and `avro.decode`/`avro.encode` round trips on the built-in registry; every record's wire header, bytes and decoded value are compared with an isolated codec. Verified to fail on `conduit-commons` v0.7.0 and v0.8.0 and pass with the `conduit-commons#309`/`#310` fix. Skipped in the `test` job unless `CONDUIT_VALUE_CORRECTNESS=1`. Covers Avro only; Protobuf and JSON Schema are not exercised yet. Make it required once it has a green nightly history |
+| External-state chaos suite (`conduit-connector-postgres`, `test/externalstate`) | **live, not required once merged** (`.github/workflows/external-state.yml`, `conduit-connector-postgres#451`) on PRs touching `source/**`, `test/**`, `internal/**`, `source.go`, `go.mod`, `go.sum`, the Makefile or the workflow, on push to `main` and nightly. Runs in its own compose projects on ports 56150-56154 and never touches the `make test` (5433) or chaos (5434) stacks. Cases: slot dropped between runs and mid-run, slot invalidated, half-open replication connection, privilege revoked, snapshot restore. Each case pins the refusal codes it accepts; a case that lists none must deliver. Same-name slot recreation, failover and the `pg_logical_emit_message` privilege case are **pending** on postgres#447 and cannot stay pending: the runner fails when the test they wait for exists. Snapshot restore on one timeline is carried as an **expected failure** (an open data-loss gap): the runner requires `SILENT` loss output, and fails when it passes or fails for another reason. Path-filtered, so it cannot become required without the always-report restructure. Becomes required after a green nightly history |
+| Guard mutation gate, `conduit` (`tools/guardmut`) | **live, not required once merged** (`.github/workflows/guardmut.yml`, #3262). Removes each `// guard:` marked guard in `pkg/connector`, `pkg/lifecycle`, `pkg/lifecycle-poc` and fails when the test named by `tests=` stays green. 17 guards, baseline empty. The workflow fails any added baseline line and any guard removed from `.github/guardmut-guards.txt` without a `guardmut-removed:` line in the PR body. **Not required**: becomes required after a green history |
+| Guard mutation gate, `conduit-connector-postgres` | **live, not required once merged** (`conduit-connector-postgres#452`). The same tool and ratchets for `source/logrepl`, in its own compose project on ports 56170-56171; the guard that needs slot-invalidation mode runs alone, last. The guards added by postgres#447 are marked in a follow-up after it merges. **Not required** |
+| CODEOWNERS for Tier 1 paths | **file live, rule not enforced** (#3259). Enforced only when branch protection turns on "Require review from Code Owners" (DeVaris's decision, see the postmortem) |
+| `go.mod` downgrade guard (#3265), `tier1-review` status (#3266), release fixes gate (#3267), release notes gate (#3269), connector release gate (#3268) | **live, not required once merged**. `tier1-review` is a commit status that becomes meaningful only when it is in `main`'s required contexts (DeVaris's decision) and review verdicts come from a second account; with one account it checks the ritual, not the identity. The release gates run at tag time inside `release.yml` and exist on a release branch only after backport. The connector release gate is a reusable workflow not yet called by any connector repository |
 | Upgrade/downgrade tests gating releases | by Phase 2 |
 | 24h soak gating every release | by Phase 2 |
 
@@ -284,6 +329,9 @@ The release quiet window is measured on the release branch, not on `main`.
       failure-mode analysis)
 - [ ] Compiles, lints clean, race detector clean; all _currently-live_ tier-required suites pass
 - [ ] Every bug fix includes the test that would have caught it
+- [ ] Data-path guards are marked `// guard:` and the mutation gate kills their removal
+- [ ] Tier 1: existing behaviour on the touched path reviewed, external-system premises cited, review
+      verdict posted on the PR at the head SHA
 - [ ] Godoc on new exported symbols; invariant comments at touched enforcement sites;
       architecture docs updated if behavior changed
 - [ ] Docs updated (README, `conduit.io` source, llms.txt, changelog entry)
@@ -389,3 +437,11 @@ The release quiet window is measured on the release branch, not on `main`.
   Helm chart, or fleet console core — the one-way ratchet is absolute.
 - Never claim a review or test gate was satisfied when the _Process maturity_ table marks it not
   yet live — say what was actually run.
+- Never resolve a data-loss or exposure gap by documenting it, deferring it to a later version, or
+  hiding it behind an opt-in. Fix it, fail closed, or block the release.
+- Never recreate, assume or "continue with a warning" at a point where an external resource is
+  missing, replaced or unverifiable and continuing could skip, duplicate or change records.
+- Never merge a Tier 1 PR that has a `changes-needed` verdict at any head with no later `approve`, or
+  one that has no `approve` and sign-off at its current head.
+- Never take a design premise about an external system from a comment or documentation alone; run it
+  against a real server and cite the result.

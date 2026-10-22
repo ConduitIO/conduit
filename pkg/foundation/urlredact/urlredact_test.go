@@ -146,16 +146,16 @@ func TestText_Shapes(t *testing.T) {
 		"password with a double quote":    {`GET http://u:pa"ss@h/p refused`, `GET http://redacted:xxxxx@h/p refused`},
 		"password with a space":           {`GET http://u:pa ss@h/p refused`, `GET http://redacted:xxxxx@h/p refused`},
 		"password with an angle bracket":  {`GET http://u:pa<ss@h/p refused`, `GET http://redacted:xxxxx@h/p refused`},
-		"query masked":                    {`GET http://h/p?token=abc refused`, `GET http://h/p?token=xxxxx refused`},
+		"query masked":                    {`GET http://h/p?token=abc refused`, `GET http://h/p?token=xxxxx`}, // the words after an unquoted URL with a query are hidden: its value can hold spaces
 		"scheme inside a password":        {`GET http://u:SECRET://x@h/p refused`, `GET http://redacted:xxxxx@h/p refused`},
 		"scheme inside a second password": {`tried https://u1:aaa://b@h1/x,https://u2:ccc://d@h2/y failed`, `tried https://redacted:xxxxx@h1/x,https://redacted:xxxxx@h2/y failed`},
-		"matrix parameter":                {`GET http://h/p;jsessionid=abc refused`, `GET http://h/p;jsessionid=xxxxx refused`},
+		"matrix parameter":                {`GET http://h/p;jsessionid=abc refused`, `GET http://h/p;jsessionid=xxxxx`}, // the words after a URL with a path parameter are hidden: its value can hold spaces
 		"url after an equals sign":        {`url=http://u:p@h/x`, `url=http://redacted:xxxxx@h/x`},
 		"url after a colon":               {`registry:https://u:p@h/x failed`, `registry:https://redacted:xxxxx@h/x failed`},
 		"url after a pipe":                {`a|https://u:p@h/x|b`, `a|https://redacted:xxxxx@h/x|b`},
 		"colon inside a password":         {`GET https://u:a:https://b@h/x refused`, `GET https://redacted:xxxxx@h/x refused`},
-		"space in a query value":          {`GET http://h/p?token=SECRET a&x=SECRET refused`, `GET http://h/p?token=xxxxx&x=xxxxx refused`},
-		"space then next param":           {`GET http://h/p?a=1 &b=SECRET2 refused`, `GET http://h/p?a=xxxxx&b=xxxxx refused`},
+		"space in a query value":          {`GET http://h/p?token=SECRET a&x=SECRET refused`, `GET http://h/p?token=xxxxx&x=xxxxx`},
+		"space then next param":           {`GET http://h/p?a=1 &b=SECRET2 refused`, `GET http://h/p?a=xxxxx&b=xxxxx`},
 		"scheme-less user info":           {`dial user:SECRET@db.internal:5432 failed`, `dial redacted:xxxxx@db.internal:5432 failed`},
 		"scheme-less after a url (the text up to the last @ is cut)": {`GET https://h/x then user:SECRET@db.internal`, `GET https://redacted:xxxxx@db.internal`},
 		"no url": {"connection refused", "connection refused"},
@@ -186,4 +186,62 @@ func TestError_MalformedLocationHeaderCause(t *testing.T) {
 	got := Error(err)
 	is.True(!strings.Contains(got.Error(), "SECRET"))
 	is.True(strings.Contains(got.Error(), "failed to parse Location header"))
+}
+
+// A value in a query, a fragment or a path parameter can hold unencoded
+// spaces, and nothing tells where it ends: every word of the line after the
+// URL is hidden unless a closing quote or bracket marks the end.
+func TestText_ValuesWithSpaces(t *testing.T) {
+	for name, tc := range map[string]struct{ in, want string }{
+		"one space":                {"token=a b", "token=a b"}, // not a URL: left alone
+		"url, one space":           {"GET https://h/p?token=a b", "GET https://h/p?token=xxxxx"},
+		"url, two spaces":          {"GET https://h/p?token=a b c", "GET https://h/p?token=xxxxx"},
+		"url, many spaces":         {"GET https://h/p?token=a b c d e f", "GET https://h/p?token=xxxxx"},
+		"second key after spaces":  {"GET https://h/p?token=a b c&x=1 d", "GET https://h/p?token=xxxxx&x=xxxxx"},
+		"fragment with spaces":     {"GET https://h/p#secret words here", "GET https://h/p#xxxxx"},
+		"path parameter, spaces":   {"GET https://h/p;sid=a b c", "GET https://h/p;sid=xxxxx"},
+		"quoted, spaces":           {`GET "https://h/p?token=a b c": refused`, `GET "https://h/p?token=xxxxx": refused`},
+		"quoted, escaped quote":    {`GET "https://h/p?token=a\"b c": refused`, `GET "https://h/p?token=xxxxx": refused`},
+		"quoted, bare quote":       {`GET "https://h/p?token=a"b c": refused`, `GET "https://h/p?token=xxxxx": refused`},
+		"bracketed":                {"see (https://h/p?token=a b c) now", "see (https://h/p?token=xxxxx) now"},
+		"angle bracketed":          {"see <https://h/p?token=a b c> now", "see <https://h/p?token=xxxxx> now"},
+		"second line is kept":      {"GET https://h/p?token=a b c\nnext line", "GET https://h/p?token=xxxxx\nnext line"},
+		"no query keeps the words": {"GET https://h/p refused", "GET https://h/p refused"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			got := Text(tc.in)
+			is.Equal(got, tc.want)
+			is.True(!strings.Contains(got, " c") && !strings.Contains(got, "b c") && !strings.Contains(got, "secret") && !strings.Contains(got, "words"))
+		})
+	}
+}
+
+// user:password@ without a scheme: the password can hold '@', '/', spaces and
+// quotes. Everything up to the last '@' of the line is hidden; no part of a
+// password may stay in the text.
+func TestText_SchemelessUserinfo(t *testing.T) {
+	for name, tc := range map[string]struct{ in, want string }{
+		"plain":                              {"dial alice:SECRET@db1 failed", "dial redacted:xxxxx@db1 failed"},
+		"at sign in the password":            {"dial alice:SEC@RET@db1 failed", "dial redacted:xxxxx@db1 failed"},
+		"two credentials, at signs":          {"alice:SEC@RET1@db1 bob:SEC@RET2@db2", "redacted:xxxxx@db2"},
+		"slash in the password":              {"dial alice:SEC/RET@db1 failed", "dial redacted:xxxxx@db1 failed"},
+		"space in the password":              {"dial alice:SEC RET@db1 failed", "dial redacted:xxxxx@db1 failed"},
+		"spaces in the password":             {"dial alice:SEC RET MORE@db1 failed", "dial redacted:xxxxx@db1 failed"},
+		"double quote in the password":       {`dial alice:SEC"RET@db1 failed`, "dial redacted:xxxxx@db1 failed"},
+		"single quote in the password":       {"dial alice:SEC'RET@db1 failed", "dial redacted:xxxxx@db1 failed"},
+		"angle bracket in the password":      {"dial alice:SEC<RET>X@db1 failed", "dial redacted:xxxxx@db1 failed"},
+		"everything":                         {`dial alice:S/E C"R'@E@T@db1 failed`, "dial redacted:xxxxx@db1 failed"},
+		"empty password":                     {"dial alice:@db1 failed", "dial redacted:xxxxx@db1 failed"},
+		"next line is kept":                  {"dial alice:SECRET@db1\nnext line", "dial redacted:xxxxx@db1\nnext line"},
+		"colon, then a space, is a sentence": {"error: contact me@x.example", "error: contact me@x.example"},
+		"no at sign":                         {"dial db1:5432 failed", "dial db1:5432 failed"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			got := Text(tc.in)
+			is.Equal(got, tc.want)
+			is.True(!strings.Contains(got, "SEC") && !strings.Contains(got, "RET") && !strings.Contains(got, "MORE"))
+		})
+	}
 }

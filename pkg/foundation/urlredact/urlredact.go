@@ -140,13 +140,14 @@ const urlStartSeparators = " \t\r\n,;\"'()<>[]{}="
 // a user name or password ("https://user:pass://x@host").
 const urlListSeparators = ":|"
 
-// urlEnd are the characters that end the URL proper in free text. A space
-// does not end it once the URL has a query: an unencoded space in a query
-// value would otherwise leave the rest of the value in the message.
-const urlEnd = "\t\r\n\"'<>"
-
-// schemelessUserinfo matches user:password@ without a scheme in free text.
-var schemelessUserinfo = regexp.MustCompile(`[A-Za-z0-9._~%+-]+:[^\s@/"'<>]*@`)
+// schemelessUserinfo matches user:password@ without a scheme in free text. The
+// password can hold anything but a line break, and the match runs to the last
+// '@' of the line: a password can contain '@', '/', spaces and quotes, and
+// nothing in the text tells where it ends, so the whole stretch up to the last
+// '@' is hidden. This can hide text between two credentials ("a:p@x b:q@y"),
+// which is the safe side of the trade. The text after the colon must not start
+// with a space ("error: contact me@x") to keep ordinary sentences out of it.
+var schemelessUserinfo = regexp.MustCompile(`[A-Za-z0-9._~%+-]+:(?:[^\s@][^\r\n]*)?@`)
 
 // schemeStart finds where an absolute URL starts in free text.
 var schemeStart = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://`)
@@ -190,7 +191,7 @@ func Text(s string) string {
 			b.WriteString(redactedUserinfo)
 			rest = rest[at+1:]
 		}
-		cut := urlProperEnd(rest)
+		cut := urlProperEnd(rest, openerOf(s, m[0]))
 		b.WriteString(maskQueryAndFragment(rest[:cut]))
 		b.WriteString(redactSchemeless(rest[cut:]))
 	}
@@ -204,42 +205,65 @@ func insideURL(s string, starts [][]int, pos int) bool {
 		return false
 	}
 	last := starts[len(starts)-1]
-	return urlProperEnd(s[last[1]:pos]) == pos-last[1]
+	return urlProperEnd(s[last[1]:pos], openerOf(s, last[0])) == pos-last[1]
 }
 
+// openerOf returns the character in front of position pos of s (0 at the
+// start of the text).
+func openerOf(s string, pos int) byte {
+	if pos == 0 {
+		return 0
+	}
+	return s[pos-1]
+}
+
+// closers maps the character a URL can be opened with in a message to the one
+// that closes it.
+var closers = map[byte]byte{'"': '"', '\'': '\'', '<': '>', '(': ')', '[': ']', '{': '}'}
+
 // urlProperEnd returns where the URL proper ends in rest, the text after its
-// scheme: at the first quote, bracket or line break, and at the first space.
-// In a query a space can be part of a value that was not encoded
-// ("token=a b&x=1"), so the URL goes on past a space when the next word has a
-// '&' or '=' in it, or the text before the space ends in one. A final word of
-// a value that has neither ("token=a b") cannot be told from the text that
-// follows the URL and is left in the message.
-func urlProperEnd(rest string) int {
-	cut := strings.IndexAny(rest, urlEnd)
+// scheme. opener is the character in front of the URL (0 at the start of the
+// text).
+//
+//   - A URL that was opened with a quote or a bracket ends at the matching
+//     closer, which is not escaped with a backslash and, for a quote, is
+//     followed by the end of the text or by punctuation (an unencoded quote in
+//     a value does not end the URL). Without a closer it runs to the end of the
+//     line.
+//   - Any other URL ends at the first space, quote or bracket, unless it has a
+//     query, a fragment or a path parameter. Their values can hold unencoded
+//     spaces ("token=a b c"), and there is no telling where such a value ends,
+//     so the URL then runs to the end of the line. This hides the words that
+//     follow the URL on that line, which is the safe side of the trade.
+func urlProperEnd(rest string, opener byte) int {
+	line := strings.IndexAny(rest, "\r\n")
+	if line < 0 {
+		line = len(rest)
+	}
+	if c, ok := closers[opener]; ok {
+		for i := 0; i < line; i++ {
+			if rest[i] != c || (i > 0 && rest[i-1] == '\\') {
+				continue
+			}
+			if c == '"' || c == '\'' {
+				if i+1 < line && !strings.ContainsRune(" \t:,;.)]}>", rune(rest[i+1])) {
+					continue
+				}
+			}
+			return i
+		}
+		return line
+	}
+	word := rest[:line]
+	if sp := strings.IndexAny(word, " \t"); sp >= 0 {
+		word = word[:sp]
+	}
+	if strings.ContainsAny(word, "?#") || matrixParam.MatchString(word) {
+		return line
+	}
+	cut := strings.IndexAny(rest, " \t\r\n\"'<>")
 	if cut < 0 {
 		cut = len(rest)
-	}
-	q := strings.IndexByte(rest[:cut], '?')
-	end := strings.IndexByte(rest[:cut], ' ')
-	if end < 0 {
-		return cut
-	}
-	if q < 0 || q > end {
-		return end
-	}
-	for end >= 0 {
-		next := strings.IndexByte(rest[end+1:cut], ' ')
-		word := rest[end+1 : cut]
-		if next >= 0 {
-			word = rest[end+1 : end+1+next]
-		}
-		if !strings.ContainsAny(word, "&=") && !strings.ContainsAny(rest[end-1:end], "&=") {
-			return end
-		}
-		if next < 0 {
-			return cut
-		}
-		end += 1 + next
 	}
 	return cut
 }
