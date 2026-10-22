@@ -65,8 +65,8 @@ func TestResolveToken(t *testing.T) {
 		{name: "NUL inside inline", token: "0123456789\x00abcdefghij", wantCode: &CodeTokenInvalid, wantPath: ConfigPathToken, leakCheck: "abcdefghij"},
 		{name: "DEL inside inline", token: "0123456789\x7fabcdefghij", wantCode: &CodeTokenInvalid, wantPath: ConfigPathToken, leakCheck: "abcdefghij"},
 		{name: "no-break space inside inline", token: "0123456789\u00a0abcdefghij", wantCode: &CodeTokenInvalid, wantPath: ConfigPathToken, leakCheck: "abcdefghij"},
-		{name: "space inside file token", file: write("inner", "0123456789 abcdefghij\n"), wantCode: &CodeTokenInvalid, wantPath: ConfigPathToken, leakCheck: "abcdefghij"},
-		{name: "two lines in a file", file: write("twolines", "0123456789abcdef\nsecondline-abcdef\n"), wantCode: &CodeTokenInvalid, wantPath: ConfigPathToken, leakCheck: "secondline"},
+		{name: "space inside file token", file: write("inner", "0123456789 abcdefghij\n"), wantCode: &CodeTokenInvalid, wantPath: ConfigPathTokenFile, leakCheck: "abcdefghij"},
+		{name: "two lines in a file", file: write("twolines", "0123456789abcdef\nsecondline-abcdef\n"), wantCode: &CodeTokenInvalid, wantPath: ConfigPathTokenFile, leakCheck: "secondline"},
 		{name: "both set", token: goodToken, file: write("both", goodToken), wantCode: &CodeTokenInvalid, wantPath: ConfigPathTokenFile},
 	}
 	for _, tc := range testCases {

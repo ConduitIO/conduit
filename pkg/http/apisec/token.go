@@ -100,6 +100,9 @@ func ResolveToken(token, tokenFile string) (string, error) {
 		// character itself is not echoed.
 		ce := conduiterr.New(CodeTokenInvalid, "the API token contains whitespace or a control character")
 		ce.ConfigPath = ConfigPathToken
+		if tokenFile != "" {
+			ce.ConfigPath = ConfigPathTokenFile
+		}
 		ce.Suggestion = "use a token made of printable characters without spaces, for example the output of `openssl rand -hex 32`"
 		return "", ce
 	}
@@ -245,9 +248,9 @@ func remoteOf(ctx context.Context) string {
 	return ""
 }
 
-// HasValidToken reports whether r carries the bearer token (Authorization
-// header, or the WebSocket subprotocol carrier on a WebSocket upgrade). It does
-// not modify r. Used for endpoints that are open to everyone but return more to
+// HasValidToken reports whether r carries the bearer token in its Authorization
+// header. The WebSocket subprotocol carrier is not consulted. It does not
+// modify r. Used for endpoints that are open to everyone but return more to
 // an authenticated caller.
 func HasValidToken(r *http.Request, token string) bool {
 	if presented, ok := bearerToken(r.Header.Get("Authorization")); ok {
