@@ -490,7 +490,7 @@ func saslJAAS(p *Plan, d *rules.Decision) error {
 		return err
 	}
 	ref, env := p.secretRef(d)
-	if err := set(p, d, side, "saslPassword", ref, env); err != nil || d.Entry.Code != "" || d.Entry.Target == nil {
+	if err := set(p, d, side, settingSASLPassword, ref, env); err != nil || d.Entry.Code != "" || d.Entry.Target == nil {
 		return err
 	}
 	d.Entry.Secret = true

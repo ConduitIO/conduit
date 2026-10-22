@@ -22,7 +22,14 @@ import (
 )
 
 // saslSettings are the builtin:kafka settings that carry SASL authentication.
-var saslSettings = []string{"saslMechanism", "saslUsername", "saslPassword"}
+const (
+	settingSASLMechanism = "saslMechanism"
+	settingSASLUsername  = "saslUsername"
+	settingSASLPassword  = "saslPassword"
+	tlsOn                = "true"
+)
+
+var saslSettings = []string{settingSASLMechanism, settingSASLUsername, settingSASLPassword}
 
 // DropUnprotectedSASL removes the SASL settings from every Kafka side of the
 // plan that Kafka Connect would not have authenticated with SASL over TLS, and
@@ -41,7 +48,7 @@ func DropUnprotectedSASL(p *Plan, entryLists ...[]kcmigrate.Entry) {
 	for i := range p.connectors {
 		c := &p.connectors[i]
 		tlsPath := fmt.Sprintf("/pipelines/0/connectors/%d/settings/tls.enabled", i)
-		if o, ok := p.owner[tlsPath]; ok && c.Settings["tls.enabled"] == "true" && p.protocol[o.keyRef] == "SASL_SSL" {
+		if o, ok := p.owner[tlsPath]; ok && c.Settings["tls.enabled"] == tlsOn && p.protocol[o.keyRef] == "SASL_SSL" {
 			continue
 		}
 		for _, name := range saslSettings {
@@ -72,7 +79,7 @@ func DropUnprotectedSASL(p *Plan, entryLists ...[]kcmigrate.Entry) {
 	for _, list := range entryLists {
 		for i := range list {
 			e := &list[i]
-			if e.Target == nil || !(dropped[e.Target.ConfigPath] || droppedEnv[e.Target.Env]) {
+			if e.Target == nil || (!dropped[e.Target.ConfigPath] && !droppedEnv[e.Target.Env]) {
 				continue
 			}
 			*e = kcmigrate.Entry{
