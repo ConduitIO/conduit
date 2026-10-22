@@ -67,6 +67,10 @@ keys:
     status: translated
     emit: {kind: setting, side: destination, name: servers, layer: fallback}
     diff: identity
+  - key: target.cluster.security.protocol
+    status: translated
+    emit: {kind: tls-from-protocol, side: destination, layer: fallback}
+    diff: identity
   - key: target.cluster.sasl.mechanism
     status: translated
     emit: {kind: setting, side: destination, name: saslMechanism, layer: fallback}
@@ -138,7 +142,7 @@ func connectorOf(res Result) kcmigrate.ReportConnector {
 // different layers: the connector's wins, whichever is applied first.
 func TestLayers_ConnectorBeatsWorkerKeyOfSameName(t *testing.T) {
 	is := is.New(t)
-	res := mirrorRun(t, "bootstrap.servers=w:9092\nproducer.sasl.mechanism=PLAIN\n"+conv,
+	res := mirrorRun(t, "bootstrap.servers=w:9092\nproducer.security.protocol=SASL_SSL\nproducer.sasl.mechanism=PLAIN\n"+conv,
 		"source.cluster.bootstrap.servers=s:9092\ntopics=t\nproducer.sasl.mechanism=SCRAM-SHA-512\n")
 	is.Equal(settings(t, res, "pipelines/c.yaml", "destination")["saslMechanism"], "SCRAM-SHA-512")
 	e := entryFor(connectorOf(res), "producer.sasl.mechanism")
@@ -154,7 +158,7 @@ func TestLayers_WorkerJAASUnderConnectorOverride(t *testing.T) {
 	jaas := func(u string) string {
 		return `org.apache.kafka.common.security.plain.PlainLoginModule required username="` + u + `" password="p";`
 	}
-	res := clientRun(t, "bootstrap.servers=k:9092\nproducer.sasl.jaas.config="+jaas("worker")+"\n"+conv,
+	res := clientRun(t, "bootstrap.servers=k:9092\nproducer.security.protocol=SASL_SSL\nproducer.sasl.jaas.config="+jaas("worker")+"\n"+conv,
 		source+"producer.override.sasl.jaas.config="+jaas("conn")+"\n")
 	is.Equal(settings(t, res, "pipelines/c.yaml", "destination")["saslUsername"], "conn")
 	tmpl := file(res, SecretsTemplateFile)
@@ -169,7 +173,7 @@ func TestLayers_WorkerJAASUnderConnectorOverride(t *testing.T) {
 func TestLayers_FallbackIsAllOrNothing(t *testing.T) {
 	is := is.New(t)
 	connector := "source.cluster.bootstrap.servers=s:9092\ntopics=t\n" +
-		"target.cluster.bootstrap.servers=t:9092\ntarget.cluster.sasl.mechanism=PLAIN\n" +
+		"target.cluster.bootstrap.servers=t:9092\ntarget.cluster.security.protocol=SASL_SSL\ntarget.cluster.sasl.mechanism=PLAIN\n" +
 		`target.cluster.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="tu" password="tp";` + "\n"
 
 	res := mirrorRun(t, "bootstrap.servers=w:9092\n"+conv, connector)
@@ -179,7 +183,7 @@ func TestLayers_FallbackIsAllOrNothing(t *testing.T) {
 		_, ok := dst[k]
 		is.True(!ok) // no target.cluster.* credential mixed into the worker's cluster
 	}
-	for _, k := range []string{"target.cluster.bootstrap.servers", "target.cluster.sasl.mechanism", "target.cluster.sasl.jaas.config"} {
+	for _, k := range []string{"target.cluster.bootstrap.servers", "target.cluster.security.protocol", "target.cluster.sasl.mechanism", "target.cluster.sasl.jaas.config"} {
 		e := entryFor(connectorOf(res), k)
 		is.True(e.Target == nil)
 		is.True(strings.Contains(e.Reason, "bootstrap.servers"))

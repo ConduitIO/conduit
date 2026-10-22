@@ -125,9 +125,15 @@ keys:
     diff: identity
     ignoreCase: true
     values:
-      - match: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
+      - match: [PLAINTEXT, SSL, SASL_SSL]
         status: translated
         emit: {kind: tls-from-protocol, side: producer, layer: client}
+      - match: [SASL_PLAINTEXT]
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: SASL_PLAINTEXT sends the SASL credentials without TLS. The Kafka connector refuses SASL without TLS unless saslAllowPlaintext is set, and the migration never writes a plaintext SASL setup by itself.
+        fix: Enable TLS on the cluster and use SASL_SSL, or set saslAllowPlaintext true (with tls.enabled false) on the migrated pipeline by hand, knowing that it exposes the SASL credentials on the network.
       - otherwise: true
         status: unsupported
         blocking: true
@@ -177,9 +183,15 @@ keys:
     diff: identity
     ignoreCase: true
     values:
-      - match: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
+      - match: [PLAINTEXT, SSL, SASL_SSL]
         status: translated
         emit: {kind: tls-from-protocol, side: consumer, layer: client}
+      - match: [SASL_PLAINTEXT]
+        status: unsupported
+        blocking: true
+        code: kc.key_unsupported
+        reason: SASL_PLAINTEXT sends the SASL credentials without TLS. The Kafka connector refuses SASL without TLS unless saslAllowPlaintext is set, and the migration never writes a plaintext SASL setup by itself.
+        fix: Enable TLS on the cluster and use SASL_SSL, or set saslAllowPlaintext true (with tls.enabled false) on the migrated pipeline by hand, knowing that it exposes the SASL credentials on the network.
       - otherwise: true
         status: unsupported
         blocking: true
