@@ -80,15 +80,23 @@ func cutUserinfo(raw string) string {
 	return schemePrefix.FindString(raw) + redactedUserinfo + raw[at+1:]
 }
 
+// matrixParam matches a path parameter (;jsessionid=abc), which carries
+// session ids and tokens like a query does.
+var matrixParam = regexp.MustCompile(`;([^/;?#=]+)=[^/;?#]*`)
+
+func maskMatrixParams(s string) string {
+	return matrixParam.ReplaceAllString(s, ";$1="+maskedValue)
+}
+
 // maskQueryAndFragment masks the value of every query parameter and the
 // fragment of a URL, working on the text so that it also covers URLs that do
 // not parse.
 func maskQueryAndFragment(s string) string {
 	i := strings.IndexAny(s, "?#")
 	if i < 0 {
-		return s
+		return maskMatrixParams(s)
 	}
-	head, tail := s[:i], s[i:]
+	head, tail := maskMatrixParams(s[:i]), s[i:]
 	var query, fragment string
 	if tail[0] == '?' {
 		query = tail[1:]
@@ -124,6 +132,9 @@ func maskQueryAndFragment(s string) string {
 	return b.String()
 }
 
+// urlStartSeparators are the characters an absolute URL can follow in a message.
+const urlStartSeparators = " \t\r\n,;\"'()<>[]{}="
+
 // schemeStart finds where an absolute URL starts in free text.
 var schemeStart = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://`)
 
@@ -137,7 +148,16 @@ var schemeStart = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://`)
 // fragment masked. This can hide more than the credentials (an '@' later in
 // the message), which is the safe side of the trade.
 func Text(s string) string {
-	starts := schemeStart.FindAllStringIndex(s, -1)
+	all := schemeStart.FindAllStringIndex(s, -1)
+	// A "scheme://" inside a password (user:SECRET://x@host) is not the start
+	// of another URL: a URL starts at the beginning of the text or after a
+	// separator, never right after a character a URL itself contains.
+	var starts [][]int
+	for _, m := range all {
+		if m[0] == 0 || strings.ContainsRune(urlStartSeparators, rune(s[m[0]-1])) {
+			starts = append(starts, m)
+		}
+	}
 	if len(starts) == 0 {
 		return s
 	}

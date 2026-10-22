@@ -48,6 +48,8 @@ func TestString(t *testing.T) {
 		{"percent escape in password", "https://user:p%zzss@registry.example.com", "https://redacted:xxxxx@registry.example.com"},
 		{"no scheme and no at sign is left alone", "registry.example.com/index.json", "registry.example.com/index.json"},
 		{"empty", "", ""},
+		{"matrix parameter", "https://h/p;jsessionid=abc123/q", "https://h/p;jsessionid=xxxxx/q"},
+		{"matrix parameter and query", "https://h/p;jsessionid=abc123?a=1", "https://h/p;jsessionid=xxxxx?a=xxxxx"},
 		// shapes url.Parse does not read the user info of
 		{"password with a slash", "https://user:pa/ss@host/p", "https://redacted:xxxxx@host/p"},
 		{"password with a hash", "https://user:pa#ss@host/p", "https://redacted:xxxxx@host/p"},
@@ -140,12 +142,16 @@ func TestText_Shapes(t *testing.T) {
 			"tried https://u1:p1@h1/x,https://u2:p2@h2/y failed",
 			"tried https://redacted:xxxxx@h1/x,https://redacted:xxxxx@h2/y failed",
 		},
-		"password with a single quote":   {`GET "http://u:pa'ss@h/p": refused`, `GET "http://redacted:xxxxx@h/p": refused`},
-		"password with a double quote":   {`GET http://u:pa"ss@h/p refused`, `GET http://redacted:xxxxx@h/p refused`},
-		"password with a space":          {`GET http://u:pa ss@h/p refused`, `GET http://redacted:xxxxx@h/p refused`},
-		"password with an angle bracket": {`GET http://u:pa<ss@h/p refused`, `GET http://redacted:xxxxx@h/p refused`},
-		"query masked":                   {`GET http://h/p?token=abc refused`, `GET http://h/p?token=xxxxx refused`},
-		"no url":                         {"connection refused", "connection refused"},
+		"password with a single quote":    {`GET "http://u:pa'ss@h/p": refused`, `GET "http://redacted:xxxxx@h/p": refused`},
+		"password with a double quote":    {`GET http://u:pa"ss@h/p refused`, `GET http://redacted:xxxxx@h/p refused`},
+		"password with a space":           {`GET http://u:pa ss@h/p refused`, `GET http://redacted:xxxxx@h/p refused`},
+		"password with an angle bracket":  {`GET http://u:pa<ss@h/p refused`, `GET http://redacted:xxxxx@h/p refused`},
+		"query masked":                    {`GET http://h/p?token=abc refused`, `GET http://h/p?token=xxxxx refused`},
+		"scheme inside a password":        {`GET http://u:SECRET://x@h/p refused`, `GET http://redacted:xxxxx@h/p refused`},
+		"scheme inside a second password": {`tried https://u1:aaa://b@h1/x,https://u2:ccc://d@h2/y failed`, `tried https://redacted:xxxxx@h1/x,https://redacted:xxxxx@h2/y failed`},
+		"matrix parameter":                {`GET http://h/p;jsessionid=abc refused`, `GET http://h/p;jsessionid=xxxxx refused`},
+		"url after an equals sign":        {`url=http://u:p@h/x`, `url=http://redacted:xxxxx@h/x`},
+		"no url":                          {"connection refused", "connection refused"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			is := is.New(t)
@@ -163,4 +169,14 @@ func TestError_PasswordWithAtSignAndDelimiter(t *testing.T) {
 	is.True(strings.Contains(got.Error(), "connection refused"))
 	is.True(!strings.Contains(got.Error(), "ss/word"))
 	is.True(strings.Contains(got.Error(), "redacted:xxxxx@host/p"))
+}
+
+// The HTTP client puts a malformed Location header, which can hold credentials,
+// into the cause of its error: the cause text goes through Text as well.
+func TestError_MalformedLocationHeaderCause(t *testing.T) {
+	is := is.New(t)
+	err := &url.Error{Op: "Get", URL: "https://registry.example.com/a", Err: cerrors.New(`failed to parse Location header "http://user:SECRET-pass@other.example.com/x;jsessionid=SECRET-sid": invalid port`)}
+	got := Error(err)
+	is.True(!strings.Contains(got.Error(), "SECRET"))
+	is.True(strings.Contains(got.Error(), "failed to parse Location header"))
 }
