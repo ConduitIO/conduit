@@ -15,6 +15,7 @@
 package processor
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -69,4 +70,23 @@ func Test_ProcessorCondition_NonBooleanOutput(t *testing.T) {
 	res, err := tmpl.Evaluate(rec)
 	is.True(err != nil)
 	is.True(res == false)
+}
+
+// The condition is evaluated against record values: neither a function that
+// quotes its input nor the output that is not a boolean may put one in the error.
+func Test_ProcessorCondition_ErrorsDoNotContainRecordValues(t *testing.T) {
+	rec := opencdc.Record{Metadata: opencdc.Metadata{"key": "customer-SECRET-4711"}}
+	for name, condition := range map[string]string{
+		"function quotes input": `{{ mustToDate "2006-01-02" .Metadata.key }}`,
+		"output not a boolean":  `{{ .Metadata.key }}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			tmpl, err := newProcessorCondition(condition)
+			is.NoErr(err)
+			_, err = tmpl.Evaluate(rec)
+			is.True(err != nil)
+			is.True(!strings.Contains(err.Error(), "SECRET"))
+		})
+	}
 }

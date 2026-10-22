@@ -16,6 +16,7 @@ package field
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/config"
@@ -151,4 +152,23 @@ func TestSetField_Configure(t *testing.T) {
 			is.NoErr(err)
 		})
 	}
+}
+
+// A template function's error quotes the record field it parsed; the error of
+// the record must not.
+func TestSetField_TemplateErrorDoesNotContainTheValue(t *testing.T) {
+	is := is.New(t)
+	p := NewSetProcessor(log.Nop())
+	is.NoErr(p.Configure(context.Background(), config.Config{
+		"field": ".Payload.After.out",
+		"value": `{{ mustToDate "2006-01-02" (index .Metadata "d") }}`,
+	}))
+	out := p.Process(context.Background(), []opencdc.Record{{
+		Metadata: opencdc.Metadata{"d": "customer-SECRET-4711"},
+		Payload:  opencdc.Change{After: opencdc.StructuredData{}},
+	}})
+	er, ok := out[0].(sdk.ErrorRecord)
+	is.True(ok)
+	is.True(strings.Contains(er.Error.Error(), "template execution failed"))
+	is.True(!strings.Contains(er.Error.Error(), "SECRET"))
 }

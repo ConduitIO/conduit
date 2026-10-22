@@ -23,6 +23,7 @@ import (
 	"github.com/Masterminds/sprig/v3"
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/tplerr"
 )
 
 // processorCondition parse go templates, Evaluate them for provided records, and return the boolean value of the output.
@@ -53,11 +54,13 @@ func (t *processorCondition) Evaluate(rec opencdc.Record) (bool, error) {
 	var b bytes.Buffer
 	err := t.tmpl.Execute(&b, rec)
 	if err != nil {
-		return false, err
+		// the text of an execution error can quote a record value
+		return false, tplerr.Exec(err)
 	}
 	output, err := strconv.ParseBool(b.String())
 	if err != nil {
-		return false, cerrors.Errorf("error converting the condition go-template output to boolean, %w", err)
+		// ParseBool's error quotes the output, which is built from the record
+		return false, cerrors.New("error converting the condition go-template output to boolean: the output is not a boolean")
 	}
 	return output, nil
 }

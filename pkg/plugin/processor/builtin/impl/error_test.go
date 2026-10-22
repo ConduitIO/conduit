@@ -16,6 +16,7 @@ package impl
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/config"
@@ -99,4 +100,20 @@ func TestError_ErrorMessage(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A message template that fails to execute reports the failure, not the value
+// the template function quoted.
+func TestError_TemplateFailureDoesNotContainRecordValues(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	proc := NewErrorProcessor(log.Nop())
+	is.NoErr(proc.Configure(ctx, config.Config{"message": `{{ mustToDate "2006-01-02" .Metadata.key }}`}))
+	is.NoErr(proc.Open(ctx))
+
+	out := proc.Process(ctx, []opencdc.Record{{Metadata: map[string]string{"key": "customer-SECRET-4711"}}})
+	er, ok := out[0].(sdk.ErrorRecord)
+	is.True(ok)
+	is.True(strings.Contains(er.Error.Error(), "template execution failed"))
+	is.True(!strings.Contains(er.Error.Error(), "SECRET"))
 }

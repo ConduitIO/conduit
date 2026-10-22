@@ -139,7 +139,7 @@ func (p *OllamaProcessor) processRecord(ctx context.Context, rec opencdc.Record,
 
 	resp, err := p.sendOllamaRequest(ctx, reqBody)
 	if err != nil {
-		return nil, cerrors.Errorf("error sending the ollama request %s", err)
+		return nil, cerrors.Errorf("error sending the ollama request: %w", err)
 	}
 
 	respData, err := processOllamaResponse(resp)
@@ -178,12 +178,12 @@ func (p *OllamaProcessor) sendOllamaRequest(ctx context.Context, reqBody []byte)
 	baseURL := fmt.Sprintf("%s/api/generate", p.config.OllamaURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL, bytes.NewBuffer(reqBody))
 	if err != nil {
-		return nil, fmt.Errorf("unable to create ollama request %w", err)
+		return nil, fmt.Errorf("unable to create ollama request %w", errCause(err))
 	}
 
 	resp, err := HTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request to ollama failed %w", err)
+		return nil, fmt.Errorf("request to ollama failed %w", errCause(err))
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("ollama request returned status code %d", resp.StatusCode)
@@ -220,7 +220,7 @@ func processOllamaResponse(body []byte) (opencdc.StructuredData, error) {
 	var response OllamaResponse
 	err := json.Unmarshal(body, &response)
 	if err != nil {
-		return nil, fmt.Errorf("invalid JSON in ollama response: %w", err)
+		return nil, fmt.Errorf("invalid JSON in ollama response: %w", jsonErr(err))
 	}
 
 	if !response.Done {
@@ -230,7 +230,7 @@ func processOllamaResponse(body []byte) (opencdc.StructuredData, error) {
 	var returnData opencdc.StructuredData
 	err = json.Unmarshal([]byte(response.Response), &returnData)
 	if err != nil {
-		return nil, fmt.Errorf("invalid JSON in response: %w", err)
+		return nil, fmt.Errorf("invalid JSON in response: %w", jsonErr(err))
 	}
 
 	return returnData, nil
@@ -284,17 +284,17 @@ func (p *OllamaProcessor) structuredData(data any) (opencdc.StructuredData, erro
 		}
 		err := json.Unmarshal(b, &sd)
 		if err != nil {
-			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", err)
+			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", jsonErr(err))
 		}
 	case string:
 		err := json.Unmarshal([]byte(v), &sd)
 		if err != nil {
-			return nil, cerrors.Errorf("failed unmarshalling JSON from string: %w", err)
+			return nil, cerrors.Errorf("failed unmarshalling JSON from string: %w", jsonErr(err))
 		}
 	case []byte:
 		err := json.Unmarshal(v, &sd)
 		if err != nil {
-			return nil, cerrors.Errorf("failed unmarshalling JSON from []byte: %w", err)
+			return nil, cerrors.Errorf("failed unmarshalling JSON from []byte: %w", jsonErr(err))
 		}
 	case opencdc.StructuredData:
 		sd = v
