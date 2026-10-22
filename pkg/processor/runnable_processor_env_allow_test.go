@@ -16,9 +16,11 @@ package processor
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/config"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/env"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
@@ -67,4 +69,25 @@ func TestService_WithEnvAllowlist(t *testing.T) {
 	is.True(s.envAllow.Allows("A"))
 	is.True(!s.envAllow.Allows("B"))
 	is.True(NewService(log.Nop(), nil, nil).envAllow == nil) // default: nothing allowed
+}
+
+// A processor error that echoes an expanded setting is redacted before it
+// reaches the writer of the settings.
+func TestRunnableProcessor_Open_ErrorsDoNotEchoExpandedValues(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	t.Setenv("API_KEY", "key-SECRET-EXPANDED-123")
+	allow, err := env.NewAllowlist([]string{"API_KEY"})
+	is.NoErr(err)
+
+	p := proc_mock.NewProcessor(gomock.NewController(t))
+	p.EXPECT().Configure(gomock.Any(), gomock.Any()).Return(cerrors.New("invalid url https://x/?k=key-SECRET-EXPANDED-123"))
+	i := newTestInstance()
+	i.Config.Settings = map[string]string{"url": "https://x/?k=${API_KEY}"}
+	rp := newRunnableProcessor(p, nil, i)
+	rp.envAllow = allow
+	err = rp.Open(ctx)
+	is.True(err != nil)
+	is.True(!strings.Contains(err.Error(), "SECRET-EXPANDED"))
+	is.True(strings.Contains(err.Error(), "${API_KEY}"))
 }

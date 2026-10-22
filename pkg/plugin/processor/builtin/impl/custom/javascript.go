@@ -18,6 +18,7 @@ package custom
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -29,6 +30,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/pathpolicy"
 	"github.com/dop251/goja"
@@ -381,7 +383,7 @@ func (p *JavascriptProcessor) toSDKRecords(v goja.Value) (sdk.ProcessedRecord, e
 // hard error (not "module not found", which the resolver would swallow and keep
 // searching).
 func (fa FileAccess) requireLoader(path string) ([]byte, error) {
-	f, err := fa.RequireDirs.OpenFile("processors.javascript.allowed-dirs", filepath.FromSlash(path), os.O_RDONLY, 0)
+	f, err := fa.RequireDirs.OpenFile("processors.javascript.allowed-dirs", filepath.FromSlash(path), os.O_RDONLY|openNonBlock, 0)
 	switch {
 	case err == nil:
 	case cerrors.Is(err, fs.ErrNotExist), cerrors.Is(err, syscall.ENOTDIR):
@@ -397,15 +399,52 @@ func (fa FileAccess) requireLoader(path string) ([]byte, error) {
 	if fi.IsDir() {
 		return nil, require.ModuleFileDoesNotExistError
 	}
-	return io.ReadAll(f)
+	return readScript(f, path)
+}
+
+// maxScriptSize is the largest script or module that is read. A script is source
+// code; nothing legitimate is anywhere near it.
+const maxScriptSize = 10 << 20
+
+// readScript reads an opened script or module: a regular file, at most
+// maxScriptSize, never truncated.
+func readScript(f *os.File, what string) ([]byte, error) {
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		ce := conduiterr.New(CodeJSScriptNotRegular, fmt.Sprintf("%q is not a regular file", what))
+		ce.ConfigPath = "settings.script.path"
+		ce.Suggestion = "point script.path at a regular file"
+		return nil, ce
+	}
+	if fi.Size() > maxScriptSize {
+		return nil, tooLarge(what, fi.Size())
+	}
+	b, err := io.ReadAll(io.LimitReader(f, maxScriptSize+1)) // it can grow while we read
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > maxScriptSize {
+		return nil, tooLarge(what, int64(len(b)))
+	}
+	return b, nil
+}
+
+func tooLarge(what string, size int64) error {
+	ce := conduiterr.New(CodeJSScriptTooLarge, fmt.Sprintf("%q is %d bytes, more than the %d byte limit for a script", what, size, maxScriptSize))
+	ce.ConfigPath = "settings.script.path"
+	ce.Suggestion = "split the script or reduce it; scripts over 10 MiB are not read"
+	return ce
 }
 
 // readFile reads script.path through the open-time enforced policy.
 func (p *JavascriptProcessor) readFile(path string) ([]byte, error) {
-	f, err := p.files.ScriptDirs.OpenFile("settings.script.path", path, os.O_RDONLY, 0)
+	f, err := p.files.ScriptDirs.OpenFile("settings.script.path", path, os.O_RDONLY|openNonBlock, 0)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	return io.ReadAll(f)
+	return readScript(f, path)
 }

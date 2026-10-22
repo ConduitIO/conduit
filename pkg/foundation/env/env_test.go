@@ -121,9 +121,8 @@ func TestResolveEnv_Tricks(t *testing.T) {
 		{"nested denied reference", "${ALLOWED${SECRET}}", CodeEnvRefMalformed},
 		{"unterminated", "${ALLOWED", CodeEnvRefMalformed},
 		{"empty braces", "${}", CodeEnvRefMalformed},
-		{"trailing dollar", "abc$", CodeEnvRefMalformed},
 		{"dollar digit", "$1", CodeEnvRefMalformed},
-		{"dollar dollar", "$$", CodeEnvRefMalformed},
+		{"escape does not hide the next reference", "$$$SECRET", CodeEnvVarNotAllowed},
 		{"special var", "$*", CodeEnvRefMalformed},
 		{"space in braces", "${ ALLOWED }", CodeEnvRefMalformed},
 		{"lowercase of allowed name", "${allowed}", CodeEnvVarNotAllowed},
@@ -196,4 +195,45 @@ func TestResolveSettings(t *testing.T) {
 	ce = wantCode(t, err, CodeEnvVarNotAllowed)
 	is.Equal(ce.ConfigPath, "settings.webhook.url")
 	is.True(strings.Contains(ce.Suggestion, "env.allow"))
+}
+
+// A literal "$": "$$" is the escape and expands nothing; a "$" that cannot start
+// a reference (end of value, followed by a space, dot or punctuation) is left as
+// it is, as it was before references were restricted. Anything that looks like a
+// reference stays strict.
+func TestResolveEnv_LiteralDollar(t *testing.T) {
+	t.Setenv("A", "av")
+	t.Setenv("SECRET", "s3cr3t")
+	a := mustAllow(t, "A")
+	cases := []struct{ in, want string }{
+		{"pa$$word", "pa$word"},
+		{"$$", "$"},
+		{"$$$$", "$$"},
+		{"$${A}", "${A}"},
+		{"$$A", "$A"},
+		{"${A}$$x", "av$x"},
+		{"$A$$", "av$"},
+		{"abc$", "abc$"},
+		{"a$.", "a$."},
+		{"price: $ 5", "price: $ 5"},
+		{"100$ (approx)", "100$ (approx)"},
+		{"$$SECRET", "$SECRET"}, // the escape hides the name: nothing is looked up
+	}
+	for _, c := range cases {
+		got, err := ResolveEnv(a, c.in)
+		if err != nil || got != c.want {
+			t.Errorf("ResolveEnv(%q) = %q, %v; want %q", c.in, got, err, c.want)
+		}
+	}
+	for _, in := range []string{"$1", "$*", "$@", "${A:-x}", "${", "$-"} {
+		if _, err := ResolveEnv(a, in); err == nil {
+			t.Errorf("ResolveEnv(%q) accepted", in)
+		}
+	}
+	// the value is not scanned again, so a "$$" in an expanded value stays
+	t.Setenv("B", "x$$y")
+	a2 := mustAllow(t, "B")
+	if got, _ := ResolveEnv(a2, "${B}"); got != "x$$y" {
+		t.Errorf("expanded value was scanned again: %q", got)
+	}
 }

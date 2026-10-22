@@ -36,25 +36,37 @@ would include the very secrets this list protects. The list cannot be changed th
 
 ## Who can read an allowed variable
 
-Listing a variable in `env.allow` lets **anyone who can write pipeline settings through the API**
-put its value into a setting that Conduit then sends somewhere, and some of those settings are shown
-back. Plugin and connector errors routinely echo the expanded setting (a failed connection prints the
-URL, a failed webhook prints the address), and errors appear in `GET /v1/pipelines/{id}`, in node
-logs and in the DLQ metadata. So list only variables whose value an API writer may see. Do not list
-variables that hold credentials of Conduit itself or of systems the pipelines do not use.
+Listing a variable in `env.allow` lets **anyone who can write pipeline settings through the API** put
+its value into a setting that Conduit then sends somewhere: the value goes to the plugin, and the plugin
+may send it to the host the setting names. List only variables whose value an API writer may use that
+way, and do not list variables that hold credentials of Conduit itself or of systems the pipelines do
+not use.
+
+Conduit does not hand the value back in what it reports. In every error from configuring, opening,
+running or validating a connector or processor, and in the engine's own refusals (a path outside the
+allowed directories, a target outside `connectors.egress.allow`), the expanded value is replaced by its
+reference, `${NAME}`. That covers the API response, the node log and the pipeline error. It is a
+safeguard, not a boundary: it matches the substituted text, so a plugin that transforms the value
+before echoing it (hashing, encoding, truncating) is not covered, and a value shorter than three
+characters is not replaced.
 
 ## A literal `$` in a value
 
-There is no escape. A value that contains `$` followed by anything but a plain name (`pa$word`,
-`pa$1`, `a$`) is refused as `config.env_ref_malformed`, or, where it looks like `$word`, as a
-reference to a variable that is not allowed. `$$` is refused too: in pipeline YAML the parser has
-already collapsed it to `$`, and through the API it is a malformed reference.
+`$$` is a literal `$` and expands nothing: `pa$$word` becomes `pa$word`, and `$${NAME}` becomes the
+text `${NAME}`. A `$` that cannot start a reference (at the end of a value, or followed by a space, a
+dot or punctuation, as in `price$` or `a$.`) is left as it is. Anything that looks like a reference
+but is not a plain `${NAME}` / `$NAME` is refused as `config.env_ref_malformed`: `$1`, `$*`, `${A:-x}`,
+an unterminated `${`.
 
-Workarounds:
+An expanded value is never scanned again, so a `$` or `$$` inside an allowed variable's value is kept
+exactly. Writing a secret that contains `$` is therefore also possible by putting it in an allowed
+variable (`password: ${DB_PASSWORD}`), or percent-encoded in a URL (`pa%24word`).
 
-- Put the whole value in an allowed environment variable and reference that: `password: ${DB_PASSWORD}`
-  with `DB_PASSWORD='pa$word'`. The expanded value is never scanned again, so the `$` inside it is safe.
-- In a URL use percent-encoding: `postgres://app:pa%24word@db/app`.
+**Upgrading.** Before references were restricted, `os.Expand` expanded `$$` as a variable named `$`,
+which is unset, so `pa$$word` became `pa` + `word`; it is now `pa$word`. Pipeline YAML used to collapse
+`$$` itself before the value was stored; it is now collapsed once, when the reference is resolved, so
+`$$` means the same in YAML and through the API. Stored values with a trailing or isolated `$` keep
+working as before.
 
 ## Errors
 

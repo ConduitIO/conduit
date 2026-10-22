@@ -1108,7 +1108,7 @@ func (s *Source) configure(ctx context.Context) error {
 	}
 	_, err = s.plugin.Configure(ctx, pconnector.SourceConfigureRequest{Config: settings})
 	if err != nil {
-		return cerrors.Errorf("could not configure source connector plugin: %w", err)
+		return cerrors.Errorf("could not configure source connector plugin: %w", s.Instance.redactError(err))
 	}
 	return nil
 }
@@ -1119,7 +1119,7 @@ func (s *Source) open(ctx context.Context) error {
 		Position: s.state().Position,
 	})
 	if err != nil {
-		return cerrors.Errorf("could not open source connector plugin: %w", err)
+		return cerrors.Errorf("could not open source connector plugin: %w", s.Instance.redactError(err))
 	}
 	return nil
 }
@@ -1131,7 +1131,7 @@ func (s *Source) run(ctx context.Context) error {
 	err := s.plugin.Run(ctx, stream)
 	if err != nil {
 		stopStream()
-		return cerrors.Errorf("could not run source connector plugin: %w", err)
+		return cerrors.Errorf("could not run source connector plugin: %w", s.Instance.redactError(err))
 	}
 	s.stream = stream.Client()
 	s.pendingRecv = nil

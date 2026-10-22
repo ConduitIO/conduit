@@ -357,7 +357,7 @@ func (d *Destination) configure(ctx context.Context) error {
 	}
 	_, err = d.plugin.Configure(ctx, pconnector.DestinationConfigureRequest{Config: settings})
 	if err != nil {
-		return cerrors.Errorf("could not configure destination connector plugin: %w", err)
+		return cerrors.Errorf("could not configure destination connector plugin: %w", d.Instance.redactError(err))
 	}
 	return nil
 }
@@ -366,7 +366,7 @@ func (d *Destination) open(ctx context.Context) error {
 	d.Instance.logger.Trace(ctx).Msg("opening destination connector plugin")
 	_, err := d.plugin.Open(ctx, pconnector.DestinationOpenRequest{})
 	if err != nil {
-		return cerrors.Errorf("could not open destination connector plugin: %w", err)
+		return cerrors.Errorf("could not open destination connector plugin: %w", d.Instance.redactError(err))
 	}
 	return nil
 }
@@ -378,7 +378,7 @@ func (d *Destination) run(ctx context.Context) error {
 	err := d.plugin.Run(ctx, stream)
 	if err != nil {
 		stopStream()
-		return cerrors.Errorf("could not run destination connector plugin: %w", err)
+		return cerrors.Errorf("could not run destination connector plugin: %w", d.Instance.redactError(err))
 	}
 	d.stream = stream.Client()
 	d.stopStream = stopStream

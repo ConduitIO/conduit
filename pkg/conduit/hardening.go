@@ -21,6 +21,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/connegress"
 	"github.com/conduitio/conduit/pkg/foundation/env"
 	"github.com/conduitio/conduit/pkg/foundation/pathpolicy"
@@ -52,8 +53,10 @@ func (c Config) fileConnectorPolicy() (*pathpolicy.Policy, error) {
 // by connector settings.
 const SecretsAllowedDirsKey = "secrets.allowed-dirs"
 
-// systemCertDirs are the conventional locations of system CA bundles and
-// container secrets, allowed for cert material by default. They are read-only
+// systemCertDirs are the conventional locations of system CA bundles. They are
+// trusted for CA certificates and revocation lists only (sslrootcert, sslcrl);
+// client keys and certificates (sslkey, sslcert) must come from
+// secrets.allowed-dirs. They are read-only
 // public trust anchors on a normal host; a Kubernetes service account token
 // directory is deliberately not among them.
 var systemCertDirs = []string{
@@ -72,6 +75,14 @@ func (c Config) EffectiveAllowedDirs() (files, secrets, scripts []string) {
 		scripts = []string{c.Processors.JavaScript.scriptsDir}
 	}
 	return c.Connectors.File.AllowedDirs, c.Secrets.AllowedDirs, scripts
+}
+
+// trustPolicy returns the directories CA bundles and revocation lists named by
+// connector settings may be read from: secrets.allowed-dirs and the system CA
+// directories.
+func (c Config) trustPolicy() (*pathpolicy.Policy, error) {
+	dirs := append(append([]string(nil), c.Secrets.AllowedDirs...), systemCertDirs...)
+	return pathpolicy.New(SecretsAllowedDirsKey, dirs)
 }
 
 // secretsPolicy returns the directories TLS and credential files named by
@@ -172,13 +183,17 @@ type engineSettingsResolver struct {
 	env     *env.Allowlist
 	files   *pathpolicy.Policy
 	secrets *pathpolicy.Policy
+	trust   *pathpolicy.Policy // secrets plus the system CA directories: CA bundles only
 	egress  *connegress.Policy
 }
 
 var _ connector.SettingsResolver = engineSettingsResolver{}
 
 func (r engineSettingsResolver) policyFor(ref fileRef) *pathpolicy.Policy {
-	if ref.secret {
+	switch {
+	case ref.trust:
+		return r.trust
+	case ref.secret:
 		return r.secrets
 	}
 	return r.files
@@ -229,8 +244,40 @@ func (r engineSettingsResolver) check(ref fileRef) (string, error) {
 	return pol.Check(key, ref.path)
 }
 
-// ResolveSettings implements connector.SettingsResolver.
+// Expansions implements connector.ExpansionLister.
+func (r engineSettingsResolver) Expansions(settings map[string]string) []env.Expansion {
+	return env.Expansions(r.env, settings)
+}
+
+// ResolveSettings implements connector.SettingsResolver. A refusal never carries
+// the expanded value of an environment variable: it names the reference
+// instead, because the message reaches whoever wrote the setting.
 func (r engineSettingsResolver) ResolveSettings(pluginName string, settings map[string]string) (map[string]string, error) {
+	out, err := r.resolveSettings(pluginName, settings)
+	if err != nil {
+		return nil, redactResolveError(err, env.Expansions(r.env, settings))
+	}
+	return out, nil
+}
+
+// redactResolveError replaces the expanded values in a coded refusal.
+func redactResolveError(err error, exps []env.Expansion) error {
+	if len(exps) == 0 {
+		return err
+	}
+	ce, ok := conduiterr.Get(err)
+	if !ok {
+		return err
+	}
+	n := conduiterr.Wrap(ce.Code, env.Redact(exps, ce.Message), cerrors.New(env.Redact(exps, ce.Message)))
+	n.ConfigPath = env.Redact(exps, ce.ConfigPath)
+	n.Suggestion = env.Redact(exps, ce.Suggestion)
+	n.DocsURL = ce.DocsURL
+	n.Fix = ce.Fix
+	return n
+}
+
+func (r engineSettingsResolver) resolveSettings(pluginName string, settings map[string]string) (map[string]string, error) {
 	out, err := env.ResolveSettings(r.env, settings)
 	if err != nil {
 		return nil, err //nolint:wrapcheck // coded error with config path

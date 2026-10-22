@@ -15,8 +15,6 @@
 package yaml
 
 import (
-	"strings"
-
 	"github.com/conduitio/yaml/v3"
 )
 
@@ -24,8 +22,10 @@ func envDecoderHook(_ []string, node *yaml.Node) {
 	if node.Kind == yaml.ScalarNode && node.Tag == "!!str" {
 		// Keep ${VAR} references unresolved: the provisioner resolves them at
 		// runtime against the current environment, so a secret is never stored
-		// expanded. Collapse the $$ escape so $${VAR} stays the literal ${VAR}.
-		node.SetString(strings.ReplaceAll(node.Value, "$$", "$"))
+		// expanded. The $$ escape (a literal $) is collapsed there too, in one
+		// place (env.ResolveEnv), so it also protects the text when the
+		// reference is resolved: $${VAR} stays the literal ${VAR}.
+		_ = node
 	}
 }
 

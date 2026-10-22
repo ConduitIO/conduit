@@ -42,19 +42,28 @@ parameter that looks like it names a file and is not in the table or in a review
 bumping a connector cannot silently add an uncovered file setting.
 
 TLS and credential files get their own list, `secrets.allowed-dirs`, instead of sharing the data-file
-list, because they live somewhere else (`/etc/ssl`, mounted secrets) and allowing those directories
-to the file connector would make them readable as data. The default is `<data dir>/secrets` plus the
-system CA directories (`/etc/ssl`, `/etc/pki`, `/etc/ca-certificates`, `/usr/share/ca-certificates`,
-`/usr/local/share/ca-certificates`). `/run/secrets` is not in the default: it holds every secret
-mounted into the container, so name the individual directory you need in `secrets.allowed-dirs`.
-It does not include the data dir itself (it holds
+list, because they live somewhere else (mounted secrets) and allowing those directories to the file
+connector would make them readable as data. The default is `<data dir>/secrets`.
+
+Two classes, because a CA bundle is public and a key is not:
+
+| Parameter | May come from |
+| --- | --- |
+| `sslkey`, `sslcert` (the client's identity) | `secrets.allowed-dirs` only |
+| `sslrootcert`, `sslcrl` (CA bundles, revocation lists) | `secrets.allowed-dirs` **and** the system CA directories: `/etc/ssl`, `/etc/pki`, `/etc/ca-certificates`, `/usr/share/ca-certificates`, `/usr/local/share/ca-certificates` |
+
+`/run/secrets` is in neither: it holds every secret mounted into the container, so name the individual
+directory you need in `secrets.allowed-dirs`. Neither includes the data dir itself (it holds
 `conduit.db` and `conduit.yaml`) or the Kubernetes service account directory. Setting
-`secrets.allowed-dirs` replaces the default, so list the system directories again if you still need
-them.
+`secrets.allowed-dirs` replaces `<data dir>/secrets`; the system CA directories stay available to CA
+bundles.
+
+For Postgres the path that was checked, with symlinks resolved, is written back into the connection
+string, so pgx opens exactly that path: a link swapped afterwards does not redirect it.
 
 | Key | Env | Default |
 | --- | --- | --- |
-| `secrets.allowed-dirs` | `CONDUIT_SECRETS_ALLOWED_DIRS` | `<data dir>/secrets` and the system CA directories |
+| `secrets.allowed-dirs` | `CONDUIT_SECRETS_ALLOWED_DIRS` | `<data dir>/secrets` |
 
 These defaults hold on every start path, including `conduit run` with no flags: an unset repeatable
 flag does not replace them (`TestRunDefaultsFileAccess` drives the real command). A flag, the

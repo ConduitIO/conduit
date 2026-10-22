@@ -17,6 +17,7 @@ package conduit
 import (
 	"context"
 	"net"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -24,6 +25,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/conduitio/conduit/pkg/foundation/env"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 
@@ -36,15 +39,15 @@ import (
 )
 
 type fsFixture struct {
-	files, secrets, outside string
-	r                       engineSettingsResolver
+	files, secrets, sysca, outside string
+	r                              engineSettingsResolver
 }
 
 func newFSFixture(t *testing.T) fsFixture {
 	t.Helper()
 	root, _ := filepath.EvalSymlinks(t.TempDir())
-	f := fsFixture{files: filepath.Join(root, "files"), secrets: filepath.Join(root, "secrets"), outside: filepath.Join(root, "outside")}
-	for _, d := range []string{f.files, f.secrets, f.outside} {
+	f := fsFixture{files: filepath.Join(root, "files"), secrets: filepath.Join(root, "secrets"), sysca: filepath.Join(root, "sysca"), outside: filepath.Join(root, "outside")}
+	for _, d := range []string{f.files, f.secrets, f.sysca, f.outside} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -57,7 +60,11 @@ func newFSFixture(t *testing.T) fsFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.r = engineSettingsResolver{files: files, secrets: secrets, egress: connegress.New(nil).WithResolver(noDNS{})}
+	trust, err := pathpolicy.New(SecretsAllowedDirsKey, []string{f.secrets, f.sysca})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.r = engineSettingsResolver{files: files, secrets: secrets, trust: trust, egress: connegress.New(nil).WithResolver(noDNS{})}
 	return f
 }
 
@@ -156,14 +163,21 @@ func TestDefaultConfig_SecretsPolicy(t *testing.T) {
 	is := is.New(t)
 	base := t.TempDir()
 	cfg := DefaultConfigWithBasePath(base)
-	is.Equal(cfg.Secrets.AllowedDirs[0], filepath.Join(base, "secrets"))
-	is.True(len(cfg.Secrets.AllowedDirs) > 1)
+	is.Equal(cfg.Secrets.AllowedDirs, []string{filepath.Join(base, "secrets")})
 	p, err := cfg.secretsPolicy()
 	is.NoErr(err)
+	// client keys and certificates come from secrets.allowed-dirs only ...
+	_, err = p.Check("settings.url", "/etc/ssl/certs/ca-certificates.crt")
+	is.True(err != nil)
+	// ... CA bundles may also come from the system CA directories
+	tp, err := cfg.trustPolicy()
+	is.NoErr(err)
 	if runtime.GOOS != "windows" {
-		_, err = p.Check("settings.url", "/etc/ssl/certs/ca-certificates.crt")
+		_, err = tp.Check("settings.url", "/etc/ssl/certs/ca-certificates.crt")
 		is.NoErr(err)
 	}
+	_, err = tp.Check("settings.url", "/run/secrets/db-password")
+	is.True(err != nil) // the container secrets directory holds everything, name what you need
 	// the data dir itself (conduit.db, conduit.yaml) is not in the default
 	_, err = p.Check("settings.url", filepath.Join(base, "conduit.db"))
 	is.True(err != nil)
@@ -282,4 +296,131 @@ type noDNS struct{}
 
 func (noDNS) LookupIPAddr(context.Context, string) ([]net.IPAddr, error) {
 	return nil, cerrors.New("no DNS in tests")
+}
+
+// Client keys and certificates are the client's identity: they come from
+// secrets.allowed-dirs, never from the system CA directories that only CA
+// bundles and revocation lists may use.
+func TestPostgresURL_SystemCADirsAreForCABundlesOnly(t *testing.T) {
+	f := newFSFixture(t)
+	ca := filepath.Join(f.sysca, "ca.pem")
+	for _, u := range []string{
+		"postgres://u@h/db?sslrootcert=" + ca,
+		"postgres://u@h/db?sslcrl=" + ca,
+		"postgres://u@h/db?sslrootcert=" + filepath.Join(f.secrets, "ca.pem"),
+		"postgres://u@h/db?sslkey=" + filepath.Join(f.secrets, "k") + "&sslcert=" + filepath.Join(f.secrets, "c"),
+	} {
+		if _, err := f.r.ResolveSettings("builtin:postgres", map[string]string{postgresURLSetting: u}); err != nil {
+			t.Errorf("%q refused: %v", u, err)
+		}
+	}
+	for _, u := range []string{
+		"postgres://u@h/db?sslkey=" + ca,
+		"postgres://u@h/db?sslcert=" + ca,
+		"host=h sslkey=" + filepath.Join(f.sysca, "client.key"),
+		"postgres://u@h/db?sslrootcert=" + filepath.Join(f.outside, "ca.pem"),
+	} {
+		f.refuses(t, "builtin:postgres", map[string]string{postgresURLSetting: u}, postgresURLSetting)
+	}
+}
+
+// pgx opens the key, certificate and CA paths itself, after the check, so the
+// settings the connector gets carry the checked, symlink-free path: a link that
+// is swapped afterwards is not followed to somewhere else, because the path the
+// connector opens no longer goes through it.
+func TestPostgresURL_ResolvedPathIsWrittenBack(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks need privileges on windows")
+	}
+	f := newFSFixture(t)
+	realKey := filepath.Join(f.secrets, "real dir&x", "client.key")
+	if err := os.MkdirAll(filepath.Dir(realKey), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(realKey, []byte("k"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(f.secrets, "key-link")
+	if err := os.Symlink(realKey, link); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, u := range []string{
+		"postgres://u:p%40ss@db.example.com:5432/app?sslmode=require&sslkey=" + url.QueryEscape(link) + "&application_name=a",
+		"host=db.example.com user=u password='p ss' sslkey=" + link,
+		"host=db.example.com sslkey='" + link + "' dbname=app",
+	} {
+		out, err := f.r.ResolveSettings("builtin:postgres", map[string]string{postgresURLSetting: u})
+		if err != nil {
+			t.Fatalf("%q: %v", u, err)
+		}
+		got := out[postgresURLSetting]
+		var key string
+		others := map[string]string{}
+		for _, kv := range postgresParams(got) {
+			if kv[0] == pgSSLKey {
+				key = kv[1]
+			} else {
+				others[kv[0]] = kv[1]
+			}
+		}
+		if key != realKey {
+			t.Errorf("%q -> %q: sslkey = %q, want the resolved %q", u, got, key, realKey)
+		}
+		want := map[string]string{"application_name": "a", "sslmode": "require", "host": "db.example.com", "user": "u", "password": "p ss", "dbname": "app"}
+		for k, v := range others {
+			if w, ok := want[k]; ok && w != v && (k != "password" || u[0] != 'p') {
+				t.Errorf("%q: %s = %q, want %q", u, k, v, w)
+			}
+		}
+	}
+	// the escaped password of the URL form survives the rewrite
+	out, _ := f.r.ResolveSettings("builtin:postgres", map[string]string{postgresURLSetting: "postgres://u:p%40ss@db.example.com/app?sslkey=" + url.QueryEscape(link)})
+	pu, err := url.Parse(out[postgresURLSetting])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pw, _ := pu.User.Password(); pw != "p@ss" || pu.Host != "db.example.com" {
+		t.Errorf("rewritten URL %q lost its credentials or host", out[postgresURLSetting])
+	}
+}
+
+// The expanded value of an allowed variable must not come back in a refusal: the
+// message reaches whoever wrote the setting (API response, node log).
+func TestResolveSettings_RefusalsDoNotEchoExpandedValues(t *testing.T) {
+	f := newFSFixture(t)
+	t.Setenv("DATA_PATH", "/etc/SECRET-EXPANDED-PATH-4711")
+	t.Setenv("DB_HOST", "SECRET-EXPANDED-HOST.example.com")
+	allow, err := env.NewAllowlist([]string{"DATA_PATH", "DB_HOST"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.r.env = allow
+	f.r.egress = connegress.New(nil).WithResolver(noDNS{})
+
+	for plugin, s := range map[string]map[string]string{
+		"builtin:file":     {"path": "${DATA_PATH}/x.log"},
+		"builtin:postgres": {"url": "postgres://u@db/app?sslkey=${DATA_PATH}"},
+	} {
+		_, err := f.r.ResolveSettings(plugin, s)
+		ce, ok := conduiterr.Get(err)
+		if !ok {
+			t.Fatalf("%s: err = %v, want a coded refusal", plugin, err)
+		}
+		for what, text := range map[string]string{"message": ce.Message, "suggestion": ce.Suggestion, "config path": ce.ConfigPath, "error": err.Error()} {
+			if strings.Contains(text, "SECRET-EXPANDED") {
+				t.Errorf("%s: the expanded value is in the %s: %q", plugin, what, text)
+			}
+		}
+		if !strings.Contains(ce.Message, "${DATA_PATH}") {
+			t.Errorf("%s: the message does not name the reference: %q", plugin, ce.Message)
+		}
+	}
+	// a refused egress target
+	f2 := egressFixture(t, mapDNS{}, "db.internal:5432")
+	f2.r.env = allow
+	_, err = f2.r.ResolveSettings("builtin:postgres", map[string]string{"url": "postgres://u@${DB_HOST}:5432/app"})
+	if ce, ok := conduiterr.Get(err); !ok || strings.Contains(ce.Message+ce.Suggestion+err.Error(), "SECRET-EXPANDED") {
+		t.Fatalf("egress refusal: %v", err)
+	}
 }

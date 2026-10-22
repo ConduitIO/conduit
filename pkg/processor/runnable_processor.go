@@ -60,16 +60,19 @@ func (p *RunnableProcessor) Open(ctx context.Context) error {
 	if err != nil {
 		return cerrors.Errorf("could not resolve processor settings: %w", err)
 	}
+	// What the processor says about its settings reaches whoever wrote them:
+	// the expanded values of environment variables stay out of it.
+	exps := env.Expansions(p.envAllow, p.Config.Settings)
 	egress.StripReservedKeys(settings)
 
 	err = p.proc.Configure(ctx, settings)
 	if err != nil {
-		return cerrors.Errorf("failed configuring processor: %w", err)
+		return cerrors.Errorf("failed configuring processor: %w", env.RedactError(err, exps))
 	}
 
 	err = p.proc.Open(ctx)
 	if err != nil {
-		return cerrors.Errorf("failed opening processor: %w", err)
+		return cerrors.Errorf("failed opening processor: %w", env.RedactError(err, exps))
 	}
 
 	return nil

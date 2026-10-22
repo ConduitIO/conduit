@@ -41,4 +41,13 @@ var (
 	// other processor error. ResourceExhausted: the output exceeds a fixed
 	// limit.
 	CodeJSOutputLimitExceeded = conduiterr.Register("processor.js_output_limit_exceeded", codes.ResourceExhausted)
+	// CodeJSScriptTooLarge is raised when script.path (or a required module)
+	// names a file larger than 10 MiB. The whole file would be read into
+	// memory and compiled, on every pipeline start, by a setting an API writer
+	// controls. Nothing is truncated; use a smaller script.
+	CodeJSScriptTooLarge = conduiterr.Register("processor.js_script_too_large", codes.ResourceExhausted)
+	// CodeJSScriptNotRegular is raised when script.path (or a required module)
+	// is not a regular file: a FIFO would block the read forever and a device
+	// never ends.
+	CodeJSScriptNotRegular = conduiterr.Register("processor.js_script_not_regular", codes.InvalidArgument)
 )

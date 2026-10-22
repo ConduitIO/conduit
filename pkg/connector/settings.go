@@ -34,6 +34,16 @@ type SettingsResolver interface {
 	ResolveSettings(plugin string, settings map[string]string) (map[string]string, error)
 }
 
+// ExpansionLister is implemented by resolvers that substitute environment
+// variables into settings. The instance uses it to keep the substituted values
+// out of every error it returns: a plugin error such as `connect to
+// "postgres://u:<password>@..." failed` reaches the writer of the settings (the
+// API response, the node log), who must not get to read an allowed variable
+// that way.
+type ExpansionLister interface {
+	Expansions(settings map[string]string) []env.Expansion
+}
+
 // DefaultSettingsResolver is used when the Service is built without a
 // SettingsResolver. It expands no environment variable at all, so a Service
 // that was not wired by the runtime fails closed instead of exposing the whole
@@ -45,9 +55,17 @@ func (DefaultSettingsResolver) ResolveSettings(_ string, settings map[string]str
 	return env.ResolveSettings(nil, settings)
 }
 
+// Expansions implements ExpansionLister (nothing is expanded).
+func (DefaultSettingsResolver) Expansions(map[string]string) []env.Expansion { return nil }
+
 // EnvSettingsResolver expands ${VAR} references for the names in Allow only.
 type EnvSettingsResolver struct {
 	Allow *env.Allowlist
+}
+
+// Expansions implements ExpansionLister.
+func (r EnvSettingsResolver) Expansions(settings map[string]string) []env.Expansion {
+	return env.Expansions(r.Allow, settings)
 }
 
 // ResolveSettings implements SettingsResolver.
@@ -55,14 +73,38 @@ func (r EnvSettingsResolver) ResolveSettings(_ string, settings map[string]strin
 	return env.ResolveSettings(r.Allow, settings)
 }
 
-// resolveSettings resolves the instance's settings through its resolver.
+// resolveSettings resolves the instance's settings through its resolver and
+// remembers which values were substituted, for redactError.
 func (i *Instance) resolveSettings(settings map[string]string) (map[string]string, error) {
 	r := i.settingsResolver
 	if r == nil {
 		r = DefaultSettingsResolver{}
 	}
+	if l, ok := r.(ExpansionLister); ok {
+		exps := l.Expansions(settings)
+		i.redactMu.Lock()
+		i.redactions = exps
+		i.redactMu.Unlock()
+	}
 	return r.ResolveSettings(i.Plugin, settings)
 }
+
+// redactError returns err with every substituted environment value replaced by
+// its reference. An error that does not contain one is returned unchanged. The
+// code, config path and remediation of a coded error are kept; the original
+// error is not reachable through the result's chain (its text must not leak
+// through a log that walks the chain), but errors.Is on it still works.
+func (i *Instance) redactError(err error) error {
+	if err == nil {
+		return nil
+	}
+	i.redactMu.Lock()
+	exps := i.redactions
+	i.redactMu.Unlock()
+	return redactError(err, exps)
+}
+
+func redactError(err error, exps []env.Expansion) error { return env.RedactError(err, exps) }
 
 // resolveEventSettings resolves settings for a lifecycle event. nil stays nil:
 // it is how the event kind (created / updated / deleted) is told apart.

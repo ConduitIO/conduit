@@ -42,6 +42,13 @@ func (s stubResolver) LookupIPAddr(_ context.Context, host string) ([]net.IPAddr
 }
 
 func TestParseIPLoose(t *testing.T) {
+	oracle := net.ParseIP("192.0.0.192")
+	for _, s := range []string{"192.0.0.192", "3221225664", "0xc00000c0", "030000000300", "0300.0.0.0300", "0xc0.0x0.0x0.0xc0", "192.0.192", "::ffff:c000:c0"} {
+		ip := ParseIPLoose(s)
+		if ip == nil || !ip.Equal(oracle) || !IsMetadataIP(ip) {
+			t.Errorf("ParseIPLoose(%q) = %v, want the Oracle metadata address", s, ip)
+		}
+	}
 	meta := net.ParseIP("169.254.169.254")
 	for _, s := range []string{
 		"169.254.169.254", "2852039166", "0xa9fea9fe", "0XA9FEA9FE", "025177524776",
@@ -64,6 +71,8 @@ func TestIsMetadataIP(t *testing.T) {
 	yes := []string{
 		"169.254.169.254", "169.254.170.2", "169.254.0.1", "168.63.129.16", "100.100.100.200",
 		"fd00:ec2::254", "fd00:ec2::1", "fe80::1",
+		// Oracle Cloud instance metadata, 192.0.0.192, in the same encodings as the others
+		"192.0.0.192", "::ffff:192.0.0.192", "64:ff9b::c000:c0", "2002:c000:c0::1", "::192.0.0.192", "64:ff9b:1:c000:0:c000::",
 		"::ffff:169.254.169.254",
 		"64:ff9b::a9fe:a9fe",             // NAT64
 		"64:ff9b:1:a9fe:a9:fe00::",       // NAT64 local-use, /48 embedding (bytes 6,7,9,10)
@@ -147,7 +156,7 @@ func TestCheck_NoAllowlist_MetadataAlwaysRefused(t *testing.T) {
 	p := New(nil).WithResolver(res)
 	for _, h := range []string{
 		"169.254.169.254", "2852039166", "0xa9fea9fe", "0251.0376.0251.0376", "[fd00:ec2::254]", "fd00:ec2::254",
-		"::ffff:169.254.169.254", "168.63.129.16", "100.100.100.200", "169.254.170.2", "fe80::1%eth0",
+		"::ffff:169.254.169.254", "168.63.129.16", "100.100.100.200", "169.254.170.2", "fe80::1%eth0", "192.0.0.192", "3221225664", "0xc00000c0", "[64:ff9b::c000:c0]",
 		"metadata.google.internal", "METADATA.GOOGLE.INTERNAL.", "metadata.goog", "instance-data", "instance-data.ec2.internal", "metadata",
 	} {
 		checkRefused(t, p, h, "80", false)

@@ -580,7 +580,11 @@ func createServices(r *Runtime) error {
 	if err != nil {
 		return cerrors.Errorf("invalid %s config: %w", connegress.AllowConfigPath, err)
 	}
-	settingsResolver := engineSettingsResolver{env: envAllow, files: filePolicy, secrets: secretsPolicy, egress: connEgress}
+	trustPolicy, err := r.Config.trustPolicy()
+	if err != nil {
+		return cerrors.Errorf("invalid %s config: %w", SecretsAllowedDirsKey, err)
+	}
+	settingsResolver := engineSettingsResolver{env: envAllow, files: filePolicy, secrets: secretsPolicy, trust: trustPolicy, egress: connEgress}
 
 	procPluginService := proc_plugin.NewPluginService(
 		r.logger,

@@ -68,9 +68,10 @@ var CodeEnvVarNotAllowed = conduiterr.Register("config.env_var_not_allowed", cod
 
 // CodeEnvRefMalformed is raised when a setting contains a "$" reference that
 // is not a plain ${NAME} or $NAME (defaults such as ${NAME:-x}, nested
-// references, an unterminated "${", or "$" followed by a non-name). Write the
-// plain form, or use $$ for a literal dollar sign where the config format
-// supports it.
+// references, an unterminated "${", or "$" followed by a digit or a shell
+// special such as $1 and $*). Write the plain form, or use $$ for a literal
+// dollar sign. A "$" at the end of a value or before a space or punctuation is
+// a literal dollar sign and is not an error.
 var CodeEnvRefMalformed = conduiterr.Register("config.env_ref_malformed", codes.InvalidArgument)
 
 // Allowlist is the set of environment variable names a setting may reference.
@@ -163,6 +164,16 @@ func ResolveEnv(allow *Allowlist, s string) (string, error) {
 			i++
 			continue
 		}
+		if i+1 < len(s) && s[i+1] == '$' { // $$ is a literal $ and expands nothing
+			b.WriteByte('$')
+			i += 2
+			continue
+		}
+		if literalDollar(s, i) {
+			b.WriteByte('$')
+			i++
+			continue
+		}
 		name, next, err := parseRef(s, i)
 		if err != nil {
 			return "", err
@@ -187,6 +198,27 @@ func ResolveEnv(allow *Allowlist, s string) (string, error) {
 		i = next
 	}
 	return b.String(), nil
+}
+
+// literalDollar reports whether the "$" at s[i] is just a dollar sign: at the
+// end of the value, or followed by something that cannot start a reference (a
+// space, a dot, punctuation). That is how a "$" like this behaved before
+// references were restricted (os.Expand left it alone), so stored values such as
+// "price$" and "a$." keep working. A "$" that looks like the start of a
+// reference ("${", "$NAME", "$1", "$@") is never a literal.
+func literalDollar(s string, i int) bool {
+	if i+1 >= len(s) {
+		return true
+	}
+	c := s[i+1]
+	if c == '{' || isNameStart(c) || (c >= '0' && c <= '9') {
+		return false
+	}
+	switch c { // the shell's special parameters: os.Expand treated them as variables
+	case '*', '#', '@', '?', '!', '-', '$':
+		return false
+	}
+	return true
 }
 
 // parseRef parses the reference starting at s[i] == '$' and returns the
@@ -247,3 +279,115 @@ func ResolveSettings(allow *Allowlist, settings map[string]string) (map[string]s
 	}
 	return out, nil
 }
+
+// Expansion is one environment variable whose value was substituted into a
+// setting.
+type Expansion struct {
+	Name  string
+	Value string
+}
+
+// minRedactLen is the shortest expanded value that is redacted from messages.
+// Replacing a one or two character value everywhere would only wreck the
+// message without hiding anything.
+const minRedactLen = 3
+
+// Expansions lists the variables the references in settings expand to (names in
+// allow that are set), without the value being looked at twice per name. It is
+// what Redact needs: the values to keep out of error messages.
+func Expansions(allow *Allowlist, settings map[string]string) []Expansion {
+	seen := map[string]bool{}
+	var out []Expansion
+	for _, v := range settings {
+		for i := 0; i < len(v); {
+			if v[i] != '$' {
+				i++
+				continue
+			}
+			if i+1 < len(v) && v[i+1] == '$' {
+				i += 2
+				continue
+			}
+			if literalDollar(v, i) {
+				i++
+				continue
+			}
+			name, next, err := parseRef(v, i)
+			if err != nil {
+				break
+			}
+			i = next
+			if seen[name] || !allow.Allows(name) {
+				continue
+			}
+			if val, ok := os.LookupEnv(name); ok && len(val) >= minRedactLen {
+				seen[name] = true
+				out = append(out, Expansion{Name: name, Value: val})
+			}
+		}
+	}
+	return out
+}
+
+// Redact replaces the expanded values in s by their references ("${NAME}"),
+// longest value first. Use it on every message that can reach a settings writer.
+func Redact(exps []Expansion, s string) string {
+	if len(exps) == 0 || s == "" {
+		return s
+	}
+	sorted := append([]Expansion(nil), exps...)
+	sort.Slice(sorted, func(i, j int) bool { return len(sorted[i].Value) > len(sorted[j].Value) })
+	for _, e := range sorted {
+		if e.Value != "" {
+			s = strings.ReplaceAll(s, e.Value, "${"+e.Name+"}")
+		}
+	}
+	return s
+}
+
+// RedactError returns err with every substituted environment value replaced by
+// its reference (see [Redact]). An error that does not contain one is returned
+// unchanged. The code, config path and remediation of a coded error are kept;
+// the original is not reachable through the result's chain (its text must not
+// leak through a log that walks the chain), but errors.Is on it still works.
+func RedactError(err error, exps []Expansion) error {
+	if err == nil || len(exps) == 0 {
+		return err
+	}
+	text := err.Error()
+	if Redact(exps, text) == text {
+		if ce, ok := conduiterr.Get(err); !ok || (Redact(exps, ce.Message)+Redact(exps, ce.Suggestion)+Redact(exps, ce.ConfigPath) == ce.Message+ce.Suggestion+ce.ConfigPath) {
+			return err
+		}
+	}
+	red := &redactedError{msg: Redact(exps, text), cause: err}
+	ce, ok := conduiterr.Get(err)
+	if !ok {
+		return red
+	}
+	n := conduiterr.Wrap(ce.Code, Redact(exps, ce.Message), cerrors.New(Redact(exps, ce.Message)))
+	n.ConfigPath = Redact(exps, ce.ConfigPath)
+	n.Suggestion = Redact(exps, ce.Suggestion)
+	n.DocsURL = ce.DocsURL
+	if ce.Fix != nil {
+		f := *ce.Fix
+		f.Value = Redact(exps, f.Value)
+		f.ConfigPath = Redact(exps, f.ConfigPath)
+		n.Fix = &f
+	}
+	if text == ce.Message {
+		return n
+	}
+	prefix := strings.TrimSuffix(strings.TrimSuffix(red.msg, Redact(exps, ce.Message)), ": ")
+	return cerrors.Errorf("%s: %w", prefix, n)
+}
+
+// redactedError carries redacted text and answers errors.Is for the error it
+// replaced without exposing it through Unwrap.
+type redactedError struct {
+	msg   string
+	cause error
+}
+
+func (e *redactedError) Error() string        { return e.msg }
+func (e *redactedError) Is(target error) bool { return cerrors.Is(e.cause, target) }

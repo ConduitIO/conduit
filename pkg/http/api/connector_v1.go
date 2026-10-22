@@ -174,12 +174,17 @@ func (c *ConnectorAPIv1) UpdateConnector(
 }
 
 func (c *ConnectorAPIv1) DeleteConnector(ctx context.Context, req *apiv1.DeleteConnectorRequest) (*apiv1.DeleteConnectorResponse, error) {
+	var warnings *connector.DeleteWarnings
+	if req.Force {
+		ctx = connector.WithForceDelete(ctx)
+	}
+	ctx, warnings = connector.WithDeleteWarnings(ctx)
 	err := c.connectorOrchestrator.Delete(ctx, req.Id)
 	if err != nil {
 		return nil, status.ConnectorError(cerrors.Errorf("failed to delete connector: %w", err))
 	}
 
-	return &apiv1.DeleteConnectorResponse{}, nil
+	return &apiv1.DeleteConnectorResponse{Warnings: warnings.List()}, nil
 }
 
 // ValidateConnector validates whether the connector configurations are valid or not

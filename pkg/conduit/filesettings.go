@@ -16,6 +16,7 @@ package conduit
 
 import (
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -33,6 +34,10 @@ type fileRef struct {
 	// secrets.allowed-dirs. Everything else is data, checked against
 	// connectors.file.allowed-dirs.
 	secret bool
+	// trust marks a CA bundle or revocation list (sslrootcert, sslcrl): it may
+	// also come from the system CA directories. Client keys and certificates are
+	// secret but not trust.
+	trust bool
 	// set, when not nil, writes the resolved path back into the settings so the
 	// plugin opens the path that was checked.
 	set func(settings map[string]string, resolved string)
@@ -47,6 +52,7 @@ const (
 	postgresURLSetting   = "url"
 	pgSSLKey             = "sslkey"
 	pgSSLCert            = "sslcert"
+	pgSSLRootCert        = "sslrootcert"
 )
 
 // Plugin names (without type or version) whose settings name files.
@@ -103,7 +109,16 @@ func fileRefs(pluginName string, settings map[string]string) []fileRef {
 				}
 			}
 			for _, kv := range postgresFileParams(u) {
-				refs = append(refs, fileRef{key: postgresURLSetting, path: kv[1], secret: true})
+				_, isTrust := postgresTrustKeys[kv[0]]
+				param, old := kv[0], kv[1]
+				refs = append(refs, fileRef{
+					key: postgresURLSetting, path: old, secret: true, trust: isTrust,
+					// pgx opens the path itself, so the checked, symlink-free path is
+					// written back: what pgx opens is what was checked.
+					set: func(m map[string]string, resolved string) {
+						m[postgresURLSetting] = withPostgresParam(m[postgresURLSetting], param, old, resolved)
+					},
+				})
 			}
 		}
 	}
@@ -116,8 +131,12 @@ func plainRef(key, path string) fileRef {
 
 // postgresFileKeys are the libpq connection parameters that name a file.
 var postgresFileKeys = map[string]struct{}{
-	pgSSLCert: {}, pgSSLKey: {}, "sslrootcert": {}, "sslcrl": {},
+	pgSSLCert: {}, pgSSLKey: {}, pgSSLRootCert: {}, "sslcrl": {},
 }
+
+// postgresTrustKeys are the file parameters that hold public trust anchors; the
+// others (sslcert, sslkey) hold the client's identity.
+var postgresTrustKeys = map[string]struct{}{pgSSLRootCert: {}, "sslcrl": {}}
 
 // postgresRefusedKeys are connection parameters that make pgx read a file whose
 // content it then trusts as connection settings or credentials: a passfile
@@ -143,7 +162,7 @@ func postgresFileParams(conn string) [][2]string {
 		if _, ok := postgresFileKeys[k]; !ok || v == "" {
 			continue
 		}
-		if k == "sslrootcert" && v == "system" {
+		if k == pgSSLRootCert && v == "system" {
 			continue
 		}
 		out = append(out, kv)
@@ -258,3 +277,34 @@ func readValue(s string, i int) (string, int) {
 }
 
 func isSpace(c byte) bool { return c == ' ' || c == '\t' || c == '\n' || c == '\r' }
+
+// withPostgresParam returns conn with the file parameter param, whose value was
+// old, set to value (the resolved path). URL form is edited in place; key/value
+// form is rewritten with every value quoted. A string it cannot find the
+// parameter in is returned unchanged.
+func withPostgresParam(conn, param, old, value string) string {
+	lower := strings.ToLower(strings.TrimSpace(conn))
+	if strings.HasPrefix(lower, "postgres://") || strings.HasPrefix(lower, "postgresql://") {
+		re := regexp.MustCompile(`([?&])` + regexp.QuoteMeta(param) + `=([^&#]*)`)
+		return re.ReplaceAllStringFunc(strings.TrimSpace(conn), func(m string) string {
+			sub := re.FindStringSubmatch(m)
+			if v, err := url.QueryUnescape(sub[2]); err != nil || v != old {
+				return m
+			}
+			return sub[1] + param + "=" + url.QueryEscape(value)
+		})
+	}
+	pairs := parseKeywordValue(conn)
+	var out []string
+	for _, kv := range pairs {
+		v := kv[1]
+		if kv[0] == param && v == old {
+			v = value
+		}
+		out = append(out, kv[0]+"='"+strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(v)+"'")
+	}
+	if len(out) == 0 {
+		return conn
+	}
+	return strings.Join(out, " ")
+}

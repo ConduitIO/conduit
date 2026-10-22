@@ -16,7 +16,12 @@ package connector
 
 import (
 	"context"
+	"strings"
 	"testing"
+
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
@@ -140,4 +145,43 @@ func TestSource_OnDelete_UnresolvableSettingsDoNotBlockDeletion(t *testing.T) {
 	// an update with the same unresolvable setting is still refused
 	_, err = src.triggerLifecycleEvent(ctx, map[string]string{"password": "${NOT_ALLOWED_ANYMORE}"}, map[string]string{"password": "${NOT_ALLOWED_ANYMORE}", "x": "1"})
 	is.True(err != nil)
+}
+
+// Errors of the plugin that echo an expanded value reach the writer of the
+// settings: the instance replaces the value by its reference, keeps the code,
+// and errors.Is still works on the original.
+func TestInstance_PluginErrorsDoNotEchoExpandedValues(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	t.Setenv("DB_PASSWORD", "hunter2-SECRET-VALUE")
+
+	src, sourceMock := newTestSource(ctx, t, gomock.NewController(t))
+	allow, err := env.NewAllowlist([]string{"DB_PASSWORD"})
+	is.NoErr(err)
+	src.Instance.settingsResolver = EnvSettingsResolver{Allow: allow}
+	src.Instance.Config.Settings = map[string]string{"url": "postgres://u:${DB_PASSWORD}@db/app"}
+	src.plugin = sourceMock
+
+	sentinel := cerrors.New("sentinel")
+	coded := conduiterr.New(conduiterr.CodeInvalidArgument, "bad url postgres://u:hunter2-SECRET-VALUE@db/app")
+	coded.Suggestion = "check hunter2-SECRET-VALUE"
+	sourceMock.EXPECT().Configure(gomock.Any(), gomock.Any()).Return(pconnector.SourceConfigureResponse{}, cerrors.Errorf("connect postgres://u:hunter2-SECRET-VALUE@db/app: %w", sentinel))
+	err = src.configure(ctx)
+	is.True(err != nil)
+	is.True(!strings.Contains(err.Error(), "SECRET-VALUE"))
+	is.True(strings.Contains(err.Error(), "${DB_PASSWORD}"))
+	is.True(cerrors.Is(err, sentinel)) // the classification survives
+
+	sourceMock.EXPECT().Open(gomock.Any(), gomock.Any()).Return(pconnector.SourceOpenResponse{}, coded)
+	err = src.open(ctx)
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, conduiterr.CodeInvalidArgument)
+	is.True(!strings.Contains(ce.Message+ce.Suggestion+err.Error(), "SECRET-VALUE"))
+	is.True(strings.Contains(ce.Message, "${DB_PASSWORD}"))
+
+	// an error without the value is returned as it is
+	plain := cerrors.New("connection refused")
+	sourceMock.EXPECT().Open(gomock.Any(), gomock.Any()).Return(pconnector.SourceOpenResponse{}, plain)
+	is.True(cerrors.Is(src.open(ctx), plain))
 }
