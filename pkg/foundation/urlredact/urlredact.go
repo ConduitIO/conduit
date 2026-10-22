@@ -24,13 +24,11 @@ package urlredact
 import (
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
-
-// userinfoPattern finds the user info of a URL that url.Parse rejected.
-var userinfoPattern = regexp.MustCompile(`(?i)([a-z][a-z0-9+.-]*://)[^/?#\s"'` + "`" + `]*@`)
 
 const (
 	redactedUser = "redacted"
@@ -55,13 +53,30 @@ const (
 // textually.
 func String(raw string) string {
 	s := raw
-	if u, err := url.Parse(raw); err != nil {
-		s = userinfoPattern.ReplaceAllString(raw, "${1}"+redactedUserinfo)
-	} else if u.User != nil {
+	u, err := url.Parse(raw)
+	switch {
+	case err == nil && u.User != nil && u.Scheme != "" && u.Host != "":
 		u.User = url.UserPassword(redactedUser, "")
 		s = u.Redacted()
+	case strings.Contains(raw, "@"):
+		// A password with an unencoded '/', '?' or '#', a URL without a scheme
+		// ("user:pass@host") or one that does not parse: url.Parse does not
+		// find the user info, or finds only part of it. Cut everything up to
+		// the last '@'. This can hide more than the credentials (an '@' in a
+		// path), which is the safe side of the trade.
+		s = cutUserinfo(raw)
 	}
 	return maskQueryAndFragment(s)
+}
+
+// schemePrefix matches an optional "scheme://" at the start of a URL.
+var schemePrefix = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*://`)
+
+// cutUserinfo replaces everything up to the last '@' of raw by the redacted
+// user info, keeping a leading scheme.
+func cutUserinfo(raw string) string {
+	at := strings.LastIndex(raw, "@")
+	return schemePrefix.FindString(raw) + redactedUserinfo + raw[at+1:]
 }
 
 // maskQueryAndFragment masks the value of every query parameter and the
@@ -123,8 +138,17 @@ func Error(err error) error {
 		if !cerrors.As(e, &ue) {
 			break
 		}
+		if ue.Op == "parse" {
+			// A parse failure's cause quotes parts of the URL (the port, an
+			// escape), and the URL may be broken in a way that hides its user
+			// info from url.Parse: drop the cause and the URL's own text.
+			redacted = strings.ReplaceAll(redacted, ue.Error(), `parse "`+String(ue.URL)+`": invalid URL (details not shown)`)
+			break
+		}
 		if ue.URL != "" {
-			redacted = strings.ReplaceAll(redacted, ue.URL, String(ue.URL))
+			red := String(ue.URL)
+			redacted = strings.ReplaceAll(redacted, strconv.Quote(ue.URL), strconv.Quote(red))
+			redacted = strings.ReplaceAll(redacted, ue.URL, red)
 		}
 		e = ue.Err // the cause can hold another url.Error
 	}

@@ -73,4 +73,10 @@ func TestFetch_ErrorsDoNotContainUserInfo(t *testing.T) {
 		is.True(strings.Contains(err.Error(), "X-Amz-Signature=xxxxx")) // names stay, values go
 		is.True(!strings.Contains(err.Error(), "SECRET"))
 	})
+	t.Run("password with an unencoded slash", func(t *testing.T) {
+		is := is.New(t)
+		_, err := boundedfetch.Fetch(context.Background(), "http://SECRET-user:SECRET/pass@127.0.0.1:1/x", 10)
+		is.True(err != nil)
+		is.True(!strings.Contains(err.Error(), "SECRET"))
+	})
 }

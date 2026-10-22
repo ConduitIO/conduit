@@ -46,8 +46,19 @@ func TestString(t *testing.T) {
 		{"password only", "https://:pass@registry.example.com", "https://redacted:xxxxx@registry.example.com"},
 		{"unparseable port", "https://user:pass@registry.example.com:bad/x", "https://redacted:xxxxx@registry.example.com:bad/x"},
 		{"percent escape in password", "https://user:p%zzss@registry.example.com", "https://redacted:xxxxx@registry.example.com"},
-		{"no scheme is left alone", "registry.example.com/index.json", "registry.example.com/index.json"},
+		{"no scheme and no at sign is left alone", "registry.example.com/index.json", "registry.example.com/index.json"},
 		{"empty", "", ""},
+		// shapes url.Parse does not read the user info of
+		{"password with a slash", "https://user:pa/ss@host/p", "https://redacted:xxxxx@host/p"},
+		{"password with a hash", "https://user:pa#ss@host/p", "https://redacted:xxxxx@host/p"},
+		{"password with a question mark", "https://user:pa?ss@host/p", "https://redacted:xxxxx@host/p"},
+		{"password with all three", "postgres://user:p/a#s?s@host:5432/db", "postgres://redacted:xxxxx@host:5432/db"},
+		{"no scheme", "user:pass@host", "redacted:xxxxx@host"},
+		{"no scheme with port and path", "user:pass@host:5432/db", "redacted:xxxxx@host:5432/db"},
+		{"several at signs", "https://user:p@ss@host/p", "https://redacted:xxxxx@host/p"},
+		{"token only, no scheme", "ghp_TOKEN@host/p", "redacted:xxxxx@host/p"},
+		{"at sign in a later query", "https://user:pass@host/p?mail=a@b.example", "https://redacted:xxxxx@host/p?mail=xxxxx"},
+		{"at sign in a path, no credentials", "https://host/@scope/pkg", "https://redacted:xxxxx@scope/pkg"}, // over-redacts, on purpose
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -66,8 +77,9 @@ func TestError(t *testing.T) {
 
 		got := Error(err)
 		is.True(!strings.Contains(got.Error(), "SECRET"))
-		is.True(strings.Contains(got.Error(), "invalid port")) // the cause stays
-		is.True(cerrors.Is(got, err))                          // chain preserved
+		is.True(strings.Contains(got.Error(), "invalid URL (details not shown)")) // a parse failure's cause quotes the URL
+		is.True(!strings.Contains(got.Error(), "invalid port"))
+		is.True(cerrors.Is(got, err)) // chain preserved
 	})
 	t.Run("wrapped url.Error", func(t *testing.T) {
 		is := is.New(t)
@@ -86,9 +98,18 @@ func TestError(t *testing.T) {
 		is.Equal(Error(err), err)
 		is.Equal(Error(nil), nil)
 	})
-	t.Run("url.Error without credentials is returned as is", func(t *testing.T) {
+	t.Run("a parse failure never shows its cause", func(t *testing.T) {
 		is := is.New(t)
 		_, err := url.Parse(badURLNoCreds)
-		is.Equal(Error(err), err)
+		got := Error(err)
+		is.True(strings.Contains(got.Error(), "invalid URL (details not shown)"))
+		is.True(!strings.Contains(got.Error(), "invalid port"))
+	})
+	t.Run("a non-parse url.Error keeps its cause and loses the credentials", func(t *testing.T) {
+		is := is.New(t)
+		err := &url.Error{Op: "Get", URL: "https://SECRET-user:SECRET-pass@host/p?token=SECRET-token", Err: cerrors.New("connection refused")}
+		got := Error(err)
+		is.True(strings.Contains(got.Error(), "connection refused"))
+		is.True(!strings.Contains(got.Error(), "SECRET"))
 	})
 }
