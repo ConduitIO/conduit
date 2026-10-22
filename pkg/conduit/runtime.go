@@ -28,6 +28,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/connegress"
+
 	"github.com/conduitio/conduit-commons/hostpolicy"
 
 	"github.com/conduitio/conduit-commons/database"
@@ -574,11 +576,16 @@ func createServices(r *Runtime) error {
 	if err != nil {
 		return cerrors.Errorf("invalid %s config: %w", SecretsAllowedDirsKey, err)
 	}
-	settingsResolver := engineSettingsResolver{env: envAllow, files: filePolicy, secrets: secretsPolicy}
+	connEgress, err := r.Config.connectorEgressPolicy()
+	if err != nil {
+		return cerrors.Errorf("invalid %s config: %w", connegress.AllowConfigPath, err)
+	}
+	settingsResolver := engineSettingsResolver{env: envAllow, files: filePolicy, secrets: secretsPolicy, egress: connEgress}
 
 	procPluginService := proc_plugin.NewPluginService(
 		r.logger,
-		proc_builtin.NewRegistry(r.logger, r.Config.ProcessorPlugins, schemaRegistry,
+		proc_builtin.NewRegistry(
+			r.logger, r.Config.ProcessorPlugins, schemaRegistry,
 			proc_builtin.WithDialGuard(dialGuard),
 			proc_builtin.WithJavaScriptFileAccess(jsFiles),
 		),

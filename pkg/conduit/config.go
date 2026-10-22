@@ -74,8 +74,8 @@ type Config struct {
 	}
 
 	// Secrets confines the TLS and credential files that connector settings name
-	// (for Postgres, the sslcert, sslkey, sslrootcert, sslcrl, passfile and
-	// servicefile parameters of the connection string). Deny by default outside
+	// (for Postgres, the sslcert, sslkey, sslrootcert and sslcrl
+	// parameters of the connection string). Deny by default outside
 	// <data dir>/secrets and the system CA directories. Separate from
 	// connectors.file.allowed-dirs on purpose: certificate material lives where
 	// the data files do not (/etc/ssl, mounted secrets), and allowing those
@@ -180,6 +180,15 @@ type Config struct {
 			// without setup. Unexported: a default, not an operator key.
 			defaultDir string
 		} `mapstructure:"file"`
+
+		// Egress is the operator's allowlist for where built-in connectors may
+		// connect (postgres url, kafka servers, s3 endpoint). Empty means no
+		// allowlist; cloud metadata endpoints are refused either way. API
+		// writers are trusted to choose connection targets; this narrows them
+		// to what the operator lists. See docs/operations/connector-egress.md.
+		Egress struct {
+			Allow []string `long:"connectors.egress.allow" mapstructure:"allow" usage:"when set, built-in connectors may only connect to these host:port, ip:port or cidr:port targets (repeatable, for example db.internal:5432 or 10.0.0.0/8:9092); cloud metadata endpoints are refused whether or not this is set"`
+		} `mapstructure:"egress"`
 
 		Standalone struct {
 			// EnvWarning controls the one-time startup warning (and the

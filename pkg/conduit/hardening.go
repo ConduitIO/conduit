@@ -15,11 +15,13 @@
 package conduit
 
 import (
+	"context"
 	"os"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/connegress"
 	"github.com/conduitio/conduit/pkg/foundation/env"
 	"github.com/conduitio/conduit/pkg/foundation/pathpolicy"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
@@ -56,7 +58,20 @@ const SecretsAllowedDirsKey = "secrets.allowed-dirs"
 // directory is deliberately not among them.
 var systemCertDirs = []string{
 	"/etc/ssl", "/etc/pki", "/etc/ca-certificates", "/usr/share/ca-certificates",
-	"/usr/local/share/ca-certificates", "/run/secrets",
+	"/usr/local/share/ca-certificates",
+}
+
+// EffectiveAllowedDirs returns the directories the file connector, TLS and
+// credential files, and custom.javascript scripts are confined to once flags,
+// config file, environment and defaults are merged: connectors.file.allowed-dirs,
+// secrets.allowed-dirs and the script directories (processors.javascript.allowed-dirs,
+// else <data dir>/scripts).
+func (c Config) EffectiveAllowedDirs() (files, secrets, scripts []string) {
+	scripts = c.Processors.JavaScript.AllowedDirs
+	if len(scripts) == 0 && c.Processors.JavaScript.scriptsDir != "" {
+		scripts = []string{c.Processors.JavaScript.scriptsDir}
+	}
+	return c.Connectors.File.AllowedDirs, c.Secrets.AllowedDirs, scripts
 }
 
 // secretsPolicy returns the directories TLS and credential files named by
@@ -104,6 +119,16 @@ func (c Config) javascriptFileAccess() (custom.FileAccess, error) {
 	return custom.FileAccess{ScriptDirs: sp, RequireDirs: rp}, nil
 }
 
+// connectorEgressPolicy returns the policy for where built-in connectors may
+// connect.
+func (c Config) connectorEgressPolicy() (*connegress.Policy, error) {
+	allow, err := connegress.ParseEntries(c.Connectors.Egress.Allow)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // names the config key
+	}
+	return connegress.New(allow), nil
+}
+
 // builtinDialGuard returns the dial guard of the built-in outbound-HTTP
 // processors.
 func (c Config) builtinDialGuard() (*egress.DialGuard, error) {
@@ -132,6 +157,9 @@ func (c Config) validateHardeningConfig() error {
 	if _, err := c.builtinDialGuard(); err != nil {
 		return err
 	}
+	if _, err := c.connectorEgressPolicy(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -144,6 +172,7 @@ type engineSettingsResolver struct {
 	env     *env.Allowlist
 	files   *pathpolicy.Policy
 	secrets *pathpolicy.Policy
+	egress  *connegress.Policy
 }
 
 var _ connector.SettingsResolver = engineSettingsResolver{}
@@ -153,6 +182,32 @@ func (r engineSettingsResolver) policyFor(ref fileRef) *pathpolicy.Policy {
 		return r.secrets
 	}
 	return r.files
+}
+
+// checkEgress applies the connector egress policy to the targets in settings.
+// Validation requests pass resolve=false: they must not be a way to make the
+// engine look up names.
+func (r engineSettingsResolver) checkEgress(pluginName string, settings map[string]string, resolve bool) error {
+	for _, ref := range egressRefs(pluginName, settings) {
+		if r.egress.Restricted() && ref.missingHost {
+			return r.egress.Check(context.Background(), "settings."+ref.key, connegress.Target{Host: "(no host: local socket or PGHOST)", Port: "0"}, false)
+		}
+		for _, t := range ref.targets {
+			if err := r.egress.Check(context.Background(), "settings."+ref.key, t, resolve); err != nil {
+				return err //nolint:wrapcheck // coded error with config path
+			}
+		}
+	}
+	return nil
+}
+
+// check applies the policy that governs ref to it.
+func (r engineSettingsResolver) check(ref fileRef) (string, error) {
+	pol, key := r.policyFor(ref), "settings."+ref.key
+	if ref.invalid != nil {
+		return "", pol.Refuse(key, ref.path, ref.invalid.Error())
+	}
+	return pol.Check(key, ref.path)
 }
 
 // ResolveSettings implements connector.SettingsResolver.
@@ -165,13 +220,24 @@ func (r engineSettingsResolver) ResolveSettings(pluginName string, settings map[
 	// ${DIR}/x cannot dodge it, and the resolved (symlink-free) path replaces
 	// the supplied one so the plugin opens the path that was checked.
 	for _, ref := range fileRefs(pluginName, out) {
-		resolved, err := r.policyFor(ref).Check("settings."+ref.key, ref.path)
+		resolved, err := r.check(ref)
 		if err != nil {
 			return nil, err //nolint:wrapcheck // coded error with config path
 		}
 		if ref.set != nil {
 			ref.set(out, resolved)
 		}
+	}
+	if pluginBase(pluginName) == pluginPostgres {
+		if u, ok := out[postgresURLSetting]; ok {
+			out[postgresURLSetting] = withEmptyAmbientFiles(u)
+		}
+	}
+	// Connection targets: the values the plugin will really get, with names
+	// resolved so a name cannot lead where the allowlist or the metadata refusal
+	// does not allow.
+	if err := r.checkEgress(pluginName, out, true); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -182,13 +248,29 @@ func (r engineSettingsResolver) ResolveSettings(pluginName string, settings map[
 // contains a "$" reference is skipped here and checked after expansion when the
 // connector is configured.
 func (r engineSettingsResolver) CheckSettings(pluginName string, settings map[string]string) error {
+	if !hasReference(settings) {
+		if err := r.checkEgress(pluginName, settings, false); err != nil {
+			return err
+		}
+	}
 	for _, ref := range fileRefs(pluginName, settings) {
 		if strings.Contains(ref.path, "$") {
 			continue
 		}
-		if _, err := r.policyFor(ref).Check("settings."+ref.key, ref.path); err != nil {
+		if _, err := r.check(ref); err != nil {
 			return err //nolint:wrapcheck // coded error with config path
 		}
 	}
 	return nil
+}
+
+// hasReference reports whether any setting still holds a ${...} reference, whose
+// value is only known after expansion.
+func hasReference(settings map[string]string) bool {
+	for _, v := range settings {
+		if strings.Contains(v, "$") {
+			return true
+		}
+	}
+	return false
 }

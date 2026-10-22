@@ -34,7 +34,30 @@ would include the very secrets this list protects. The list cannot be changed th
 - The expanded value is not expanded again. If `A` is allowed and its value is `${B}`, the setting
   becomes the text `${B}`.
 
+## Who can read an allowed variable
+
+Listing a variable in `env.allow` lets **anyone who can write pipeline settings through the API**
+put its value into a setting that Conduit then sends somewhere, and some of those settings are shown
+back. Plugin and connector errors routinely echo the expanded setting (a failed connection prints the
+URL, a failed webhook prints the address), and errors appear in `GET /v1/pipelines/{id}`, in node
+logs and in the DLQ metadata. So list only variables whose value an API writer may see. Do not list
+variables that hold credentials of Conduit itself or of systems the pipelines do not use.
+
+## A literal `$` in a value
+
+There is no escape. A value that contains `$` followed by anything but a plain name (`pa$word`,
+`pa$1`, `a$`) is refused as `config.env_ref_malformed`, or, where it looks like `$word`, as a
+reference to a variable that is not allowed. `$$` is refused too: in pipeline YAML the parser has
+already collapsed it to `$`, and through the API it is a malformed reference.
+
+Workarounds:
+
+- Put the whole value in an allowed environment variable and reference that: `password: ${DB_PASSWORD}`
+  with `DB_PASSWORD='pa$word'`. The expanded value is never scanned again, so the `$` inside it is safe.
+- In a URL use percent-encoding: `postgres://app:pa%24word@db/app`.
+
 ## Errors
+
 
 | Code | Symptom | Fix |
 | --- | --- | --- |

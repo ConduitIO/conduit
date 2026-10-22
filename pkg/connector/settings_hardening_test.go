@@ -128,8 +128,8 @@ func TestSource_OnDelete_DoesNotCarryRawSettings(t *testing.T) {
 
 	err := src.OnDelete(ctx)
 
-	is.True(err != nil)
-	is.Equal(len(events), 0) // the plugin must not receive the unvetted settings
+	is.NoErr(err)            // an unresolvable setting does not make the connector undeletable
+	is.Equal(len(events), 0) // and the plugin must not receive the unvetted settings
 }
 
 func TestDestination_OnDelete_DoesNotCarryRawSettings(t *testing.T) {
@@ -150,6 +150,6 @@ func TestDestination_OnDelete_DoesNotCarryRawSettings(t *testing.T) {
 
 	err := dest.OnDelete(ctx)
 
-	is.True(err != nil)
+	is.NoErr(err) // an unresolvable setting does not make the connector undeletable
 	is.Equal(len(events), 0)
 }

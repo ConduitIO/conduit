@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/plugin"
 )
 
@@ -35,6 +36,9 @@ type fileRef struct {
 	// set, when not nil, writes the resolved path back into the settings so the
 	// plugin opens the path that was checked.
 	set func(settings map[string]string, resolved string)
+	// invalid, when set, is why the setting cannot be accepted at all; it is a
+	// refusal whatever the path is.
+	invalid error
 }
 
 // generatorPathSetting is the generator setting that names its input file.
@@ -42,6 +46,7 @@ const (
 	generatorPathSetting = "format.options.path"
 	postgresURLSetting   = "url"
 	pgSSLKey             = "sslkey"
+	pgSSLCert            = "sslcert"
 )
 
 // Plugin names (without type or version) whose settings name files.
@@ -67,8 +72,10 @@ func pluginBase(pluginName string) string {
 //   - generator: `format.options.path` and `collections.<name>.format.options.path`,
 //     the input file of the `file` record format.
 //   - postgres: the file parameters inside the connection string `url`
-//     (sslcert, sslkey, sslrootcert, sslcrl, passfile, servicefile), which pgx
-//     reads when it connects.
+//     (sslcert, sslkey, sslrootcert, sslcrl), which pgx reads when it connects.
+//     passfile, servicefile and service are refused outright, and passfile,
+//     sslcert and sslkey are set to empty when absent so pgx does not read
+//     the home directory's files.
 //
 // Kafka's caCert, clientCert and clientKey are PEM text, not paths. S3 reads
 // no file named by a setting.
@@ -87,6 +94,14 @@ func fileRefs(pluginName string, settings map[string]string) []fileRef {
 		}
 	case pluginPostgres:
 		if u, ok := settings[postgresURLSetting]; ok {
+			for _, kv := range postgresParams(u) {
+				if _, ok := postgresRefusedKeys[kv[0]]; ok {
+					refs = append(refs, fileRef{
+						key: postgresURLSetting, path: kv[1], secret: true,
+						invalid: cerrors.Errorf("the Postgres connection parameter %q makes the connector read a file as settings or credentials and is not accepted in connector settings", kv[0]),
+					})
+				}
+			}
 			for _, kv := range postgresFileParams(u) {
 				refs = append(refs, fileRef{key: postgresURLSetting, path: kv[1], secret: true})
 			}
@@ -101,8 +116,21 @@ func plainRef(key, path string) fileRef {
 
 // postgresFileKeys are the libpq connection parameters that name a file.
 var postgresFileKeys = map[string]struct{}{
-	"sslcert": {}, pgSSLKey: {}, "sslrootcert": {}, "sslcrl": {}, "passfile": {}, "servicefile": {},
+	pgSSLCert: {}, pgSSLKey: {}, "sslrootcert": {}, "sslcrl": {},
 }
+
+// postgresRefusedKeys are connection parameters that make pgx read a file whose
+// content it then trusts as connection settings or credentials: a passfile
+// supplies passwords, a service file overrides host, port and sslmode (the pgx
+// documentation says untrusted input must not set them). They are not accepted
+// from API-supplied settings at all, not even inside secrets.allowed-dirs.
+var postgresRefusedKeys = map[string]struct{}{"passfile": {}, "servicefile": {}, "service": {}}
+
+// postgresAmbientFileKeys default to files below the process's home directory
+// (~/.pgpass, ~/.postgresql/postgresql.crt and .key). ResolveSettings sets them
+// to the empty string when the settings do not name them, so a connector made
+// from API-supplied settings never reads the operator's ambient credentials.
+var postgresAmbientFileKeys = []string{"passfile", pgSSLCert, pgSSLKey}
 
 // postgresFileParams returns the (parameter, path) pairs of a Postgres
 // connection string, in either URL form (postgres://host/db?sslcert=...) or
@@ -110,32 +138,65 @@ var postgresFileKeys = map[string]struct{}{
 // means the system roots, not a file.
 func postgresFileParams(conn string) [][2]string {
 	var out [][2]string
-	add := func(k, v string) {
+	for _, kv := range postgresParams(conn) {
+		k, v := kv[0], kv[1]
 		if _, ok := postgresFileKeys[k]; !ok || v == "" {
-			return
+			continue
 		}
 		if k == "sslrootcert" && v == "system" {
-			return
+			continue
 		}
-		out = append(out, [2]string{k, v})
+		out = append(out, kv)
 	}
+	return out
+}
+
+// postgresParams returns every (parameter, value) pair of a Postgres connection
+// string, in URL form or key/value form.
+func postgresParams(conn string) [][2]string {
 	lower := strings.ToLower(strings.TrimSpace(conn))
 	if strings.HasPrefix(lower, "postgres://") || strings.HasPrefix(lower, "postgresql://") {
 		u, err := url.Parse(strings.TrimSpace(conn))
 		if err != nil {
 			return nil // the connector fails on it too
 		}
+		var out [][2]string
 		for k, vs := range u.Query() {
 			for _, v := range vs {
-				add(k, v)
+				out = append(out, [2]string{k, v})
 			}
 		}
 		return out
 	}
-	for _, kv := range parseKeywordValue(conn) {
-		add(kv[0], kv[1])
+	return parseKeywordValue(conn)
+}
+
+// withEmptyAmbientFiles returns conn with passfile, sslcert and sslkey set to
+// the empty string where conn does not set them, so pgx does not fall back to
+// the home directory's files.
+func withEmptyAmbientFiles(conn string) string {
+	set := map[string]bool{}
+	for _, kv := range postgresParams(conn) {
+		set[kv[0]] = true
 	}
-	return out
+	var missing []string
+	for _, k := range postgresAmbientFileKeys {
+		if !set[k] {
+			missing = append(missing, k)
+		}
+	}
+	if len(missing) == 0 {
+		return conn
+	}
+	lower := strings.ToLower(strings.TrimSpace(conn))
+	if strings.HasPrefix(lower, "postgres://") || strings.HasPrefix(lower, "postgresql://") {
+		sep := "?"
+		if strings.Contains(conn, "?") {
+			sep = "&"
+		}
+		return strings.TrimSpace(conn) + sep + strings.Join(missing, "=&") + "="
+	}
+	return strings.TrimSpace(conn) + " " + strings.Join(missing, "='' ") + "=''"
 }
 
 // parseKeywordValue parses libpq key/value form: whitespace-separated

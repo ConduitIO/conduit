@@ -18,7 +18,7 @@
 (6 built-in connectors; full parameters in llms-full.txt)
 
 ## Error codes
-- 174 stable error codes, dotted `domain.name` reasons, each with a gRPC status class. Full list with descriptions in llms-full.txt.
+- 175 stable error codes, dotted `domain.name` reasons, each with a gRPC status class. Full list with descriptions in llms-full.txt.
 - CLI `--json`: a failing command prints one JSON object on stdout whose `error` carries `code`, `message`, `suggestion` and `configPath`; the exit code is 2 (validation), 3 (environment) or 1 (runtime).
 
 ## MCP tools
@@ -32,6 +32,7 @@
 - [Ambient cloud credentials](https://github.com/ConduitIO/conduit/blob/main/docs/operations/ambient-credentials.md): built-in connectors use the host's identity (for example the AWS default chain) only when the operator sets `connectors.ambient-credentials.enabled=true` with exact `allow-resources`; a pipeline must name `builtin:s3`. Off by default.
 - [Environment variables in settings](https://github.com/ConduitIO/conduit/blob/main/docs/operations/env-allowlist.md): `${VAR}` in a connector or processor setting expands only for names the operator lists in `env.allow`; otherwise `config.env_var_not_allowed`. Off by default; not settable over the API.
 - [Outbound HTTP from built-in processors](https://github.com/ConduitIO/conduit/blob/main/docs/operations/outbound-http-egress.md): `webhook.http`, `ollama.request`, `openai.*` and `cohere.*` refuse private, loopback, link-local and metadata addresses (`processor.egress_blocked`), on every redirect hop, and ignore proxy variables; the operator exempts exact destinations with `processors.egress.builtin-allow`.
+- [Connector egress](https://github.com/ConduitIO/conduit/blob/main/docs/operations/connector-egress.md): built-in connectors never connect to a cloud metadata endpoint (`connector.egress_blocked`); API writers are trusted to choose other targets, and the operator can confine them with `connectors.egress.allow`.
 - [File access](https://github.com/ConduitIO/conduit/blob/main/docs/operations/file-access.md): the `file` connector and `custom.javascript` (`script.path`, `require()`) are confined to the operator's `connectors.file.allowed-dirs` and `processors.javascript.allowed-dirs` (`config.path_not_allowed`).
 
 ## Building connectors

@@ -143,6 +143,13 @@ type Options struct {
 	// (for example "http://127.0.0.1:11434" for a local Ollama). The zero value
 	// allows none. Equivalent to processors.egress.builtin-allow in the CLI.
 	BuiltinEgressAllow []string
+
+	// ConnectorEgressAllow, when set, confines every built-in connector's
+	// connection target (Postgres hosts, Kafka brokers, the S3 endpoint) to
+	// these host:port, ip:port and cidr:port entries. The zero value sets no
+	// allowlist; cloud metadata endpoints are refused either way. Equivalent to
+	// connectors.egress.allow in the CLI.
+	ConnectorEgressAllow []string
 }
 
 // DBOptions configures Options.DB.
@@ -409,6 +416,7 @@ func New(_ context.Context, opts Options) (*Engine, error) {
 	}
 	cfg.Processors.JavaScript.AllowedDirs = opts.JavaScriptAllowedDirs
 	cfg.Processors.Egress.BuiltinAllow = opts.BuiltinEgressAllow
+	cfg.Connectors.Egress.Allow = opts.ConnectorEgressAllow
 	cfg.API.Enabled = opts.API.Enabled
 	if opts.API.Enabled {
 		cfg.API.GRPC.Address = opts.API.GRPCAddress

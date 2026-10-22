@@ -15,6 +15,8 @@
 package conduit
 
 import (
+	"context"
+	"net"
 	"os"
 	"path"
 	"path/filepath"
@@ -23,9 +25,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/foundation/connegress"
 	"github.com/conduitio/conduit/pkg/foundation/pathpolicy"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/matryer/is"
 )
 
@@ -51,7 +57,7 @@ func newFSFixture(t *testing.T) fsFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.r = engineSettingsResolver{files: files, secrets: secrets}
+	f.r = engineSettingsResolver{files: files, secrets: secrets, egress: connegress.New(nil).WithResolver(noDNS{})}
 	return f
 }
 
@@ -112,6 +118,10 @@ func TestPostgresURL_FileParametersConfined(t *testing.T) {
 		"postgres://u:p@h/db?sslrootcert=" + evil,
 		"postgres://u:p@h/db?sslcert=/etc/passwd&sslkey=" + okKey,
 		"postgres://u:p@h/db?passfile=/home/x/.pgpass",
+		"postgres://u:p@h/db?passfile=" + filepath.Join(f.secrets, "pgpass"),
+		"host=h servicefile=" + filepath.Join(f.secrets, "svc.conf"),
+		"postgres://u:p@h/db?service=prod",
+		"host=h service=prod",
 		"postgres://u:p@h/db?servicefile=" + evil,
 		"postgres://u:p@h/db?sslcrl=" + evil,
 		"postgres://u:p@h/db?sslkey=" + filepath.Join(f.secrets, "..", "outside", "k"),
@@ -210,4 +220,66 @@ func TestBuiltinConnectorFileParams(t *testing.T) {
 			check("destination", key)
 		}
 	}
+}
+
+// Settings supplied through the API must not make pgx read the operator's
+// ambient files: with HOME pointing at a directory that has a .pgpass, the
+// connection string as the user wrote it picks up the password; the string
+// ResolveSettings returns does not.
+func TestPostgresURL_AmbientFilesAreNotRead(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("pgx reads %APPDATA% there")
+	}
+	f := newFSFixture(t)
+	home := t.TempDir()
+	if err := os.WriteFile(filepath.Join(home, ".pgpass"), []byte("*:*:*:*:AMBIENT-PASSWORD\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("PGPASSFILE", "")
+
+	for _, u := range []string{
+		"postgres://app@db.example.com:5432/app?sslmode=disable",
+		"postgres://app@db.example.com/app",
+		"host=db.example.com user=app dbname=app sslmode=disable",
+	} {
+		raw, err := pgconn.ParseConfig(u)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if raw.Password != "AMBIENT-PASSWORD" {
+			t.Fatalf("%q: setup is wrong, pgx did not read the .pgpass (%q)", u, raw.Password)
+		}
+		out, err := f.r.ResolveSettings("builtin:postgres", map[string]string{postgresURLSetting: u})
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := pgconn.ParseConfig(out[postgresURLSetting])
+		if err != nil {
+			t.Fatalf("%q -> %q: %v", u, out[postgresURLSetting], err)
+		}
+		if cfg.Password != "" {
+			t.Errorf("%q -> %q: pgx still read the ambient passfile", u, out[postgresURLSetting])
+		}
+		if cfg.Host != "db.example.com" || cfg.User != "app" {
+			t.Errorf("%q -> %q: connection target changed: %s %s", u, out[postgresURLSetting], cfg.Host, cfg.User)
+		}
+	}
+
+	// a password in the string and explicit values are left alone
+	out, _ := f.r.ResolveSettings("builtin:postgres", map[string]string{postgresURLSetting: "postgres://app:given@db/app?sslcert=&sslkey="})
+	cfg, err := pgconn.ParseConfig(out[postgresURLSetting])
+	if err != nil || cfg.Password != "given" {
+		t.Fatalf("%v %v", cfg, err)
+	}
+	if strings.Count(out[postgresURLSetting], "sslcert") != 1 {
+		t.Fatalf("duplicated a parameter: %q", out[postgresURLSetting])
+	}
+}
+
+// noDNS makes every lookup fail, so tests never touch the network.
+type noDNS struct{}
+
+func (noDNS) LookupIPAddr(context.Context, string) ([]net.IPAddr, error) {
+	return nil, cerrors.New("no DNS in tests")
 }

@@ -140,6 +140,12 @@ func (c *RunCommand) Flags() []ecdysis.Flag {
 	flags.SetDefault("schema-registry.type", c.Cfg.SchemaRegistry.Type)
 	flags.SetDefault("schema-registry.confluent.connection-string", c.Cfg.SchemaRegistry.Confluent.ConnectionString)
 	flags.SetDefault("schema.avro.max-elements", c.Cfg.Schema.Avro.MaxElements)
+	// File-access confinement: the documented defaults (<data dir>/files,
+	// <data dir>/secrets plus the system CA directories) must be the flag
+	// defaults, or an unset repeatable flag parses as an empty list and the
+	// defaults silently do not apply.
+	flags.SetDefault("connectors.file.allowed-dirs", c.Cfg.Connectors.File.AllowedDirs)
+	flags.SetDefault("secrets.allowed-dirs", c.Cfg.Secrets.AllowedDirs)
 	flags.SetDefault("preview.pipeline-arch-v2", c.Cfg.Preview.PipelineArchV2)
 	flags.SetDefault("preview.pipeline-arch-v2-disable-metrics", c.Cfg.Preview.PipelineArchV2DisableMetrics)
 

@@ -118,3 +118,26 @@ func TestSource_OnDelete_CarriesResolvedSettings(t *testing.T) {
 	is.NoErr(src.OnDelete(ctx))
 	is.Equal(got, map[string]string{"password": "pw-1"})
 }
+
+// A setting that no longer resolves must not make the connector undeletable:
+// the "deleted" event is skipped (the plugin is not told) and OnDelete succeeds.
+// Created and updated events still fail on it.
+func TestSource_OnDelete_UnresolvableSettingsDoNotBlockDeletion(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	t.Setenv("NOT_ALLOWED_ANYMORE", "secret-value")
+
+	src, sourceMock := newTestSource(ctx, t, gomock.NewController(t))
+	allow, err := env.NewAllowlist([]string{"SOMETHING_ELSE"})
+	is.NoErr(err)
+	src.Instance.settingsResolver = EnvSettingsResolver{Allow: allow}
+	src.Instance.LastActiveConfig.Settings = map[string]string{"password": "${NOT_ALLOWED_ANYMORE}"}
+
+	// LifecycleOnDeleted must not be called; Teardown still is
+	sourceMock.EXPECT().Teardown(gomock.Any(), gomock.Any()).Return(pconnector.SourceTeardownResponse{}, nil)
+	is.NoErr(src.OnDelete(ctx))
+
+	// an update with the same unresolvable setting is still refused
+	_, err = src.triggerLifecycleEvent(ctx, map[string]string{"password": "${NOT_ALLOWED_ANYMORE}"}, map[string]string{"password": "${NOT_ALLOWED_ANYMORE}", "x": "1"})
+	is.True(err != nil)
+}

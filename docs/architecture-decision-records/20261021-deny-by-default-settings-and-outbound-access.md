@@ -56,8 +56,13 @@ pipeline must not thereby act as the Conduit host.
   (default `<data dir>/scripts`) and `require()` exists only when that key is set explicitly, with a
   loader that applies the same check. The file connector's own fix (mode 0600) lives in
   `conduit-connector-file`.
-- **Log connector.** `conduit-connector-log` logs position, operation, a SHA-256 of the key and
-  metadata by default; `payload: true` restores the full record.
+- **Log connector.** `conduit-connector-log` logs the operation, salted hashes of the position and
+  key and an allowlist of safe metadata keys by default; `payload: true` restores the full record.
+- **Connector connection targets.** API writers are authenticated and trusted to choose where a
+  built-in connector connects. Cloud metadata endpoints are refused for every connector; an optional
+  `connectors.egress.allow` confines every target (Postgres hosts, Kafka brokers, the S3 endpoint),
+  including names and what they resolve to. Checked at configuration, so DNS rebinding after it is
+  not covered.
 - Every refusal is a registered `ConduitError` with a config path and a suggestion naming the
   operator key to change. None of the operator keys is a connector or processor parameter.
 

@@ -359,6 +359,9 @@ flag, or by `CONDUIT_*` environment, and never through a pipeline or API field:
   [`processors.egress.builtin-allow`](docs/operations/outbound-http-egress.md).
 - The `file` connector and `custom.javascript` (`script.path`, `require()`) are confined to
   [`connectors.file.allowed-dirs` and `processors.javascript.allowed-dirs`](docs/operations/file-access.md).
+- Built-in connectors never connect to a cloud metadata endpoint, and the operator can confine every
+  target with [`connectors.egress.allow`](docs/operations/connector-egress.md). Writers of the API are
+  trusted to choose the other targets (a database, a Kafka cluster, an S3 endpoint).
 - The log connector, and so the default dead-letter queue, does not write record keys or payloads
   unless `payload: true`.
 
