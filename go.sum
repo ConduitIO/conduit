@@ -576,8 +576,8 @@ github.com/samber/slog-zerolog/v2 v2.9.2 h1:DIFzfzDTxHeRyGlfg/D7b2by7VVzcsBTybRP
 github.com/samber/slog-zerolog/v2 v2.9.2/go.mod h1:2q6cYK2OcN6YfQE/WyCnUtigc+yYf3ozqGsGmRwZR6I=
 github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 h1:1EYB5IzjZawrrnELUi78f9fPu57HuXjmddZPjrls/28=
 github.com/santhosh-tekuri/jsonschema/v6 v6.0.3/go.mod h1:JXeL+ps8p7/KNMjDQk3TCwPpBy0wYklyWTfbkIzdIFU=
-github.com/sashabaranov/go-openai v1.42.1 h1:9nK2UgDVVSIyoEUNDeWqu3Ttj8EqCO6FT8HK0Cv8VEo=
-github.com/sashabaranov/go-openai v1.42.1/go.mod h1:lj5b/K+zjTSFxVLijLSTDZuP7adOgerWeFyZLUhAKRg=
+github.com/sashabaranov/go-openai v1.43.0 h1:HNRpO8TAQ01ssO7aPXO/68QRlcCCYQQ5GfHbFceRZcY=
+github.com/sashabaranov/go-openai v1.43.0/go.mod h1:lj5b/K+zjTSFxVLijLSTDZuP7adOgerWeFyZLUhAKRg=
 github.com/sassoftware/relic v7.2.1+incompatible h1:Pwyh1F3I0r4clFJXkSI8bOyJINGqpgjJU3DYAZeI05A=
 github.com/sassoftware/relic v7.2.1+incompatible/go.mod h1:CWfAxv73/iLZ17rbyhIEq3K9hs5w6FpNMdUT//qR+zk=
 github.com/sassoftware/relic/v7 v7.6.2 h1:rS44Lbv9G9eXsukknS4mSjIAuuX+lMq/FnStgmZlUv4=
