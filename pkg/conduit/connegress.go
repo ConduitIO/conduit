@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/conduitio/conduit-commons/dialer"
 	"github.com/conduitio/conduit/pkg/foundation/connegress"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -158,7 +159,16 @@ func s3Egress(settings map[string]string) egressRef {
 }
 
 // withEgressPolicy is the context decorator that hands a built-in connector the
-// operator's connector egress policy.
+// operator's connector egress policy and, through the conduit-commons dialer
+// seam, the dial guard built from it. A connector that honors the seam opens
+// every network connection through p.DialContext, so the policy is applied to
+// the address actually dialed, after the name is resolved, and not only to the
+// text of a setting when the connector was configured.
+//
+// A connector release that does not read the seam ignores it and keeps the
+// setting check as its only enforcement (see docs/operations/connector-egress.md).
 func withEgressPolicy(p *connegress.Policy) func(context.Context) context.Context {
-	return func(ctx context.Context) context.Context { return connegress.WithPolicy(ctx, p) }
+	return func(ctx context.Context) context.Context {
+		return dialer.WithDialContext(connegress.WithPolicy(ctx, p), p.DialContext)
+	}
 }

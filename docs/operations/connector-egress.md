@@ -87,20 +87,26 @@ An invalid entry is a startup error. The list cannot be changed through the API.
    `http.Transport`, a MySQL driver's `DialContext`. The engine puts the policy on the call context
    of the Postgres, Kafka and S3 connectors (`connegress.PolicyFrom(ctx)`).
 
-**The built-in connectors do not use the dial guard yet.** They take no dial hook from the engine at
-the versions Conduit ships; that needs a seam in `conduit-commons` (next to the ambient-credentials
-policy) and a release of each connector. Until then the setting check is the only enforcement in a
-running engine, and the limits below apply in full.
+The engine hands the dial guard to the built-in connectors through the `conduit-commons/dialer`
+seam, and a connector opens every network connection through it: data, admin, metadata, replication
+and reconnect connections. This needs connector releases that read the seam (Postgres, Kafka and S3
+in the built-in set); with an older connector release the dial guard is not applied to that connector
+and the setting check is its only enforcement. Design:
+[20261022-connector-dial-guard.md](../design-documents/20261022-connector-dial-guard.md).
+
+A refused dial looks like a pipeline error with `connector.egress_blocked`. Typical cause: a name on
+the allowlist that now resolves to an address outside it (a DNS change). Remediation: list the new
+address or CIDR, or correct the DNS record. Name entries trust the name: a name listed by name may
+resolve to any address except a metadata address; list CIDRs to pin addresses.
 
 ## What this does not do
 
-- Until the connectors use the dial guard, the check is made when the connector is configured (and on
-  lifecycle events). A connector resolves the name again when it dials, so DNS rebinding after the
-  check is possible for a name that is allowed by name. List addresses or CIDRs, or names you trust to
-  resolve sanely.
 - It does not intercept what a connector does after it connected: redirects, a Kafka cluster that
   advertises other brokers, a Postgres server that points elsewhere.
-- Standalone connectors are separate processes the operator installed and are not checked.
+- **Standalone connectors are not restricted.** They are separate processes the operator installed;
+  they receive no dialer and are not checked, by the allowlist or at the dial. This includes the MySQL
+  connector, which is distributed standalone. The engine logs a warning at startup when the allowlist
+  is set. Restricting them needs a separate mechanism (tracked with #3043).
 - Validation requests check names only and do no DNS lookups, so they cannot be used to probe the
   network.
 - The processors' outbound HTTP has its own guard: [outbound-http-egress.md](outbound-http-egress.md).
