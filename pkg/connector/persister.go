@@ -384,6 +384,7 @@ func (p *Persister) flushNow(ctx context.Context, batch map[string]persistData, 
 		// Invariant 1: a callback gets nil only for a recorded commit. A
 		// missing result (writeBatch always records one; this guards a
 		// future change to it) fails closed.
+		// guard: connector-persister-missing-result-fails-closed
 		if _, ok := results[id]; !ok {
 			results[id] = statePersistError("internal error", cerrors.Errorf("no write outcome recorded for connector %q", id))
 		}

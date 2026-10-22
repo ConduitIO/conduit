@@ -1,0 +1,9 @@
+# Guards that survive today: removing them leaves the package tests green.
+# Format: `guard-name | why it survives and what would kill it`.
+# This is a ratchet (tools/guardmut): a new survivor fails the gate, and an
+# entry whose guard is now killed also fails, so the list only shrinks.
+# A survivor is a test gap, not an approval: each line names the test to write.
+
+connector-persister-missing-result-fails-closed | Defensive: Persister.writeBatch always records an outcome for every connector, so the branch is unreachable today and its comment says it guards a future change. Killing it needs a seam that makes writeBatch omit a result, then an assertion that the callback gets an error, not nil (invariant 1).
+funnel-multiack-ack-after-terminal-noop | Under the one-vote-per-branch rule an ack arriving after a terminal decision cannot raise ackVotes to the branch count, so the mutant behaves the same. A test must inject a duplicate vote from one branch after a sibling nack and assert the position is nacked, not acked (invariant 3).
+funnel-multiack-nack-after-terminal-noop | Same shape on the nack side: a second nack for a terminal position must not reach the DLQ again. A test must send two nacks for one position from two branches and count DLQ writes (invariant 3).

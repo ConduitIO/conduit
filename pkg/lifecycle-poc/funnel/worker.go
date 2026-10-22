@@ -908,6 +908,7 @@ func (w *Worker) doNextTask(ctx context.Context, taskNode *TaskNode, b *Batch, a
 		// partial run can never complete on either side and its source
 		// position would be withheld forever while later positions ack past
 		// it. See validateRunsWholeBeforeFanOut.
+		// guard: funnel-fanout-whole-runs-only
 		if err := validateRunsWholeBeforeFanOut(b); err != nil {
 			return err
 		}
@@ -1012,6 +1013,7 @@ func (w *Worker) Ack(ctx context.Context, batch *Batch) error {
 	// happens to cover only that tail collapses to nils. Failing loud is the
 	// only safe response — the records are simply not acked, so they replay on
 	// restart (invariant 3 preserved), whereas proceeding corrupts the position.
+	// guard: funnel-ack-rejects-empty-position
 	if err := validateAckPositions(originalBatch.positions); err != nil {
 		return err
 	}
@@ -1086,6 +1088,7 @@ func (w *Worker) Nack(ctx context.Context, batch *Batch, taskID string) error {
 		// acked, so they replay on restart (invariant 3 holds, at-least-once).
 		// Acking instead would force the source to re-read from the beginning,
 		// which is strictly worse.
+		// guard: funnel-nack-rejects-empty-position
 		if posErr := validateAckPositions(originalBatch.positions[:n]); posErr != nil {
 			// Keep DLQ.Nack's own error in the chain. It is frequently fatal
 			// itself (a partial sendToDLQ success, or the nack threshold being
@@ -1462,6 +1465,7 @@ func (m *multiAckNacker) Ack(ctx context.Context, batch *Batch) error {
 			return err
 		}
 
+		// guard: funnel-multiack-ack-after-terminal-noop
 		if m.terminal[idx] {
 			// Requirement 3: this position already reached a terminal
 			// decision. The only way to get here is a sibling branch having
@@ -1502,6 +1506,7 @@ func (m *multiAckNacker) Nack(ctx context.Context, batch *Batch, taskID string) 
 			return err
 		}
 
+		// guard: funnel-multiack-nack-after-terminal-noop
 		if m.terminal[idx] {
 			// Already resolved (either a sibling nack got here first, which
 			// is idempotent, or - should never happen given the one-vote-
