@@ -62,6 +62,15 @@ var (
 		"Number of pipeline status writes that failed to reach the pipeline store (by pipeline name).",
 		[]string{labelPipelineName},
 	)
+	// ConnectorForceDeletesCounter counts connectors deleted with force while
+	// their settings no longer resolved, so the plugin's deletion hook was
+	// skipped (by connector type). Each one may have left plugin-side state
+	// behind, for example a Postgres replication slot.
+	ConnectorForceDeletesCounter = metrics.NewLabeledCounter(
+		"conduit_connector_force_deletes_total",
+		"Number of connectors deleted with force whose deletion hook was skipped because their settings no longer resolved (by connector type).",
+		[]string{labelType},
+	)
 	ConnectorsGauge = metrics.NewLabeledGauge("conduit_connectors",
 		"Number of connectors by type.",
 		[]string{labelType})
@@ -90,19 +99,22 @@ var (
 	// dashboards that only key on the original three labels keep working
 	// unchanged (Prometheus aggregates across component_id values unless a
 	// query explicitly groups by it); per-node granularity is opt-in.
-	ConnectorBytesHistogram = metrics.NewLabeledHistogram("conduit_connector_bytes",
+	ConnectorBytesHistogram = metrics.NewLabeledHistogram(
+		"conduit_connector_bytes",
 		"Number of bytes a connector processed by pipeline name, plugin, type (source, destination) and component ID.",
 		[]string{labelPipelineName, labelPlugin, labelType, labelComponentID},
 		// buckets from 1KiB to 2MiB
 		prometheus.HistogramOpts{Buckets: []float64{1024, 1024 << 1, 1024 << 2, 1024 << 3, 1024 << 4, 1024 << 5, 1024 << 6, 1024 << 7, 1024 << 8, 1024 << 9, 1024 << 10, 1024 << 11}},
 	)
-	DLQBytesHistogram = metrics.NewLabeledHistogram("conduit_dlq_bytes",
+	DLQBytesHistogram = metrics.NewLabeledHistogram(
+		"conduit_dlq_bytes",
 		"Number of bytes a DLQ connector processed per pipeline and plugin.",
 		[]string{labelPipelineName, labelPlugin},
 		// buckets from 1KiB to 2MiB
 		prometheus.HistogramOpts{Buckets: []float64{1024, 1024 << 1, 1024 << 2, 1024 << 3, 1024 << 4, 1024 << 5, 1024 << 6, 1024 << 7, 1024 << 8, 1024 << 9, 1024 << 10, 1024 << 11}},
 	)
-	PipelineExecutionDurationTimer = metrics.NewLabeledTimer("conduit_pipeline_execution_duration_seconds",
+	PipelineExecutionDurationTimer = metrics.NewLabeledTimer(
+		"conduit_pipeline_execution_duration_seconds",
 		"Amount of time records spent in a pipeline.",
 		[]string{labelPipelineName},
 		prometheus.HistogramOpts{Buckets: []float64{.001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5}},
@@ -110,17 +122,20 @@ var (
 	// ConnectorExecutionDurationTimer carries a component_id label in addition
 	// to the original labels, see the comment on ConnectorBytesHistogram for
 	// the additive-contract rationale (same for both metrics below).
-	ConnectorExecutionDurationTimer = metrics.NewLabeledTimer("conduit_connector_execution_duration_seconds",
+	ConnectorExecutionDurationTimer = metrics.NewLabeledTimer(
+		"conduit_connector_execution_duration_seconds",
 		"Amount of time spent reading or writing records per pipeline, plugin, connector type (source, destination) and component ID.",
 		[]string{labelPipelineName, labelPlugin, labelType, labelComponentID},
 		prometheus.HistogramOpts{Buckets: []float64{.001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5}},
 	)
-	ProcessorExecutionDurationTimer = metrics.NewLabeledTimer("conduit_processor_execution_duration_seconds",
+	ProcessorExecutionDurationTimer = metrics.NewLabeledTimer(
+		"conduit_processor_execution_duration_seconds",
 		"Amount of time spent on processing records per pipeline, processor and component ID.",
 		[]string{labelPipelineName, "processor", labelComponentID},
 		prometheus.HistogramOpts{Buckets: []float64{.001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5}},
 	)
-	DLQExecutionDurationTimer = metrics.NewLabeledTimer("conduit_dlq_execution_duration_seconds",
+	DLQExecutionDurationTimer = metrics.NewLabeledTimer(
+		"conduit_dlq_execution_duration_seconds",
 		"Amount of time spent writing records to DLQ connector per pipeline and plugin.",
 		[]string{labelPipelineName, labelPlugin},
 		prometheus.HistogramOpts{Buckets: []float64{.001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5}},

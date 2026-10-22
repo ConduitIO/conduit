@@ -235,6 +235,12 @@ func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher Plugin
 		return errDeleteSettingRefs(id)
 	}
 
+	// Refuse before anything is removed if the plugin's deletion hook could not
+	// run, unless the caller forces it.
+	if hookErr := instance.checkDeleteHook(ctx); hookErr != nil {
+		return hookErr
+	}
+
 	err = s.store.Delete(ctx, id)
 	if err != nil {
 		return cerrors.Errorf("could not delete connector instance %v from store: %w", id, err)

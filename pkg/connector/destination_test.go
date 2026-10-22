@@ -256,7 +256,8 @@ func newTestDestination(ctx context.Context, t *testing.T, ctrl *gomock.Controll
 func expectDestinationOpen(dest *Destination, destinationMock *mock.DestinationPlugin) *builtin.InMemoryDestinationRunStream {
 	stream := &builtin.InMemoryDestinationRunStream{}
 
-	destinationMock.EXPECT().Configure(gomock.Any(),
+	destinationMock.EXPECT().Configure(
+		gomock.Any(),
 		pconnector.DestinationConfigureRequest{
 			Config: dest.Instance.Config.Settings,
 		},

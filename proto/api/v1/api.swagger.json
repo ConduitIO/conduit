@@ -354,6 +354,13 @@
             "in": "path",
             "required": true,
             "type": "string"
+          },
+          {
+            "name": "force",
+            "description": "Delete although the connector's stored settings no longer resolve, so the\nplugin's deletion hook (for example dropping a Postgres replication slot)\ncannot run and is skipped. Without it such a delete is refused with\nconnector.delete_hook_unresolvable.",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
           }
         ],
         "tags": [
@@ -2133,7 +2140,16 @@
       "description": "Data is used to represent the record key and payload. It can be either raw\ndata (byte array) or structured data (struct)."
     },
     "v1DeleteConnectorResponse": {
-      "type": "object"
+      "type": "object",
+      "properties": {
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "What a forced delete skipped; clean up by hand."
+        }
+      }
     },
     "v1DeletePipelineResponse": {
       "type": "object"

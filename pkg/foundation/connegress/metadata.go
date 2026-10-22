@@ -49,11 +49,12 @@ func mustCIDR(s string) *net.IPNet {
 // metadataNets are the addresses of metadata services: the IPv4 link-local /16
 // (AWS and GCP 169.254.169.254, the ECS task credentials endpoint
 // 169.254.170.2, Azure IMDS 169.254.169.254), the Azure WireServer, Alibaba
-// Cloud, the AWS IPv6 endpoint, and IPv6 link-local.
+// Cloud, Oracle Cloud, the AWS IPv6 endpoint, and IPv6 link-local.
 var metadataNets = []*net.IPNet{
 	mustCIDR("169.254.0.0/16"),
 	mustCIDR("168.63.129.16/32"),
 	mustCIDR("100.100.100.200/32"),
+	mustCIDR("192.0.0.192/32"), // Oracle Cloud Infrastructure instance metadata
 	mustCIDR("fd00:ec2::/32"),
 	mustCIDR("fe80::/10"),
 }

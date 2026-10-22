@@ -1052,8 +1052,16 @@ message UpdateConnectorResponse {
 
 message DeleteConnectorRequest {
   string id = 1;
+  // Delete although the connector's stored settings no longer resolve, so the
+  // plugin's deletion hook (for example dropping a Postgres replication slot)
+  // cannot run and is skipped. Without it such a delete is refused with
+  // connector.delete_hook_unresolvable.
+  bool force = 2;
 }
-message DeleteConnectorResponse {}
+message DeleteConnectorResponse {
+  // What a forced delete skipped; clean up by hand.
+  repeated string warnings = 1;
+}
 
 message ListConnectorPluginsRequest {
   // Regex to filter plugins by name.

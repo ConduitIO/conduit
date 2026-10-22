@@ -59,17 +59,15 @@ func TestRunDefaultsFileAccess(t *testing.T) {
 
 	files, secrets, scripts := cfg.EffectiveAllowedDirs()
 	is.Equal(files, []string{filepath.Join(dir, "files")})
-	is.True(len(secrets) > 1 && secrets[0] == filepath.Join(dir, "secrets"))
+	is.Equal(secrets, []string{filepath.Join(dir, "secrets")}) // keys and certs; CA bundles also use the system CA directories
 	is.Equal(scripts, []string{filepath.Join(dir, "scripts")})
-	for _, s := range secrets {
-		is.True(s != "/run/secrets") // only explicitly configured names, never the whole directory
-	}
 }
 
 func TestRunExplicitSettingsReplaceDefaults(t *testing.T) {
 	is := is.New(t)
 	dir, _ := filepath.EvalSymlinks(t.TempDir())
-	cfg := runConfig(t, dir,
+	cfg := runConfig(
+		t, dir,
 		"--connectors.file.allowed-dirs", "/data/a",
 		"--connectors.file.allowed-dirs", "/data/b",
 		"--secrets.allowed-dirs", "/etc/conduit/tls",
@@ -90,7 +88,7 @@ func TestRunDefaultsFromEnvAndConfigFile(t *testing.T) {
 	files, secrets, _ := cfg.EffectiveAllowedDirs()
 	is.Equal(files, []string{"/from/env"})
 	// secrets still default: one explicit setting does not disable the others
-	is.True(len(secrets) > 1 && secrets[0] == filepath.Join(dir, "secrets"))
+	is.Equal(secrets, []string{filepath.Join(dir, "secrets")})
 
 	t.Setenv("CONDUIT_CONNECTORS_FILE_ALLOWED_DIRS", "")
 	cfgFile := filepath.Join(dir, "conduit.yaml")

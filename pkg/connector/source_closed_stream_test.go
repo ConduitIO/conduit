@@ -259,7 +259,8 @@ func TestSource_Teardown_PluginClosedGRPCStream_ReturnsPromptly(t *testing.T) {
 			case <-ctx.Done():
 				return ctx.Err()
 			}
-		})
+		},
+	)
 	pluginMock.EXPECT().Teardown(gomock.Any(), gomock.Any()).Return(pconnector.SourceTeardownResponse{}, nil)
 
 	lis := bufconn.Listen(1 << 20)
@@ -268,7 +269,8 @@ func TestSource_Teardown_PluginClosedGRPCStream_ReturnsPromptly(t *testing.T) {
 	go func() { _ = grpcServer.Serve(lis) }()
 	t.Cleanup(grpcServer.Stop)
 
-	conn, err := grpc.NewClient("passthrough:///bufnet",
+	conn, err := grpc.NewClient(
+		"passthrough:///bufnet",
 		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)

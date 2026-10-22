@@ -15,6 +15,9 @@
 package conduit
 
 import (
+	"context"
+	"net"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -23,22 +26,26 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/foundation/connegress"
 	"github.com/conduitio/conduit/pkg/foundation/pathpolicy"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/matryer/is"
 )
 
 type fsFixture struct {
-	files, secrets, outside string
-	r                       engineSettingsResolver
+	files, secrets, sysca, outside string
+	r                              engineSettingsResolver
 }
 
 func newFSFixture(t *testing.T) fsFixture {
 	t.Helper()
 	root, _ := filepath.EvalSymlinks(t.TempDir())
-	f := fsFixture{files: filepath.Join(root, "files"), secrets: filepath.Join(root, "secrets"), outside: filepath.Join(root, "outside")}
-	for _, d := range []string{f.files, f.secrets, f.outside} {
+	f := fsFixture{files: filepath.Join(root, "files"), secrets: filepath.Join(root, "secrets"), sysca: filepath.Join(root, "sysca"), outside: filepath.Join(root, "outside")}
+	for _, d := range []string{f.files, f.secrets, f.sysca, f.outside} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -51,7 +58,11 @@ func newFSFixture(t *testing.T) fsFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.r = engineSettingsResolver{files: files, secrets: secrets}
+	trust, err := pathpolicy.New(SecretsAllowedDirsKey, []string{f.secrets, f.sysca})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.r = engineSettingsResolver{files: files, secrets: secrets, trust: trust, egress: connegress.New(nil).WithResolver(noDNS{})}
 	return f
 }
 
@@ -112,6 +123,10 @@ func TestPostgresURL_FileParametersConfined(t *testing.T) {
 		"postgres://u:p@h/db?sslrootcert=" + evil,
 		"postgres://u:p@h/db?sslcert=/etc/passwd&sslkey=" + okKey,
 		"postgres://u:p@h/db?passfile=/home/x/.pgpass",
+		"postgres://u:p@h/db?passfile=" + filepath.Join(f.secrets, "pgpass"),
+		"host=h servicefile=" + filepath.Join(f.secrets, "svc.conf"),
+		"postgres://u:p@h/db?service=prod",
+		"host=h service=prod",
 		"postgres://u:p@h/db?servicefile=" + evil,
 		"postgres://u:p@h/db?sslcrl=" + evil,
 		"postgres://u:p@h/db?sslkey=" + filepath.Join(f.secrets, "..", "outside", "k"),
@@ -146,14 +161,21 @@ func TestDefaultConfig_SecretsPolicy(t *testing.T) {
 	is := is.New(t)
 	base := t.TempDir()
 	cfg := DefaultConfigWithBasePath(base)
-	is.Equal(cfg.Secrets.AllowedDirs[0], filepath.Join(base, "secrets"))
-	is.True(len(cfg.Secrets.AllowedDirs) > 1)
+	is.Equal(cfg.Secrets.AllowedDirs, []string{filepath.Join(base, "secrets")})
 	p, err := cfg.secretsPolicy()
 	is.NoErr(err)
+	// client keys and certificates come from secrets.allowed-dirs only ...
+	_, err = p.Check("settings.url", "/etc/ssl/certs/ca-certificates.crt")
+	is.True(err != nil)
+	// ... CA bundles may also come from the system CA directories
+	tp, err := cfg.trustPolicy()
+	is.NoErr(err)
 	if runtime.GOOS != "windows" {
-		_, err = p.Check("settings.url", "/etc/ssl/certs/ca-certificates.crt")
+		_, err = tp.Check("settings.url", "/etc/ssl/certs/ca-certificates.crt")
 		is.NoErr(err)
 	}
+	_, err = tp.Check("settings.url", "/run/secrets/db-password")
+	is.True(err != nil) // the container secrets directory holds everything, name what you need
 	// the data dir itself (conduit.db, conduit.yaml) is not in the default
 	_, err = p.Check("settings.url", filepath.Join(base, "conduit.db"))
 	is.True(err != nil)
@@ -209,5 +231,154 @@ func TestBuiltinConnectorFileParams(t *testing.T) {
 		for key := range spec.DestinationParams {
 			check("destination", key)
 		}
+	}
+}
+
+// Settings supplied through the API must not make pgx read the operator's
+// ambient files: with HOME pointing at a directory that has a .pgpass, the
+// connection string as the user wrote it picks up the password; the string
+// ResolveSettings returns does not.
+func TestPostgresURL_AmbientFilesAreNotRead(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("pgx reads %APPDATA% there")
+	}
+	f := newFSFixture(t)
+	home := t.TempDir()
+	if err := os.WriteFile(filepath.Join(home, ".pgpass"), []byte("*:*:*:*:AMBIENT-PASSWORD\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("PGPASSFILE", "")
+
+	for _, u := range []string{
+		"postgres://app@db.example.com:5432/app?sslmode=disable",
+		"postgres://app@db.example.com/app",
+		"host=db.example.com user=app dbname=app sslmode=disable",
+	} {
+		raw, err := pgconn.ParseConfig(u)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if raw.Password != "AMBIENT-PASSWORD" {
+			t.Fatalf("%q: setup is wrong, pgx did not read the .pgpass (%q)", u, raw.Password)
+		}
+		out, err := f.r.ResolveSettings("builtin:postgres", map[string]string{postgresURLSetting: u})
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := pgconn.ParseConfig(out[postgresURLSetting])
+		if err != nil {
+			t.Fatalf("%q -> %q: %v", u, out[postgresURLSetting], err)
+		}
+		if cfg.Password != "" {
+			t.Errorf("%q -> %q: pgx still read the ambient passfile", u, out[postgresURLSetting])
+		}
+		if cfg.Host != "db.example.com" || cfg.User != "app" {
+			t.Errorf("%q -> %q: connection target changed: %s %s", u, out[postgresURLSetting], cfg.Host, cfg.User)
+		}
+	}
+
+	// a password in the string and explicit values are left alone
+	out, _ := f.r.ResolveSettings("builtin:postgres", map[string]string{postgresURLSetting: "postgres://app:given@db/app?sslcert=&sslkey="})
+	cfg, err := pgconn.ParseConfig(out[postgresURLSetting])
+	if err != nil || cfg.Password != "given" {
+		t.Fatalf("%v %v", cfg, err)
+	}
+	if strings.Count(out[postgresURLSetting], "sslcert") != 1 {
+		t.Fatalf("duplicated a parameter: %q", out[postgresURLSetting])
+	}
+}
+
+// noDNS makes every lookup fail, so tests never touch the network.
+type noDNS struct{}
+
+func (noDNS) LookupIPAddr(context.Context, string) ([]net.IPAddr, error) {
+	return nil, cerrors.New("no DNS in tests")
+}
+
+// Client keys and certificates are the client's identity: they come from
+// secrets.allowed-dirs, never from the system CA directories that only CA
+// bundles and revocation lists may use.
+func TestPostgresURL_SystemCADirsAreForCABundlesOnly(t *testing.T) {
+	f := newFSFixture(t)
+	ca := filepath.Join(f.sysca, "ca.pem")
+	for _, u := range []string{
+		"postgres://u@h/db?sslrootcert=" + ca,
+		"postgres://u@h/db?sslcrl=" + ca,
+		"postgres://u@h/db?sslrootcert=" + filepath.Join(f.secrets, "ca.pem"),
+		"postgres://u@h/db?sslkey=" + filepath.Join(f.secrets, "k") + "&sslcert=" + filepath.Join(f.secrets, "c"),
+	} {
+		if _, err := f.r.ResolveSettings("builtin:postgres", map[string]string{postgresURLSetting: u}); err != nil {
+			t.Errorf("%q refused: %v", u, err)
+		}
+	}
+	for _, u := range []string{
+		"postgres://u@h/db?sslkey=" + ca,
+		"postgres://u@h/db?sslcert=" + ca,
+		"host=h sslkey=" + filepath.Join(f.sysca, "client.key"),
+		"postgres://u@h/db?sslrootcert=" + filepath.Join(f.outside, "ca.pem"),
+	} {
+		f.refuses(t, "builtin:postgres", map[string]string{postgresURLSetting: u}, postgresURLSetting)
+	}
+}
+
+// pgx opens the key, certificate and CA paths itself, after the check, so the
+// settings the connector gets carry the checked, symlink-free path: a link that
+// is swapped afterwards is not followed to somewhere else, because the path the
+// connector opens no longer goes through it.
+func TestPostgresURL_ResolvedPathIsWrittenBack(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks need privileges on windows")
+	}
+	f := newFSFixture(t)
+	realKey := filepath.Join(f.secrets, "real dir&x", "client.key")
+	if err := os.MkdirAll(filepath.Dir(realKey), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(realKey, []byte("k"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(f.secrets, "key-link")
+	if err := os.Symlink(realKey, link); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, u := range []string{
+		"postgres://u:p%40ss@db.example.com:5432/app?sslmode=require&sslkey=" + url.QueryEscape(link) + "&application_name=a",
+		"host=db.example.com user=u password='p ss' sslkey=" + link,
+		"host=db.example.com sslkey='" + link + "' dbname=app",
+	} {
+		out, err := f.r.ResolveSettings("builtin:postgres", map[string]string{postgresURLSetting: u})
+		if err != nil {
+			t.Fatalf("%q: %v", u, err)
+		}
+		got := out[postgresURLSetting]
+		var key string
+		others := map[string]string{}
+		for _, kv := range postgresParams(got) {
+			if kv[0] == pgSSLKey {
+				key = kv[1]
+			} else {
+				others[kv[0]] = kv[1]
+			}
+		}
+		if key != realKey {
+			t.Errorf("%q -> %q: sslkey = %q, want the resolved %q", u, got, key, realKey)
+		}
+		want := map[string]string{"application_name": "a", "sslmode": "require", "host": "db.example.com", "user": "u", "password": "p ss", "dbname": "app"}
+		for k, v := range others {
+			if w, ok := want[k]; ok && w != v && (k != "password" || u[0] != 'p') {
+				t.Errorf("%q: %s = %q, want %q", u, k, v, w)
+			}
+		}
+	}
+	// the escaped password of the URL form survives the rewrite
+	out, _ := f.r.ResolveSettings("builtin:postgres", map[string]string{postgresURLSetting: "postgres://u:p%40ss@db.example.com/app?sslkey=" + url.QueryEscape(link)})
+	pu, err := url.Parse(out[postgresURLSetting])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pw, _ := pu.User.Password(); pw != "p@ss" || pu.Host != "db.example.com" {
+		t.Errorf("rewritten URL %q lost its credentials or host", out[postgresURLSetting])
 	}
 }

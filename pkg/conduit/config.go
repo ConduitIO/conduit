@@ -144,7 +144,7 @@ type Config struct {
 	// the data files do not (/etc/ssl, mounted secrets). See
 	// docs/operations/file-access.md.
 	Secrets struct {
-		AllowedDirs []string `long:"secrets.allowed-dirs" mapstructure:"allowed-dirs" usage:"directories connector settings may read TLS and credential files from (repeatable); replaces the default <data dir>/secrets and the system CA directories"`
+		AllowedDirs []string `long:"secrets.allowed-dirs" mapstructure:"allowed-dirs" usage:"directories connector settings may read TLS and credential files from (repeatable); replaces the default <data dir>/secrets; CA bundles (sslrootcert, sslcrl) may also come from the system CA directories"`
 	}
 
 	Connectors struct {
@@ -438,7 +438,7 @@ func DefaultConfigWithBasePath(basePath string) Config {
 	// Deny by default outside <data dir>/files: the file connector cannot reach
 	// conduit.db, conduit.yaml, the process's other files or the rest of the
 	// host unless an operator widens this.
-	cfg.Secrets.AllowedDirs = append([]string{filepath.Join(basePath, "secrets")}, systemCertDirs...)
+	cfg.Secrets.AllowedDirs = []string{filepath.Join(basePath, "secrets")}
 	cfg.Connectors.File.defaultDir = filepath.Join(basePath, "files")
 	cfg.Connectors.File.AllowedDirs = []string{cfg.Connectors.File.defaultDir}
 	// Deny-all by default: the host-egress ceiling is closed until an operator

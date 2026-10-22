@@ -47,8 +47,10 @@ func (c Config) fileConnectorPolicy() (*pathpolicy.Policy, error) {
 // by connector settings.
 const SecretsAllowedDirsKey = "secrets.allowed-dirs"
 
-// systemCertDirs are the conventional locations of system CA bundles and
-// container secrets, allowed for cert material by default. They are read-only
+// systemCertDirs are the conventional locations of system CA bundles. They are
+// trusted for CA certificates and revocation lists only (sslrootcert, sslcrl);
+// client keys and certificates (sslkey, sslcert) must come from
+// secrets.allowed-dirs. They are read-only
 // public trust anchors on a normal host; a Kubernetes service account token
 // directory is deliberately not among them.
 var systemCertDirs = []string{
@@ -67,6 +69,14 @@ func (c Config) EffectiveAllowedDirs() (files, secrets, scripts []string) {
 		scripts = []string{c.Processors.JavaScript.scriptsDir}
 	}
 	return c.Connectors.File.AllowedDirs, c.Secrets.AllowedDirs, scripts
+}
+
+// trustPolicy returns the directories CA bundles and revocation lists named by
+// connector settings may be read from: secrets.allowed-dirs and the system CA
+// directories.
+func (c Config) trustPolicy() (*pathpolicy.Policy, error) {
+	dirs := append(append([]string(nil), c.Secrets.AllowedDirs...), systemCertDirs...)
+	return pathpolicy.New(SecretsAllowedDirsKey, dirs)
 }
 
 // secretsPolicy returns the directories TLS and credential files named by
@@ -162,13 +172,17 @@ func (c Config) validateHardeningConfig() error {
 type engineSettingsResolver struct {
 	files   *pathpolicy.Policy
 	secrets *pathpolicy.Policy
+	trust   *pathpolicy.Policy // secrets plus the system CA directories: CA bundles only
 	egress  *connegress.Policy
 }
 
 var _ connector.SettingsResolver = engineSettingsResolver{}
 
 func (r engineSettingsResolver) policyFor(ref fileRef) *pathpolicy.Policy {
-	if ref.secret {
+	switch {
+	case ref.trust:
+		return r.trust
+	case ref.secret:
 		return r.secrets
 	}
 	return r.files
