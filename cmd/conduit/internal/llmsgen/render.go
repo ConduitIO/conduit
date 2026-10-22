@@ -87,7 +87,10 @@ func renderLLMSTxt(d generatedData) string {
 
 	b.WriteString("## Error codes\n")
 	fmt.Fprintf(&b, "- %d stable error codes, dotted `domain.name` reasons, each with a gRPC status "+
-		"class. Full list with descriptions in llms-full.txt.\n\n", len(d.ErrorCodes))
+		"class. Full list with descriptions in llms-full.txt.\n", len(d.ErrorCodes))
+	b.WriteString("- CLI `--json`: a failing command prints one JSON object on stdout whose `error` carries " +
+		"`code`, `message`, `suggestion` and `configPath`; the exit code is 2 (validation), 3 (environment) " +
+		"or 1 (runtime).\n\n")
 
 	b.WriteString("## MCP tools\n")
 	fmt.Fprintf(&b, "- Read: %s\n", joinToolNames(d.readTools()))

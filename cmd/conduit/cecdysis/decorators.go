@@ -22,9 +22,11 @@ import (
 	"github.com/conduitio/conduit/cmd/conduit/api"
 	"github.com/conduitio/conduit/pkg/conduit"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/ecdysis"
 	json "github.com/goccy/go-json"
 	"github.com/spf13/cobra"
+	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -109,30 +111,24 @@ func (CommandWithExecuteWithClientResultDecorator) Decorate(_ *ecdysis.Ecdysis, 
 
 	old := cmd.RunE
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		if old != nil {
-			if err := old(cmd, args); err != nil {
-				return err
+		asJSON, _ := cmd.Flags().GetBool("json")
+		result, err := runClientResult(cmd, args, old, v)
+		if err != nil {
+			if asJSON {
+				// Under --json a failure is one JSON object on stdout too,
+				// so a script reads the code from it instead of parsing
+				// cobra's "Error: ..." text (#2989). The error is still
+				// returned, so the exit code is unchanged. Cobra's own
+				// error line (stderr) and usage text (stdout, which would
+				// corrupt the object) are silenced for this run only.
+				renderClientResultError(cmd, err)
+				cmd.SilenceErrors = true
+				cmd.SilenceUsage = true
 			}
-		}
-
-		grpcAddress, err := getGRPCAddress(cmd)
-		if err != nil {
-			return cerrors.Errorf("error reading gRPC address: %w", err)
-		}
-
-		client, err := api.NewClient(cmd.Context(), grpcAddress)
-		if err != nil {
-			return err
-		}
-		defer client.Close()
-
-		ctx := ecdysis.ContextWithCobraCommand(cmd.Context(), cmd)
-		result, err := v.ExecuteWithClientResult(ctx, client)
-		if err != nil {
 			return err
 		}
 
-		if asJSON, _ := cmd.Flags().GetBool("json"); asJSON {
+		if asJSON {
 			b, err := marshalJSON(result)
 			if err != nil {
 				return cerrors.Errorf("could not marshal result to JSON: %w", err)
@@ -153,6 +149,70 @@ func (CommandWithExecuteWithClientResultDecorator) Decorate(_ *ecdysis.Ecdysis, 
 	}
 
 	return nil
+}
+
+// runClientResult runs the decorated command: any earlier RunE in the chain,
+// then the client dial, then ExecuteWithClientResult.
+func runClientResult(cmd *cobra.Command, args []string, old func(*cobra.Command, []string) error, v CommandWithExecuteWithClientResult) (any, error) {
+	if old != nil {
+		if err := old(cmd, args); err != nil {
+			return nil, err
+		}
+	}
+
+	grpcAddress, err := getGRPCAddress(cmd)
+	if err != nil {
+		return nil, cerrors.Errorf("error reading gRPC address: %w", err)
+	}
+
+	client, err := api.NewClient(cmd.Context(), grpcAddress)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+
+	ctx := ecdysis.ContextWithCobraCommand(cmd.Context(), cmd)
+	return v.ExecuteWithClientResult(ctx, client)
+}
+
+// ClientResultError is the --json shape a client-result (Family B) command
+// prints on stdout when it fails: {"error": {...}}. Success output is the raw
+// result value and is not wrapped; see
+// docs/design-documents/20260707-cli-output-conventions.md §6. The error
+// fields are the envelope's ResultError, so both families report a failure
+// with the same code, message, suggestion and config path.
+type ClientResultError struct {
+	Error *ResultError `json:"error"`
+}
+
+// NewClientResultError converts a client command's error into the --json
+// error shape. A server error crosses gRPC as a status whose ErrorInfo detail
+// carries the stable code, suggestion and config path; it is decoded with
+// conduiterr.FromStatus. A ConduitError raised in the CLI itself is used as
+// is. Anything else is reported as common.unknown with its message.
+func NewClientResultError(err error) ClientResultError {
+	if _, ok := conduiterr.Get(err); ok {
+		return ClientResultError{Error: newResultError(err)}
+	}
+	// errors.As, not grpcstatus.FromError: FromError on a wrapped status
+	// replaces the server's message with the whole wrapped error text.
+	var se interface{ GRPCStatus() *grpcstatus.Status }
+	if cerrors.As(err, &se) {
+		return ClientResultError{Error: newResultError(conduiterr.FromStatus(se.GRPCStatus()))}
+	}
+	return ClientResultError{Error: newResultError(err)}
+}
+
+// renderClientResultError writes NewClientResultError(err) to stdout as one
+// JSON object. If marshaling fails (it can't for this struct of strings), it
+// falls back to the plain error on stderr rather than printing nothing.
+func renderClientResultError(cmd *cobra.Command, err error) {
+	b, merr := json.MarshalIndent(NewClientResultError(err), "", "  ")
+	if merr != nil {
+		cmd.PrintErrln("Error:", err)
+		return
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), string(b))
 }
 
 // MarshalJSON renders result exactly as CommandWithExecuteWithClientResultDecorator's
