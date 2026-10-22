@@ -269,12 +269,12 @@ table.
 | 4 | CODEOWNERS for Tier 1 paths and gates | Takes effect only with item 8. Names DeVaris alone on data-path code, the chaos and upgrade suites, `.github/`, `CLAUDE.md`. | RC 6 | DeVaris | [#3259](https://github.com/ConduitIO/conduit/pull/3259) |
 | 5 | Process rules in CLAUDE.md and the PR template | Not a check by itself. The template makes tier, the touched-path review, the premise citations and the guard marks required fields, which the `tier1-review` check (item 9) reads. | RC 3, 5, 7 | Claude, DeVaris | [#3263](https://github.com/ConduitIO/conduit/pull/3263) |
 | 6 | Defaults audit (security) | A test fails when a listed security-relevant default changes without its inventory changing. | RC 1, 6 | Claude | held, not yet proposed |
-| 7 | `go.mod` downgrade guard | Fails a PR whose diff lowers any module version relative to its merge base, unless labelled. Would have stopped B. | B | Claude | no PR yet |
+| 7 | `go.mod` downgrade guard | Fails a PR whose diff lowers any module version relative to its merge base, unless labelled. Would have stopped B. | B | Claude | [#3265](https://github.com/ConduitIO/conduit/pull/3265) |
 | 8 | Branch protection settings | Admin bypass off or limited, code-owner review on, stale approvals dismissed, the required checks list below. | RC 6, A | **DeVaris** | none (settings) |
-| 9 | `tier1-review` required check | A Tier 1 PR passes only with `Review: approve @ <head sha>` and `Sign-off @ <head sha>` comments; any `changes-needed` blocks until a later `approve`; a push clears both. Design below. | C | Claude (build), DeVaris | no PR yet |
-| 10 | Release gate: fixes the release must contain | `release-fixes.yaml` per release branch; the release workflow checks every listed commit is an ancestor of the tag. | D | Claude | no PR yet |
-| 11 | Connector release gate: open findings | Fails a connector tag while a PR merged since the last tag carries `do-not-merge` or an unanswered `changes-needed`. | C | Claude | no PR yet |
-| 12 | Release notes required on release branches | A patch release fails if its body is only the generated changelog. | D | Claude | no PR yet |
+| 9 | `tier1-review` required check | A Tier 1 PR passes only with `Review: approve @ <head sha>` and `Sign-off @ <head sha>` comments; any `changes-needed` blocks until a later `approve`; a push clears both. Design below. | C | Claude (build), DeVaris | [#3266](https://github.com/ConduitIO/conduit/pull/3266) |
+| 10 | Release gate: fixes the release must contain | `release-fixes.yaml` per release branch; the release workflow checks every listed commit is an ancestor of the tag. | D | Claude | [#3267](https://github.com/ConduitIO/conduit/pull/3267) |
+| 11 | Connector release gate: open findings | Fails a connector tag while a PR merged since the last tag carries `do-not-merge` or an unanswered `changes-needed`. | C | Claude | [#3268](https://github.com/ConduitIO/conduit/pull/3268) |
+| 12 | Release notes required on release branches | A patch release fails if its body is only the generated changelog. | D | Claude | [#3269](https://github.com/ConduitIO/conduit/pull/3269) |
 | 13 | Pooler in the connector test stacks | A PgBouncer service in `test/docker-compose.yml`; the cross-client regression test from postgres#436. | RC 2, 4 | Claude | merged in postgres#436 |
 
 Root causes and their automated cover, so the gaps are visible:
@@ -290,7 +290,7 @@ Root causes and their automated cover, so the gaps are visible:
 - RC 7 (document and defer): rule only. The suite's expected-failure state is the mechanism that keeps a deferred gap
   red.
 
-Items 7 and 9 to 12 are the next PRs. They are not in this batch.
+Items 7 and 9 to 12 have PRs (above). Items 11 and 12 are stacked on 9 and 10, and item 11 is not yet wired into any connector repository.
 
 ### Design of items 9 to 12
 
@@ -370,5 +370,5 @@ change beyond what those PRs carry.
   the snapshot-restore expected failure is either closed or escalated to a decision with a fail-closed interim.
 - Bump Conduit `main` to the fixed connector versions (postgres v0.17.4 and later, s3 v0.11.2, mysql v0.5.2) before
   v0.21.0; decide the same for the v0.20.x line (postgres v0.14.6).
-- Ship items 7 and 9 to 12.
+- Merge items 7 and 9 to 12; backport the release gates (10, 12) to `release/v0.20.x` with a `release-fixes.txt` before v0.20.6; add the `connector-release-gate` job to each connector repository.
 - The security section above is filled in when the security releases ship.
