@@ -254,6 +254,7 @@ func (s *Service) Restore(ctx context.Context, instance *Instance) error {
 	if instance.ProvisionedBy == ProvisionTypeDLQ {
 		return cerrors.Errorf("can't restore DLQ connector %v: DLQ connectors are not registered", instance.ID)
 	}
+	// guard: connector-restore-no-overwrite tests=^TestService_Restore_RefusesToReplace$
 	if current, ok := s.connectors[instance.ID]; ok {
 		if current == instance {
 			return nil
@@ -273,6 +274,7 @@ func (s *Service) Restore(ctx context.Context, instance *Instance) error {
 			"it will refuse to start until it is deleted and created again or Conduit is restarted")
 	}
 
+	// guard: connector-restore-no-store-write-in-txn tests=^TestService_Restore_InTransactionDoesNotWrite$
 	if database.TransactionFromContext(ctx) != nil {
 		return nil
 	}

@@ -1,0 +1,22 @@
+# Every `// guard:` marker in pkg/connector, pkg/lifecycle and pkg/lifecycle-poc.
+# tools/guardmut fails when a name here has no marker (the guard was deleted or
+# renamed) and when a marker is missing here. The workflow also fails a PR that
+# removes a line from this file unless its body has `guardmut-removed: <reason>`.
+# Sorted; one name per line.
+connector-connector-checkstartable
+connector-destination-delete-hook-marks-instance
+connector-persister-missing-result-fails-closed
+connector-restore-no-overwrite
+connector-restore-no-store-write-in-txn
+connector-source-delete-hook-marks-instance
+funnel-ack-rejects-empty-position
+funnel-fanout-whole-runs-only
+funnel-multiack-ack-after-terminal-noop
+funnel-multiack-nack-after-terminal-noop
+funnel-nack-rejects-empty-position
+lifecycle-checkstartable-before-build
+lifecycle-poc-checkstartable-before-build
+lifecycle-poc-waitpipeline-chain
+lifecycle-poc-waitpipeline-last
+lifecycle-waitpipeline-chain
+lifecycle-waitpipeline-last

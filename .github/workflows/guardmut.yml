@@ -1,0 +1,109 @@
+name: guardmut
+
+# Guard-mutation gate. Data-path guards are marked with `// guard: <name>`
+# (see docs/code_guidelines.md, "Guard markers"). tools/guardmut removes each
+# marked guard in turn and runs the package's tests; a guard whose removal
+# leaves the tests green SURVIVED, which fails the job unless it is in
+# .github/guardmut-baseline.txt with a written justification. The baseline is
+# a ratchet: a new survivor fails, and a baselined guard that is now killed
+# also fails, so the list only shrinks.
+#
+# Same trigger shape as chaos.yml: the job reports on every PR and gates the
+# expensive part inside it with a fail-closed change detector, so the check
+# could become required later without blocking unrelated PRs. It is NOT in
+# main's required contexts yet; it needs a green history first.
+
+on:
+  schedule:
+    - cron: '25 5 * * *'
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GOPRIVATE: github.com/conduitio/*
+  GONOSUMDB: github.com/conduitio/*
+
+jobs:
+  guardmut:
+    name: guardmut (marked guards)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Shrink-only, enforced here and not left to the tool: the tool can only
+      # see the files it is given, so a PR that adds a baseline line (to make
+      # its own survivor pass) or deletes a line of the guard list (to hide a
+      # deleted marker) would otherwise pass. Runs on every PR, whatever the
+      # change detector below decides.
+      - name: Baseline and guard list may only shrink
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          mb=$(git merge-base "$BASE_SHA" HEAD)
+          names() { sed -e 's/#.*//' -e 's/|.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -v '^$' | sort -u || true; }
+          show() { git show "$mb:$1" 2>/dev/null || true; }
+          fail=0
+          # 1. Baseline: no added entry (by name), however justified.
+          added=$(comm -13 <(show .github/guardmut-baseline.txt | names) <(names < .github/guardmut-baseline.txt) || true)
+          if [ -n "$added" ]; then
+            echo "::error::guardmut baseline gained entries: $added. The baseline may only shrink; write the test that kills the guard."
+            fail=1
+          fi
+          # 2. Guard list: no removed name unless the PR body says why.
+          removed=$(comm -23 <(show .github/guardmut-guards.txt | names) <(names < .github/guardmut-guards.txt) || true)
+          # Strip HTML comments (multi-line, and an unclosed one runs to the end)
+          # before looking for the waiver: template text must not waive anything.
+          clean=$(printf '%s' "$PR_BODY" | python3 -c 'import re,sys; t=sys.stdin.read(); t=re.sub(r"<!--.*?-->","",t,flags=re.S); print(t.split("<!--",1)[0])')
+          if [ -n "$removed" ] && ! printf '%s\n' "$clean" | grep -Eq '^[[:space:]]*guardmut-removed:[[:space:]]*[^[:space:]]+'; then
+            echo "::error::guardmut guard list lost entries: $removed. A guard may be removed only with a line 'guardmut-removed: <reason>' in the PR body."
+            fail=1
+          fi
+          exit $fail
+
+      - name: Detect guarded-path changes
+        id: detect
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; echo "reason=event $EVENT_NAME always runs"; exit 0
+          fi
+          base="$BASE_SHA"
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; echo "reason=base ref unavailable, running (fail-closed)"; exit 0
+          fi
+          if ! changed=$(git diff --name-only "$base"...HEAD 2>/dev/null); then
+            echo "run=true" >> "$GITHUB_OUTPUT"; echo "reason=git diff failed, running (fail-closed)"; exit 0
+          fi
+          if echo "$changed" | grep -qE '^(go\.mod$|go\.sum$|pkg/connector/|pkg/lifecycle/|pkg/lifecycle-poc/|Makefile$|tools/go\.(mod|sum)$|tools/guardmut/|\.github/guardmut-baseline\.txt$|\.github/guardmut-guards\.txt$|\.github/workflows/guardmut\.yml$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; echo "reason=guarded path changed"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"; echo "reason=no guarded path changed, gate passes"
+          fi
+
+      - name: Set up Go
+        if: steps.detect.outputs.run == 'true'
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Test the tool
+        if: steps.detect.outputs.run == 'true'
+        run: cd tools && go test -count=1 ./guardmut
+
+      - name: Remove each marked guard and run its tests
+        if: steps.detect.outputs.run == 'true'
+        run: make guardmut GUARDMUT_FLAGS="-summary $GITHUB_STEP_SUMMARY"
