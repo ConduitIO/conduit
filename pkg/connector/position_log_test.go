@@ -54,3 +54,31 @@ func TestDestination_StopLogsPositionHashOnly(t *testing.T) {
 	is.True(strings.Contains(out, log.KeyHash(pos)))
 	is.True(!strings.Contains(out, secret))
 }
+
+// Same for the source: the stop response position is hashed, never logged.
+func TestSource_StopLogsPositionHashOnly(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	src, sourceMock := newTestSource(ctx, t, ctrl)
+	src.Instance.LastActiveConfig = src.Instance.Config // no lifecycle event
+	_ = expectSourceOpen(src, sourceMock)
+	is.NoErr(src.Open(ctx))
+
+	var buf bytes.Buffer
+	src.Instance.logger = log.New(zerolog.New(&buf).Level(zerolog.DebugLevel))
+
+	const secret = "customer-SECRET-4711"
+	pos := opencdc.Position(`{"last_read":"` + secret + `"}`)
+	sourceMock.EXPECT().Stop(gomock.Any(), pconnector.SourceStopRequest{}).
+		Return(pconnector.SourceStopResponse{LastPosition: pos}, nil)
+	got, err := src.Stop(ctx)
+	is.NoErr(err)
+	is.Equal(got, pos) // the real position is still returned to the caller
+
+	out := buf.String()
+	is.True(strings.Contains(out, "successfully responded to stop signal"))
+	is.True(strings.Contains(out, log.KeyHash(pos)))
+	is.True(!strings.Contains(out, secret))
+}

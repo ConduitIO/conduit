@@ -16,6 +16,7 @@ package lifecycle
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -104,4 +105,28 @@ func TestDLQDestination_DestinationNack(t *testing.T) {
 	err := dlq.Write(ctx, rec)
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr))
+}
+
+// The unexpected-ack error names positions by salted hash only, since a
+// position can embed record key values.
+func TestDLQDestination_UnexpectedAck_ErrorHasPositionHashOnly(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	dest := streammock.NewDestination(ctrl)
+
+	dlq := &DLQDestination{Destination: dest, Logger: log.Nop()}
+
+	const secretA, secretB = "customer-SECRET-A", "customer-SECRET-B"
+	rec := opencdc.Record{Position: []byte(secretA)}
+	dest.EXPECT().Write(gomock.Any(), []opencdc.Record{rec}).Return(nil)
+	dest.EXPECT().Ack(gomock.Any()).Return([]connector.DestinationAck{{Position: []byte(secretB)}}, nil)
+
+	err := dlq.Write(ctx, rec)
+	is.True(err != nil)
+	msg := err.Error()
+	is.True(strings.Contains(msg, log.KeyHash([]byte(secretA))))
+	is.True(strings.Contains(msg, log.KeyHash([]byte(secretB))))
+	is.True(!strings.Contains(msg, secretA))
+	is.True(!strings.Contains(msg, secretB))
 }

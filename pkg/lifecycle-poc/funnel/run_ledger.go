@@ -110,8 +110,8 @@ type splitRun struct {
 func (r *splitRun) complete() (bool, error) {
 	if r.terminalCount > r.total {
 		return false, cerrors.Errorf(
-			"(bug) splitRun %q: %d terminal members counted for a run of %d - a member was credited twice",
-			r.origPos, r.terminalCount, r.total)
+			"(bug) splitRun at source position (hash %s): %d terminal members counted for a run of %d - a member was credited twice",
+			log.KeyHash(r.origPos), r.terminalCount, r.total)
 	}
 	return r.terminalCount == r.total, nil
 }
