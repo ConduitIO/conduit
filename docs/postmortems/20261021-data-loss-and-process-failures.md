@@ -369,5 +369,6 @@ change beyond what those PRs carry.
   the snapshot-restore expected failure is either closed or escalated to a decision with a fail-closed interim.
 - Bump Conduit `main` to the fixed connector versions (postgres v0.17.4 and later, s3 v0.11.2, mysql v0.5.2) before
   v0.21.0; decide the same for the v0.20.x line (postgres v0.14.6).
-- Merge items 7 and 9 to 12; backport the release gates (10, 12) to `release/v0.20.x` with a `release-fixes.txt`
-  before v0.20.6; add the `connector-release-gate` job to each connector repository.
+- Merge items 7 and 9 to 12; backport the release gates (10, 12) to each open release branch, each with its own
+  `release-fixes.txt`, before that branch's next patch release; add the `connector-release-gate` job to each
+  connector repository.
