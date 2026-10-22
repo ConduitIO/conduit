@@ -35,7 +35,7 @@ test:
 COVER_OUT ?= cover.out
 
 # Gates a release tag must pass before anything is published. Also runnable
-# locally on a release branch: make release-check TAG=v0.20.6
+# locally on a release branch: make release-check TAG=v9.9.1
 # See docs/releases.md, "Release gates".
 .PHONY: release-check
 release-check:

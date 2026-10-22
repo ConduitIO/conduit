@@ -29,7 +29,8 @@ file is the curated summary a human would actually want to read.
   the tag of that module's version in `go.mod` (or of the release commit). A patch release (`vX.Y.Z`, Z > 0) must
   have at least one entry that is new since the previous stable tag, so a list of old commits does not pass. A
   `replace` of a listed module to a fork or a local path fails, because the version then says nothing about the code
-  that ships; waive it with `waive-replace | <module> | <reason>`. An unresolvable module, tag or commit fails. The
+  that ships; waive it with `waive-replace | <module> | <reason>`. A committed `go.work` is treated the same way
+  (its `replace` lines count, and a `use` of anything but the root needs `waive-replace | go.work | <reason>`). An unresolvable module, tag or commit fails. The
   gate lives in the tagged commit's
   `release.yml`, so a release branch has it only once this change is backported to it.
 

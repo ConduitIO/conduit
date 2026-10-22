@@ -20,7 +20,7 @@ def gomod(version, extra=""):
 
 class Fixture(unittest.TestCase):
     """Dependency repo: a (v0.7.1) -> fix (v0.7.2) -> b (unreleased).
-    This repo: old (v0.20.4) -> prev (v0.20.5, pins commons v0.7.1) -> HEAD."""
+    This repo: old (v9.8.0) -> prev (v9.9.0, pins commons v0.7.1) -> HEAD."""
 
     def setUp(self):
         self.d = tempfile.TemporaryDirectory()
@@ -55,9 +55,9 @@ class Fixture(unittest.TestCase):
                 sh(self.me, "git", "tag", tag)
             return sh(self.me, "git", "rev-parse", "HEAD")
 
-        self.old_fix = commit(gomod("v0.7.1"), "v0.20.4")      # already shipped in v0.20.4 and v0.20.5
-        commit(gomod("v0.7.1"), "v0.20.5")
-        self.my_fix = commit(gomod("v0.7.2"))                   # new since v0.20.5
+        self.old_fix = commit(gomod("v0.7.1"), "v9.8.0")      # already shipped in v9.8.0 and v9.9.0
+        commit(gomod("v0.7.1"), "v9.9.0")
+        self.my_fix = commit(gomod("v0.7.2"))                   # new since v9.9.0
         self.cwd = os.getcwd()
         os.chdir(self.me)
         self.addCleanup(os.chdir, self.cwd)
@@ -71,46 +71,46 @@ class Fixture(unittest.TestCase):
 
 class Gate(Fixture):
     def test_new_fix_in_pinned_tag_passes(self):
-        self.assertEqual(self.gate("v0.20.6", f"{COMMONS} | {self.fix} | the fix\n"), 0)
+        self.assertEqual(self.gate("v9.9.1", f"{COMMONS} | {self.fix} | the fix\n"), 0)
 
     def test_fix_merged_but_not_in_pinned_tag_fails(self):
         # The v0.20.3 shape: the fix exists upstream but the release pins a version cut before it.
-        self.assertEqual(self.gate("v0.20.6", f"{COMMONS} | {self.fix} | the fix\n", version="v0.7.1"), 1)
+        self.assertEqual(self.gate("v9.9.1", f"{COMMONS} | {self.fix} | the fix\n", version="v0.7.1"), 1)
 
     def test_commit_after_the_tag_fails(self):
-        self.assertEqual(self.gate("v0.20.6", f"{COMMONS} | {self.unreleased}\n"), 1)
+        self.assertEqual(self.gate("v9.9.1", f"{COMMONS} | {self.unreleased}\n"), 1)
 
     def test_unknown_commit_fails_closed(self):
-        self.assertEqual(self.gate("v0.20.6", f"{COMMONS} | deadbeefdead\n"), 1)
+        self.assertEqual(self.gate("v9.9.1", f"{COMMONS} | deadbeefdead\n"), 1)
 
     def test_module_not_in_gomod_fails(self):
-        self.assertEqual(self.gate("v0.20.6", f"github.com/conduitio/conduit-sdk | {self.fix}\n"), 1)
+        self.assertEqual(self.gate("v9.9.1", f"github.com/conduitio/conduit-sdk | {self.fix}\n"), 1)
 
     def test_unreachable_remote_fails_closed(self):
-        self.assertEqual(self.gate("v0.20.6", f"{COMMONS} | {self.fix}\n", remote=os.path.join(self.d.name, "nope")), 1)
+        self.assertEqual(self.gate("v9.9.1", f"{COMMONS} | {self.fix}\n", remote=os.path.join(self.d.name, "nope")), 1)
 
     def test_self_commit_new_since_previous_tag_passes(self):
-        self.assertEqual(self.gate("v0.20.6", f"conduit | {self.my_fix}\n"), 0)
+        self.assertEqual(self.gate("v9.9.1", f"conduit | {self.my_fix}\n"), 0)
 
     def test_self_commit_from_another_repo_fails(self):
-        self.assertEqual(self.gate("v0.20.6", f"conduit | {self.fix}\n"), 1)
+        self.assertEqual(self.gate("v9.9.1", f"conduit | {self.fix}\n"), 1)
 
     def test_patch_with_only_old_entries_fails(self):
-        # Trivial padding: a commit that was already in v0.20.5 is not a fix of this release.
-        self.assertEqual(self.gate("v0.20.6", f"conduit | {self.old_fix}\n"), 1)
+        # Trivial padding: a commit that was already in v9.9.0 is not a fix of this release.
+        self.assertEqual(self.gate("v9.9.1", f"conduit | {self.old_fix}\n"), 1)
 
     def test_old_module_fix_already_pinned_at_previous_tag_fails(self):
-        # commons `a` is in v0.7.1, which v0.20.5 already pinned.
-        self.assertEqual(self.gate("v0.20.6", f"{COMMONS} | {self.first}\n", version="v0.7.2"), 1)
+        # commons `a` is in v0.7.1, which v9.9.0 already pinned.
+        self.assertEqual(self.gate("v9.9.1", f"{COMMONS} | {self.first}\n", version="v0.7.2"), 1)
 
     def test_one_new_entry_among_old_ones_passes(self):
-        self.assertEqual(self.gate("v0.20.6", f"conduit | {self.old_fix}\n{COMMONS} | {self.fix}\n"), 0)
+        self.assertEqual(self.gate("v9.9.1", f"conduit | {self.old_fix}\n{COMMONS} | {self.fix}\n"), 0)
 
     def test_patch_without_entries_fails(self):
-        self.assertEqual(self.gate("v0.20.6", "# nothing\n"), 1)
+        self.assertEqual(self.gate("v9.9.1", "# nothing\n"), 1)
 
     def test_patch_without_file_fails(self):
-        self.assertEqual(r.main(["v0.20.6", "--file", os.path.join(self.d.name, "absent.txt")]), 1)
+        self.assertEqual(r.main(["v9.9.1", "--file", os.path.join(self.d.name, "absent.txt")]), 1)
 
     def test_minor_without_file_passes(self):
         self.assertEqual(r.main(["v0.21.0", "--file", os.path.join(self.d.name, "absent.txt")]), 0)
@@ -120,7 +120,7 @@ class Gate(Fixture):
 
     def test_pseudo_version_resolves_to_its_commit(self):
         v = f"v0.0.0-20260101000000-{self.fix[:12]}"
-        self.assertEqual(self.gate("v0.20.6", f"{COMMONS} | {self.fix}\n", version=v), 0)
+        self.assertEqual(self.gate("v9.9.1", f"{COMMONS} | {self.fix}\n", version=v), 0)
 
     def test_bad_tag_fails(self):
         self.assertEqual(r.main(["nightly"]), 1)
@@ -129,31 +129,53 @@ class Gate(Fixture):
         self.assertEqual(self.gate("v0.1.1", f"conduit | {self.my_fix}\n"), 1)
 
 
+class Workspace(Fixture):
+    def gate_ws(self, work, fixes):
+        wp = os.path.join(self.d.name, "go.work")
+        open(wp, "w").write(work)
+        path, mod = os.path.join(self.d.name, "fixes.txt"), os.path.join(self.d.name, "go.mod")
+        open(path, "w").write(fixes)
+        open(mod, "w").write(gomod("v0.7.2"))
+        return r.main(["v9.9.1", "--file", path, "--gomod", mod, "--gowork", wp, "--remote-base", self.remote])
+
+    def test_go_work_replace_to_a_local_path_fails(self):
+        work = f"go 1.26\n\nuse .\n\nreplace {COMMONS} => ../commons\n"
+        self.assertEqual(self.gate_ws(work, f"{COMMONS} | {self.fix}\n"), 1)
+
+    def test_go_work_using_another_module_fails_unless_waived(self):
+        work = "go 1.26\n\nuse (\n\t.\n\t../commons\n)\n"
+        self.assertEqual(self.gate_ws(work, f"{COMMONS} | {self.fix}\n"), 1)
+        self.assertEqual(self.gate_ws(work, f"waive-replace | go.work | scratch workspace\n{COMMONS} | {self.fix}\n"), 0)
+
+    def test_plain_go_work_passes(self):
+        self.assertEqual(self.gate_ws("go 1.26\n\nuse .\n", f"{COMMONS} | {self.fix}\n"), 0)
+
+
 class Replace(Fixture):
     def test_replace_to_a_fork_fails(self):
         extra = f"\nreplace {COMMONS} => github.com/evil/commons v0.7.2\n"
-        self.assertEqual(self.gate("v0.20.6", f"{COMMONS} | {self.fix}\n", extra=extra), 1)
+        self.assertEqual(self.gate("v9.9.1", f"{COMMONS} | {self.fix}\n", extra=extra), 1)
 
     def test_replace_to_a_local_path_fails(self):
         extra = f"\nreplace {COMMONS} => ../commons\n"
-        self.assertEqual(self.gate("v0.20.6", f"{COMMONS} | {self.fix}\n", extra=extra), 1)
+        self.assertEqual(self.gate("v9.9.1", f"{COMMONS} | {self.fix}\n", extra=extra), 1)
 
     def test_replace_block_form_to_a_fork_fails(self):
         extra = f"\nreplace (\n\t{COMMONS} v0.7.2 => github.com/evil/commons v0.7.2\n)\n"
-        self.assertEqual(self.gate("v0.20.6", f"{COMMONS} | {self.fix}\n", extra=extra), 1)
+        self.assertEqual(self.gate("v9.9.1", f"{COMMONS} | {self.fix}\n", extra=extra), 1)
 
     def test_waiver_allows_a_replace(self):
         extra = f"\nreplace {COMMONS} => ../commons\n"
         fixes = f"waive-replace | {COMMONS} | testing a local build\n{COMMONS} | {self.fix}\n"
-        self.assertEqual(self.gate("v0.20.6", fixes, extra=extra), 0)
+        self.assertEqual(self.gate("v9.9.1", fixes, extra=extra), 0)
 
     def test_waiver_needs_a_reason(self):
-        self.assertEqual(self.gate("v0.20.6", f"waive-replace | {COMMONS} |\n{COMMONS} | {self.fix}\n"), 1)
+        self.assertEqual(self.gate("v9.9.1", f"waive-replace | {COMMONS} |\n{COMMONS} | {self.fix}\n"), 1)
 
     def test_same_path_replace_pins_the_version_that_ships(self):
         # Replace pins commons back to v0.7.1: the fix is not in what ships.
         extra = f"\nreplace {COMMONS} => {COMMONS} v0.7.1\n"
-        self.assertEqual(self.gate("v0.20.6", f"{COMMONS} | {self.fix}\n", extra=extra), 1)
+        self.assertEqual(self.gate("v9.9.1", f"{COMMONS} | {self.fix}\n", extra=extra), 1)
 
     def test_replace_block_line_does_not_overwrite_the_require_version(self):
         text = (f"module x\n\nrequire {COMMONS} v0.7.2\n\nreplace (\n\t{COMMONS} v0.7.1 => "

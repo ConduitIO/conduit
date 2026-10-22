@@ -19,6 +19,10 @@ Rules:
   * a `replace` of a listed module to another module path or a local path
     fails, because the version in go.mod then says nothing about the code that
     ships; waive it with a line `waive-replace | <module> | <reason>`;
+  * a committed `go.work` is treated like go.mod: its `replace` lines are
+    layered over go.mod's, and a `use` of anything but the root fails unless
+    waived with `waive-replace | go.work | <reason>`, because a workspace
+    builds local code whatever the versions say;
   * a patch release (vX.Y.Z with Z > 0) MUST have at least one entry, and at
     least one entry must be NEW in this release: its commit is not already in
     the previous stable tag (for `conduit`) or in the version of that module
@@ -110,6 +114,25 @@ def gomod_versions(text):
             if m:
                 repls[m.group(1)] = (m.group(2), m.group(3))
     return reqs, repls
+
+
+def workspace_uses(text):
+    """`use` paths of a go.work, single and block form."""
+    out, block = [], False
+    for raw in text.splitlines():
+        line = raw.split("//", 1)[0].strip()
+        if not line:
+            continue
+        if block:
+            if line == ")":
+                block = False
+            else:
+                out.append(line)
+        elif re.match(r"^use\s*\($", line):
+            block = True
+        elif line.startswith("use "):
+            out.append(line[4:].strip())
+    return out
 
 
 def git(*args, cwd=None):
@@ -209,6 +232,7 @@ def main(argv=None):
     ap.add_argument("tag")
     ap.add_argument("--file", default=".github/release-fixes.txt")
     ap.add_argument("--gomod", default="go.mod")
+    ap.add_argument("--gowork", default="go.work", help="committed go.work, if any")
     ap.add_argument("--remote-base", default="https://github.com/ConduitIO")
     a = ap.parse_args(argv)
     try:
@@ -227,6 +251,15 @@ def main(argv=None):
             return 0
         with open(a.gomod) as f:
             versions, replaces = gomod_versions(f.read())
+        if os.path.exists(a.gowork):
+            with open(a.gowork) as f:
+                work = f.read()
+            _, work_repls = gomod_versions(work)
+            replaces = {**replaces, **work_repls}
+            extra_uses = [u for u in workspace_uses(work) if u.rstrip("/") not in (".", "")]
+            if extra_uses and "go.work" not in waivers:
+                raise GateError(f"{a.gowork} uses {extra_uses}: a workspace builds local code whatever go.mod says "
+                                "(waive with `waive-replace | go.work | reason`)")
         prev_tag, prev_versions = "", {}
         if patch:
             prev_tag = previous_stable_tag(a.tag)
