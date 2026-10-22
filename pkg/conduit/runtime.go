@@ -126,7 +126,10 @@ type Runtime struct {
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
 
-	connSchemaService  *connutils.SchemaService
+	connSchemaService *connutils.SchemaService
+	// connTokenService issues the per-connector tokens the connector utilities
+	// server requires on every call.
+	connTokenService   *connutils.AuthManager
 	connectorPersister *connector.Persister
 	procSchemaService  *procutils.SchemaService
 
@@ -657,6 +660,7 @@ func createServices(r *Runtime) error {
 	r.connectorPluginService = connPluginService
 	r.processorPluginService = procPluginService
 	r.connSchemaService = connSchemaService
+	r.connTokenService = tokenService
 	r.procSchemaService = procSchemaService
 	r.lifecycleService = lifecycleService
 
@@ -1147,20 +1151,23 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 // startConnectorUtils starts all the utility services needed by connectors.
 func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Addr, error) {
 	grpcServer := grpc.NewServer(
+		// The connector token check runs first, on every call (including
+		// streams and unknown methods).
 		grpc.ChainUnaryInterceptor(
+			r.connTokenService.UnaryServerInterceptor(r.apiRejections()),
 			grpcutil.RequestIDUnaryServerInterceptor(r.logger),
 			grpcutil.LoggerUnaryServerInterceptor(r.logger),
 		),
+		grpc.ChainStreamInterceptor(r.connTokenService.StreamServerInterceptor(r.apiRejections())),
 		grpc.StatsHandler(r.metricsGrpcStatsHandler),
 	)
 
 	schemaServiceAPI := pconnutils.NewSchemaServiceServer(r.connSchemaService)
 	connutilsv1.RegisterSchemaServiceServer(grpcServer, schemaServiceAPI)
 
-	// Makes it easier to use command line tools to interact
-	// with the gRPC API.
-	// https://github.com/grpc/grpc/blob/master/doc/server-reflection.md
-	reflection.Register(grpcServer)
+	// No server reflection here: it would list the services to any local
+	// process, and plugins do not use it. The API server has reflection, behind
+	// the API token.
 
 	// Names taken from schema.proto
 	healthServer := api.NewHealthServer(
