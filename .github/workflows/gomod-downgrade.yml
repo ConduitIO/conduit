@@ -17,6 +17,8 @@ name: gomod-downgrade
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [ main, 'release/**' ]
 
 permissions:
   contents: read
@@ -24,10 +26,11 @@ permissions:
 jobs:
   gomod-downgrade:
     name: gomod downgrade guard
+    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -35,7 +38,7 @@ jobs:
         working-directory: .github/scripts
         run: python3 -m unittest -v test_gomod_downgrade_guard
 
-      - name: Compare go.mod with the base branch
+      - name: Compare every go.mod with the base branch
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           # The body goes through a file, never through the shell command line.
@@ -46,8 +49,53 @@ jobs:
           # tip, so comparing with the base tip compares what main would
           # contain after the merge. A merge base would hide exactly the
           # revert this gate exists for.
-          git show "$BASE_SHA:go.mod" > "$RUNNER_TEMP/base.go.mod"
           printf '%s' "$PR_BODY" > "$RUNNER_TEMP/body.txt"
           python3 .github/scripts/gomod_downgrade_guard.py \
-            "$RUNNER_TEMP/base.go.mod" go.mod --body-file "$RUNNER_TEMP/body.txt" | tee -a "$GITHUB_STEP_SUMMARY"
+            --base "$BASE_SHA" --head HEAD --body-file "$RUNNER_TEMP/body.txt" | tee -a "$GITHUB_STEP_SUMMARY"
           exit "${PIPESTATUS[0]}"
+
+  # A merge that skipped PR CI (admin merge, a stale rebase merged around the
+  # check: the conduit#3192 path) is still caught here: the commit that landed
+  # is compared with its first parent. The main build goes red and an issue is
+  # opened so the revert is not forgotten. The waiver is a `deps-downgrade:`
+  # line in the commit message (a squash merge carries the PR body).
+  gomod-downgrade-main:
+    name: gomod downgrade guard (push)
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+
+      - name: Compare HEAD with its first parent
+        id: cmp
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          if ! git rev-parse --verify -q HEAD^1 >/dev/null; then
+            echo "No parent commit; nothing to compare." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0
+          fi
+          git log -1 --format=%B > "$RUNNER_TEMP/body.txt"
+          python3 .github/scripts/gomod_downgrade_guard.py \
+            --base HEAD^1 --head HEAD --body-file "$RUNNER_TEMP/body.txt" > "$RUNNER_TEMP/out.txt"
+          rc=$?
+          tee -a "$GITHUB_STEP_SUMMARY" < "$RUNNER_TEMP/out.txt"
+          if [ "$rc" -ne 0 ]; then
+            {
+              echo "A commit on \`$GITHUB_REF_NAME\` lowered a module version without a \`deps-downgrade:\` line (or the check could not run)."
+              echo
+              echo "Commit: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
+              echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+              echo
+              cat "$RUNNER_TEMP/out.txt"
+            } > "$RUNNER_TEMP/issue.md"
+            gh issue create -R "$GITHUB_REPOSITORY" --title "go.mod downgrade landed on $GITHUB_REF_NAME ($GITHUB_SHA)" \
+              --body-file "$RUNNER_TEMP/issue.md" || true
+          fi
+          exit "$rc"

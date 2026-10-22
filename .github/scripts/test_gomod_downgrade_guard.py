@@ -1,4 +1,5 @@
 import os
+import subprocess
 import tempfile
 import unittest
 
@@ -29,20 +30,41 @@ def sub(**kw):
     return out
 
 
+ENV = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+
+
+def git(cwd, *a):
+    return subprocess.run(["git", *a], cwd=cwd, check=True, capture_output=True, text=True, env=ENV).stdout.strip()
+
+
 class Guard(unittest.TestCase):
-    def run_guard(self, head, body=None):
+    def run_guard(self, head, body=None, extra_base=None, extra_head=None):
+        """Commit BASE then head (a go.mod text) in a scratch repo and compare
+        them. extra_* map extra paths (nested go.mod) to text."""
         with tempfile.TemporaryDirectory() as d:
-            paths = []
-            for name, text in (("base", BASE), ("head", head)):
-                p = os.path.join(d, name)
-                open(p, "w").write(text)
-                paths.append(p)
-            args = paths
+            git(d, "init", "-q", "-b", "main")
+            revs = []
+            for text, extra in ((BASE, extra_base or {}), (head, extra_head or {})):
+                for path, content in {"go.mod": text, **extra}.items():
+                    full = os.path.join(d, path)
+                    os.makedirs(os.path.dirname(full), exist_ok=True)
+                    with open(full, "w") as f:
+                        f.write(content)
+                git(d, "add", "-A")
+                git(d, "commit", "-q", "--allow-empty", "-m", "c")
+                revs.append(git(d, "rev-parse", "HEAD"))
+            args = ["--base", revs[0], "--head", revs[1]]
             if body is not None:
-                bp = os.path.join(d, "body")
-                open(bp, "w").write(body)
-                args = paths + ["--body-file", bp]
-            return g.main(args)
+                bp = os.path.join(d, "body.txt")
+                with open(bp, "w") as f:
+                    f.write(body)
+                args += ["--body-file", bp]
+            cwd = os.getcwd()
+            os.chdir(d)
+            try:
+                return g.main(args)
+            finally:
+                os.chdir(cwd)
 
     def test_same_passes(self):
         self.assertEqual(self.run_guard(BASE), 0)
@@ -94,6 +116,47 @@ class Guard(unittest.TestCase):
     def test_garbage_go_mod_fails_closed(self):
         self.assertEqual(self.run_guard("not a go.mod"), 2)
         self.assertEqual(self.run_guard("require (\n\tfoo v1.0.0\n"), 2)
+
+    def test_waiver_inside_html_comment_does_not_count(self):
+        head = sub(**{"conduit-commons v0.12.1": "conduit-commons v0.11.9"})
+        self.assertEqual(self.run_guard(head, "<!-- deps-downgrade: because -->"), 1)
+
+    def test_replace_pinning_a_lower_version_is_a_downgrade(self):
+        head = BASE + "\nreplace github.com/conduitio/conduit-commons => github.com/conduitio/conduit-commons v0.11.0\n"
+        self.assertEqual(self.run_guard(head), 1)
+
+    def test_replace_block_pinning_a_lower_version_is_a_downgrade(self):
+        head = BASE + "\nreplace (\n\tgithub.com/some/direct => github.com/some/direct v1.0.0\n)\n"
+        self.assertEqual(self.run_guard(head), 1)
+
+    def test_replace_to_a_fork_or_local_path_needs_the_waiver(self):
+        head = BASE + "\nreplace github.com/conduitio/conduit-commons => ../commons\n"
+        self.assertEqual(self.run_guard(head), 1)
+        self.assertEqual(self.run_guard(head, "deps-downgrade: local debugging, removed before merge"), 0)
+        fork = BASE + "\nreplace github.com/conduitio/conduit-commons => github.com/evil/commons v0.12.1\n"
+        self.assertEqual(self.run_guard(fork), 1)
+
+    def test_replace_unchanged_against_base_is_fine(self):
+        base_with = "\nreplace github.com/conduitio/conduit-commons => ../commons\n"
+        self.assertEqual(self.run_guard(BASE + base_with, extra_base=None), 1)  # base lacks it: new replace
+        # same replace in both: compare two commits where both have it
+        with tempfile.TemporaryDirectory() as d:
+            git(d, "init", "-q", "-b", "main")
+            open(os.path.join(d, "go.mod"), "w").write(BASE + base_with)
+            git(d, "add", "-A"); git(d, "commit", "-q", "-m", "a"); a = git(d, "rev-parse", "HEAD")
+            git(d, "commit", "-q", "--allow-empty", "-m", "b")
+            cwd = os.getcwd(); os.chdir(d)
+            try:
+                self.assertEqual(g.main(["--base", a, "--head", "HEAD"]), 0)
+            finally:
+                os.chdir(cwd)
+
+    def test_nested_and_tools_go_mod_are_checked(self):
+        nested = "module y\n\nrequire github.com/some/dep v1.2.0\n"
+        lower = "module y\n\nrequire github.com/some/dep v1.1.0\n"
+        self.assertEqual(self.run_guard(BASE, extra_base={"tools/go.mod": nested}, extra_head={"tools/go.mod": lower}), 1)
+        self.assertEqual(self.run_guard(BASE, extra_base={"a/b/go.mod": nested}, extra_head={"a/b/go.mod": lower}), 1)
+        self.assertEqual(self.run_guard(BASE, extra_base={"tools/go.mod": nested}, extra_head={"tools/go.mod": nested}), 0)
 
     def test_pseudo_versions_order_by_timestamp(self):
         a = "v0.0.0-20260101000000-aaaaaaaaaaaa"

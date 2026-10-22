@@ -13,6 +13,12 @@ strict where reverting hurts most:
 Indirect requirements outside that list are ignored: `go mod tidy` moves them
 for reasons that are not the author's decision.
 
+The same rules apply to every go.mod in the repository (root, `tools/`, any
+nested module) and to `replace` directives: a replace that pins a gated module
+to a LOWER version counts as a downgrade, and a replace that points a gated
+module at a fork or a local path (added or changed against the base) needs the
+waiver too, because it swaps the code without touching the version.
+
 A deliberate downgrade says so in the PR body with a line
 `deps-downgrade: <reason>`. An empty reason does not count. The reason is
 printed in the job summary so it is reviewed, not skipped.
@@ -20,11 +26,15 @@ printed in the job summary so it is reviewed, not skipped.
 FAILS CLOSED: an unreadable or unparsable go.mod on either side is an error,
 never "no downgrade".
 
-Usage: gomod_downgrade_guard.py BASE_GOMOD HEAD_GOMOD [--body-file FILE]
+Usage: gomod_downgrade_guard.py --base REV --head REV [--body-file FILE]
+       (compares every go.mod that exists at both revisions; REV is a git
+       revision; for a push to main use --base HEAD^1 --head HEAD and put the
+       commit message in --body-file)
 """
 
 import argparse
 import re
+import subprocess
 import sys
 
 PROTECTED_EXACT = {
@@ -38,6 +48,8 @@ PROTECTED_PREFIX = "github.com/conduitio/conduit-connector-"
 _REQ = re.compile(r"^\s*(?:require\s+)?(\S+)\s+(v\S+?)(\s*//\s*indirect)?\s*(?://.*)?$")
 _SEMVER = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.\-]+))?(?:\+[0-9A-Za-z.\-]+)?$")
 _WAIVER = re.compile(r"(?mi)^[ \t>*-]*deps-downgrade:[ \t]*(\S.*)$")
+_HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
+_REPL = re.compile(r"^\s*(?:replace\s+)?(\S+)(?:\s+(v\S+))?\s*=>\s*(\S+)(?:\s+(v\S+))?\s*(?://.*)?$")
 
 
 class GateError(Exception):
@@ -79,6 +91,31 @@ def parse_gomod(text):
     return out
 
 
+def parse_replaces(text):
+    """Return {module: (target, target_version_or_None)} from replace
+    directives (single-line and block form)."""
+    out = {}
+    in_block = False
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("//"):
+            continue
+        if in_block:
+            if line == ")":
+                in_block = False
+                continue
+        elif re.match(r"^replace\s*\($", line):
+            in_block = True
+            continue
+        elif not line.startswith("replace "):
+            continue
+        m = _REPL.match(raw)
+        if not m:
+            raise GateError(f"unparsable replace line: {raw!r}")
+        out[m.group(1)] = (m.group(3), m.group(4))
+    return out
+
+
 def _pre_key(pre):
     # Semver 2.0 precedence: numeric identifiers < alphanumeric; no pre-release
     # sorts after any pre-release. Pseudo-versions compare by timestamp.
@@ -97,62 +134,103 @@ def version_key(v):
     return (int(m.group(1)), int(m.group(2)), int(m.group(3)), _pre_key(m.group(4)))
 
 
-def downgrades(base, head):
-    """Modules whose version is lower in head than in base, restricted to the
-    gated set. Returns a sorted list of (module, base_version, head_version)."""
+def effective(reqs, repls, mod):
+    """(version, replaced_by) in force for mod. A same-path replace with a
+    version overrides the require version; a replace to another path or a
+    local path keeps the require version and reports the target."""
+    ver = reqs[mod][0]
+    if mod in repls:
+        target, tver = repls[mod]
+        if target == mod and tver:
+            return tver, None
+        if target != mod:
+            return ver, target if not tver else f"{target} {tver}"
+    return ver, None
+
+
+def downgrades(base, head, base_repl=None, head_repl=None):
+    """Problems in head relative to base for the gated set. Returns a sorted
+    list of (module, base_desc, head_desc): a lower effective version, or a
+    replace to another module/path that is new or changed."""
+    base_repl, head_repl = base_repl or {}, head_repl or {}
     out = []
-    for mod, (hv, h_indirect) in head.items():
+    for mod, (_, h_indirect) in head.items():
         if mod not in base:
             continue
-        bv, b_indirect = base[mod]
-        gated = is_protected(mod) or not h_indirect or not b_indirect
-        if not gated:
+        b_indirect = base[mod][1]
+        if not (is_protected(mod) or not h_indirect or not b_indirect):
             continue
+        bv, brep = effective(base, base_repl, mod)
+        hv, hrep = effective(head, head_repl, mod)
         if version_key(hv) < version_key(bv):
             out.append((mod, bv, hv))
+        elif hrep and hrep != brep:
+            out.append((mod, bv + (f" => {brep}" if brep else ""), f"{hv} => {hrep}"))
     return sorted(out)
 
 
 def waiver(body):
-    m = _WAIVER.search(body or "")
+    # HTML comments are template text; a waiver inside one is not a waiver.
+    m = _WAIVER.search(_HTML_COMMENT.sub("", body or ""))
     return m.group(1).strip() if m else None
+
+
+def git(*args):
+    r = subprocess.run(["git", *args], capture_output=True, text=True)
+    if r.returncode != 0:
+        raise GateError(f"git {' '.join(args)} failed: {r.stderr.strip()[:200]}")
+    return r.stdout
+
+
+def gomod_files(rev):
+    return {p for p in git("ls-tree", "-r", "--name-only", rev).splitlines() if p == "go.mod" or p.endswith("/go.mod")}
+
+
+def compare(base_rev, head_rev):
+    """Problems across every go.mod present at both revisions."""
+    base_files, head_files = gomod_files(base_rev), gomod_files(head_rev)
+    if "go.mod" not in base_files or "go.mod" not in head_files:
+        raise GateError("go.mod is missing at the base or the head")
+    bad = []
+    for path in sorted(base_files & head_files):
+        bt, ht = git("show", f"{base_rev}:{path}"), git("show", f"{head_rev}:{path}")
+        for mod, b, h in downgrades(parse_gomod(bt), parse_gomod(ht), parse_replaces(bt), parse_replaces(ht)):
+            bad.append((path, mod, b, h))
+    return bad
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("base")
-    ap.add_argument("head")
+    ap.add_argument("--base", required=True)
+    ap.add_argument("--head", required=True)
     ap.add_argument("--body-file")
     a = ap.parse_args(argv)
     try:
-        with open(a.base) as f:
-            base = parse_gomod(f.read())
-        with open(a.head) as f:
-            head = parse_gomod(f.read())
         body = ""
         if a.body_file:
             with open(a.body_file) as f:
                 body = f.read()
-        bad = downgrades(base, head)
+        bad = compare(a.base, a.head)
     except (OSError, GateError) as e:
         print(f"go.mod downgrade guard: cannot decide: {e}")
         return 2
     if not bad:
         print("go.mod downgrade guard: no gated module version went down.")
         return 0
-    lines = ["| module | base | head |", "| --- | --- | --- |"]
-    lines += [f"| `{m}` | {b} | {h} |" for m, b, h in bad]
+    lines = ["| go.mod | module | base | head |", "| --- | --- | --- | --- |"]
+    lines += [f"| `{p}` | `{m}` | {b} | {h} |" for p, m, b, h in bad]
     reason = waiver(body)
     if reason:
-        print("go.mod downgrade guard: downgrade waived in the PR body.\n")
+        print("go.mod downgrade guard: downgrade waived.\n")
         print("\n".join(lines))
         print(f"\n`deps-downgrade: {reason}`")
         return 0
-    print("go.mod downgrade guard: FAILED. These versions are lower than on the base branch:\n")
+    print("go.mod downgrade guard: FAILED. These versions are lower than on the base, or a replace swapped the code:\n")
     print("\n".join(lines))
     print(
         "\nIf this PR was rebased, a stale go.mod is reverting someone else's fix: rebase onto the base branch and "
-        "keep its versions.\nIf the downgrade is intended, add a line `deps-downgrade: <reason>` to the PR body."
+        "keep its versions.\nIf the change is intended, add a line `deps-downgrade: <reason>` to the PR body "
+        "(for a push to main: to the commit message)."
     )
     return 1
 
