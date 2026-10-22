@@ -59,8 +59,10 @@ var knownMessages = []struct {
 var knownNames = map[string]bool{
 	"Error": true, "TypeError": true, "RangeError": true, "SyntaxError": true,
 	"ReferenceError": true, "EvalError": true, "URIError": true, "GoError": true,
-	"InterruptedError": true, "StackOverflowError": true,
 }
+
+// maxProtoDepth bounds the walk up a thrown object's prototype chain.
+const maxProtoDepth = 8
 
 // jsError is a JavaScript exception without the record values the engine
 // quotes. The original error stays in the chain.
@@ -72,6 +74,61 @@ type jsError struct {
 func (e *jsError) Error() string { return e.msg }
 func (e *jsError) Unwrap() error { return e.err }
 
+// pristineOwnDescriptor returns Object.getOwnPropertyDescriptor as it is
+// before any script ran, so a script cannot replace it. Call it right after
+// the runtime is created.
+func pristineOwnDescriptor(rt *goja.Runtime) goja.Callable {
+	o, ok := rt.Get("Object").(*goja.Object)
+	if !ok {
+		return nil
+	}
+	f, _ := goja.AssertFunction(o.Get("getOwnPropertyDescriptor"))
+	return f
+}
+
+// ownString reads the own DATA property key of obj, or of the nearest object
+// in its prototype chain that has it, and returns it only when it holds a
+// primitive string. It never runs a getter or a toString of the script: the
+// thrown object is script-controlled, and anything it computes can differ
+// between two reads and can return a record value. Anything else (an accessor,
+// a non-string, an object, a throwing trap) reports ok=false.
+func ownString(rt *goja.Runtime, getOwn goja.Callable, obj *goja.Object, key string) (s string, ok bool) {
+	if getOwn == nil {
+		return "", false
+	}
+	defer func() {
+		if recover() != nil {
+			s, ok = "", false
+		}
+	}()
+	exc := rt.Try(func() {
+		for depth := 0; obj != nil && depth < maxProtoDepth; depth++ {
+			d, err := getOwn(goja.Undefined(), obj, rt.ToValue(key))
+			if err != nil {
+				return
+			}
+			if desc, isObj := d.(*goja.Object); isObj {
+				v := desc.Get("value") // own data property of a fresh descriptor
+				if v == nil {
+					return // an accessor: do not run it
+				}
+				if _, isObj := v.(*goja.Object); isObj {
+					return
+				}
+				if str, isStr := v.Export().(string); isStr {
+					s, ok = str, true
+				}
+				return
+			}
+			obj = obj.Prototype()
+		}
+	})
+	if exc != nil {
+		return "", false
+	}
+	return s, ok
+}
+
 // sanitizeJSError turns a goja exception into an error that keeps the
 // exception type (when it is a known one), the line and column in the script,
 // and the message only when it is on the allowlist (knownMessages), with the
@@ -79,18 +136,21 @@ func (e *jsError) Unwrap() error { return e.err }
 // withheld, including the messages a script throws itself: use the logger to
 // debug (see docs/operations/js-processor-errors.md). Errors that are not
 // exceptions are returned as they are.
-func sanitizeJSError(err error) error {
+//
+// name and message are read once, as data properties holding primitive
+// strings (see ownString), so reading them runs no script code.
+func sanitizeJSError(rt *goja.Runtime, getOwn goja.Callable, err error) error {
 	var ex *goja.Exception
 	if !cerrors.As(err, &ex) {
 		return err
 	}
 	name, msg := "Error", ""
 	if obj, ok := ex.Value().(*goja.Object); ok {
-		if v := obj.Get("name"); v != nil && knownNames[v.String()] {
-			name = v.String()
+		if n, ok := ownString(rt, getOwn, obj, "name"); ok && knownNames[n] {
+			name = n
 		}
-		if v := obj.Get("message"); v != nil {
-			msg = v.String()
+		if m, ok := ownString(rt, getOwn, obj, "message"); ok {
+			msg = m
 		}
 	}
 	out := messageWithheld

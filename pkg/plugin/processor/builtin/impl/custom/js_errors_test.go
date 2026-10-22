@@ -23,6 +23,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/dop251/goja"
 	"github.com/matryer/is"
 )
 
@@ -117,5 +118,39 @@ func TestJSProcessor_UnknownOperationDoesNotContainTheValue(t *testing.T) {
 func TestSanitizeJSError_OtherErrorsAreReturnedAsTheyAre(t *testing.T) {
 	is := is.New(t)
 	err := context.Canceled
-	is.Equal(sanitizeJSError(err), err)
+	is.Equal(sanitizeJSError(goja.New(), nil, err), err)
+}
+
+// The thrown object is script-controlled. Reading its name or message must
+// not run script code: a toString that answers differently the second time
+// returned a record value, and a getter that throws used to panic.
+func TestJSProcessor_ThrownObjectIsReadWithoutRunningScriptCode(t *testing.T) {
+	for name, body := range map[string]string{
+		"toString swap on name":        `var c = 0; throw {name: {toString: function() { return c++ ? rec.Payload.After.ssn : "TypeError"; }}, message: "Invalid time value"};`,
+		"toString swap on message":     `var c = 0; throw {name: "TypeError", message: {toString: function() { return c++ ? rec.Payload.After.ssn : "Invalid time value"; }}};`,
+		"throwing getter for message":  `throw {name: "TypeError", get message() { throw new Error(rec.Payload.After.ssn); }};`,
+		"throwing getter for name":     `throw {get name() { throw new Error(rec.Payload.After.ssn); }, message: "Invalid time value"};`,
+		"throwing toString on message": `throw {name: "TypeError", message: {toString: function() { throw new Error(rec.Payload.After.ssn); }}};`,
+		"getter returning the value":   `throw {name: "TypeError", get message() { return rec.Payload.After.ssn; }};`,
+		"proxy trap":                   `throw new Proxy({}, {getOwnPropertyDescriptor: function() { throw new Error(rec.Payload.After.ssn); }});`,
+		"string object name":           `throw {name: new String(rec.Payload.After.ssn), message: "x"};`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			err := scriptError(t, body)
+			is.True(err != nil)
+			is.True(!strings.Contains(err.Error(), "SECRET"))
+			is.True(!strings.Contains(err.Error(), "ssn"))
+		})
+	}
+}
+
+// A data property still works, own or inherited, so engine errors keep their
+// type and allowlisted message.
+func TestJSProcessor_DataPropertiesAreKept(t *testing.T) {
+	is := is.New(t)
+	err := scriptError(t, `throw {name: "TypeError", message: "Invalid time value"};`)
+	is.True(strings.HasPrefix(err.Error(), "TypeError: Invalid time value"))
+	err = scriptError(t, `new Date(NaN).toISOString();`)
+	is.True(strings.HasPrefix(err.Error(), "RangeError: Invalid time value"))
 }

@@ -50,6 +50,8 @@ type jsRecord struct {
 type gojaContext struct {
 	runtime  *goja.Runtime
 	function goja.Callable
+	// ownDesc is Object.getOwnPropertyDescriptor from before the script ran.
+	ownDesc goja.Callable
 }
 type javascriptConfig struct {
 	// JavaScript code for this processor.
@@ -138,10 +140,12 @@ func (p *JavascriptProcessor) Open(context.Context) error {
 	p.gojaPool.New = func() any {
 		// create a new runtime for the function, so it's executed in a separate goja context
 		rt, _ := p.newRuntime(p.logger)
+		ownDesc := pristineOwnDescriptor(rt) // before the script can replace it
 		f, _ := p.newFunction(rt, p.src)
 		return &gojaContext{
 			runtime:  rt,
 			function: f,
+			ownDesc:  ownDesc,
 		}
 	}
 
@@ -157,7 +161,7 @@ func (p *JavascriptProcessor) Process(_ context.Context, records []opencdc.Recor
 		jsRecs := p.toJSRecord(g.runtime, rec)
 		result, err := g.function(goja.Undefined(), jsRecs)
 		if err != nil {
-			return append(out, sdk.ErrorRecord{Error: sanitizeJSError(err)})
+			return append(out, sdk.ErrorRecord{Error: sanitizeJSError(g.runtime, g.ownDesc, err)})
 		}
 
 		proc, err := p.toSDKRecords(result)
