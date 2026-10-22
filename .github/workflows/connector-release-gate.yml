@@ -1,0 +1,93 @@
+name: connector-release-gate
+
+# Reusable workflow (postmortem action item 11). A connector repository calls it
+# from its tag workflow, before the release job:
+#
+#   on:
+#     push:
+#       tags: [ 'v*' ]
+#   jobs:
+#     gate:
+#       uses: ConduitIO/conduit/.github/workflows/connector-release-gate.yml@main
+#       permissions: { contents: read, pull-requests: read, issues: read }
+#     release:
+#       needs: gate
+#       ...
+#
+# It fails the tag while a PR merged since the previous stable tag still carries
+# `do-not-merge` or an unanswered `Review: changes-needed`. Rules and limits:
+# .github/scripts/connector_release_gate.py. Not wired into any connector
+# repository yet; each needs a one-line `uses:` PR (and `gate` added to the
+# release job's needs).
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: The tag being released. Defaults to the ref name that triggered the caller.
+        type: string
+        default: ''
+      trusted-logins:
+        description: Comma-separated logins whose review verdicts count whatever their author_association.
+        type: string
+        default: devarismeroxa
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: connector release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      TAG: ${{ inputs.tag || github.ref_name }}
+      TRUSTED: ${{ inputs.trusted-logins }}
+    steps:
+      - name: Checkout the connector (tags needed)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Checkout the gate scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ConduitIO/conduit
+          ref: main
+          path: .conduit-gates
+          sparse-checkout: .github/scripts
+
+      - name: Gate script tests
+        working-directory: .conduit-gates/.github/scripts
+        run: python3 -m unittest -v test_connector_release_gate test_tier1_review
+
+      - name: Find the previous stable tag
+        id: prev
+        run: |
+          set -euo pipefail
+          # Highest stable tag strictly below the one being released, by semver
+          # (an rc sorts below its release; `sort -V` gets that wrong).
+          prev=$(git tag --list 'v[0-9]*' | python3 .conduit-gates/.github/scripts/connector_release_gate.py prev "$TAG")
+          echo "prev=$prev" >> "$GITHUB_OUTPUT"
+          echo "previous stable tag: ${prev:-none}"
+
+      - name: Check the PRs merged since then
+        if: steps.prev.outputs.prev != ''
+        run: |
+          set -euo pipefail
+          python3 .conduit-gates/.github/scripts/connector_release_gate.py \
+            collect "$REPO" "${{ steps.prev.outputs.prev }}" "$TAG" "$RUNNER_TEMP/prs.json"
+          python3 .conduit-gates/.github/scripts/connector_release_gate.py \
+            evaluate "$RUNNER_TEMP/prs.json" --trusted "$TRUSTED" | tee -a "$GITHUB_STEP_SUMMARY"
+          exit "${PIPESTATUS[0]}"
+
+      - name: First release
+        if: steps.prev.outputs.prev == ''
+        run: |
+          echo "No previous stable tag, so nothing was merged since one. The gate passes." | tee -a "$GITHUB_STEP_SUMMARY"
