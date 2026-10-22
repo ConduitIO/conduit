@@ -52,7 +52,8 @@ unchanged, so blocker 2 was still there too.
 
 - **2026-10-15 20:02:** Tier 1 review of the stack: changes needed. s3#1057 ready but held ("no partial stack on
   main"). Blocker 1 on s3#1060, blocker 2 on s3#1059/s3#1060 (with a real MinIO repro), two SHOULDs. A fix lane is
-  started. The exact-resume design doc, #3099, is still open and unreviewed.
+  started. The exact-resume design doc, #3099, is still open and unreviewed (it merged on 2026-10-19, after
+  the code had shipped).
 - **2026-10-15 21:03:** the coordinating session hits its weekly usage limit. The fix lane stops with it; nothing
   is pushed. The decision log records nothing until 2026-10-19 21:00.
 - **2026-10-16 20:49 to 22:27:** s3#1057, s3#1060, s3#1059 and s3#1061 merge from local-model sessions, at the

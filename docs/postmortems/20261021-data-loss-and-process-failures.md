@@ -1,7 +1,7 @@
 # Postmortem: data-loss incidents and the process failures behind them (Oct 2026)
 
 This is a blameless postmortem. It covers the data-loss and silent-corruption incidents found in the October 2026
-audit of Conduit and its connectors, the process failures that let them through, the root causes they share, and
+review of Conduit and its connectors, the process failures that let them through, the root causes they share, and
 the automated checks that follow. It folds in the earlier process draft and links to the postmortems that have their
 own file. Here `postgres#N`, `s3#N` and `mysql#N` are issues or PRs in `ConduitIO/conduit-connector-<name>`, and a
 bare `#N` is one in this repository.
@@ -34,8 +34,6 @@ and does not repeat: `20261019-postgres-pgbouncer-stale-statement-coercion.md`,
 `20261015-mysql-cdc-second-resume-loss.md`, `20261015-avro-encoder-cache-collision.md`. Where the same cause shows
 up in more than one, that is the point of putting them together.
 
-Security findings from the same audit are not covered here. See "Security findings".
-
 ## Incidents
 
 ### 1. Postgres destination converts values silently behind PgBouncer
@@ -52,7 +50,8 @@ invariant 6.
   v0.17.0 followed nine minutes later. Fixed by postgres#436 (merged 2026-10-20 02:11), `describe_exec` default
   again, in v0.17.2.
 - **Reached Conduit `main`** through #3199 and #3213, both of which merged with required checks failing (see
-  "Process failures"). Not in any Conduit release (v0.20.x bundles postgres v0.14.4).
+  "Process failures"). Not in any Conduit release (v0.20.3 and v0.20.4 bundle postgres v0.14.4;
+  v0.20.5 bundles v0.14.5 and commons v0.7.2).
 - **Detail:** `20261019-postgres-pgbouncer-stale-statement-coercion.md`; advisory GHSA-rcwq-pcpp-gx9v.
 
 ### 2. S3 exact resume ships with the review's two record-loss blockers
@@ -94,8 +93,8 @@ healthy idle slot that is past the saved position. The resume skips everything i
 Tier 1, v0.17.5) closes it with a slot identity in the position (authenticated beacons written into the WAL), a
 check of the server's system identifier and timeline, and tests for each. As of this writing:
 
-- #447 has passed its own fresh-context review (three blockers fixed, each with a failing-before test) but is not
-  merged.
+- #447 has had a fresh-context review in a separate session (three blockers fixed, each with a failing-before test),
+  but there is no review on the PR on GitHub, and it is not merged.
 - **One case stays open:** a restore from a volume snapshot on the same timeline whose new WAL has already passed
   the saved position, with the restored slot at or below it. #447 documents it and tells users to re-snapshot after
   restores. By the rule this postmortem adds ("Documented limitation is never acceptable for data loss"), that is
@@ -185,13 +184,13 @@ no marker, so an unfinished PR looked the same as a finished one.
 
 ### D. A release cut without a fix it was meant to carry
 
-`conduit-commons` v0.7.2 was never tagged. Its fixes, among them #339 (the `Record.Clone` fix), sat on
+`conduit-commons` v0.7.2 had not been tagged. Its fixes, among them commons#339 (the `Record.Clone` fix), sat on
 `release/v0.7.x`. Conduit v0.20.3 (2026-10-16 01:03) and v0.20.4 (03:21) were cut on commons v0.7.1. The v0.20.3 notes
 draft led with the fix; the published notes were the generated changelog only, so no published note claimed it.
 
 ## What went well
 
-- The audit itself: seven real bugs found before any known user report, most with a failing-before test.
+- The review itself: seven real bugs found before any known user report, most with a failing-before test.
 - Reviews found the S3 blockers, the PgBouncer case and the #447 blockers with repros, seeds and proposed patches.
 - Fail-closed was chosen where it mattered: `connector.delete_hook_ran`, `slot_wal_gap`, `slot_invalidated`.
 - Several fixes shipped with the mutation list that proves their tests bite (postgres#447).
@@ -200,7 +199,7 @@ draft led with the fix; the published notes were the generated changelog only, s
 ## Timeline (UTC, abridged)
 
 - **10-13:** postgres#367 filed (cached statements keep pre-ALTER types).
-- **10-15 19:32:** #3151 and #3137 filed. **20:02:** s3 stack review: changes needed. **21:03:** the coordinating
+- **10-15 18:36:** #3137 filed. **19:32:** #3151 filed. **20:02:** s3 stack review: changes needed. **21:03:** the coordinating
   session reaches its usage limit; lanes stop; no marker on any PR.
 - **10-16 20:17 to 22:27:** #3174 merges red; mysql#232 merges with a blocker open; the s3 stack merges at rejected
   heads.
@@ -251,10 +250,6 @@ Contributing factors, not root causes: the coordinating session's usage limit wi
 pressure on the PgBouncer default, and a release process that cut from what had merged instead of from a list of what
 had to be in it.
 
-## Security findings: published with v0.21.0 / v0.20.6
-
-_Placeholder. The security findings from the same audit are described, with their fixes and affected versions, in the advisories published with v0.21.0 and v0.20.6, and this section is filled in then._
-
 ## Action items
 
 Every item is an automated check or a setting that makes one enforceable. "Owner" is who makes it real; Claude opens
@@ -268,11 +263,10 @@ table.
 | 3 | Guard mutation gate, postgres | The same for `source/logrepl`. The #447 guards (beacon, slot identity, WAL history) are marked in a follow-up after #447 merges. | RC 4 | Claude, DeVaris | [postgres#452](https://github.com/ConduitIO/conduit-connector-postgres/pull/452) |
 | 4 | CODEOWNERS for Tier 1 paths and gates | Takes effect only with item 8. Names DeVaris alone on data-path code, the chaos and upgrade suites, `.github/`, `CLAUDE.md`. | RC 6 | DeVaris | [#3259](https://github.com/ConduitIO/conduit/pull/3259) |
 | 5 | Process rules in CLAUDE.md and the PR template | Not a check by itself. The template makes tier, the touched-path review, the premise citations and the guard marks required fields, which the `tier1-review` check (item 9) reads. | RC 3, 5, 7 | Claude, DeVaris | [#3263](https://github.com/ConduitIO/conduit/pull/3263) |
-| 6 | Defaults audit (security) | A test fails when a listed security-relevant default changes without its inventory changing. | RC 1, 6 | Claude | held, not yet proposed |
-| 7 | `go.mod` downgrade guard | Fails a PR whose diff lowers any module version relative to its merge base, unless labelled. Would have stopped B. | B | Claude | [#3265](https://github.com/ConduitIO/conduit/pull/3265) |
+| 7 | `go.mod` downgrade guard | Fails a PR when the go.mod it would produce (the PR merged into the base tip) lowers, against the base tip, any direct requirement or any `conduit-connector-sdk`, `conduit-commons`, `conduit-processor-sdk`, `conduit-connector-protocol` or `conduit-connector-*` version (direct or indirect), in the root, `tools/` or any nested go.mod, including through a `replace`. Waived by a `deps-downgrade: <reason>` line in the PR body. A push-to-`main` check compares `HEAD^1` with `HEAD`, fails the main build and opens an issue, so a merge that skipped PR CI is still caught. Would have stopped B. | B | Claude | [#3265](https://github.com/ConduitIO/conduit/pull/3265) |
 | 8 | Branch protection settings | Admin bypass off or limited, code-owner review on, stale approvals dismissed, the required checks list below. | RC 6, A | **DeVaris** | none (settings) |
-| 9 | `tier1-review` required check | A Tier 1 PR passes only with `Review: approve @ <head sha>` and `Sign-off @ <head sha>` comments; any `changes-needed` blocks until a later `approve`; a push clears both. Design below. | C | Claude (build), DeVaris | [#3266](https://github.com/ConduitIO/conduit/pull/3266) |
-| 10 | Release gate: fixes the release must contain | `release-fixes.yaml` per release branch; the release workflow checks every listed commit is an ancestor of the tag. | D | Claude | [#3267](https://github.com/ConduitIO/conduit/pull/3267) |
+| 9 | `tier1-review` required check | Commit status `tier1-review`. A PR must declare a tier, and a PR that touches the CODEOWNERS Tier 1 paths is Tier 1 whatever it declares. A Tier 1 PR passes only with `Review: approve @ <head sha>` and a signer's `Sign-off @ <head sha>`, from commenters who are OWNER, MEMBER or COLLABORATOR; the newest verdict per author counts, edits and deletions included; any unanswered `changes-needed` blocks; a push clears both. Design below. | C | Claude (build), DeVaris | [#3266](https://github.com/ConduitIO/conduit/pull/3266) |
+| 10 | Release gate: fixes the release must contain | `.github/release-fixes.txt` on the release branch (one `module, commit, note` entry per line). The `release-check` job in `release.yml`, which both publishing jobs need, requires every listed commit to be an ancestor of the tag of that module's version in `go.mod`; a patch release needs at least one fix newer than the previous tag; a `replace` to a fork or local path fails unless waived. | D | Claude | [#3267](https://github.com/ConduitIO/conduit/pull/3267) |
 | 11 | Connector release gate: open findings | Fails a connector tag while a PR merged since the last tag carries `do-not-merge` or an unanswered `changes-needed`. | C | Claude | [#3268](https://github.com/ConduitIO/conduit/pull/3268) |
 | 12 | Release notes required on release branches | A patch release fails if its body is only the generated changelog. | D | Claude | [#3269](https://github.com/ConduitIO/conduit/pull/3269) |
 | 13 | Pooler in the connector test stacks | A PgBouncer service in `test/docker-compose.yml`; the cross-client regression test from postgres#436. | RC 2, 4 | Claude | merged in postgres#436 |
@@ -290,29 +284,34 @@ Root causes and their automated cover, so the gaps are visible:
 - RC 7 (document and defer): rule only. The suite's expected-failure state is the mechanism that keeps a deferred gap
   red.
 
-Items 7 and 9 to 12 have PRs (above). Items 11 and 12 are stacked on 9 and 10, and item 11 is not yet wired into any connector repository.
+Items 7 and 9 to 12 have PRs (above). Items 11 and 12 are stacked on 9 and 10, and item 11 is not yet wired
+into any connector repository.
 
 ### Design of items 9 to 12
 
-1. **`tier1-review`, in every ConduitIO repo, as a reusable workflow.** Runs on every PR event and push.
-   - A PR is Tier 1 if its body declares "Tier 1" or it carries the `tier-1` label. The PR template makes a tier
-     declaration mandatory; a PR with none fails.
+1. **`tier1-review`, as a commit status.** Runs from `pull_request_target` and `issue_comment` using the default
+   branch's script; no PR code is checked out.
+   - A PR is Tier 1 if its body declares "Tier 1", it carries the `tier-1` label, or it touches a CODEOWNERS Tier 1
+     path. The path floor wins over the declaration. A PR with no declaration fails.
    - A Tier 1 PR passes only if comments naming the **current head SHA** exist for both a review
-     (`Review: approve @ <sha>`, posted by the reviewing session) and a sign-off (`Sign-off @ <sha>`, from DeVaris).
-     Any `Review: changes-needed` at any head fails the check until a later `approve`. A push clears both, because the
-     SHA no longer matches.
+     (`Review: approve @ <sha>`) and a sign-off (`Sign-off @ <sha>`, from DeVaris). Only comments by an OWNER, MEMBER
+     or COLLABORATOR (or an allowlist) count, and only the newest verdict per author. Any `Review: changes-needed`
+     fails the check until a later `approve`. A push clears both, because the SHA no longer matches.
    - It uses comments, not the review API, because GitHub does not let an account approve its own PR and every PR
      here is opened from one account. With a second account (see Branch protection) it can read real reviews instead.
-   - A `changes-needed` record also applies the `do-not-merge` label, which a required check rejects.
-   - Add it to the required contexts on `main` and `release/**`.
-2. **`release-fixes.yaml` per release branch.** For each planned patch, the fixes it must carry as module plus commit.
-   The release workflow resolves each module's version in `go.mod` to its tag and checks every listed commit is an
-   ancestor (`git merge-base --is-ancestor`) before tagging. The "Fixed" entries in the release notes must map to
-   listed commits. First entry for `release/v0.20.x`: commons v0.7.2 with the four fixes the v0.20.3 plan named.
-3. **Connector release gate.** Before a connector tag, list the PRs merged since the last tag that carry
+   - A `changes-needed` record also applies the `do-not-merge` label, which the check rejects.
+   - **Limit:** a required status context can be set by any workflow in the same repository that has
+     `statuses: write`, so the check can be spoofed by a workflow change. The follow-up is a GitHub App that
+     posts a check run, which only that App can write.
+2. **`.github/release-fixes.txt` per release branch.** For each planned patch, the fixes it must carry as module plus
+   commit. `release-check` resolves each module's version in `go.mod` to its tag and checks every listed commit is an
+   ancestor (`git merge-base --is-ancestor`) before anything is published. A patch release must list at least one
+   fix newer than the previous tag, so a trivial old entry does not satisfy it. First entry for `release/v0.20.x`:
+   commons v0.7.2 with the four fixes the v0.20.3 plan named.
+3. **Connector release gate.** Before a connector tag, list the merged PRs since the last stable tag that carry
    `do-not-merge` or a `changes-needed` record without a later `approve`; fail if there are any.
-4. **Release notes on release branches.** A patch release from `release/vX.Y.x` fails if its body is only the
-   generated changelog.
+4. **Release notes on release branches.** A patch release fails if its notes are only the generated changelog, or do
+   not name each listed fix by commit prefix or a distinctive note.
 
 Process changes that need no tooling: a session that cannot read the decision log does not merge or tag; a session
 near its limit labels every PR it owns `do-not-merge` with a one-line status as its last action; and the catch-up
@@ -370,5 +369,5 @@ change beyond what those PRs carry.
   the snapshot-restore expected failure is either closed or escalated to a decision with a fail-closed interim.
 - Bump Conduit `main` to the fixed connector versions (postgres v0.17.4 and later, s3 v0.11.2, mysql v0.5.2) before
   v0.21.0; decide the same for the v0.20.x line (postgres v0.14.6).
-- Merge items 7 and 9 to 12; backport the release gates (10, 12) to `release/v0.20.x` with a `release-fixes.txt` before v0.20.6; add the `connector-release-gate` job to each connector repository.
-- The security section above is filled in when the security releases ship.
+- Merge items 7 and 9 to 12; backport the release gates (10, 12) to `release/v0.20.x` with a `release-fixes.txt`
+  before v0.20.6; add the `connector-release-gate` job to each connector repository.
