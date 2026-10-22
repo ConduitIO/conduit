@@ -154,6 +154,7 @@ func TestText_Shapes(t *testing.T) {
 			is.True(!strings.Contains(got, "p1") && !strings.Contains(got, "p2") && !strings.Contains(got, "ss@"))
 		})
 	}
+}
 
 func TestError_PasswordWithAtSignAndDelimiter(t *testing.T) {
 	is := is.New(t)
