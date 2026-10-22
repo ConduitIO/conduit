@@ -104,7 +104,7 @@ func TestPostgresURL_FileParametersConfined(t *testing.T) {
 		"host=h sslrootcert=system",
 	}
 	for _, u := range allowed {
-		if _, err := f.r.ResolveSettings("builtin:postgres", map[string]string{"url": u}); err != nil {
+		if _, err := f.r.ResolveSettings("builtin:postgres", map[string]string{postgresURLSetting: u}); err != nil {
 			t.Errorf("%q refused: %v", u, err)
 		}
 	}
@@ -119,17 +119,17 @@ func TestPostgresURL_FileParametersConfined(t *testing.T) {
 		"host=h sslkey=" + evil,
 		"host=h sslkey = " + evil,
 		"host=h sslkey='" + evil + "'",
-		"sslkey=" + evil + " host=h",
+		pgSSLKey + "=" + evil + " host=h",
 		"host=h sslkey=" + evil + "\tuser=u",
 		"host=h sslkey='a b' sslcert=" + evil,
 	}
 	for _, u := range refused {
-		f.refuses(t, "builtin:postgres", map[string]string{"url": u}, "url")
+		f.refuses(t, "builtin:postgres", map[string]string{postgresURLSetting: u}, postgresURLSetting)
 	}
 	// the data-file policy does not open the secrets class
 	files, _ := pathpolicy.New(FileAllowedDirsKey, []string{f.secrets})
 	f.r.files = files
-	f.refuses(t, "builtin:postgres", map[string]string{"url": "host=h sslkey=" + filepath.Join(f.files, "k")}, "url")
+	f.refuses(t, "builtin:postgres", map[string]string{"url": "host=h sslkey=" + filepath.Join(f.files, "k")}, postgresURLSetting)
 }
 
 func TestPostgresFileParams_Parsing(t *testing.T) {

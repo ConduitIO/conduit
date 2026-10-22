@@ -37,6 +37,13 @@ type fileRef struct {
 	set func(settings map[string]string, resolved string)
 }
 
+// generatorPathSetting is the generator setting that names its input file.
+const (
+	generatorPathSetting = "format.options.path"
+	postgresURLSetting   = "url"
+	pgSSLKey             = "sslkey"
+)
+
 // Plugin names (without type or version) whose settings name files.
 const (
 	pluginFile      = "file"
@@ -74,14 +81,14 @@ func fileRefs(pluginName string, settings map[string]string) []fileRef {
 		}
 	case pluginGenerator:
 		for k, p := range settings {
-			if k == "format.options.path" || (strings.HasPrefix(k, "collections.") && strings.HasSuffix(k, ".format.options.path")) {
+			if k == generatorPathSetting || (strings.HasPrefix(k, "collections.") && strings.HasSuffix(k, "."+generatorPathSetting)) {
 				refs = append(refs, plainRef(k, p))
 			}
 		}
 	case pluginPostgres:
-		if u, ok := settings["url"]; ok {
+		if u, ok := settings[postgresURLSetting]; ok {
 			for _, kv := range postgresFileParams(u) {
-				refs = append(refs, fileRef{key: "url", path: kv[1], secret: true})
+				refs = append(refs, fileRef{key: postgresURLSetting, path: kv[1], secret: true})
 			}
 		}
 	}
@@ -94,7 +101,7 @@ func plainRef(key, path string) fileRef {
 
 // postgresFileKeys are the libpq connection parameters that name a file.
 var postgresFileKeys = map[string]struct{}{
-	"sslcert": {}, "sslkey": {}, "sslrootcert": {}, "sslcrl": {}, "passfile": {}, "servicefile": {},
+	"sslcert": {}, pgSSLKey: {}, "sslrootcert": {}, "sslcrl": {}, "passfile": {}, "servicefile": {},
 }
 
 // postgresFileParams returns the (parameter, path) pairs of a Postgres
@@ -136,49 +143,57 @@ func postgresFileParams(conn string) [][2]string {
 // with backslash escapes.
 func parseKeywordValue(s string) [][2]string {
 	var out [][2]string
-	i := 0
+	i := skipSpace(s, 0)
 	for i < len(s) {
-		for i < len(s) && isSpace(s[i]) {
-			i++
-		}
 		start := i
 		for i < len(s) && s[i] != '=' && !isSpace(s[i]) {
 			i++
 		}
 		key := s[start:i]
-		for i < len(s) && isSpace(s[i]) {
-			i++
-		}
+		i = skipSpace(s, i)
 		if i >= len(s) || s[i] != '=' || key == "" {
 			return out // malformed: pgx rejects it
 		}
-		i++
-		for i < len(s) && isSpace(s[i]) {
-			i++
-		}
-		var val strings.Builder
-		if i < len(s) && s[i] == '\'' {
-			i++
-			for i < len(s) && s[i] != '\'' {
-				if s[i] == '\\' && i+1 < len(s) {
-					i++
-				}
-				val.WriteByte(s[i])
-				i++
-			}
-			i++ // closing quote
-		} else {
-			for i < len(s) && !isSpace(s[i]) {
-				if s[i] == '\\' && i+1 < len(s) {
-					i++
-				}
-				val.WriteByte(s[i])
-				i++
-			}
-		}
-		out = append(out, [2]string{key, val.String()})
+		var val string
+		val, i = readValue(s, skipSpace(s, i+1))
+		out = append(out, [2]string{key, val})
+		i = skipSpace(s, i)
 	}
 	return out
+}
+
+func skipSpace(s string, i int) int {
+	for i < len(s) && isSpace(s[i]) {
+		i++
+	}
+	return i
+}
+
+// readValue reads one value starting at s[i] and returns it with the index just
+// past it. A quoted value runs to the closing quote; an unquoted one to the next
+// space. A backslash escapes the next byte in both.
+func readValue(s string, i int) (string, int) {
+	var val strings.Builder
+	quoted := i < len(s) && s[i] == '\''
+	if quoted {
+		i++
+	}
+	for i < len(s) {
+		c := s[i]
+		if (quoted && c == '\'') || (!quoted && isSpace(c)) {
+			break
+		}
+		if c == '\\' && i+1 < len(s) {
+			i++
+			c = s[i]
+		}
+		val.WriteByte(c)
+		i++
+	}
+	if quoted && i < len(s) {
+		i++ // closing quote
+	}
+	return val.String(), i
 }
 
 func isSpace(c byte) bool { return c == ' ' || c == '\t' || c == '\n' || c == '\r' }

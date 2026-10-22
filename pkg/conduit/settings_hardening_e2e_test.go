@@ -54,7 +54,7 @@ func TestSettingsHardening_EndToEnd(t *testing.T) {
 
 	// startRuntime provisions one pipeline file under a fresh data dir and
 	// returns the data dir, the files dir and the engine log.
-	startRuntime := func(t *testing.T, pipelineYAML func(dataDir, filesDir string) string) (string, string, *safeBuffer) {
+	startRuntime := func(t *testing.T, expect string, pipelineYAML func(dataDir, filesDir string) string) (string, string, *safeBuffer) {
 		t.Helper()
 		is := is.New(t)
 		tmp := t.TempDir()
@@ -94,14 +94,20 @@ func TestSettingsHardening_EndToEnd(t *testing.T) {
 		case <-time.After(20 * time.Second):
 			t.Fatal("runtime did not become ready in time")
 		}
-		time.Sleep(4 * time.Second)
+		// Wait for the refusal to be logged (up to 30 s on a loaded machine), then
+		// give a leak that would have started alongside it time to show up.
+		deadline := time.Now().Add(30 * time.Second)
+		for !strings.Contains(logs.String(), expect) && time.Now().Before(deadline) {
+			time.Sleep(50 * time.Millisecond)
+		}
+		time.Sleep(2 * time.Second)
 		return tmp, filesDir, logs
 	}
 
 	t.Run("file connector cannot read outside its directory", func(t *testing.T) {
 		is := is.New(t)
 		var outsideSecret, readOut string
-		_, _, logs := startRuntime(t, func(dataDir, filesDir string) string {
+		_, _, logs := startRuntime(t, "is not allowed: the path is outside every allowed directory", func(dataDir, filesDir string) string {
 			outsideDir := filepath.Join(dataDir, "outside")
 			is.NoErr(os.MkdirAll(outsideDir, 0o755))
 			is.NoErr(os.MkdirAll(filesDir, 0o755))
@@ -137,7 +143,7 @@ pipelines:
 	t.Run("generator file format cannot read outside the file directory", func(t *testing.T) {
 		is := is.New(t)
 		var genOut string
-		_, _, logs := startRuntime(t, func(dataDir, filesDir string) string {
+		_, _, logs := startRuntime(t, "is not allowed: the path is outside every allowed directory", func(dataDir, filesDir string) string {
 			outsideDir := filepath.Join(dataDir, "outside")
 			is.NoErr(os.MkdirAll(outsideDir, 0o755))
 			is.NoErr(os.MkdirAll(filesDir, 0o755))
@@ -173,7 +179,7 @@ pipelines:
 
 	t.Run("env reference does not expand the engine environment", func(t *testing.T) {
 		is := is.New(t)
-		_, filesDir, logs := startRuntime(t, func(_, filesDir string) string {
+		_, filesDir, logs := startRuntime(t, "is not in the operator allowlist (env.allow)", func(_, filesDir string) string {
 			is.NoErr(os.MkdirAll(filesDir, 0o755))
 			return fmt.Sprintf(`version: 2.2
 pipelines:
@@ -214,7 +220,7 @@ pipelines:
 		defer internal.Close()
 
 		var hookOut string
-		_, _, logs := startRuntime(t, func(_, filesDir string) string {
+		_, _, logs := startRuntime(t, "refused by the egress guard", func(_, filesDir string) string {
 			is.NoErr(os.MkdirAll(filesDir, 0o755))
 			hookOut = filepath.Join(filesDir, "hook.out")
 			return fmt.Sprintf(`version: 2.2

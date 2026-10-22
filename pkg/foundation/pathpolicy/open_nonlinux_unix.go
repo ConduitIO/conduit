@@ -17,10 +17,11 @@
 package pathpolicy
 
 import (
-	"errors"
 	"os"
+
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
 
-var errOpenat2Unsupported = errors.New("openat2 unsupported")
+var errOpenat2Unsupported = cerrors.New("openat2 unsupported")
 
 func openat2Beneath(int, string, int, os.FileMode) (int, error) { return -1, errOpenat2Unsupported }

@@ -17,12 +17,14 @@
 package pathpolicy
 
 import (
-	"errors"
 	"fmt"
 	"os"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"golang.org/x/sys/unix"
 )
+
+const opOpen = "open"
 
 // openBeneath opens rel (a clean, relative, symlink-free path) below root
 // without following a symlink in any component. root is the resolved allowed
@@ -34,14 +36,14 @@ func openBeneath(root, resolved, rel string, flag int, perm os.FileMode) (*os.Fi
 	}
 	rootFd, err := unix.Open(root, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 	if err != nil {
-		return nil, &os.PathError{Op: "open", Path: root, Err: err}
+		return nil, &os.PathError{Op: opOpen, Path: root, Err: err}
 	}
 	defer unix.Close(rootFd)
 
 	if fd, err := openat2Beneath(rootFd, rel, flag, perm); err == nil {
 		return os.NewFile(uintptr(fd), resolved), nil
-	} else if !errors.Is(err, errOpenat2Unsupported) {
-		return nil, &os.PathError{Op: "open", Path: resolved, Err: err}
+	} else if !cerrors.Is(err, errOpenat2Unsupported) {
+		return nil, &os.PathError{Op: opOpen, Path: resolved, Err: err}
 	}
 
 	// Portable path: one openat per component, never following a symlink.
@@ -58,7 +60,7 @@ func openBeneath(root, resolved, rel string, flag int, perm os.FileMode) (*os.Fi
 			unix.Close(dirFd)
 		}
 		if err != nil {
-			return nil, &os.PathError{Op: "open", Path: resolved, Err: err}
+			return nil, &os.PathError{Op: opOpen, Path: resolved, Err: err}
 		}
 		if last {
 			return os.NewFile(uintptr(fd), resolved), nil

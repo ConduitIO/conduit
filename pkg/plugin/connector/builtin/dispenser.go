@@ -16,6 +16,7 @@ package builtin
 
 import (
 	"context"
+
 	"github.com/conduitio/conduit-commons/hostpolicy"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit-connector-protocol/pconnutils"

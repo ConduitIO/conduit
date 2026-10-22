@@ -17,19 +17,20 @@
 package pathpolicy
 
 import (
-	"errors"
 	"os"
+
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 
 	"golang.org/x/sys/unix"
 )
 
 // errOpenat2Unsupported means the running kernel (or a seccomp filter) does
 // not offer openat2; the caller falls back to walking the components.
-var errOpenat2Unsupported = errors.New("openat2 unsupported")
+var errOpenat2Unsupported = cerrors.New("openat2 unsupported")
 
 func openat2Beneath(rootFd int, rel string, flag int, perm os.FileMode) (int, error) {
 	how := &unix.OpenHow{
-		Flags:   uint64(flag | unix.O_CLOEXEC),
+		Flags:   uint64(flag | unix.O_CLOEXEC), //nolint:gosec // open(2) flags are non-negative
 		Mode:    uint64(perm.Perm()),
 		Resolve: unix.RESOLVE_BENEATH | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS,
 	}
@@ -41,9 +42,9 @@ func openat2Beneath(rootFd int, rel string, flag int, perm os.FileMode) (int, er
 		switch {
 		case err == nil:
 			return fd, nil
-		case errors.Is(err, unix.EINTR):
+		case cerrors.Is(err, unix.EINTR):
 			continue
-		case errors.Is(err, unix.ENOSYS), errors.Is(err, unix.EPERM), errors.Is(err, unix.EINVAL):
+		case cerrors.Is(err, unix.ENOSYS), cerrors.Is(err, unix.EPERM), cerrors.Is(err, unix.EINVAL):
 			return -1, errOpenat2Unsupported
 		default:
 			return -1, err
