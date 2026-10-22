@@ -55,10 +55,14 @@ jobs:
           exit "${PIPESTATUS[0]}"
 
   # A merge that skipped PR CI (admin merge, a stale rebase merged around the
-  # check: the conduit#3192 path) is still caught here: the commit that landed
-  # is compared with its first parent. The main build goes red and an issue is
-  # opened so the revert is not forgotten. The waiver is a `deps-downgrade:`
-  # line in the commit message (a squash merge carries the PR body).
+  # check: the conduit#3192 path) is still caught here. Everything the push
+  # brought in (`before..HEAD`, not only HEAD^1) is compared with the tip the
+  # branch had before it, so a multi-commit push or a merge commit is covered.
+  # The main build goes red and an issue is opened so the revert is not
+  # forgotten. The waiver is read from the bodies of the PRs the pushed commits
+  # belong to (commits/{sha}/pulls), plus the commit messages: what a squash
+  # merge copies into the message depends on the repository setting
+  # (squash_merge_commit_message), so the PR body is the source of truth.
   gomod-downgrade-main:
     name: gomod downgrade guard (push)
     if: ${{ github.event_name == 'push' }}
@@ -66,31 +70,40 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      pull-requests: read
       issues: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
-      - name: Compare HEAD with its first parent
-        id: cmp
+      - name: Compare the pushed commits with the previous tip
         env:
           GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
         run: |
           set -uo pipefail
-          if ! git rev-parse --verify -q HEAD^1 >/dev/null; then
-            echo "No parent commit; nothing to compare." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0
+          base="$BEFORE"
+          if [ -z "$base" ] || [ "$base" = 0000000000000000000000000000000000000000 ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            base=$(git rev-parse -q --verify HEAD^1 || true)   # new branch or force push: fall back to the first parent
           fi
-          git log -1 --format=%B > "$RUNNER_TEMP/body.txt"
+          if [ -z "$base" ]; then
+            echo "No earlier commit to compare with." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0
+          fi
+          # Waiver sources: commit messages and the bodies of the PRs these commits came from.
+          git log --format=%B "$base..HEAD" > "$RUNNER_TEMP/body.txt"
+          for sha in $(git rev-list --max-count=50 "$base..HEAD"); do
+            gh api "repos/$GITHUB_REPOSITORY/commits/$sha/pulls" --jq '.[].body // empty' >> "$RUNNER_TEMP/body.txt" 2>/dev/null || true
+          done
           python3 .github/scripts/gomod_downgrade_guard.py \
-            --base HEAD^1 --head HEAD --body-file "$RUNNER_TEMP/body.txt" > "$RUNNER_TEMP/out.txt"
+            --base "$base" --head HEAD --body-file "$RUNNER_TEMP/body.txt" > "$RUNNER_TEMP/out.txt"
           rc=$?
           tee -a "$GITHUB_STEP_SUMMARY" < "$RUNNER_TEMP/out.txt"
           if [ "$rc" -ne 0 ]; then
             {
-              echo "A commit on \`$GITHUB_REF_NAME\` lowered a module version without a \`deps-downgrade:\` line (or the check could not run)."
+              echo "Commits on \`$GITHUB_REF_NAME\` lowered a module version without a \`deps-downgrade:\` line (or the check could not run)."
               echo
-              echo "Commit: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
+              echo "Range: $base..$GITHUB_SHA"
               echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
               echo
               cat "$RUNNER_TEMP/out.txt"

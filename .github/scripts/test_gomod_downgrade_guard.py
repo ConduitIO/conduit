@@ -5,6 +5,7 @@ import unittest
 
 import gomod_downgrade_guard as g
 
+COMMONS = "github.com/conduitio/conduit-commons"
 BASE = """module x
 
 go 1.26
@@ -150,6 +151,17 @@ class Guard(unittest.TestCase):
                 self.assertEqual(g.main(["--base", a, "--head", "HEAD"]), 0)
             finally:
                 os.chdir(cwd)
+
+    def test_go_work_replace_is_checked(self):
+        work = f"go 1.26\n\nuse .\n\nreplace {COMMONS} => ../commons\n"
+        self.assertEqual(self.run_guard(BASE, extra_head={"go.work": work}, extra_base={"README": "x"}), 1)
+        lower = f"go 1.26\n\nuse .\n\nreplace {COMMONS} => {COMMONS} v0.11.0\n"
+        self.assertEqual(self.run_guard(BASE, extra_head={"go.work": lower}), 1)
+
+    def test_go_work_use_change_needs_the_waiver(self):
+        self.assertEqual(self.run_guard(BASE, extra_head={"go.work": "go 1.26\n\nuse (\n\t.\n\t../commons\n)\n"}), 1)
+        self.assertEqual(self.run_guard(BASE, "deps-downgrade: local workspace, not committed to main",
+                                        extra_head={"go.work": "go 1.26\n\nuse (\n\t.\n\t../commons\n)\n"}), 0)
 
     def test_nested_and_tools_go_mod_are_checked(self):
         nested = "module y\n\nrequire github.com/some/dep v1.2.0\n"

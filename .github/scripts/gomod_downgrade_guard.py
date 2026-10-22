@@ -19,6 +19,10 @@ to a LOWER version counts as a downgrade, and a replace that points a gated
 module at a fork or a local path (added or changed against the base) needs the
 waiver too, because it swaps the code without touching the version.
 
+A committed `go.work` is part of the same check: its `replace` lines override
+go.mod's for every module, and a `use` directive that appears or changes swaps
+in local code, so any difference in `go.work` against the base needs the waiver.
+
 A deliberate downgrade says so in the PR body with a line
 `deps-downgrade: <reason>`. An empty reason does not count. The reason is
 printed in the job summary so it is reviewed, not skipped.
@@ -28,8 +32,8 @@ never "no downgrade".
 
 Usage: gomod_downgrade_guard.py --base REV --head REV [--body-file FILE]
        (compares every go.mod that exists at both revisions; REV is a git
-       revision; for a push to main use --base HEAD^1 --head HEAD and put the
-       commit message in --body-file)
+       revision; for a push use --base <previous tip> --head HEAD and put the
+       merged PRs' bodies and the commit messages in --body-file)
 """
 
 import argparse
@@ -186,15 +190,50 @@ def gomod_files(rev):
     return {p for p in git("ls-tree", "-r", "--name-only", rev).splitlines() if p == "go.mod" or p.endswith("/go.mod")}
 
 
+def read_gowork(rev):
+    """The committed go.work at rev, or None."""
+    r = subprocess.run(["git", "show", f"{rev}:go.work"], capture_output=True, text=True)
+    return r.stdout if r.returncode == 0 else None
+
+
+def gowork_uses(text):
+    """The set of `use` paths in a go.work (single and block form)."""
+    out, block = set(), False
+    for raw in (text or "").splitlines():
+        line = raw.split("//", 1)[0].strip()
+        if not line:
+            continue
+        if block:
+            if line == ")":
+                block = False
+            else:
+                out.add(line)
+        elif re.match(r"^use\s*\($", line):
+            block = True
+        elif line.startswith("use "):
+            out.add(line[4:].strip())
+    return out
+
+
 def compare(base_rev, head_rev):
-    """Problems across every go.mod present at both revisions."""
+    """Problems across every go.mod present at both revisions, with a
+    committed go.work's replace lines layered over each go.mod's own."""
     base_files, head_files = gomod_files(base_rev), gomod_files(head_rev)
     if "go.mod" not in base_files or "go.mod" not in head_files:
         raise GateError("go.mod is missing at the base or the head")
+    bw, hw = read_gowork(base_rev), read_gowork(head_rev)
     bad = []
+    if hw is not None:
+        # A workspace swaps local modules in without touching any version.
+        if gowork_uses(hw) != gowork_uses(bw):
+            bad.append(("go.work", "(use)", ", ".join(sorted(gowork_uses(bw))) or "none", ", ".join(sorted(gowork_uses(hw)))))
+    brep_w = parse_replaces(bw) if bw is not None else {}
+    hrep_w = parse_replaces(hw) if hw is not None else {}
     for path in sorted(base_files & head_files):
         bt, ht = git("show", f"{base_rev}:{path}"), git("show", f"{head_rev}:{path}")
-        for mod, b, h in downgrades(parse_gomod(bt), parse_gomod(ht), parse_replaces(bt), parse_replaces(ht)):
+        brep = {**parse_replaces(bt), **brep_w}
+        hrep = {**parse_replaces(ht), **hrep_w}
+        for mod, b, h in downgrades(parse_gomod(bt), parse_gomod(ht), brep, hrep):
             bad.append((path, mod, b, h))
     return bad
 
@@ -230,7 +269,7 @@ def main(argv=None):
     print(
         "\nIf this PR was rebased, a stale go.mod is reverting someone else's fix: rebase onto the base branch and "
         "keep its versions.\nIf the change is intended, add a line `deps-downgrade: <reason>` to the PR body "
-        "(for a push to main: to the commit message)."
+        "(for a push: to the body of the PR that was merged)."
     )
     return 1
 
