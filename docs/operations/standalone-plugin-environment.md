@@ -8,6 +8,8 @@ longer inherit Conduit's environment. A plugin receives only:
 | `PATH`, `HOME` | plugins that run helper programs or resolve `~` |
 | `TMPDIR`, `TEMP`, `TMP` | the temp directory (go-plugin puts its unix socket there) |
 | `TZ`, `LANG`, `LANGUAGE`, `LC_*` | time zone and locale |
+| `SSL_CERT_FILE`, `SSL_CERT_DIR` | private-CA deployments: where the plugin finds the CA bundle |
+| `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and the lower-case `http_proxy`, `https_proxy`, `no_proxy` | proxy deployments: without them a plugin cannot reach the network. A proxy URL can carry credentials; `ALL_PROXY` is not passed, add it to `connectors.standalone.env.allow` if you use it |
 | `SYSTEMROOT`, `WINDIR` (Windows only) | the Go runtime and Winsock do not start without them |
 | names in `connectors.standalone.env.allow` | whatever the operator adds |
 | `CONDUIT_CONNECTOR_*` | set by Conduit for each plugin (id, token, log level, utilities address, max record size) |
