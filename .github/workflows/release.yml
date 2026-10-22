@@ -37,7 +37,7 @@ jobs:
 
       - name: Gate script tests
         working-directory: .github/scripts
-        run: python3 -m unittest -v test_release_fixes
+        run: python3 -m unittest -v test_release_fixes test_release_notes_check
 
       - name: Run the release gates
         run: make release-check TAG="$GITHUB_REF_NAME"

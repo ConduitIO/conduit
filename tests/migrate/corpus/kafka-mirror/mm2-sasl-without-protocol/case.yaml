@@ -1,0 +1,25 @@
+schemaVersion: 1
+id: mm2-sasl-without-protocol
+family: kafka-mirror
+description: >-
+  MirrorSourceConnector with sasl.* on both clusters and no security.protocol. Kafka Connect ignores sasl.* unless security.protocol is a SASL
+  protocol, so the running connector does not authenticate with SASL. migrate
+  drops the SASL settings, reports each key as blocking, and never writes SASL
+  credentials with TLS off.
+provenance:
+  source: synthetic
+  license: Apache-2.0
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {kafka: "4.2"}
+command: {args: [migrate, kafka-connect, input/mm2-msc.json]}
+expect:
+  exitCode: 2
+  entries:
+    - {key: source.cluster.sasl.mechanism, status: unsupported, blocking: true, code: kc.key_unsupported}
+    - {key: source.cluster.sasl.jaas.config, status: unsupported, blocking: true, code: kc.key_unsupported}
+    - {key: target.cluster.sasl.mechanism, status: unsupported, blocking: true, code: kc.key_unsupported}
+    - {key: target.cluster.sasl.jaas.config, status: unsupported, blocking: true, code: kc.key_unsupported}
+covers:
+  - class: org.apache.kafka.connect.mirror.MirrorSourceConnector
+    keys: [source.cluster.sasl.mechanism, source.cluster.sasl.jaas.config, target.cluster.sasl.mechanism, target.cluster.sasl.jaas.config]
+run: {tier: offline}
