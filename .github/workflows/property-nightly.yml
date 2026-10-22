@@ -1,0 +1,88 @@
+name: property-nightly
+
+# The long half of the property and fuzz split in CLAUDE.md's testing
+# standards ("CI (short) + scheduled (long)").
+#
+# - Property tests (pgregory.net/rapid) run on every PR inside the `test`
+#   job at RAPID_CHECKS=100. The `property` job here runs every test under
+#   ./pkg whose name contains "Property" at RAPID_CHECKS=20000. ./tests is
+#   left out on purpose: tests/chaos has SIGKILL suites named Property2 that
+#   chaos.yml runs.
+# - Fuzz targets run their seed corpus on every PR (go test runs a Fuzz*
+#   function's seeds like a unit test). The `fuzz` job here fuzzes every
+#   Fuzz* target in the repo for FUZZTIME each. Targets are found by name,
+#   so a new one is picked up without editing this file.
+#
+# Off the critical path and not in branch protection: a red run is a bug to
+# fix (a rapid failure prints the -rapid.seed that replays it; a fuzz
+# failure is uploaded as an artifact), not a reason to block merges.
+
+on:
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  property:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Property tests, long run
+        env:
+          RAPID_CHECKS: "20000"
+        run: go test -race -count=1 -timeout 45m -run 'Property' ./pkg/...
+
+  fuzz:
+    runs-on: ubuntu-latest
+    # 12 targets x 2m of fuzzing is 24m, plus one test build per target
+    # (about a minute each on a cold cache). 90m leaves room for that and
+    # for new targets before the budget needs a second look.
+    timeout-minutes: 90
+    env:
+      FUZZTIME: 2m
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Fuzz every target
+        # Runs every target even after one fails, so one bug does not hide
+        # the others, then fails the job if any failed.
+        run: |
+          set -uo pipefail
+          failed=()
+          while IFS= read -r file; do
+            dir=$(dirname "$file")
+            for name in $(sed -nE 's/^func (Fuzz[A-Za-z0-9_]+)\(.*/\1/p' "$file"); do
+              echo "::group::$dir $name"
+              if ! go test -run '^$' -fuzz "^${name}\$" -fuzztime "$FUZZTIME" "./$dir"; then
+                failed+=("$dir $name")
+              fi
+              echo "::endgroup::"
+            done
+          done < <(grep -rlE --include='*_test.go' '^func Fuzz' pkg tests cmd | sort)
+          if [ ${#failed[@]} -gt 0 ]; then
+            printf '::error::fuzz target failed: %s\n' "${failed[@]}"
+            exit 1
+          fi
+
+      - name: Upload failing fuzz inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-failures
+          path: '**/testdata/fuzz/'
+          if-no-files-found: ignore
