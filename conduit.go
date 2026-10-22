@@ -587,10 +587,10 @@ func (e *Engine) Run(ctx context.Context) (*Handle, error) {
 // background (Runtime.Run's own registerCleanup timeout, exitTimeout, still
 // applies) — a subsequent Stop call returns the same timeout result rather
 // than re-waiting, per the idempotency guarantee above. A ctx that is already
-// done when Stop is called gets that timeout result without waiting at all,
-// even if the drain finishes in the meantime: the engine is still told to
-// stop, but the result no longer depends on which of two ready channels
-// select picks.
+// done when Stop is called does not wait at all: the result is the drain
+// result if the drain has already finished (it is never replaced by the
+// timeout), the timeout error otherwise. The engine is told to stop in both
+// cases.
 func (h *Handle) Stop(ctx context.Context) error {
 	if h == nil {
 		return conduiterr.New(conduiterr.CodeInvalidArgument, "conduit: Stop called on a nil *Handle")
@@ -598,24 +598,41 @@ func (h *Handle) Stop(ctx context.Context) error {
 
 	h.stopOnce.Do(func() {
 		h.cancel()
-		if err := ctx.Err(); err != nil {
-			h.stopErr = conduiterr.Wrap(conduiterr.CodeInvalidArgument,
-				"conduit: timed out waiting for the engine to stop", err)
-			return
-		}
-		select {
-		case h.stopErr = <-h.done:
-			if h.stopErr != nil && cerrors.Is(h.stopErr, context.Canceled) {
-				// A canceled ctx is Stop's own expected shutdown trigger, not
-				// a failure the caller needs to see.
-				h.stopErr = nil
-			}
-		case <-ctx.Done():
-			h.stopErr = conduiterr.Wrap(conduiterr.CodeInvalidArgument,
-				"conduit: timed out waiting for the engine to stop", ctx.Err())
-		}
+		h.stopErr = h.waitDrained(ctx)
 	})
 	return h.stopErr
+}
+
+// waitDrained waits for the engine's drain result or for ctx, whichever comes
+// first. When ctx is done it still takes a drain result that is already there,
+// without waiting: Stop latches its first result, and reporting "timed out"
+// for a drain that had finished (cleanly or with an error) would hide what the
+// shutdown really did (Invariant 7). The result no longer depends on which of
+// two ready channels select picks.
+func (h *Handle) waitDrained(ctx context.Context) error {
+	if ctx.Err() == nil {
+		select {
+		case err := <-h.done:
+			return drainResult(err)
+		case <-ctx.Done():
+		}
+	}
+	select {
+	case err := <-h.done:
+		return drainResult(err)
+	default:
+	}
+	return conduiterr.Wrap(conduiterr.CodeInvalidArgument,
+		"conduit: timed out waiting for the engine to stop", ctx.Err())
+}
+
+// drainResult maps the engine's exit error to Stop's result: a canceled ctx is
+// Stop's own expected shutdown trigger, not a failure the caller needs to see.
+func drainResult(err error) error {
+	if err != nil && cerrors.Is(err, context.Canceled) {
+		return nil
+	}
+	return err
 }
 
 // Import creates or updates a pipeline from cfg, delegating to the same

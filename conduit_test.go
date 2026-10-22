@@ -209,8 +209,11 @@ func TestStop_ConcurrentIdempotent(t *testing.T) {
 	is.NoErr(errs[0])
 }
 
-// TestStop_DeadlineExceeded proves Stop returns a distinguishable timeout
-// error, bounded by ctx, without blocking forever.
+// TestStop_DeadlineExceeded proves Stop does not block with an expired ctx.
+// An engine with nothing to drain can finish before Stop looks, in which case
+// its (clean) result is returned; otherwise the timeout is distinguishable.
+// The timeout itself is asserted deterministically by
+// TestHandleStop_ExpiredContext in package conduit.
 func TestStop_DeadlineExceeded(t *testing.T) {
 	is := is.New(t)
 	e := newTestEngine(t, conduit.Options{})
@@ -224,18 +227,21 @@ func TestStop_DeadlineExceeded(t *testing.T) {
 	time.Sleep(time.Millisecond) // ensure the deadline has genuinely elapsed
 
 	err = h.Stop(ctx)
-	is.True(err != nil)
+	if err == nil {
+		return // the drain had already finished
+	}
 	ce, ok := conduiterr.Get(err)
 	is.True(ok)
 	is.Equal(ce.Code, conduiterr.CodeInvalidArgument)
 }
 
-// TestStop_ExpiredContext_TimesOutEvenIfTheEngineAlreadyStopped is the
-// deterministic form of TestStop_DeadlineExceeded. The engine is stopped
-// first, so its done channel is ready when Stop is called with an expired
-// ctx: Stop used to pick between the two ready channels at random, and the
-// test above failed in CI whenever the drain won the race.
-func TestStop_ExpiredContext_TimesOutEvenIfTheEngineAlreadyStopped(t *testing.T) {
+// TestStop_ExpiredContext_ReturnsTheDrainResultIfTheEngineAlreadyStopped: the
+// engine is stopped first, so its done channel is ready when Stop is called
+// with an expired ctx. Stop used to pick between the two ready channels at
+// random (and later dropped the drain result for the timeout error); it now
+// reports the drain result, deterministically. The timeout side is covered
+// by TestHandleStop_ExpiredContext in package conduit.
+func TestStop_ExpiredContext_ReturnsTheDrainResultIfTheEngineAlreadyStopped(t *testing.T) {
 	// Several engines, so a random pick between the two ready channels fails
 	// at least one of them with near certainty.
 	for i := 0; i < 12; i++ {
@@ -252,11 +258,8 @@ func TestStop_ExpiredContext_TimesOutEvenIfTheEngineAlreadyStopped(t *testing.T)
 
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
-			err = h.Stop(ctx)
-			is.True(err != nil)
-			ce, ok := conduiterr.Get(err)
-			is.True(ok)
-			is.Equal(ce.Code, conduiterr.CodeInvalidArgument)
+			is.NoErr(h.Stop(ctx)) // the drain finished cleanly: not "timed out"
+			is.NoErr(h.Stop(context.Background()))
 		})
 	}
 }
