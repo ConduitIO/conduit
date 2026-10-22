@@ -55,14 +55,15 @@ func String(raw string) string {
 	s := raw
 	u, err := url.Parse(raw)
 	switch {
-	case err == nil && u.User != nil && u.Scheme != "" && u.Host != "":
+	case err == nil && u.User != nil && u.Scheme != "" && u.Host != "" && strings.Count(raw, "@") == 1:
 		u.User = url.UserPassword(redactedUser, "")
 		s = u.Redacted()
 	case strings.Contains(raw, "@"):
-		// A password with an unencoded '/', '?' or '#', a URL without a scheme
-		// ("user:pass@host") or one that does not parse: url.Parse does not
-		// find the user info, or finds only part of it. Cut everything up to
-		// the last '@'. This can hide more than the credentials (an '@' in a
+		// A password with an unencoded '/', '?' or '#' (also when the URL
+		// parses and keeps the tail of the password in its path), a URL without
+		// a scheme ("user:pass@host"), or one that does not parse: url.Parse
+		// does not find the user info, or finds only part of it. More than one
+		// '@' is read the same way. Cut everything up to the last '@'. This can hide more than the credentials (an '@' in a
 		// path), which is the safe side of the trade.
 		s = cutUserinfo(raw)
 	}

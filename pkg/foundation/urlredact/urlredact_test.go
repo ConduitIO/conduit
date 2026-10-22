@@ -57,7 +57,10 @@ func TestString(t *testing.T) {
 		{"no scheme with port and path", "user:pass@host:5432/db", "redacted:xxxxx@host:5432/db"},
 		{"several at signs", "https://user:p@ss@host/p", "https://redacted:xxxxx@host/p"},
 		{"token only, no scheme", "ghp_TOKEN@host/p", "redacted:xxxxx@host/p"},
-		{"at sign in a later query", "https://user:pass@host/p?mail=a@b.example", "https://redacted:xxxxx@host/p?mail=xxxxx"},
+		{"at sign in a later query", "https://user:pass@host/p?mail=a@b.example", "https://redacted:xxxxx@b.example"},
+		{"password with at sign and slash", "https://user:p@ss/word@host/p", "https://redacted:xxxxx@host/p"},
+		{"password with at sign and question mark", "https://user:p@ss?word@host/p", "https://redacted:xxxxx@host/p"},
+		{"password with at sign and hash", "https://user:p@ss#word@host/p", "https://redacted:xxxxx@host/p"},
 		{"at sign in a path, no credentials", "https://host/@scope/pkg", "https://redacted:xxxxx@scope/pkg"}, // over-redacts, on purpose
 	}
 	for _, tc := range testCases {
@@ -112,4 +115,13 @@ func TestError(t *testing.T) {
 		is.True(strings.Contains(got.Error(), "connection refused"))
 		is.True(!strings.Contains(got.Error(), "SECRET"))
 	})
+}
+
+func TestError_PasswordWithAtSignAndDelimiter(t *testing.T) {
+	is := is.New(t)
+	err := &url.Error{Op: "Get", URL: "https://user:p@ss/word@host/p", Err: cerrors.New("connection refused")}
+	got := Error(err)
+	is.True(strings.Contains(got.Error(), "connection refused"))
+	is.True(!strings.Contains(got.Error(), "ss/word"))
+	is.True(strings.Contains(got.Error(), "redacted:xxxxx@host/p"))
 }
