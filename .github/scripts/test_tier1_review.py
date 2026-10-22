@@ -13,9 +13,10 @@ def pr(body="**Risk tier: Tier 1**", labels=(), head=HEAD):
     return {"body": body, "labels": [{"name": l} for l in labels], "head": {"sha": head}}
 
 
-def c(body, who="devarismeroxa", at="2026-10-21T00:00:00Z", n=[0]):
+def c(body, who="devarismeroxa", at="2026-10-21T00:00:00Z", n=[0], assoc="MEMBER", updated=None):
     n[0] += 1
-    return {"id": n[0], "body": body, "created_at": at, "user": {"login": who}}
+    return {"id": n[0], "body": body, "created_at": at, "updated_at": updated or at,
+            "author_association": assoc, "user": {"login": who}}
 
 
 def at(i):
@@ -90,6 +91,68 @@ class Tier1(unittest.TestCase):
     def test_short_sha_below_seven_chars_is_not_accepted(self):
         cs = [c(f"Review: approve @ {HEAD[:6]}", "r", at(1)), c(f"Sign-off @ {HEAD[:7]}", at=at(2))]
         self.assertEqual(t.decide(pr(), cs, S)["state"], "failure")
+
+    def test_comments_from_untrusted_authors_are_ignored(self):
+        cs = [c(f"Review: approve @ {HEAD[:7]}", "stranger", at(1), assoc="NONE"),
+              c(f"Sign-off @ {HEAD[:7]}", "devarismeroxa", at(2), assoc="CONTRIBUTOR")]
+        self.assertEqual(t.decide(pr(), cs, S)["state"], "failure")
+
+    def test_comment_without_association_is_not_trusted(self):
+        x = c(f"Review: approve @ {HEAD[:7]}", "r", at(1))
+        del x["author_association"]
+        cs = [x, c(f"Sign-off @ {HEAD[:7]}", at=at(2))]
+        self.assertEqual(t.decide(pr(), cs, S)["state"], "failure")
+
+    def test_allowlisted_login_counts_without_association(self):
+        x = c(f"Review: approve @ {HEAD[:7]}", "bot", at(1), assoc="NONE")
+        cs = [x, c(f"Sign-off @ {HEAD[:7]}", at=at(2))]
+        self.assertEqual(t.decide(pr(), cs, S, reviewers={"bot"})["state"], "success")
+
+    def test_untrusted_changes_needed_cannot_block(self):
+        cs = [c(f"Review: approve @ {HEAD[:7]}", "r", at(1)), c(f"Sign-off @ {HEAD[:7]}", at=at(2)),
+              c(f"Review: changes-needed @ {HEAD[:7]}", "drive-by", at(3), assoc="NONE")]
+        self.assertEqual(t.decide(pr(), cs, S)["state"], "success")
+
+    def test_touching_a_tier1_path_floors_the_tier(self):
+        body = "Risk tier: Tier 3"
+        paths = t.tier1_patterns("*  @org/team @devarismeroxa\n/pkg/connector/  @devarismeroxa\n/go.mod @devarismeroxa\n", S)
+        self.assertEqual(paths, ["/pkg/connector/", "/go.mod"])
+        self.assertEqual(t.decide(pr(body=body), [], S, files=["docs/x.md"], tier1_paths=paths)["state"], "success")
+        r = t.decide(pr(body=body), [], S, files=["pkg/connector/source.go"], tier1_paths=paths)
+        self.assertEqual(r["state"], "failure")
+        self.assertIn("Tier 1 path", r["description"])
+        self.assertEqual(t.decide(pr(body=body), [], S, files=["go.mod"], tier1_paths=paths)["state"], "failure")
+
+    def test_path_matching(self):
+        self.assertTrue(t.touches("/pkg/lifecycle/", "pkg/lifecycle/a/b.go"))
+        self.assertFalse(t.touches("/pkg/lifecycle/", "pkg/lifecycle-poc/a.go"))
+        self.assertTrue(t.touches("/.github/", ".github/workflows/x.yml"))
+        self.assertFalse(t.touches("/go.mod", "tools/go.mod"))
+
+    def test_only_the_newest_verdict_per_author_counts(self):
+        # approve, then the same author edits it into changes-needed later.
+        a = c(f"Review: approve @ {HEAD[:7]}", "r", at(1), updated=at(9))
+        a["body"] = f"Review: changes-needed @ {HEAD[:7]}"
+        cs = [a, c(f"Sign-off @ {HEAD[:7]}", at=at(2))]
+        self.assertEqual(t.decide(pr(), cs, S)["state"], "failure")
+
+    def test_edit_moves_a_comment_to_its_edit_time(self):
+        # changes-needed written first but EDITED after the approve: it is the newer verdict.
+        old = c(f"Review: changes-needed @ {HEAD[:7]}", "r", at(1), updated=at(8))
+        new = c(f"Review: approve @ {HEAD[:7]}", "r", at(5))
+        cs = [old, new, c(f"Sign-off @ {HEAD[:7]}", at=at(6))]
+        self.assertEqual(t.decide(pr(), cs, S)["state"], "failure")
+
+    def test_a_second_reviewers_approve_does_not_clear_the_first_ones_finding(self):
+        cs = [c(f"Review: changes-needed @ {HEAD[:7]}", "r1", at(1)), c(f"Review: approve @ {HEAD[:7]}", "r2", at(2)),
+              c(f"Sign-off @ {HEAD[:7]}", at=at(3))]
+        self.assertEqual(t.decide(pr(), cs, S)["state"], "failure")
+
+    def test_deleted_comment_is_simply_absent(self):
+        cs = [c(f"Review: changes-needed @ {HEAD[:7]}", "r", at(1))]
+        self.assertEqual(t.decide(pr(), cs + [c(f"Sign-off @ {HEAD[:7]}", at=at(2))], S)["state"], "failure")
+        cs = []  # the finding was deleted and nothing else exists
+        self.assertEqual(t.decide(pr(), cs, S)["state"], "failure")  # still no approve or sign-off
 
     def test_cli_fails_closed_on_bad_input(self):
         with tempfile.TemporaryDirectory() as d:

@@ -20,6 +20,18 @@ name: tier1-review
 # Same-repo and fork PRs both work (pull_request_target has a write token), but
 # only because no PR code runs. Do not add a checkout of the PR head here.
 #
+# What it trusts: verdict comments only from OWNER, MEMBER or COLLABORATOR
+# (author_association), the newest verdict per author, and a path floor: a PR
+# touching a CODEOWNERS path owned by the signers alone is Tier 1 whatever it
+# declares.
+#
+# KNOWN LIMIT: a required status context can be set by ANY workflow in this
+# repository that has `statuses: write`, so a PR that adds such a workflow could
+# post a green `tier1-review`. CODEOWNERS on `.github/` (DeVaris alone) is the
+# control today. The structural fix is a GitHub App that posts a check run, which
+# only that App can write; do that before treating this gate as more than a
+# guard against mistakes.
+#
 # STATUS: live, NOT in main's required contexts. Requiring it is DeVaris's
 # decision (postmortem, "Branch protection"): with one account opening every
 # PR, the sign-off comment is only as strong as account separation.
@@ -52,7 +64,7 @@ jobs:
       PR: ${{ github.event.pull_request.number || github.event.issue.number }}
       SIGNERS: devarismeroxa
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
 
@@ -67,10 +79,14 @@ jobs:
           # an edit or a deleted comment sees the current state.
           gh api "repos/$REPO/pulls/$PR" > "$RUNNER_TEMP/pr.json"
           gh api --paginate "repos/$REPO/issues/$PR/comments" --jq '.[]' | jq -s . > "$RUNNER_TEMP/comments.json"
+          gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[]' | jq -s . > "$RUNNER_TEMP/files.json"
           sha=$(jq -r .head.sha "$RUNNER_TEMP/pr.json")
 
+          # CODEOWNERS comes from the default branch checkout, so a PR cannot
+          # shrink the Tier 1 path list that judges it.
           python3 .github/scripts/tier1_review.py "$RUNNER_TEMP/pr.json" "$RUNNER_TEMP/comments.json" \
-            --signers "$SIGNERS" > "$RUNNER_TEMP/verdict.json"
+            --signers "$SIGNERS" --files "$RUNNER_TEMP/files.json" --codeowners .github/CODEOWNERS \
+            > "$RUNNER_TEMP/verdict.json"
           state=$(jq -r .state "$RUNNER_TEMP/verdict.json")
           desc=$(jq -r .description "$RUNNER_TEMP/verdict.json")
           echo "tier1-review: $state: $desc" | tee -a "$GITHUB_STEP_SUMMARY"
