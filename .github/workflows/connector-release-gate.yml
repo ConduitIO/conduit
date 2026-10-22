@@ -1,0 +1,90 @@
+name: connector-release-gate
+
+# Reusable workflow (postmortem action item 11). A connector repository calls it
+# from its tag workflow, before the release job:
+#
+#   on:
+#     push:
+#       tags: [ 'v*' ]
+#   jobs:
+#     gate:
+#       uses: ConduitIO/conduit/.github/workflows/connector-release-gate.yml@main
+#       permissions: { contents: read, pull-requests: read, issues: read }
+#     release:
+#       needs: gate
+#       ...
+#
+# It fails the tag while a PR merged since the previous stable tag still carries
+# `do-not-merge` or an unanswered `Review: changes-needed`. Rules and limits:
+# .github/scripts/connector_release_gate.py. Not wired into any connector
+# repository yet; each needs a one-line `uses:` PR (and `gate` added to the
+# release job's needs).
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: The tag being released. Defaults to the ref name that triggered the caller.
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: connector release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout the connector (tags needed)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Checkout the gate scripts
+        uses: actions/checkout@v7
+        with:
+          repository: ConduitIO/conduit
+          ref: main
+          path: .conduit-gates
+          sparse-checkout: .github/scripts
+
+      - name: Gate script tests
+        working-directory: .conduit-gates/.github/scripts
+        run: python3 -m unittest -v test_connector_release_gate test_tier1_review
+
+      - name: Find the previous stable tag
+        id: prev
+        run: |
+          set -euo pipefail
+          # Stable tags only (no -rc, -nightly), version-sorted; the one just
+          # below the tag being released. Nightly and pre-release tags are not
+          # releases, so PRs merged "since" one of them still count.
+          prev=$( { git tag --list 'v[0-9]*' | grep -Ev -e '-' | grep -Fxv "$TAG" || true; echo "$TAG"; } \
+            | sort -V | awk -v t="$TAG" '$0 == t { print p; exit } { p = $0 }')
+          echo "prev=$prev" >> "$GITHUB_OUTPUT"
+          echo "previous stable tag: ${prev:-none}"
+
+      - name: Check the PRs merged since then
+        if: steps.prev.outputs.prev != ''
+        run: |
+          set -euo pipefail
+          python3 .conduit-gates/.github/scripts/connector_release_gate.py \
+            collect "$REPO" "${{ steps.prev.outputs.prev }}" "$TAG" "$RUNNER_TEMP/prs.json"
+          python3 .conduit-gates/.github/scripts/connector_release_gate.py \
+            evaluate "$RUNNER_TEMP/prs.json" | tee -a "$GITHUB_STEP_SUMMARY"
+          exit "${PIPESTATUS[0]}"
+
+      - name: First release
+        if: steps.prev.outputs.prev == ''
+        run: |
+          echo "No previous stable tag, so nothing was merged since one. The gate passes." | tee -a "$GITHUB_STEP_SUMMARY"
