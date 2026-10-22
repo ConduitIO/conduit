@@ -84,9 +84,18 @@ jobs:
 
           # CODEOWNERS comes from the default branch checkout, so a PR cannot
           # shrink the Tier 1 path list that judges it.
+          # The script exits 1 for every verdict but success (it prints the
+          # verdict first). Steps run under `bash -e`, so an unguarded exit
+          # status aborted the step before the status was posted, and a failing
+          # PR showed a red check with no description.
+          rc=0
           python3 .github/scripts/tier1_review.py "$RUNNER_TEMP/pr.json" "$RUNNER_TEMP/comments.json" \
             --signers "$SIGNERS" --files "$RUNNER_TEMP/files.json" --codeowners .github/CODEOWNERS \
-            > "$RUNNER_TEMP/verdict.json"
+            > "$RUNNER_TEMP/verdict.json" || rc=$?
+          # A script that crashed printed no verdict: fail closed with a reason.
+          if ! jq -e '(.state | type == "string") and (.description | type == "string")' "$RUNNER_TEMP/verdict.json" >/dev/null 2>&1; then
+            jq -n --arg d "tier1_review.py produced no verdict (exit $rc)" '{state: "error", description: $d, label: false}' > "$RUNNER_TEMP/verdict.json"
+          fi
           state=$(jq -r .state "$RUNNER_TEMP/verdict.json")
           desc=$(jq -r .description "$RUNNER_TEMP/verdict.json")
           echo "tier1-review: $state: $desc" | tee -a "$GITHUB_STEP_SUMMARY"
