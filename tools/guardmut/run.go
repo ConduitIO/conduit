@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -233,9 +234,16 @@ func (r *Runner) runOne(ctx context.Context, g *Guard, deadline time.Time) *Resu
 	case o.buildFail:
 		res.Status, res.Reason = StatusError, "mutant does not compile (not viable): "+firstLine(o.output)
 	case o.failed:
-		res.Status, res.KilledBy = StatusKilled, o.failedTest
+		// A kill counts only when a named test that tests= selects failed. A package-level
+		// failure (panic in init, TestMain, timeout, crash) says nothing about the guard.
 		if o.failedTest == "" {
-			res.KilledBy = "(package failure)"
+			res.Status = StatusError
+			res.Reason = "killed only by a package-level failure (panic, timeout, TestMain), not by a test matching tests=" + g.Tests
+		} else if !selectedByTests(g.Tests, o.failedTest) {
+			res.Status = StatusError
+			res.Reason = fmt.Sprintf("killed by %s, which tests=%s does not select", o.failedTest, g.Tests)
+		} else {
+			res.Status, res.KilledBy = StatusKilled, o.failedTest
 		}
 	case o.passes == 0:
 		res.Status, res.Reason = StatusSurvived, "no test ran (tests= matched nothing, or every test skipped)"
@@ -243,6 +251,16 @@ func (r *Runner) runOne(ctx context.Context, g *Guard, deadline time.Time) *Resu
 		res.Status, res.Reason = StatusSurvived, fmt.Sprintf("%d tests passed with the guard removed", o.passes)
 	}
 	return res
+}
+
+// selectedByTests reports whether test (as `go test -json` names it, with
+// "/" between subtests) is selected by the -run expression: the top-level
+// name must match the expression's first "/"-separated element.
+func selectedByTests(expr, test string) bool {
+	first, _, _ := strings.Cut(expr, "/")
+	top, _, _ := strings.Cut(test, "/")
+	re, err := regexp.Compile(first)
+	return err == nil && re.MatchString(top)
 }
 
 func firstLine(s string) string {

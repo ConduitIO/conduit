@@ -85,17 +85,22 @@ violated: a refusal to start, an ack check, a wait that keeps shutdown from retu
 suite that stays green when the guard is deleted does not protect it, so guards are marked and
 checked mechanically.
 
-Put `// guard: <name>` on the line directly above the statement (or trailing it). Optional tokens:
-`tests=<regexp>` restricts `go test -run`, `pkgs=./a,./b` adds test packages, `env=KEY=VALUE` sets an
-environment variable for the run. Names are lowercase and unique.
+Put `// guard: <name> tests=<regexp>` on the line directly above the statement (or trailing it). `tests=` is
+required: it restricts `go test -run` and names the test(s) that must fail when the guard is removed. A kill
+counts only when a named test that `tests=` selects fails; a package-level failure (panic in init, `TestMain`,
+timeout) is an error, not a kill. Optional tokens: `pkgs=./a,./b` adds test packages, `env=KEY=VALUE` sets an
+environment variable for the run. Names are lowercase and unique, and every name is listed in
+`.github/guardmut-guards.txt`: deleting a marker fails the gate because its name is still listed.
 
 `make guardmut` (`tools/guardmut`) deletes each marked guard in turn (an `if` condition becomes
 `false && (cond)`; a call statement is not run), runs the guard's package tests and requires them to
-fail. A guard that survives fails the check unless it is listed with a justification in
-`.github/guardmut-baseline.txt`; a listed guard that is killed must be removed from the list. Only
-guards that are refusals can be marked: a condition whose removal means "always proceed" is the same
-mutation, but a condition that must hold for the success path (`if !ok { return nil }`) is not a
-guard.
+fail. A guard that survives fails the check. `.github/guardmut-baseline.txt` can list a survivor with a
+written reason, but it is empty today and the workflow fails any PR that adds a line to it (compared with
+the merge base), so the only way to pass is the test. A listed guard that is now killed must be removed
+from the list. Removing a name from `.github/guardmut-guards.txt` fails the workflow unless the PR body
+has a `guardmut-removed: <reason>` line. Only guards that are refusals can be marked: a condition whose
+removal means "always proceed" is the same mutation, but a condition that must hold for the success path
+(`if !ok { return nil }`) is not a guard.
 
 Why a purpose-built tool and not `go-mutesting`, `gremlins` or `ooze`. Those tools apply every
 operator to every line and report a score, which on a data-path package is hours of runtime and a

@@ -17,7 +17,7 @@
 //
 // A guard is an `if` statement or a call statement marked with a comment:
 //
-//	// guard: slot-gap-refuse tests=TestSlotGap pkgs=./other/pkg env=KEY=1
+//	// guard: slot-gap-refuse tests=^TestSlotGap pkgs=./other/pkg env=KEY=1
 //	if gap {
 //		return err
 //	}
@@ -192,6 +192,11 @@ func parseMarker(text, rel string, line int) (*Guard, error) {
 		default:
 			return nil, fmt.Errorf("unknown option %q (want tests=<regexp>, pkgs=<./a,./b> or env=KEY=VALUE)", f)
 		}
+	}
+	if g.Tests == "" {
+		// Without tests= any failing test in the package "kills" the guard, so an unrelated
+		// test or a package-level failure can hide a guard no test actually needs.
+		return nil, fmt.Errorf("guard %q needs tests=<regexp> naming the test(s) that must fail when it is removed", g.Name)
 	}
 	return g, nil
 }

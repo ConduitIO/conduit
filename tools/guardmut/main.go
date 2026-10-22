@@ -23,6 +23,8 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -64,11 +66,14 @@ func LoadBaseline(path string) (Baseline, error) {
 // Judge applies the ratchet: a survivor fails unless baselined, a baselined
 // guard that is now killed fails (shrink the list), a baseline name that
 // matches no guard fails. It returns the failure messages.
-func Judge(results []*Result, base Baseline) []string {
+//
+// all is the set of every guard name in the FULL scan. A partial run (-only,
+// or -dirs narrower than -all-dirs) executes a subset, but a baseline entry
+// is "unknown" only when no marker anywhere carries its name, so a partial run
+// cannot report a valid entry as stale or hide a missing one.
+func Judge(results []*Result, base Baseline, all map[string]bool) []string {
 	var fails []string
-	known := map[string]bool{}
 	for _, r := range results {
-		known[r.Guard.Name] = true
 		_, inBase := base[r.Guard.Name]
 		r.Baselined = inBase
 		switch {
@@ -87,12 +92,67 @@ func Judge(results []*Result, base Baseline) []string {
 			r.Verdict = "ok"
 		}
 	}
+	names := make([]string, 0, len(base))
 	for name := range base {
-		if !known[name] {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if !all[name] {
 			fails = append(fails, fmt.Sprintf("baseline entry %q matches no guard marker: remove it", name))
 		}
 	}
 	return fails
+}
+
+// CheckGuardList compares the committed list of guard names with the markers
+// found in the full scan, in both directions: a listed name with no marker
+// means a guard was deleted or renamed (the list is how deleting a marker
+// fails the gate), and a marker not in the list must be added deliberately.
+func CheckGuardList(path string, all map[string]bool) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("guard list: %w", err)
+	}
+	defer f.Close()
+	listed := map[string]bool{}
+	sc := bufio.NewScanner(f)
+	for n := 1; sc.Scan(); n++ {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if !nameRE.MatchString(line) {
+			return nil, fmt.Errorf("%s:%d: %q is not a guard name", path, n, line)
+		}
+		if listed[line] {
+			return nil, fmt.Errorf("%s:%d: %q is listed twice", path, n, line)
+		}
+		listed[line] = true
+	}
+	if err := sc.Err(); err != nil {
+		return nil, err
+	}
+	var fails []string
+	var names []string
+	for n := range listed {
+		names = append(names, n)
+	}
+	for n := range all {
+		if !listed[n] {
+			names = append(names, n)
+		}
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		switch {
+		case listed[n] && !all[n]:
+			fails = append(fails, fmt.Sprintf("guard %q is in %s but no `// guard: %s` marker exists: it was deleted or renamed. Restore the guard, or remove it from the list in a reviewed change", n, filepath.Base(path), n))
+		case !listed[n] && all[n]:
+			fails = append(fails, fmt.Sprintf("guard %q has a marker but is not in %s: add it", n, filepath.Base(path)))
+		}
+	}
+	return fails, nil
 }
 
 // Markdown renders a GitHub step summary.
@@ -112,19 +172,71 @@ func Markdown(w io.Writer, results []*Result, fails []string, elapsed time.Durat
 	fmt.Fprintln(w)
 }
 
+// filterEnv keeps guards that set the env key `with` (when given) and do not
+// set the key `without` (when given).
+func filterEnv(guards []*Guard, with, without string) []*Guard {
+	sets := func(g *Guard, key string) bool {
+		for _, kv := range g.Env {
+			if k, _, _ := strings.Cut(kv, "="); k == key {
+				return true
+			}
+		}
+		return false
+	}
+	var out []*Guard
+	for _, g := range guards {
+		if with != "" && !sets(g, with) || without != "" && sets(g, without) {
+			continue
+		}
+		out = append(out, g)
+	}
+	return out
+}
+
+func dedupe(in []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, d := range in {
+		if d = strings.TrimSpace(d); d != "" && !seen[d] {
+			seen[d] = true
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// selectGuards keeps the guards whose file is under one of dirs.
+func selectGuards(full []*Guard, dirs []string) []*Guard {
+	var out []*Guard
+	for _, g := range full {
+		for _, d := range dirs {
+			d = strings.Trim(strings.TrimSpace(d), "/")
+			if d != "" && (g.File == d || strings.HasPrefix(g.File, d+"/")) {
+				out = append(out, g)
+				break
+			}
+		}
+	}
+	return out
+}
+
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
 func run(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("guardmut", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	root := fs.String("root", ".", "module root `go test` runs in")
-	dirs := fs.String("dirs", "", "comma-separated directories (relative to root) to scan for `// guard:` markers")
+	dirs := fs.String("dirs", "", "comma-separated directories (relative to root) whose guards are run")
+	allDirs := fs.String("all-dirs", "", "every directory that carries markers (default: -dirs); the baseline and the guard list are judged against the full scan")
+	guardList := fs.String("guards", "", "committed list of every guard name; a missing marker or an unlisted marker fails")
 	baselineFile := fs.String("baseline", "", "baseline file of allowed survivors (`name | justification` per line)")
 	tags := fs.String("tags", "", "build tags passed to go test")
 	timeout := fs.Duration("timeout", 10*time.Minute, "go test timeout per mutant")
 	budget := fs.Duration("budget", 0, "overall time budget; guards not reached fail the gate (0 = none)")
 	parallel := fs.Int("parallel", 1, "mutants run at once (keep 1 for tests that share a database)")
 	only := fs.String("only", "", "run only this guard name")
+	withEnv := fs.String("with-env", "", "run only guards whose marker sets this env KEY (for example a mode that changes cluster-wide settings, run alone)")
+	withoutEnv := fs.String("without-env", "", "run only guards whose marker does NOT set this env KEY")
 	list := fs.Bool("list", false, "list the guards and exit")
 	asJSON := fs.Bool("json", false, "write the result as JSON on stdout")
 	summary := fs.String("summary", "", "append a markdown summary to this file (for $GITHUB_STEP_SUMMARY)")
@@ -136,14 +248,30 @@ func run(args []string, stdout, stderr io.Writer) int {
 		logf("-dirs is required")
 		return 2
 	}
-	guards, err := Scan(*root, strings.Split(*dirs, ","))
+	scanDirs := *dirs
+	if *allDirs != "" {
+		scanDirs = *allDirs + "," + *dirs
+	}
+	full, err := Scan(*root, dedupe(strings.Split(scanDirs, ",")))
 	if err != nil {
 		logf("%v", err)
 		return 2
 	}
+	all := map[string]bool{}
+	for _, g := range full {
+		all[g.Name] = true
+	}
+	guards := selectGuards(full, strings.Split(*dirs, ","))
 	if len(guards) == 0 {
 		logf("no guard markers found under %s: refusing to pass an empty gate", *dirs)
 		return 2
+	}
+	if *withEnv != "" || *withoutEnv != "" {
+		guards = filterEnv(guards, *withEnv, *withoutEnv)
+		if len(guards) == 0 {
+			logf("no guard matches -with-env=%q -without-env=%q", *withEnv, *withoutEnv)
+			return 2
+		}
 	}
 	if *only != "" {
 		var sel []*Guard
@@ -182,7 +310,15 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	results := r.Run(ctx, guards)
-	fails := Judge(results, base)
+	fails := Judge(results, base, all)
+	if *guardList != "" {
+		lf, err := CheckGuardList(*guardList, all)
+		if err != nil {
+			logf("%v", err)
+			return 2
+		}
+		fails = append(fails, lf...)
+	}
 	elapsed := time.Since(start)
 	if *asJSON {
 		_ = json.NewEncoder(stdout).Encode(map[string]any{"results": results, "failures": fails, "seconds": elapsed.Seconds()})

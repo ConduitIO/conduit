@@ -4,11 +4,11 @@ package fx
 import "errors"
 
 func Check(n int) error {
-	// guard: neg-input
+	// guard: neg-input tests=^Test(Negative|Positive)$
 	if n < 0 {
 		return errors.New("negative")
 	}
-	// guard: log-call
+	// guard: log-call tests=^Test(Negative|Positive)$
 	_ = func() { note(n) }
 	return nil
 }
@@ -20,11 +20,11 @@ package fx
 import "errors"
 
 func Check(n int) error {
-	// guard: neg-input
+	// guard: neg-input tests=^Test(Negative|Positive)$
 	if false && (n < 0) {
 		return errors.New("negative")
 	}
-	// guard: log-call
+	// guard: log-call tests=^Test(Negative|Positive)$
 	note(n)
 	return nil
 }

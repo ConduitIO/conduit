@@ -27,13 +27,13 @@ const guardedSrc = `package fx
 
 import "errors"
 
-// guard: covered
+// guard: covered tests=^TestNegative$
 func Check(n int) error {
-	// guard: neg-input
+	// guard: neg-input tests=^Test(Negative|Positive)$
 	if n < 0 {
 		return errors.New("negative")
 	}
-	// guard: log-call
+	// guard: log-call tests=^Test(Negative|Positive)$
 	note(n)
 	return nil
 }
@@ -79,7 +79,7 @@ func TestMarkerErrors(t *testing.T) {
 }
 
 func TestEnvOption(t *testing.T) {
-	src := "package fx\n\nfunc F(a bool) {\n\t// guard: g env=FX_ON=1\n\tif a {\n\t}\n}\n"
+	src := "package fx\n\nfunc F(a bool) {\n\t// guard: g tests=^TestF$ env=FX_ON=1\n\tif a {\n\t}\n}\n"
 	root := fixture(t, src, "package fx\n")
 	gs, err := Scan(root, []string{"fx"})
 	if err != nil || len(gs[0].Env) != 1 || gs[0].Env[0] != "FX_ON=1" {
@@ -88,7 +88,7 @@ func TestEnvOption(t *testing.T) {
 }
 
 func TestMutateGolden(t *testing.T) {
-	src := strings.Replace(guardedSrc, "// guard: covered\n", "", 1)
+	src := strings.Replace(guardedSrc, "// guard: covered tests=^TestNegative$\n", "", 1)
 	root := fixture(t, src, "package fx\n")
 	guards, err := Scan(root, []string{"fx"})
 	if err != nil {
@@ -145,8 +145,8 @@ func TestPositive(t *testing.T) {
 
 func runGate(t *testing.T, testSrc, baseline string) (code int, out string) {
 	t.Helper()
-	src := strings.Replace(guardedSrc, "// guard: covered\n", "", 1)
-	src = strings.Replace(src, "\t// guard: log-call\n\tnote(n)\n", "", 1)
+	src := strings.Replace(guardedSrc, "// guard: covered tests=^TestNegative$\n", "", 1)
+	src = strings.Replace(src, "\t// guard: log-call tests=^Test(Negative|Positive)$\n\tnote(n)\n", "", 1)
 	root := fixture(t, src, testSrc)
 	args := []string{"-root", root, "-dirs", "fx", "-json"}
 	if baseline != "" {
@@ -214,9 +214,9 @@ func TestBaselinedSurvivorPassesAndStaleEntryFails(t *testing.T) {
 }
 
 func TestTestsFilterMatchingNothingSurvives(t *testing.T) {
-	src := strings.Replace(guardedSrc, "// guard: neg-input", "// guard: neg-input tests=TestDoesNotExist", 1)
-	src = strings.Replace(src, "// guard: covered\n", "", 1)
-	src = strings.Replace(src, "\t// guard: log-call\n\tnote(n)\n", "", 1)
+	src := strings.Replace(guardedSrc, "tests=^Test(Negative|Positive)$", "tests=TestDoesNotExist", 1)
+	src = strings.Replace(src, "// guard: covered tests=^TestNegative$\n", "", 1)
+	src = strings.Replace(src, "\t// guard: log-call tests=^Test(Negative|Positive)$\n\tnote(n)\n", "", 1)
 	root := fixture(t, src, coveringTest)
 	var so, se bytes.Buffer
 	if code := run([]string{"-root", root, "-dirs", "fx", "-json"}, &so, &se); code != 1 {
@@ -224,19 +224,108 @@ func TestTestsFilterMatchingNothingSurvives(t *testing.T) {
 	}
 }
 
+func TestMarkerWithoutTestsIsRejected(t *testing.T) {
+	src := strings.Replace(guardedSrc, "neg-input tests=^Test(Negative|Positive)$", "neg-input", 1)
+	src = strings.Replace(src, "// guard: covered tests=^TestNegative$\n", "", 1)
+	src = strings.Replace(src, "\t// guard: log-call tests=^Test(Negative|Positive)$\n\tnote(n)\n", "", 1)
+	root := fixture(t, src, coveringTest)
+	var so, se bytes.Buffer
+	if code := run([]string{"-root", root, "-dirs", "fx"}, &so, &se); code != 2 || !strings.Contains(se.String(), "needs tests=") {
+		t.Fatalf("a marker without tests= must be rejected (exit 2), got %d\n%s", code, se.String())
+	}
+}
+
+// A package-level failure (here a panic in init that only the mutant triggers)
+// is not a kill: no named test failed, so nothing proves a test needs the guard.
+func TestPackageLevelFailureIsNotAKill(t *testing.T) {
+	src := "package fx\n\nimport \"errors\"\n\nfunc Check(n int) error {\n\t// guard: neg tests=^TestNegative$\n\tif n < 0 {\n\t\treturn errors.New(\"negative\")\n\t}\n\treturn nil\n}\n\nfunc init() {\n\tif Check(-1) == nil {\n\t\tpanic(\"guard missing\")\n\t}\n}\n"
+	root := fixture(t, src, coveringTest)
+	var so, se bytes.Buffer
+	code := run([]string{"-root", root, "-dirs", "fx", "-json"}, &so, &se)
+	if code != 1 || !strings.Contains(so.String(), "package-level failure") {
+		t.Fatalf("want exit 1 with a package-level failure reason, got %d\n%s%s", code, so.String(), se.String())
+	}
+}
+
+func TestGuardListRatchet(t *testing.T) {
+	src := strings.Replace(guardedSrc, "// guard: covered tests=^TestNegative$\n", "", 1)
+	src = strings.Replace(src, "\t// guard: log-call tests=^Test(Negative|Positive)$\n\tnote(n)\n", "", 1)
+	root := fixture(t, src, coveringTest)
+	list := filepath.Join(t.TempDir(), "guards.txt")
+	try := func(content string) (int, string) {
+		if err := os.WriteFile(list, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		var so, se bytes.Buffer
+		code := run([]string{"-root", root, "-dirs", "fx", "-guards", list}, &so, &se)
+		return code, so.String() + se.String()
+	}
+	if code, out := try("neg-input\n"); code != 0 {
+		t.Fatalf("a matching list passes, got %d\n%s", code, out)
+	}
+	// The marker was deleted from the code but the list still names it.
+	if code, out := try("neg-input\ndeleted-guard\n"); code != 1 || !strings.Contains(out, "deleted or renamed") {
+		t.Fatalf("a listed guard with no marker must fail, got %d\n%s", code, out)
+	}
+	// A new marker that nobody listed.
+	if code, out := try("\n"); code != 1 || !strings.Contains(out, "not in guards.txt") {
+		t.Fatalf("an unlisted marker must fail, got %d\n%s", code, out)
+	}
+}
+
+// A partial run (-only) must judge the baseline against the full scan: a valid
+// entry for a guard that was not selected is neither stale nor unknown.
+func TestPartialRunJudgesAgainstFullScan(t *testing.T) {
+	src := strings.Replace(guardedSrc, "// guard: covered tests=^TestNegative$\n", "", 1)
+	root := fixture(t, src, coveringTest)
+	bf := filepath.Join(t.TempDir(), "baseline.txt")
+	if err := os.WriteFile(bf, []byte("log-call | fixture: note() has no observable effect\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var so, se bytes.Buffer
+	code := run([]string{"-root", root, "-dirs", "fx", "-only", "neg-input", "-baseline", bf}, &so, &se)
+	if code != 0 {
+		t.Fatalf("a partial run must not call a valid baseline entry unknown, got %d\n%s%s", code, so.String(), se.String())
+	}
+	if err := os.WriteFile(bf, []byte("nope | x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	so.Reset()
+	if code := run([]string{"-root", root, "-dirs", "fx", "-only", "neg-input", "-baseline", bf}, &so, &se); code != 1 {
+		t.Fatalf("an entry that matches no marker anywhere must still fail, got %d", code)
+	}
+}
+
 func TestFailingBaselineAborts(t *testing.T) {
-	failing := "package fx\n\nimport \"testing\"\n\nfunc TestBroken(t *testing.T) { t.Fatal(\"x\") }\n"
+	failing := "package fx\n\nimport \"testing\"\n\nfunc TestNegative(t *testing.T) { t.Fatal(\"x\") }\n"
 	if code, _ := runGate(t, failing, ""); code != 2 {
 		t.Fatalf("a failing unmutated baseline must abort with 2, got %d", code)
 	}
 }
 
 func TestCallGuardRemoved(t *testing.T) {
-	src := "package fx\n\nvar Calls int\n\nfunc F() {\n\t// guard: count\n\tcount()\n}\n\nfunc count() { Calls++ }\n"
+	src := "package fx\n\nvar Calls int\n\nfunc F() {\n\t// guard: count tests=^TestF$\n\tcount()\n}\n\nfunc count() { Calls++ }\n"
 	test := "package fx\n\nimport \"testing\"\n\nfunc TestF(t *testing.T) {\n\tF()\n\tif Calls != 1 {\n\t\tt.Fatal(Calls)\n\t}\n}\n"
 	root := fixture(t, src, test)
 	var so, se bytes.Buffer
 	if code := run([]string{"-root", root, "-dirs", "fx"}, &so, &se); code != 0 {
 		t.Fatalf("exit %d\n%s%s", code, so.String(), se.String())
+	}
+}
+
+func TestEnvFilterSplitsGuards(t *testing.T) {
+	gs := []*Guard{{Name: "a", Env: []string{"MODE=1"}}, {Name: "b"}, {Name: "c", Env: []string{"OTHER=1"}}}
+	names := func(in []*Guard) string {
+		var out []string
+		for _, g := range in {
+			out = append(out, g.Name)
+		}
+		return strings.Join(out, ",")
+	}
+	if got := names(filterEnv(gs, "MODE", "")); got != "a" {
+		t.Fatalf("with-env: %s", got)
+	}
+	if got := names(filterEnv(gs, "", "MODE")); got != "b,c" {
+		t.Fatalf("without-env: %s", got)
 	}
 }
