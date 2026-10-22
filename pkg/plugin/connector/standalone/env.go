@@ -59,6 +59,7 @@ const (
 	envLang       = "LANG"
 	envHTTPProxy  = "HTTP_PROXY"
 	envHTTPSProxy = "HTTPS_PROXY"
+	envNoProxy    = "NO_PROXY"
 	goosWindows   = "windows"
 )
 
@@ -70,7 +71,8 @@ var baseEnvNames = []string{
 	// proxy URL may carry credentials: the operator chose to set it for the
 	// engine, and a plugin needs it to connect the same way).
 	"SSL_CERT_FILE", "SSL_CERT_DIR",
-	envHTTPProxy, envHTTPSProxy, "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
+	envHTTPProxy, envHTTPSProxy, envNoProxy,
+	strings.ToLower(envHTTPProxy), strings.ToLower(envHTTPSProxy), strings.ToLower(envNoProxy),
 }
 
 var windowsEnvNames = []string{"SYSTEMROOT", "WINDIR"}

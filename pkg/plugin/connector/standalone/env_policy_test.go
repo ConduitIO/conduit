@@ -81,7 +81,7 @@ func TestEnvPolicy_Filter(t *testing.T) {
 	got := names(passed)
 	for _, want := range []string{
 		"PATH", "HOME", "TMPDIR", "TEMP", "TMP", "TZ", envLang, "LANGUAGE", "LC_ALL", "LC_CTYPE", "EXTRA",
-		"SSL_CERT_FILE", "SSL_CERT_DIR", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
+		"SSL_CERT_FILE", "SSL_CERT_DIR", "HTTP_PROXY", envHTTPSProxy, envNoProxy, "http_proxy", "https_proxy", "no_proxy",
 	} {
 		is.True(has(got, want))
 	}
