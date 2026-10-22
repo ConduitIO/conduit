@@ -60,6 +60,11 @@ jobs:
         # surfaced (pkg/foundation/log and
         # pkg/plugin/processor/builtin/internal/diff/difftest) were fixed;
         # both are now hermetic and this can gate merges.
+        #
+        # RAPID_CHECKS: property tests (pgregory.net/rapid) run a small, fixed
+        # number of cases here; property-nightly.yml runs many more.
+        env:
+          RAPID_CHECKS: "100"
         run: |
           # Resource sampler: lets the next runner kill be diagnosed from the log.
           ( while sleep 10; do echo "MEMSAMPLE $(date -u +%T) $(free -m | awk 'NR==2{print "used="$3" avail="$7} NR==3{print "swap="$3}' | tr '\n' ' ') top: $(ps -eo rss,args --sort=-rss | sed -n 2,4p | awk '{printf "%dMB:%s ", $1/1024, $2}' | sed 's#/home/runner/work/conduit/conduit/##g')"; done ) &
