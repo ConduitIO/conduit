@@ -61,7 +61,8 @@ type Plan struct {
 	pgURL       map[string]string // Postgres connection URL parts, assembled by the pg-url finisher
 	secrets     []Secret
 	envs        *EnvNames
-	sinkBlocked map[string]bool // worker keys the block-sinks kind blocked on this pipeline
+	sinkBlocked map[string]bool   // worker keys the block-sinks kind blocked on this pipeline
+	protocol    map[keyRef]string // upper-cased security.protocol value each tls-from-protocol key wrote
 }
 
 // Secret is an environment variable a pipeline references instead of a
@@ -157,7 +158,7 @@ func NewPlan(name, scope string, emits []rules.Emit, envs *EnvNames) (*Plan, err
 	}
 	p := &Plan{
 		ID: name, File: "pipelines/" + fileUnsafe.ReplaceAllString(name, "_") + ".yaml", scope: scope,
-		owner: map[string]owner{}, superseded: map[keyRef]string{}, origin: OriginConnector, envs: envs,
+		owner: map[string]owner{}, superseded: map[keyRef]string{}, protocol: map[keyRef]string{}, origin: OriginConnector, envs: envs,
 	}
 	for _, side := range []string{SideSource, SideDestination} {
 		var plugin string

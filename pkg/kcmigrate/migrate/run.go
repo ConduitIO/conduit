@@ -293,6 +293,7 @@ func migrateConnector(cl rules.Classified, state string, workerDs []rules.Decisi
 	run.rc.Notes = append(run.rc.Notes, emit.RequireSettings(plan, required)...)
 	run.plan = plan
 	run.rc.Entries = rules.Entries(cl.Decisions) // Apply refines entries in place
+	emit.DropUnprotectedSASL(plan, run.rc.Entries, run.workerEntries)
 	run.rc.Pipeline = plan.File
 	run.rc.Target = &kcmigrate.Target{Source: plan.Plugin(emit.SideSource), Destination: plan.Plugin(emit.SideDestination)}
 	run.rc.Notes = append(run.rc.Notes, converterNotes(cl.Decisions, workerDs)...)
@@ -333,7 +334,7 @@ func hasLiteralSecret(ds []rules.Decision) bool {
 func plaintextNote() kcmigrate.Note {
 	return kcmigrate.Note{
 		Code: kcmigrate.CodeSecretPlaintext.Reason(), Rule: "secrets",
-		Reason: "The input holds at least one secret as a literal value. migrate wrote a variable reference instead, but the input file itself contains the secret.",
+		Reason: "The input holds at least one secret as a literal value. Where migrate used the setting it wrote a variable reference instead (a dropped setting has no variable), but the input file itself contains the secret.",
 		Fix:    "Fill the variables in secrets.env.template from your secret store, and replace the literal in the Kafka Connect config with a config-provider reference.",
 	}
 }
