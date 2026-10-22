@@ -135,6 +135,19 @@ func maskQueryAndFragment(s string) string {
 // urlStartSeparators are the characters an absolute URL can follow in a message.
 const urlStartSeparators = " \t\r\n,;\"'()<>[]{}="
 
+// urlListSeparators also start a URL ("url:https://...", "a|https://..."), but
+// only when no URL is being read: inside one, the same characters are part of
+// a user name or password ("https://user:pass://x@host").
+const urlListSeparators = ":|"
+
+// urlEnd are the characters that end the URL proper in free text. A space
+// does not end it once the URL has a query: an unencoded space in a query
+// value would otherwise leave the rest of the value in the message.
+const urlEnd = "\t\r\n\"'<>"
+
+// schemelessUserinfo matches user:password@ without a scheme in free text.
+var schemelessUserinfo = regexp.MustCompile(`[A-Za-z0-9._~%+-]+:[^\s@/"'<>]*@`)
+
 // schemeStart finds where an absolute URL starts in free text.
 var schemeStart = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://`)
 
@@ -154,15 +167,18 @@ func Text(s string) string {
 	// separator, never right after a character a URL itself contains.
 	var starts [][]int
 	for _, m := range all {
-		if m[0] == 0 || strings.ContainsRune(urlStartSeparators, rune(s[m[0]-1])) {
+		switch {
+		case m[0] == 0, strings.ContainsRune(urlStartSeparators, rune(s[m[0]-1])):
+			starts = append(starts, m)
+		case strings.ContainsRune(urlListSeparators, rune(s[m[0]-1])) && !insideURL(s, starts, m[0]):
 			starts = append(starts, m)
 		}
 	}
-	if len(starts) == 0 {
-		return s
-	}
 	var b strings.Builder
-	b.WriteString(s[:starts[0][0]])
+	if len(starts) == 0 {
+		return redactSchemeless(s)
+	}
+	b.WriteString(redactSchemeless(s[:starts[0][0]]))
 	for i, m := range starts {
 		end := len(s)
 		if i+1 < len(starts) {
@@ -174,15 +190,63 @@ func Text(s string) string {
 			b.WriteString(redactedUserinfo)
 			rest = rest[at+1:]
 		}
-		// the URL proper ends at the first space, quote or bracket
-		cut := strings.IndexAny(rest, " \t\r\n\"'<>")
-		if cut < 0 {
-			cut = len(rest)
-		}
+		cut := urlProperEnd(rest)
 		b.WriteString(maskQueryAndFragment(rest[:cut]))
-		b.WriteString(rest[cut:])
+		b.WriteString(redactSchemeless(rest[cut:]))
 	}
 	return b.String()
+}
+
+// insideURL reports whether position pos of s is inside the URL that the last
+// of starts began: nothing that ends a URL lies between them.
+func insideURL(s string, starts [][]int, pos int) bool {
+	if len(starts) == 0 {
+		return false
+	}
+	last := starts[len(starts)-1]
+	return urlProperEnd(s[last[1]:pos]) == pos-last[1]
+}
+
+// urlProperEnd returns where the URL proper ends in rest, the text after its
+// scheme: at the first quote, bracket or line break, and at the first space.
+// In a query a space can be part of a value that was not encoded
+// ("token=a b&x=1"), so the URL goes on past a space when the next word has a
+// '&' or '=' in it, or the text before the space ends in one. A final word of
+// a value that has neither ("token=a b") cannot be told from the text that
+// follows the URL and is left in the message.
+func urlProperEnd(rest string) int {
+	cut := strings.IndexAny(rest, urlEnd)
+	if cut < 0 {
+		cut = len(rest)
+	}
+	q := strings.IndexByte(rest[:cut], '?')
+	end := strings.IndexByte(rest[:cut], ' ')
+	if end < 0 {
+		return cut
+	}
+	if q < 0 || q > end {
+		return end
+	}
+	for end >= 0 {
+		next := strings.IndexByte(rest[end+1:cut], ' ')
+		word := rest[end+1 : cut]
+		if next >= 0 {
+			word = rest[end+1 : end+1+next]
+		}
+		if !strings.ContainsAny(word, "&=") && !strings.ContainsAny(rest[end-1:end], "&=") {
+			return end
+		}
+		if next < 0 {
+			return cut
+		}
+		end += 1 + next
+	}
+	return cut
+}
+
+// redactSchemeless masks user:password@ that has no scheme in front of it.
+func redactSchemeless(s string) string {
+	return schemelessUserinfo.ReplaceAllString(s, redactedUserinfo)
 }
 
 // Error returns err with the URLs of every *url.Error in its chain replaced in

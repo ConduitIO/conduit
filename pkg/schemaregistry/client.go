@@ -171,7 +171,7 @@ func (c *Client) CreateSchema(ctx context.Context, subject string, schema sr.Sch
 			for _, res := range result {
 				if res.Err != nil {
 					// only log error, don't return it
-					c.logger.Warn(ctx).Err(res.Err).Str("subject", subject).Msg("failed to set compatibility to none, might create issues if an incompatible schema change happens in the future")
+					c.logger.Warn(ctx).Err(urlredact.Error(res.Err)).Str("subject", subject).Msg("failed to set compatibility to none, might create issues if an incompatible schema change happens in the future")
 				}
 			}
 		}
