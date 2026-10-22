@@ -16,8 +16,13 @@ tag (or of HEAD for `conduit`), so a fix that was merged to a branch but never
 tagged into the version this release pins is caught.
 
 Rules:
-  * a patch release (vX.Y.Z with Z > 0) MUST have at least one entry; a patch
-    with no declared fixes is an error, not a no-op;
+  * a `replace` of a listed module to another module path or a local path
+    fails, because the version in go.mod then says nothing about the code that
+    ships; waive it with a line `waive-replace | <module> | <reason>`;
+  * a patch release (vX.Y.Z with Z > 0) MUST have at least one entry, and at
+    least one entry must be NEW in this release: its commit is not already in
+    the previous stable tag (for `conduit`) or in the version of that module
+    pinned at the previous tag. A list of old commits does not count;
   * a non-patch release validates the file only if it exists;
   * an unresolvable module, tag or commit fails (fail closed: a lookup that
     could not run never reads as "the fix is in").
@@ -49,23 +54,62 @@ def is_patch(tag):
 
 
 def parse_fixes(text):
-    out = []
+    """Return (entries, waivers). entries are (module, commit, note);
+    waivers maps module to the reason from `waive-replace | module | reason`."""
+    out, waivers = [], {}
     for n, raw in enumerate(text.splitlines(), 1):
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
         parts = [p.strip() for p in line.split("|")]
+        if parts[0] == "waive-replace":
+            if len(parts) < 3 or not parts[1] or not parts[2]:
+                raise GateError(f"line {n}: want `waive-replace | module | reason`")
+            waivers[parts[1]] = parts[2]
+            continue
         if len(parts) < 2 or not parts[0] or not re.fullmatch(r"[0-9a-f]{7,40}", parts[1]):
             raise GateError(f"line {n}: want `module | commit | note` with a hex commit, got {raw!r}")
         out.append((parts[0], parts[1], parts[2] if len(parts) > 2 else ""))
-    return out
+    return out, waivers
+
+
+_REQ = re.compile(r"^\s*(?:require\s+)?(\S+)\s+(v\d\S*)")
+_REPL = re.compile(r"^\s*(?:replace\s+)?(\S+)(?:\s+v\S+)?\s*=>\s*(\S+)(?:\s+(v\S+))?")
 
 
 def gomod_versions(text):
-    out = {}
-    for m in re.finditer(r"^\s*(?:require\s+)?(\S+)\s+(v\d\S*)", text, re.M):
-        out[m.group(1)] = m.group(2)
-    return out
+    """(requires, replaces) from go.mod. Only lines in a require directive
+    set a version; replace lines, in either form, never overwrite one."""
+    reqs, repls = {}, {}
+    block = None
+    for raw in text.splitlines():
+        line = raw.split("//", 1)[0].strip()
+        if not line:
+            continue
+        if block:
+            if line == ")":
+                block = None
+            elif block == "require":
+                m = _REQ.match(line)
+                if m:
+                    reqs[m.group(1)] = m.group(2)
+            elif block == "replace":
+                m = _REPL.match(line)
+                if m:
+                    repls[m.group(1)] = (m.group(2), m.group(3))
+            continue
+        m = re.match(r"^(require|replace|exclude|retract|tool|godebug|ignore)\s*\($", line)
+        if m:
+            block = m.group(1)
+        elif line.startswith("require "):
+            m = _REQ.match(line)
+            if m:
+                reqs[m.group(1)] = m.group(2)
+        elif line.startswith("replace "):
+            m = _REPL.match(line)
+            if m:
+                repls[m.group(1)] = (m.group(2), m.group(3))
+    return reqs, repls
 
 
 def git(*args, cwd=None):
@@ -86,34 +130,78 @@ def is_ancestor(repo, commit, ref):
     return rc == 0
 
 
-def check(entries, versions, remote_base, work, self_repo="."):
-    """Return a list of human-readable problems; empty means the gate passes."""
-    problems = []
+_SEMVER = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+
+
+def previous_stable_tag(tag, repo="."):
+    """Highest stable vX.Y.Z tag in repo strictly below `tag` (by semver), or ''."""
+    rc, out = git("tag", "--list", "v[0-9]*", cwd=repo)
+    if rc != 0:
+        raise GateError(f"cannot list tags: {out}")
+    m = TAG.match(tag)
+    cur = (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    best = None
+    for t in out.split():
+        mm = _SEMVER.match(t)
+        if mm:
+            k = (int(mm.group(1)), int(mm.group(2)), int(mm.group(3)))
+            if k < cur and (best is None or k > best[0]):
+                best = (k, t)
+    return best[1] if best else ""
+
+
+def resolve_ref(version):
+    pm = PSEUDO.search(version)
+    return pm.group(1) if pm else version
+
+
+def check(entries, versions, replaces, waivers, remote_base, work, prev_tag="", prev_versions=None,
+          self_repo="."):
+    """Return (problems, new_count). Problems empty means the fixes are all in;
+    new_count is how many entries are not already in the previous release."""
+    problems, new = [], 0
     clones = {}
+
+    def clone(name):
+        if name not in clones:
+            dest = os.path.join(work, name)
+            rc, out = git("clone", "--bare", "--quiet", f"{remote_base}/{name}", dest)
+            if rc != 0:
+                raise GateError(f"cannot clone {name}: {out}")
+            clones[name] = dest
+        return clones[name]
+
     for module, commit, note in entries:
         try:
             if module == SELF:
                 ok, where = is_ancestor(self_repo, commit, "HEAD"), "this release"
+                if ok and prev_tag and not is_ancestor(self_repo, commit, prev_tag):
+                    new += 1
             else:
                 if module not in versions:
                     raise GateError(f"{module} is not in go.mod")
+                target = replaces.get(module)
                 version = versions[module]
+                if target:
+                    tpath, tver = target
+                    if tpath == module and tver:
+                        version = tver
+                    elif module not in waivers:
+                        raise GateError(f"go.mod replaces {module} with {tpath}; the version says nothing about "
+                                        f"the code that ships (waive with `waive-replace | {module} | reason`)")
                 name = module.rstrip("/").split("/")[-1]
-                if name not in clones:
-                    dest = os.path.join(work, name)
-                    rc, out = git("clone", "--bare", "--quiet", f"{remote_base}/{name}", dest)
-                    if rc != 0:
-                        raise GateError(f"cannot clone {name}: {out}")
-                    clones[name] = dest
-                pm = PSEUDO.search(version)
-                ref = pm.group(1) if pm else version
-                ok, where = is_ancestor(clones[name], commit, ref), f"{name} {version}"
+                repo = clone(name)
+                ok, where = is_ancestor(repo, commit, resolve_ref(version)), f"{name} {version}"
+                if ok:
+                    pv = (prev_versions or {}).get(module)
+                    if not pv or not is_ancestor(repo, commit, resolve_ref(pv)):
+                        new += 1
         except GateError as e:
             problems.append(f"{module} {commit}: {e}")
             continue
         if not ok:
             problems.append(f"{module} {commit} ({note or 'no note'}) is NOT in {where}")
-    return problems
+    return problems, new
 
 
 def main(argv=None):
@@ -127,9 +215,9 @@ def main(argv=None):
         patch = is_patch(a.tag)
         try:
             with open(a.file) as f:
-                entries = parse_fixes(f.read())
+                entries, waivers = parse_fixes(f.read())
         except FileNotFoundError:
-            entries = []
+            entries, waivers = [], {}
             if patch:
                 raise GateError(f"{a.file} is missing: a patch release must list the fixes it carries")
         if patch and not entries:
@@ -138,9 +226,20 @@ def main(argv=None):
             print(f"release fixes: no fixes declared for {a.tag}; nothing to check.")
             return 0
         with open(a.gomod) as f:
-            versions = gomod_versions(f.read())
+            versions, replaces = gomod_versions(f.read())
+        prev_tag, prev_versions = "", {}
+        if patch:
+            prev_tag = previous_stable_tag(a.tag)
+            if not prev_tag:
+                raise GateError(f"no previous stable tag below {a.tag}; cannot tell which fixes are new")
+            rc, out = git("show", f"{prev_tag}:go.mod")
+            if rc != 0:
+                raise GateError(f"cannot read go.mod at {prev_tag}: {out}")
+            prev_versions, _ = gomod_versions(out)
         with tempfile.TemporaryDirectory() as work:
-            problems = check(entries, versions, a.remote_base, work)
+            problems, new = check(entries, versions, replaces, waivers, a.remote_base, work, prev_tag, prev_versions)
+        if patch and not problems and new == 0:
+            problems.append(f"no listed fix is new since {prev_tag}: every commit is already in the previous release")
     except (OSError, GateError) as e:
         print(f"release fixes: FAILED: {e}")
         return 1
@@ -149,7 +248,7 @@ def main(argv=None):
         for p in problems:
             print(f"  - {p}")
         return 1
-    print(f"release fixes: all {len(entries)} listed fixes are in {a.tag}.")
+    print(f"release fixes: all {len(entries)} listed fixes are in {a.tag}" + (f" ({new} new since {prev_tag})." if patch else "."))
     return 0
 
 
