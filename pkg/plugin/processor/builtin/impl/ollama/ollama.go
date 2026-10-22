@@ -135,7 +135,7 @@ func (p *OllamaProcessor) processRecord(ctx context.Context, rec opencdc.Record,
 	if err != nil {
 		return nil, cerrors.Errorf("creating the ollama request %w", err)
 	}
-	logger.Trace().Msg(fmt.Sprintf("Ollama Request: %s", reqBody))
+	logger.Trace().Int("request_size", len(reqBody)).Msg("sending Ollama request")
 
 	resp, err := p.sendOllamaRequest(ctx, reqBody)
 	if err != nil {
