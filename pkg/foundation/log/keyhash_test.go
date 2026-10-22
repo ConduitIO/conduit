@@ -1,0 +1,33 @@
+// Copyright © 2026 Meroxa, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package log
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/matryer/is"
+)
+
+func TestKeyHash(t *testing.T) {
+	is := is.New(t)
+
+	h := KeyHash([]byte("customer-42"))
+	is.Equal(len(h), 16)
+	is.True(!strings.Contains(h, "customer"))
+	is.Equal(h, KeyHash([]byte("customer-42")))  // stable within the process
+	is.True(h != KeyHash([]byte("customer-43"))) // distinct keys differ
+	is.Equal(len(KeyHash(nil)), 16)              // nil key does not panic
+}
