@@ -26,6 +26,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/errsafe"
 	"github.com/goccy/go-json"
 )
 
@@ -124,12 +125,12 @@ func (d *DebeziumProcessor) processRecord(rec opencdc.Record) (sdk.ProcessedReco
 	case opencdc.RawData:
 		err := json.Unmarshal(d.Bytes(), &debeziumEvent)
 		if err != nil {
-			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", err)
+			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", errsafe.Sanitize(err))
 		}
 	case string:
 		err := json.Unmarshal([]byte(d), &debeziumEvent)
 		if err != nil {
-			return nil, cerrors.Errorf("failed unmarshalling JSON from string: %w", err)
+			return nil, cerrors.Errorf("failed unmarshalling JSON from string: %w", errsafe.Sanitize(err))
 		}
 	default:
 		return nil, cerrors.Errorf("unexpected data type %T", ref.Get())

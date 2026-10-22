@@ -274,7 +274,7 @@ func TestUnwrapOpenCDC_Process(t *testing.T) {
 				},
 				Position: []byte("test-pos"),
 			},
-			want: sdk.ErrorRecord{Error: cerrors.New("failed to unmarshal raw data as JSON: invalid character 'h' in literal true (expecting 'r')")},
+			want: sdk.ErrorRecord{Error: cerrors.New("failed to unmarshal raw data as JSON: invalid JSON syntax at offset 2")},
 		},
 		{
 			name:   "create with structured data",

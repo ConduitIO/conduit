@@ -26,6 +26,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/internal"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/errsafe"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/goccy/go-json"
 )
@@ -184,17 +185,17 @@ func (p *EncodeProcessor) structuredData(data any) (opencdc.StructuredData, erro
 		}
 		err := json.Unmarshal(b, &sd)
 		if err != nil {
-			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", err)
+			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", errsafe.Sanitize(err))
 		}
 	case string:
 		err := json.Unmarshal([]byte(v), &sd)
 		if err != nil {
-			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", err)
+			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", errsafe.Sanitize(err))
 		}
 	case []byte:
 		err := json.Unmarshal(v, &sd)
 		if err != nil {
-			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", err)
+			return nil, cerrors.Errorf("failed unmarshalling JSON from raw data: %w", errsafe.Sanitize(err))
 		}
 	case opencdc.StructuredData:
 		sd = v

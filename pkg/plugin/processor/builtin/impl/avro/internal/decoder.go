@@ -20,6 +20,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/errsafe"
 	"github.com/conduitio/conduit/pkg/schemaregistry"
 	"github.com/conduitio/conduit/pkg/schemaregistry/toschema"
 	"github.com/twmb/franz-go/pkg/sr"
@@ -52,6 +53,12 @@ func (d *Decoder) Decode(ctx context.Context, b opencdc.RawData) (opencdc.Struct
 	var out opencdc.StructuredData
 	err = sch.Unmarshal(data, &out)
 	if err != nil {
+		// A cap failure names a limit, not data, and is classified by its text
+		// (schemaregistry.ClassifyDecodeError); any other codec error can
+		// quote the value.
+		if !schemaregistry.IsAvroLimitError(err) {
+			err = errsafe.Opaque(err)
+		}
 		return nil, cerrors.Errorf("failed to unmarshal data with schema (ID: %v): %w", id, err)
 	}
 

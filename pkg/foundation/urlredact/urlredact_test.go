@@ -113,3 +113,20 @@ func TestError(t *testing.T) {
 		is.True(!strings.Contains(got.Error(), "SECRET"))
 	})
 }
+
+func TestText(t *testing.T) {
+	is := is.New(t)
+	got := Text(`unable to GET "http://SECRET-user:SECRET-pass@registry.internal:8081/schemas/ids/3?token=SECRET-token": connection refused; see https://docs.example.com/x`)
+	is.True(!strings.Contains(got, "SECRET"))
+	is.True(strings.Contains(got, "registry.internal:8081/schemas/ids/3?token=xxxxx"))
+	is.True(strings.Contains(got, "connection refused"))
+	is.True(strings.Contains(got, "https://docs.example.com/x"))
+}
+
+func TestError_RedactsURLsTheLibraryFormattedItself(t *testing.T) {
+	is := is.New(t)
+	err := cerrors.Errorf(`unable to GET "http://SECRET-user:SECRET-pass@registry.internal/subjects": %w`, cerrors.New("connection refused"))
+	got := Error(err)
+	is.True(!strings.Contains(got.Error(), "SECRET"))
+	is.True(cerrors.Is(got, err))
+}

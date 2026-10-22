@@ -123,6 +123,14 @@ func maskQueryAndFragment(s string) string {
 	return b.String()
 }
 
+// urlInText finds absolute URLs in free text.
+var urlInText = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s"'<>]+`)
+
+// Text returns s with every absolute URL in it redacted by String.
+func Text(s string) string {
+	return urlInText.ReplaceAllStringFunc(s, String)
+}
+
 // Error returns err with the URLs of every *url.Error in its chain replaced in
 // the message by their redacted form. The returned error wraps err, so
 // errors.Is and errors.As keep working. If nothing needs redacting, err is
@@ -152,6 +160,9 @@ func Error(err error) error {
 		}
 		e = ue.Err // the cause can hold another url.Error
 	}
+	// Libraries that format a URL into their own text (not a url.Error) are
+	// covered by redacting every URL found in the message.
+	redacted = Text(redacted)
 	if redacted == msg {
 		return err
 	}

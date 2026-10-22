@@ -53,6 +53,22 @@ var avroLimitMarkers = []string{
 	"Config.MaxMapAllocSize",
 }
 
+// IsAvroLimitError reports whether err is an Avro allocation-cap failure, by the
+// same markers ClassifyDecodeError uses. Its message names a limit and a count,
+// not record data.
+func IsAvroLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	for _, m := range avroLimitMarkers {
+		if strings.Contains(msg, m) {
+			return true
+		}
+	}
+	return false
+}
+
 // ClassifyDecodeError returns err tagged with CodeAvroLimitExceeded when it
 // is an Avro allocation-cap failure, and err unchanged otherwise (including
 // nil). It works on the error text, so it also classifies errors that
