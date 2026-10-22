@@ -307,8 +307,7 @@ into any connector repository.
    commit. `release-check` resolves each module's version in `go.mod` to its tag and checks every listed commit is an
    ancestor (`git merge-base --is-ancestor`) before anything is published. A patch release must list at least one
    fix newer than the previous tag, so a trivial old entry does not satisfy it. First entry for the v0.20
-   line:
-   commons v0.7.2 with the four fixes the v0.20.3 plan named.
+   line: commons v0.7.2 with the four fixes the v0.20.3 plan named.
 3. **Connector release gate.** Before a connector tag, list the merged PRs since the last stable tag that carry
    `do-not-merge` or a `changes-needed` record without a later `approve`; fail if there are any.
 4. **Release notes on release branches.** A patch release fails if its notes are only the generated changelog, or do
