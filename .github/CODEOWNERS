@@ -1,1 +1,37 @@
-*       @ConduitIO/conduit-core @devarismeroxa
+# Code owners.
+#
+# Last matching pattern wins, so the Tier 1 block below replaces the default
+# owners for those paths rather than adding to them.
+#
+# This file does nothing until branch protection on `main` and `release/*` turns
+# on "Require review from Code Owners". The recommended settings are in
+# docs/postmortems/20261021-data-loss-and-process-failures.md, "Branch
+# protection". A caveat from there: GitHub never lets an account approve its own
+# PR. While every PR is opened from the account listed below, a code-owner
+# review on a Tier 1 path cannot be given. Open PRs from a separate machine
+# account first, or the rule will be bypassed and mean nothing.
+
+# Default.
+*                                   @ConduitIO/conduit-core @devarismeroxa
+
+# Tier 1 (CLAUDE.md, "PR review process"): record flow, ack/position/checkpoint
+# logic, state, connector protocol, serialization formats. Human sign-off by
+# DeVaris is required; the default owners are not enough.
+/pkg/connector/                     @devarismeroxa
+/pkg/lifecycle/                     @devarismeroxa
+/pkg/lifecycle-poc/                 @devarismeroxa
+/pkg/orchestrator/                  @devarismeroxa
+/pkg/pipeline/                      @devarismeroxa
+/pkg/provisioning/                  @devarismeroxa
+/pkg/plugin/connector/              @devarismeroxa
+/pkg/schemaregistry/                @devarismeroxa
+
+# The suites that prove the data-path invariants.
+/tests/chaos/                       @devarismeroxa
+/tests/upgrade/                     @devarismeroxa
+/tests/valuecorrectness/            @devarismeroxa
+
+# The gates themselves. Weakening a gate is a Tier 1 change.
+/.github/                           @devarismeroxa
+/CLAUDE.md                          @devarismeroxa
+/Makefile                           @devarismeroxa
