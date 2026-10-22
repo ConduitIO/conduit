@@ -170,8 +170,8 @@
             "pointer": "/source.cluster.sasl.mechanism"
           },
           "code": "kc.key_unsupported",
-          "reason": "Dropped: Kafka Connect ignores SASL settings unless security.protocol is SASL_SSL or SASL_PLAINTEXT, and here it is PLAINTEXT, SSL or not set, so the running connector does not authenticate with SASL. migrate does not write SASL credentials with TLS off (they would be sent in the clear, and the Kafka connector refuses that).",
-          "fix": "If the cluster needs no SASL, remove the sasl.* keys from the Kafka Connect config. If it does, set security.protocol to SASL_SSL (and enable TLS on the cluster), then re-run.",
+          "reason": "Dropped: migrate writes SASL settings only for security.protocol SASL_SSL. Kafka Connect ignores them with PLAINTEXT, with SSL and when security.protocol is not set, so the running connector does not authenticate with SASL there; with SASL_PLAINTEXT it does, but over a connection without TLS, which migrate does not write (the credentials would be sent in the clear and the Kafka connector refuses that).",
+          "fix": "If the cluster needs no SASL, remove the sasl.* keys from the Kafka Connect config. If it does, enable TLS on the cluster and set security.protocol to SASL_SSL, then re-run.",
           "blocking": true
         },
         {
@@ -182,8 +182,8 @@
             "pointer": "/source.cluster.sasl.jaas.config"
           },
           "code": "kc.key_unsupported",
-          "reason": "Dropped: Kafka Connect ignores SASL settings unless security.protocol is SASL_SSL or SASL_PLAINTEXT, and here it is PLAINTEXT, SSL or not set, so the running connector does not authenticate with SASL. migrate does not write SASL credentials with TLS off (they would be sent in the clear, and the Kafka connector refuses that).",
-          "fix": "If the cluster needs no SASL, remove the sasl.* keys from the Kafka Connect config. If it does, set security.protocol to SASL_SSL (and enable TLS on the cluster), then re-run.",
+          "reason": "Dropped: migrate writes SASL settings only for security.protocol SASL_SSL. Kafka Connect ignores them with PLAINTEXT, with SSL and when security.protocol is not set, so the running connector does not authenticate with SASL there; with SASL_PLAINTEXT it does, but over a connection without TLS, which migrate does not write (the credentials would be sent in the clear and the Kafka connector refuses that).",
+          "fix": "If the cluster needs no SASL, remove the sasl.* keys from the Kafka Connect config. If it does, enable TLS on the cluster and set security.protocol to SASL_SSL, then re-run.",
           "blocking": true,
           "secret": true
         },
@@ -207,8 +207,8 @@
             "pointer": "/target.cluster.sasl.mechanism"
           },
           "code": "kc.key_unsupported",
-          "reason": "Dropped: Kafka Connect ignores SASL settings unless security.protocol is SASL_SSL or SASL_PLAINTEXT, and here it is PLAINTEXT, SSL or not set, so the running connector does not authenticate with SASL. migrate does not write SASL credentials with TLS off (they would be sent in the clear, and the Kafka connector refuses that).",
-          "fix": "If the cluster needs no SASL, remove the sasl.* keys from the Kafka Connect config. If it does, set security.protocol to SASL_SSL (and enable TLS on the cluster), then re-run.",
+          "reason": "Dropped: migrate writes SASL settings only for security.protocol SASL_SSL. Kafka Connect ignores them with PLAINTEXT, with SSL and when security.protocol is not set, so the running connector does not authenticate with SASL there; with SASL_PLAINTEXT it does, but over a connection without TLS, which migrate does not write (the credentials would be sent in the clear and the Kafka connector refuses that).",
+          "fix": "If the cluster needs no SASL, remove the sasl.* keys from the Kafka Connect config. If it does, enable TLS on the cluster and set security.protocol to SASL_SSL, then re-run.",
           "blocking": true
         },
         {
@@ -219,8 +219,8 @@
             "pointer": "/target.cluster.sasl.jaas.config"
           },
           "code": "kc.key_unsupported",
-          "reason": "Dropped: Kafka Connect ignores SASL settings unless security.protocol is SASL_SSL or SASL_PLAINTEXT, and here it is PLAINTEXT, SSL or not set, so the running connector does not authenticate with SASL. migrate does not write SASL credentials with TLS off (they would be sent in the clear, and the Kafka connector refuses that).",
-          "fix": "If the cluster needs no SASL, remove the sasl.* keys from the Kafka Connect config. If it does, set security.protocol to SASL_SSL (and enable TLS on the cluster), then re-run.",
+          "reason": "Dropped: migrate writes SASL settings only for security.protocol SASL_SSL. Kafka Connect ignores them with PLAINTEXT, with SSL and when security.protocol is not set, so the running connector does not authenticate with SASL there; with SASL_PLAINTEXT it does, but over a connection without TLS, which migrate does not write (the credentials would be sent in the clear and the Kafka connector refuses that).",
+          "fix": "If the cluster needs no SASL, remove the sasl.* keys from the Kafka Connect config. If it does, enable TLS on the cluster and set security.protocol to SASL_SSL, then re-run.",
           "blocking": true,
           "secret": true
         }
@@ -242,7 +242,7 @@
         },
         {
           "code": "kc.secret_plaintext",
-          "reason": "The input holds at least one secret as a literal value. migrate wrote a variable reference instead, but the input file itself contains the secret.",
+          "reason": "The input holds at least one secret as a literal value. Where migrate used the setting it wrote a variable reference instead (a dropped setting has no variable), but the input file itself contains the secret.",
           "fix": "Fill the variables in secrets.env.template from your secret store, and replace the literal in the Kafka Connect config with a config-provider reference.",
           "blocking": false,
           "rule": "secrets"

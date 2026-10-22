@@ -334,7 +334,7 @@ func hasLiteralSecret(ds []rules.Decision) bool {
 func plaintextNote() kcmigrate.Note {
 	return kcmigrate.Note{
 		Code: kcmigrate.CodeSecretPlaintext.Reason(), Rule: "secrets",
-		Reason: "The input holds at least one secret as a literal value. migrate wrote a variable reference instead, but the input file itself contains the secret.",
+		Reason: "The input holds at least one secret as a literal value. Where migrate used the setting it wrote a variable reference instead (a dropped setting has no variable), but the input file itself contains the secret.",
 		Fix:    "Fill the variables in secrets.env.template from your secret store, and replace the literal in the Kafka Connect config with a config-provider reference.",
 	}
 }

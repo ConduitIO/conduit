@@ -236,7 +236,7 @@ func claimedSettings(a rules.Action) []string {
 	case KindTLS:
 		return []string{"tls.enabled"}
 	case KindSASLJAAS:
-		return []string{"saslUsername", "saslPassword"}
+		return []string{settingSASLUsername, settingSASLPassword}
 	case KindPGURL:
 		return []string{"url"}
 	}
@@ -445,7 +445,7 @@ func CheckActions(refs []rules.ActionRef) error {
 func tlsFromProtocol(p *Plan, d *rules.Decision) error {
 	proto := strings.ToUpper(strings.TrimSpace(d.KV.Value.Reveal()))
 	switch proto {
-	case "SSL", "SASL_SSL":
+	case protocolSSL, protocolSASLSSL:
 		if err := set(p, d, d.Emit.Args["side"], "tls.enabled", "true", ""); err != nil {
 			return err
 		}

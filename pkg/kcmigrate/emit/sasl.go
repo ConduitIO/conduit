@@ -27,6 +27,8 @@ const (
 	settingSASLUsername  = "saslUsername"
 	settingSASLPassword  = "saslPassword"
 	tlsOn                = "true"
+	protocolSSL          = "SSL"
+	protocolSASLSSL      = "SASL_SSL"
 )
 
 var saslSettings = []string{settingSASLMechanism, settingSASLUsername, settingSASLPassword}
@@ -48,7 +50,7 @@ func DropUnprotectedSASL(p *Plan, entryLists ...[]kcmigrate.Entry) {
 	for i := range p.connectors {
 		c := &p.connectors[i]
 		tlsPath := fmt.Sprintf("/pipelines/0/connectors/%d/settings/tls.enabled", i)
-		if o, ok := p.owner[tlsPath]; ok && c.Settings["tls.enabled"] == tlsOn && p.protocol[o.keyRef] == "SASL_SSL" {
+		if o, ok := p.owner[tlsPath]; ok && c.Settings["tls.enabled"] == tlsOn && p.protocol[o.keyRef] == protocolSASLSSL {
 			continue
 		}
 		for _, name := range saslSettings {
@@ -68,6 +70,16 @@ func DropUnprotectedSASL(p *Plan, entryLists ...[]kcmigrate.Entry) {
 	if len(dropped) == 0 {
 		return
 	}
+	// A variable that a setting we keep still references (the same
+	// ${env:NAME} used on both sides, one of them with SASL over TLS) stays in
+	// the secrets template and is not the dropped entries' variable.
+	for i := range p.connectors {
+		for _, v := range p.connectors[i].Settings {
+			if m := strings.TrimSuffix(strings.TrimPrefix(v, "${"), "}"); m != v {
+				delete(droppedEnv, m)
+			}
+		}
+	}
 	kept := p.secrets[:0]
 	for _, s := range p.secrets {
 		if !droppedEnv[s.Env] {
@@ -85,8 +97,8 @@ func DropUnprotectedSASL(p *Plan, entryLists ...[]kcmigrate.Entry) {
 			*e = kcmigrate.Entry{
 				Key: e.Key, Status: kcmigrate.StatusUnsupported, Origin: e.Origin, Blocking: true,
 				Code:   kcmigrate.CodeKeyUnsupported.Reason(),
-				Reason: "Dropped: Kafka Connect ignores SASL settings unless security.protocol is SASL_SSL or SASL_PLAINTEXT, and here it is PLAINTEXT, SSL or not set, so the running connector does not authenticate with SASL. migrate does not write SASL credentials with TLS off (they would be sent in the clear, and the Kafka connector refuses that).",
-				Fix:    "If the cluster needs no SASL, remove the sasl.* keys from the Kafka Connect config. If it does, set security.protocol to SASL_SSL (and enable TLS on the cluster), then re-run.",
+				Reason: "Dropped: migrate writes SASL settings only for security.protocol SASL_SSL. Kafka Connect ignores them with PLAINTEXT, with SSL and when security.protocol is not set, so the running connector does not authenticate with SASL there; with SASL_PLAINTEXT it does, but over a connection without TLS, which migrate does not write (the credentials would be sent in the clear and the Kafka connector refuses that).",
+				Fix:    "If the cluster needs no SASL, remove the sasl.* keys from the Kafka Connect config. If it does, enable TLS on the cluster and set security.protocol to SASL_SSL, then re-run.",
 			}
 		}
 	}
