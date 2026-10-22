@@ -184,7 +184,7 @@
         },
         {
           "code": "kc.secret_plaintext",
-          "reason": "The input holds at least one secret as a literal value. migrate wrote a variable reference instead, but the input file itself contains the secret.",
+          "reason": "The input holds at least one secret as a literal value. Where migrate used the setting it wrote a variable reference instead (a dropped setting has no variable), but the input file itself contains the secret.",
           "fix": "Fill the variables in secrets.env.template from your secret store, and replace the literal in the Kafka Connect config with a config-provider reference.",
           "blocking": false,
           "rule": "secrets"

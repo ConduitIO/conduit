@@ -1,0 +1,21 @@
+version: "2.2"
+pipelines:
+  - id: mm2-sasl-with-plaintext-protocol
+    status: stopped
+    description: Migrated from Kafka Connect connector "mm2-sasl-with-plaintext-protocol" (org.apache.kafka.connect.mirror.MirrorSourceConnector) by conduit <VERSION>; report sha256:<REPORT_SHA256>
+    connectors:
+      - id: source
+        type: source
+        plugin: builtin:kafka
+        settings:
+          readFromBeginning: "true"
+          servers: b-1.source.internal.example:9092
+          tls.enabled: "false"
+          topics: orders
+      - id: destination
+        type: destination
+        plugin: builtin:kafka
+        settings:
+          servers: b-1.target.internal.example:9092
+          tls.enabled: "false"
+          topic: msksource.{{ index .Metadata "opencdc.collection" }}

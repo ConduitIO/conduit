@@ -236,7 +236,7 @@ func claimedSettings(a rules.Action) []string {
 	case KindTLS:
 		return []string{"tls.enabled"}
 	case KindSASLJAAS:
-		return []string{"saslUsername", "saslPassword"}
+		return []string{settingSASLUsername, settingSASLPassword}
 	case KindPGURL:
 		return []string{"url"}
 	}
@@ -438,18 +438,33 @@ func CheckActions(refs []rules.ActionRef) error {
 }
 
 // tlsFromProtocol maps security.protocol onto tls.enabled. Argument: side.
-// SSL and SASL_SSL enable TLS; PLAINTEXT and SASL_PLAINTEXT write nothing
-// (TLS off is the connector default). Rule data restricts the values.
+// SSL and SASL_SSL enable TLS; PLAINTEXT writes tls.enabled=false. Rule data
+// restricts the values and blocks SASL_PLAINTEXT before it gets here: the Kafka
+// connector refuses SASL without TLS, and the migration never writes a
+// plaintext SASL setup by itself.
 func tlsFromProtocol(p *Plan, d *rules.Decision) error {
-	switch strings.ToUpper(strings.TrimSpace(d.KV.Value.Reveal())) {
-	case "SSL", "SASL_SSL":
-		return set(p, d, d.Emit.Args["side"], "tls.enabled", "true", "")
+	proto := strings.ToUpper(strings.TrimSpace(d.KV.Value.Reveal()))
+	switch proto {
+	case protocolSSL, protocolSASLSSL:
+		if err := set(p, d, d.Emit.Args["side"], "tls.enabled", "true", ""); err != nil {
+			return err
+		}
+	case "SASL_PLAINTEXT":
+		// Unreachable with the shipped rule data. Fail closed if a rule file
+		// ever routes it here: never silently emit plaintext SASL.
+		return cerrors.Errorf("%s: security.protocol SASL_PLAINTEXT must be a blocking report entry, not a translation", d.Entry.Key)
 	default:
 		// Written explicitly, so a lower layer (a worker's
 		// producer.security.protocol=SSL) cannot turn TLS on under a
 		// connector's PLAINTEXT override.
-		return set(p, d, d.Emit.Args["side"], "tls.enabled", "false", "")
+		if err := set(p, d, d.Emit.Args["side"], "tls.enabled", "false", ""); err != nil {
+			return err
+		}
 	}
+	// DropUnprotectedSASL needs the protocol that produced the winning
+	// tls.enabled value.
+	p.protocol[keyRef{origin: p.origin, key: d.KV.Key}] = proto
+	return nil
 }
 
 // saslJAAS splits sasl.jaas.config into saslUsername and saslPassword (the
@@ -475,7 +490,7 @@ func saslJAAS(p *Plan, d *rules.Decision) error {
 		return err
 	}
 	ref, env := p.secretRef(d)
-	if err := set(p, d, side, "saslPassword", ref, env); err != nil || d.Entry.Code != "" || d.Entry.Target == nil {
+	if err := set(p, d, side, settingSASLPassword, ref, env); err != nil || d.Entry.Code != "" || d.Entry.Target == nil {
 		return err
 	}
 	d.Entry.Secret = true
