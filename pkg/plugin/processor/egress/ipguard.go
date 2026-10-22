@@ -89,6 +89,10 @@ var refusedV6 = []struct {
 
 var (
 	nat64Net = mustCIDR("64:ff9b::/96") // RFC 6052 well-known NAT64 prefix
+	// nat64LocalNet is the RFC 8215 local-use NAT64 prefix. An operator's
+	// translator may map any v4 address, private and metadata ranges included,
+	// into it, so it is refused wholesale like the well-known prefix.
+	nat64LocalNet = mustCIDR("64:ff9b:1::/48")
 	// v4TranslatedNet is the RFC 6052 IPv4-Translated special-purpose prefix. It
 	// is DISTINCT from the v4-mapped ::ffff:0:0/96 that ip.To4() unwraps: the
 	// embedded v4 sits one 16-bit group further right (bytes [12:16] with ffff at
@@ -161,7 +165,7 @@ func Refuse(ip net.IP) (bool, refusedReason) {
 	// NAT64 64:ff9b::/96 — a DNS64 resolver (or a hostile authoritative server)
 	// can legitimately synthesize 64:ff9b::a9fe:a9fe which EMBEDS 169.254.169.254.
 	// Unwrap the embedded v4 and re-check, and refuse the whole block outright.
-	if nat64Net.Contains(ip16) {
+	if nat64Net.Contains(ip16) || nat64LocalNet.Contains(ip16) {
 		return true, reasonNAT64
 	}
 	// IPv4-Translated ::ffff:0:0:0/96 (RFC 6052) — embeds a v4 in bytes [12:16]

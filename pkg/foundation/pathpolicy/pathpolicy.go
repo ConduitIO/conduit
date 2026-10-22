@@ -170,6 +170,12 @@ func splitRel(rel string) ([]string, error) {
 	return parts, nil
 }
 
+// Refuse returns the coded refusal for path, as [Policy.Check] does, for
+// callers that find a reason of their own.
+func (p *Policy) Refuse(configPath, path, why string) error {
+	return p.refuse(configPath, path, why)
+}
+
 func (p *Policy) refuse(configPath, path, why string) error {
 	key := "the operator allowed-dirs setting"
 	if p != nil && p.operatorKey != "" {

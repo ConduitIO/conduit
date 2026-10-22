@@ -44,6 +44,7 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/foundation/connegress"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/grpcutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -560,11 +561,16 @@ func createServices(r *Runtime) error {
 	if err != nil {
 		return cerrors.Errorf("invalid %s config: %w", SecretsAllowedDirsKey, err)
 	}
-	settingsResolver := engineSettingsResolver{files: filePolicy, secrets: secretsPolicy}
+	connEgress, err := r.Config.connectorEgressPolicy()
+	if err != nil {
+		return cerrors.Errorf("invalid %s config: %w", connegress.AllowConfigPath, err)
+	}
+	settingsResolver := engineSettingsResolver{files: filePolicy, secrets: secretsPolicy, egress: connEgress}
 
 	procPluginService := proc_plugin.NewPluginService(
 		r.logger,
-		proc_builtin.NewRegistry(r.logger, r.Config.ProcessorPlugins, schemaRegistry,
+		proc_builtin.NewRegistry(
+			r.logger, r.Config.ProcessorPlugins, schemaRegistry,
 			proc_builtin.WithDialGuard(dialGuard),
 			proc_builtin.WithJavaScriptFileAccess(jsFiles),
 		),

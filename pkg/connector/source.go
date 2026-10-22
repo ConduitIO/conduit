@@ -1155,6 +1155,17 @@ func (s *Source) triggerLifecycleEvent(ctx context.Context, oldConfig, newConfig
 	// (for example a ${VAR} the operator has not allowed) fails the event.
 	oldConfig, err = s.Instance.resolveEventSettings(oldConfig)
 	if err != nil {
+		if newConfig == nil {
+			// "deleted": a setting that no longer resolves (a ${VAR} that left
+			// env.allow, or a path outside the allowed directories) must not
+			// make the connector undeletable. The plugin is not told, so its
+			// own cleanup (for example dropping a replication slot) does not
+			// run and has to be done by hand. Only the error is logged, never
+			// a setting value.
+			s.Instance.logger.Warn(ctx).Err(err).
+				Msg("skipping lifecycle event \"deleted\" on source connector plugin: its settings could not be resolved; plugin-side cleanup must be done manually")
+			return false, nil
+		}
 		return false, cerrors.Errorf("could not resolve the previous connector settings for the lifecycle event: %w", err)
 	}
 	newConfig, err = s.Instance.resolveEventSettings(newConfig)

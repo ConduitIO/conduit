@@ -63,7 +63,7 @@ func TestSource_OnDelete_UsesResolver(t *testing.T) {
 	is.Equal(got, map[string]string{"path": "resolved:/x"})
 }
 
-func TestSource_OnDelete_ResolverRefusalStopsTheEvent(t *testing.T) {
+func TestSource_OnDelete_ResolverRefusalSkipsTheEvent(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 
@@ -74,11 +74,12 @@ func TestSource_OnDelete_ResolverRefusalStopsTheEvent(t *testing.T) {
 
 	// no LifecycleOnDeleted expectation: the plugin must not be called
 	sourceMock.EXPECT().Teardown(gomock.Any(), gomock.Any()).Return(pconnector.SourceTeardownResponse{}, nil)
-	err := src.OnDelete(ctx)
-	is.True(cerrors.Is(err, refusal))
+	// a refused setting must not make the connector undeletable: the plugin is
+	// not told, the delete goes through
+	is.NoErr(src.OnDelete(ctx))
 }
 
-func TestDestination_OnDelete_ResolverRefusalStopsTheEvent(t *testing.T) {
+func TestDestination_OnDelete_ResolverRefusalSkipsTheEvent(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 
@@ -88,6 +89,5 @@ func TestDestination_OnDelete_ResolverRefusalStopsTheEvent(t *testing.T) {
 	dest.Instance.LastActiveConfig.Settings = map[string]string{"path": "/etc/passwd"}
 
 	destMock.EXPECT().Teardown(gomock.Any(), gomock.Any()).Return(pconnector.DestinationTeardownResponse{}, nil)
-	err := dest.OnDelete(ctx)
-	is.True(cerrors.Is(err, refusal))
+	is.NoErr(dest.OnDelete(ctx))
 }
