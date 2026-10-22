@@ -57,7 +57,7 @@ func (d *DLQDestination) Write(ctx context.Context, rec opencdc.Record) error {
 		return cerrors.Errorf("expected 1 ack but got %d", len(ack))
 	}
 	if !bytes.Equal(rec.Position, ack[0].Position) {
-		return cerrors.Errorf("received unexpected ack, expected position %q but got %q", rec.Position, ack)
+		return cerrors.Errorf("received unexpected ack, expected position hash %s but got %d ack(s) starting with position hash %s", log.KeyHash(rec.Position), len(ack), log.KeyHash(ack[0].Position))
 	}
 	if ack[0].Error != nil {
 		return ack[0].Error // nack

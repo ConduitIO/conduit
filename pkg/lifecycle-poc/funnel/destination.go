@@ -235,7 +235,7 @@ func (t *DestinationTask) validateAcks(acks []connector.DestinationAck, position
 
 	for i, ack := range acks {
 		if !bytes.Equal(positions[i], ack.Position) {
-			return cerrors.Errorf("received unexpected ack, expected position %q but got %q", positions[i], ack.Position)
+			return cerrors.Errorf("received unexpected ack, expected position hash %s but got %s", log.KeyHash(positions[i]), log.KeyHash(ack.Position))
 		}
 	}
 

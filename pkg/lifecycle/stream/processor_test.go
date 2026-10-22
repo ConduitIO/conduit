@@ -16,6 +16,7 @@ package stream
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -27,6 +28,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/lifecycle/stream/mock"
 	"github.com/google/uuid"
@@ -273,8 +275,10 @@ func TestProcessorNode_BadProcessor_ChangesPosition(t *testing.T) {
 	nackHandler := func(msg *Message, nackMetadata NackMetadata) error {
 		// expected underlying error to be the processor error
 		is.New(t).Equal(
-			"processor changed position from 'test position' to 'new position' "+
+			// positions embed record keys for some connectors: only hashes are reported
+			fmt.Sprintf("processor changed position (hash %s to hash %s) "+
 				"(not allowed because source connector cannot correctly acknowledge messages)",
+				log.KeyHash([]byte("test position")), log.KeyHash([]byte("new position"))),
 			nackMetadata.Reason.Error(),
 		)
 		return nil // the error should be regarded as handled
