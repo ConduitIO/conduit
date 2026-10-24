@@ -24,7 +24,6 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/goccy/go-json"
 	"github.com/jpillora/backoff"
@@ -158,12 +157,10 @@ func (p *CommandProcessor) Process(ctx context.Context, records []opencdc.Record
 
 			if err != nil {
 				switch {
-				case cerrors.As(err, &cohere.GatewayTimeoutError{}),
-					cerrors.As(err, &cohere.InternalServerError{}),
-					cerrors.As(err, &cohere.ServiceUnavailableError{}):
+				case isRetryable(err):
 
 					if attempt < p.config.BackoffRetryCount {
-						p.logger.Debug(ctx).Err(err).Float64("attempt", attempt).
+						p.logger.Debug(ctx).Str("error_type", fmt.Sprintf("%T", err)).Float64("attempt", attempt).
 							Float64("backoffRetry.count", p.config.BackoffRetryCount).
 							Int64("backoffRetry.duration", duration.Milliseconds()).
 							Msg("retrying Cohere HTTP request")
@@ -175,13 +172,13 @@ func (p *CommandProcessor) Process(ctx context.Context, records []opencdc.Record
 							continue
 						}
 					} else {
-						return append(out, sdk.ErrorRecord{Error: err})
+						return append(out, sdk.ErrorRecord{Error: sanitizeAPIError(err)})
 					}
 
 				default:
 					// BadRequestError, ClientClosedRequestError, ForbiddenError, InvalidTokenError,
 					// NotFoundError, NotImplementedError, TooManyRequestsError, UnauthorizedError, UnprocessableEntityError
-					return append(out, sdk.ErrorRecord{Error: err})
+					return append(out, sdk.ErrorRecord{Error: sanitizeAPIError(err)})
 				}
 			}
 
