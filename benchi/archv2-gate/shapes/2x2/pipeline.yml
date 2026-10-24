@@ -1,0 +1,42 @@
+# archv2-gate shape 2x2: two generator sources, two file sinks, default config.
+#
+# Every record from either source reaches both sinks, so each sink should count
+# the same number of records; the harness reports records per second per sink
+# (the mean over the two). This is the shape where the engines differ in
+# design: v1 fans in and out through FaninNode/FanoutNode, arch-v2 runs one
+# worker per source into a shared destination subtree.
+#
+# Default config: sdk.batch.size and sdk.batch.delay unset (batches of one).
+# Both engines run this file unchanged.
+version: "2.2"
+pipelines:
+  - id: archv2-gate
+    status: running
+    name: archv2-gate
+    connectors:
+      - id: src-1
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+      - id: src-2
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+      - id: sink-1
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: /sink/sink-1.jsonl
+      - id: sink-2
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: /sink/sink-2.jsonl
