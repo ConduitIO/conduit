@@ -103,10 +103,12 @@ resolve to any address except a metadata address; list CIDRs to pin addresses.
 
 - It does not intercept what a connector does after it connected: redirects, a Kafka cluster that
   advertises other brokers, a Postgres server that points elsewhere.
-- **Standalone connectors are not restricted.** They are separate processes the operator installed;
-  they receive no dialer and are not checked, by the allowlist or at the dial. This includes the MySQL
-  connector, which is distributed standalone. The engine logs a warning at startup when the allowlist
-  is set. Restricting them needs a separate mechanism (tracked with #3043).
+- **Standalone connectors are refused while the allowlist is set.** A standalone connector is a
+  separate process the operator installed; it never receives the engine's dialer, so the allowlist
+  cannot bind what it dials. Rather than run it unconstrained, the engine refuses to start a pipeline
+  that uses one, with `connector.standalone_not_allowlisted`. Use a built-in connector (postgres,
+  kafka or s3), which honors the allowlist, or remove `connectors.egress.allow`. This includes the
+  MySQL connector, which is distributed standalone.
 - Validation requests check names only and do no DNS lookups, so they cannot be used to probe the
   network.
 - The processors' outbound HTTP has its own guard: [outbound-http-egress.md](outbound-http-egress.md).

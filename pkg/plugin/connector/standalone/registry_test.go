@@ -25,6 +25,7 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit-connector-protocol/pconnector/server"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/matryer/is"
@@ -141,4 +142,34 @@ func TestRegistry_List(t *testing.T) {
 		bp.FullName: bp.Specification,
 	}
 	is.Equal(got, want)
+}
+
+// When connectors.egress.allow is set, every standalone connector is refused at
+// dispatch: a standalone plugin is a separate process that never receives the
+// engine's dialer, so the allowlist cannot bind it, and starting it would run
+// an unconstrained process (fail closed).
+func TestRegistry_NewDispenser_RefusedWhenEgressRestricted(t *testing.T) {
+	is := is.New(t)
+
+	r := NewRegistry(log.Nop(), "", WithEgressRestricted(true))
+	_, err := r.NewDispenser(log.Nop(), plugin.FullName("standalone:mysql:latest"), pconnector.PluginConfig{})
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, CodeStandaloneNotAllowlisted)
+	is.Equal(ce.ConfigPath, "connectors.egress.allow")
+	is.True(ce.Suggestion != "")
+}
+
+// Without the allowlist the registry behaves as before: an unloaded plugin is
+// reported as not found, not as an egress refusal.
+func TestRegistry_NewDispenser_NotRefusedWhenEgressUnrestricted(t *testing.T) {
+	is := is.New(t)
+
+	r := NewRegistry(log.Nop(), "", WithEgressRestricted(false))
+	_, err := r.NewDispenser(log.Nop(), plugin.FullName("standalone:mysql:latest"), pconnector.PluginConfig{})
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, conduiterr.CodeConnectorPluginNotFound)
 }

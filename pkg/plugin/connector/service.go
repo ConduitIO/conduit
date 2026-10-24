@@ -216,7 +216,11 @@ func (s *PluginService) newDispenser(logger log.CtxLogger, name string, cfg pcon
 		return s.builtinReg.NewDispenser(logger, fullName, cfg)
 	case plugin.PluginTypeAny:
 		d, err := s.standaloneReg.NewDispenser(logger, fullName, cfg)
-		if err != nil {
+		// Only a genuinely absent standalone plugin falls back to the built-in
+		// registry. Any other standalone error — including the egress-allowlist
+		// refusal of pkg/plugin/connector/standalone — must propagate, not be
+		// masked by a built-in lookup.
+		if err != nil && cerrors.Is(err, plugin.ErrPluginNotFound) {
 			s.logger.Debug(context.Background()).Err(err).Msg("could not find standalone plugin dispenser, falling back to builtin plugin")
 			d, err = s.builtinReg.NewDispenser(logger, fullName, cfg)
 		}

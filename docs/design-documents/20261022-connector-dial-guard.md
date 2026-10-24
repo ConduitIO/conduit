@@ -15,9 +15,11 @@ The hand-off is a new package in `conduit-commons`, `dialer` (`WithDialContext`,
 somewhere; the connectors (postgres, kafka, s3, mysql) install it on every client they build. No
 `conduit-connector-sdk` change and no `conduit-connector-protocol` change.
 
-Scope decision for v0.21, stated explicitly: **the dial guard binds built-in connectors only.** Standalone
-connectors are separate processes; they receive no dialer, are not restricted by the allowlist, and the
-engine logs that at startup when an allowlist is set. See _Standalone connectors_.
+Scope decision for v0.21, stated explicitly: **the dial guard binds built-in connectors; standalone
+connectors are refused at dispatch while the allowlist is set.** Standalone connectors are separate
+processes that receive no dialer, so the allowlist cannot bind what they dial, and the engine refuses
+them (`connector.standalone_not_allowlisted`) instead of running them unconstrained. See _Standalone
+connectors_.
 
 Risk tier: Tier 1 (security boundary on how connectors reach the network; it touches connection setup
 on the data path but not record flow, acks, positions or serialization).
@@ -106,14 +108,14 @@ standalone connector that does not honor the dialer, or an older SDK, is silentl
 same cooperative model as built-ins but with a much larger population of third-party binaries.
 That is a design of its own and does not fit before v0.21.
 
-**Decision: (b).** For v0.21 the allowlist and dial guard bind built-in connectors only. This is not
-silent: the engine logs a warning at startup when `connectors.egress.allow` is set, and
-`docs/operations/connector-egress.md` states that standalone connectors (including the MySQL
-connector, which is distributed standalone) are unrestricted. Refusing every standalone connector
-whenever an allowlist is set was rejected for v0.21: it would break operators who run both, with no
-supported way to proceed. The MySQL connector adopts the seam so it is covered the moment a host that
-can supply the dialer (an embedding engine, a future env-driven SDK path, or MySQL becoming built-in)
-runs it.
+**Decision: refuse standalone connectors while the allowlist is set.** A standalone connector never
+receives the engine's dialer, so the allowlist cannot bind what it dials. Running it unconstrained
+would leave a hole exactly where the operator asked to close one, so the engine refuses it at dispatch
+(`connector.standalone_not_allowlisted`, fail closed) while `connectors.egress.allow` is set, and
+`docs/operations/connector-egress.md` states the built-in alternatives (postgres, kafka, s3) and the
+remove-the-allowlist remediation. The MySQL connector still adopts the seam so it is covered the moment
+a host that can supply the dialer (an embedding engine, a future env-driven SDK path, or MySQL becoming
+built-in) runs it.
 
 Follow-up (not in this change): the env-driven standalone path (a), tracked with #3043.
 
@@ -148,7 +150,7 @@ Follow-up (not in this change): the env-driven standalone path (a), tracked with
 | Dial to a host with several IPs, first unreachable | `Policy.DialContext` dials vetted addresses in order with the connector's per-attempt timeout; a dual-stack host with an unreachable first family connects slower than with Happy Eyeballs. Accepted; documented. |
 | Proxy configured in the environment | The vetted address is dialed directly; HTTP proxies are not used by the guard's transport (same as processors). |
 | Redirects, a Kafka cluster advertising other brokers | Every new connection still goes through the dial guard, so an advertised broker is vetted when dialed. Redirects across hosts are connector-level and unchanged. |
-| Standalone connector | Not restricted. Logged at startup, documented. |
+| Standalone connector | Refused at dispatch while the allowlist is set (`connector.standalone_not_allowlisted`), fail closed. |
 
 Data-path safety: the guard only decides whether a connection may be made. Refusal surfaces as a dial
 error through the connector's existing error path (the pipeline errors and is restarted by the engine's
@@ -171,7 +173,8 @@ record is acknowledged or dropped by this change.
 
 - A refused dial is a coded `connector.egress_blocked` error naming the target and the config path of
   the setting when known, logged by the connector and visible in the pipeline error.
-- Startup log (warn) when the allowlist is set: scope is built-in connectors only.
+- Startup log (info) when the allowlist is set: built-in connectors honor it and standalone connectors
+  are refused at dispatch (`connector.standalone_not_allowlisted`).
 - Existing metric/alert guidance in `docs/operations/connector-egress.md` applies; the runbook entry
   is extended with the dial-time symptom (pipeline degraded with `connector.egress_blocked` on a
   previously working connector after a DNS change) and its remediation (list the new address or CIDR).
@@ -188,3 +191,7 @@ record is acknowledged or dropped by this change.
   next dial is refused and the target listener sees no connection.
 - The MySQL connector is not built in, so it has no engine e2e; its guard is covered in its own
   repository and through the policy's `MySQLDialContext` adapter test.
+- Standalone-refusal regression (`pkg/plugin/connector/standalone` and `pkg/plugin/connector`): a
+  registry with the egress allowlist set refuses `NewDispenser` with
+  `connector.standalone_not_allowlisted`, and a bare connector name does not fall back to a built-in
+  lookup that would mask the refusal.

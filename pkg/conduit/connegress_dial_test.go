@@ -97,6 +97,22 @@ func (a *acceptCounter) port() string {
 	return p
 }
 
+// settle blocks until the accept counter stops increasing, so a baseline read
+// reflects every connection the control phase opened. The control source is
+// already torn down by then; this only absorbs the accept loop's asynchronous
+// count (the server increments just after the client's dial completes).
+func (a *acceptCounter) settle() {
+	const window = 100 * time.Millisecond
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		before := a.accepted.Load()
+		time.Sleep(window)
+		if a.accepted.Load() == before {
+			return
+		}
+	}
+}
+
 // openSource configures and opens the built-in source pluginName with settings
 // and returns the error of Open, within a bounded time.
 func openSource(t *testing.T, reg *conn_builtin.Registry, pluginName string, settings map[string]string) error {
@@ -193,6 +209,7 @@ func TestConnectorEgress_RebindRefusedAtDial(t *testing.T) {
 				// connection, so Open itself fails, but the dial happened).
 				_ = openSource(t, reg, c.plugin, settings)
 				is.True(target.accepted.Load() > 0) // control: the dial guard lets an allowed target through
+				target.settle()                     // absorb the accept loop's asynchronous count
 				before := target.accepted.Load()
 
 				// The record changes after configure.
@@ -201,7 +218,8 @@ func TestConnectorEgress_RebindRefusedAtDial(t *testing.T) {
 
 				err = openSource(t, reg, c.plugin, settings)
 				is.True(err != nil)
-				is.True(dns.lookups.Load() > lookups)    // the dial resolved the name itself
+				is.True(dns.lookups.Load() > lookups) // the dial resolved the name itself
+				target.settle()
 				is.Equal(target.accepted.Load(), before) // nothing reached the target again
 			})
 		}

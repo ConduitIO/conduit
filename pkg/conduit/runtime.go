@@ -581,12 +581,14 @@ func createServices(r *Runtime) error {
 		return cerrors.Errorf("invalid %s config: %w", connegress.AllowConfigPath, err)
 	}
 	if connEgress.Restricted() {
-		// Standalone connectors are separate processes: they receive no dialer
-		// from the engine, so the allowlist does not bind them. Said once at
+		// Standalone connectors are separate processes that never receive the
+		// engine's dialer, so the allowlist cannot bind them. The standalone
+		// registry refuses them at dispatch (see
+		// conn_standalone.WithEgressRestricted below); this is said once at
 		// startup so the scope of the setting is never a surprise.
-		r.logger.Warn(context.Background()).
+		r.logger.Info(context.Background()).
 			Str("setting", connegress.AllowConfigPath).
-			Msg("connector egress allowlist applies to built-in connectors only; standalone connectors are separate processes and are not restricted by it")
+			Msg("connector egress allowlist is set; standalone connectors are refused when a pipeline starts them (built-in connectors honor the allowlist)")
 	}
 	settingsResolver := engineSettingsResolver{env: envAllow, files: filePolicy, secrets: secretsPolicy, egress: connEgress}
 
@@ -633,6 +635,10 @@ func createServices(r *Runtime) error {
 			r.logger,
 			r.Config.Connectors.Path,
 			conn_standalone.WithEnvWarning(r.Config.Connectors.Standalone.EnvWarning),
+			// Standalone connectors are separate processes that never receive
+			// the engine's dialer, so the egress allowlist cannot bind them;
+			// refuse them at dispatch (fail closed) while the allowlist is set.
+			conn_standalone.WithEgressRestricted(connEgress.Restricted()),
 		),
 		tokenService,
 		conn_plugin.WithSettingsGuard(settingsResolver.CheckSettings),

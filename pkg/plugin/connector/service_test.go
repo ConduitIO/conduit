@@ -21,10 +21,12 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit-connector-protocol/pconnector/server"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/plugin/connector/mock"
+	"github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
@@ -176,6 +178,45 @@ func TestService_NewDispenser(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A bare connector name tries standalone first and falls back to built-in only
+// when the standalone plugin is absent. Any other standalone error — here the
+// egress-allowlist refusal — must propagate instead of being masked by the
+// built-in lookup.
+func TestService_NewDispenser_StandaloneRefusalNotMasked(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	authManager := mock.NewAuthManager(ctrl)
+	authManager.EXPECT().GenerateNew("foobar-connector-id")
+
+	builtinReg := mock.NewBuiltinReg(ctrl)
+	builtinReg.EXPECT().Init(ctx)
+
+	standaloneReg := mock.NewStandaloneReg(ctrl)
+	standaloneReg.EXPECT().Init(ctx, "test-conn-utils-address", server.DefaultMaxReceiveRecordSize)
+
+	standaloneReg.EXPECT().
+		NewDispenser(gomock.Any(), gomock.Eq(plugin.FullName("foobar-connector")), gomock.Any()).
+		Return(nil, conduiterr.New(standalone.CodeStandaloneNotAllowlisted, "refused"))
+	// builtinReg.NewDispenser has no expectation: gomock fails the test if the
+	// refusal is masked by a built-in fallback.
+
+	underTest := connector.NewPluginService(
+		log.Nop(),
+		builtinReg,
+		standaloneReg,
+		authManager,
+	)
+
+	underTest.Init(ctx, "test-conn-utils-address", server.DefaultMaxReceiveRecordSize)
+	_, err := underTest.NewDispenser(log.Nop(), "foobar-connector", "foobar-connector-id")
+
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code, standalone.CodeStandaloneNotAllowlisted)
 }
 
 func TestService_NewDispenser_InvalidPluginPrefix(t *testing.T) {

@@ -5,7 +5,7 @@
 The engine enforces `connectors.egress.allow` and the metadata-address refusal at dial time for
 built-in connectors by putting `connegress.Policy.DialContext` on the call context with the
 `conduit-commons/dialer` package. Connectors install it on every client they build. Standalone
-connectors are out of scope for v0.21.
+connectors never receive a dialer, so they are refused at dispatch while the allowlist is set.
 
 ## Context
 
@@ -19,8 +19,9 @@ not acceptable for v0.21. Details in `docs/design-documents/20261022-connector-d
    connector keeps its library default (not a deny, not a substituted `net.Dialer`).
 2. The engine applies it to the postgres, kafka and s3 built-in connectors; the policy used is the
    operator's `connegress.Policy`, with the metadata refusal always on.
-3. Standalone connectors receive no dialer and are not restricted by the allowlist for v0.21; the engine
-   warns at startup when the allowlist is set. An env-driven standalone path is a separate design.
+3. Standalone connectors receive no dialer, so the allowlist cannot bind what they dial; the engine
+   refuses them at dispatch while the allowlist is set (`connector.standalone_not_allowlisted`, fail
+   closed) rather than run them unconstrained. An env-driven standalone path is a separate design.
 4. Cooperative enforcement: a connector that does not read the seam is not guarded. The engine
    guards against missing adoption by tests that fail when a built-in connector in `go.mod` does not
    honor the dialer.
@@ -30,7 +31,7 @@ not acceptable for v0.21. Details in `docs/design-documents/20261022-connector-d
 - The dial guard is live for built-in connectors once the engine depends on connector releases that read
   the seam. Until then the setting check is the only enforcement and the docs say so.
 - DNS failures at dial now stop reconnects for restricted targets (they cannot be vetted).
-- Standalone connectors, including MySQL, are unrestricted in v0.21.
+- Standalone connectors, including MySQL, are refused at dispatch while the allowlist is set.
 - Backporting to v0.20.x is a separate maintainer decision.
 
 ## Related
