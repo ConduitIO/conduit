@@ -1,0 +1,40 @@
+schemaVersion: 1
+requestID: kafka-to-postgres-filter-before-upsert
+provider: anthropic
+model: claude-sonnet-5
+capturedAt: 2026-10-08T02:43:06.631514Z
+corpusPromptSHA256: fe4a8bbfe0fa358edde27130b7dc048f3e04be19888ee692193daf1c74032d1c
+systemPromptSHA256: 0901ab74fcb5a210a033e6849d662e6a0806995547c03037a684f3069a70957a
+catalogFingerprint: 186679fe313df6bc14bf8bc7d4e503c83f5f557d652e210635c421b105da7205
+turns:
+    - "n": 1
+      userPromptSHA256: fe4a8bbfe0fa358edde27130b7dc048f3e04be19888ee692193daf1c74032d1c
+      tokensUsed: 6677
+      completionText: |-
+        version: "2.2"
+        pipelines:
+          - id: kafka-to-postgres-upsert
+            status: running
+            connectors:
+              - id: kafka-source
+                type: source
+                plugin: "builtin:kafka"
+                settings:
+                  servers: "localhost:9092"
+                  topics: "events"
+                  groupID: "conduit-events-group"
+                  readFromBeginning: "true"
+              - id: postgres-destination
+                type: destination
+                plugin: "builtin:postgres"
+                settings:
+                  url: TODO
+                  table: "events"
+            processors:
+              - id: skip-test-events
+                plugin: "builtin:filter"
+                settings:
+                  condition: '{{ ne (index .Metadata "is_test") "true" }}'
+outcome:
+    validatePass: true
+    semanticMatch: true
