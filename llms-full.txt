@@ -229,7 +229,7 @@ Author: Meroxa, Inc.
 
 (none)
 
-### kafka (v0.14.2)
+### kafka (v0.15.1-0.20261024022630-95a7c8b63ac6)
 
 A Kafka source and destination plugin for Conduit, written in Go.
 
@@ -440,6 +440,15 @@ mode works on both brokers; Redpanda does not return or enforce the
 `message.timestamp.before/after.max.ms` bounds, so only the timestamp type and
 retention rules can differ from Apache Kafka.
 
+**Host-supplied dialer**
+
+If the host that runs the connector puts a dialer on the context
+(`dialer.WithDialContext` from `conduit-commons`), the connector opens every
+broker connection through it: the seed brokers, brokers discovered from
+metadata, reconnects, and the admin and metadata requests. When TLS is
+enabled, the handshake runs over the connection the host dialer returns.
+Without a host dialer the connector dials directly, as before.
+
 Author: Meroxa, Inc.
 
 #### Source parameters
@@ -457,6 +466,7 @@ Author: Meroxa, Inc.
 | `insecureSkipVerify` | bool |  | no | InsecureSkipVerify defines whether to validate the broker's certificate chain and host name. If 'true', accepts any certificate presented by the server and any host name in that certificate. |  |
 | `readFromBeginning` | bool |  | no | ReadFromBeginning determines from whence the consumer group should begin consuming when it finds a partition without a committed offset. If this options is set to true it will start with the first message in that partition. |  |
 | `retryGroupJoinErrors` | bool | true | no | RetryGroupJoinErrors determines whether the connector will continually retry on group join errors. |  |
+| `saslAllowPlaintext` | bool |  | no | AllowPlaintext lets SASL authenticate over a connection that is not protected by TLS (tls.enabled is false). This exposes the SASL credentials, and with PLAIN the password itself, to anyone who can observe the network path to the brokers. By default the connector refuses to start in that configuration. Only set this for a trusted network, such as a local development cluster. |  |
 | `saslMechanism` | string |  | no | Mechanism configures the connector to use SASL authentication. If empty, no authentication will be performed. | inclusion(PLAIN,SCRAM-SHA-256,SCRAM-SHA-512) |
 | `saslPassword` | string |  | no | Password sets up the password used with SASL authentication. |  |
 | `saslUsername` | string |  | no | Username sets up the username used with SASL authentication. |  |
@@ -489,6 +499,7 @@ Author: Meroxa, Inc.
 | `insecureSkipVerify` | bool |  | no | InsecureSkipVerify defines whether to validate the broker's certificate chain and host name. If 'true', accepts any certificate presented by the server and any host name in that certificate. |  |
 | `mirror` | bool |  | no | Mirror enables Kafka-to-Kafka mirror mode: it writes the record's key, value, headers, timestamp and partition to Kafka verbatim from the mirror metadata the source emits when its emitMirrorMetadata option is on. It requires acks=all, rejects deliveryTimeout > 0 and a user-set sdk.record.format, and disables topic auto-creation. See the kafka mirror passthrough design in ConduitIO/conduit. |  |
 | `produceTimeout` | duration | 2m | no | ProduceTimeout is a connector-side bound on a Write in mirror mode, because deliveryTimeout must stay unset there. Minimum 30s, maximum 1h. |  |
+| `saslAllowPlaintext` | bool |  | no | AllowPlaintext lets SASL authenticate over a connection that is not protected by TLS (tls.enabled is false). This exposes the SASL credentials, and with PLAIN the password itself, to anyone who can observe the network path to the brokers. By default the connector refuses to start in that configuration. Only set this for a trusted network, such as a local development cluster. |  |
 | `saslMechanism` | string |  | no | Mechanism configures the connector to use SASL authentication. If empty, no authentication will be performed. | inclusion(PLAIN,SCRAM-SHA-256,SCRAM-SHA-512) |
 | `saslPassword` | string |  | no | Password sets up the password used with SASL authentication. |  |
 | `saslUsername` | string |  | no | Username sets up the username used with SASL authentication. |  |
@@ -551,7 +562,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-### postgres (v0.17.2)
+### postgres (v0.17.5-0.20261024022616-4c2a74867cdb)
 
 Conduit connector for PostgreSQL
 
@@ -572,6 +583,17 @@ in the URL or in the environment, is also mapped to `disable`; `require` and
 ```
 postgres://user:pass@host:5432/db?sslmode=require&channel_binding=require
 ```
+
+**Dialer supplied by the host**
+
+If the process that runs the connector puts a dialer on the context (see
+`github.com/conduitio/conduit-commons/dialer`), the connector opens every
+network connection through it: the destination connection and its reconnects,
+and for the source the pool connections, the snapshot reads, the replication
+connection, and the slot and publication cleanup. Host
+names in the URL are then passed to the dialer unresolved, so it decides how to
+resolve them. Without a host dialer, nothing changes: the driver dials and
+resolves the addresses itself. A connector setting cannot supply the dialer.
 
 **Upgrading from v0.14.x: connection string parsing**
 
@@ -649,6 +671,48 @@ pipelines:
 :warning: When the connector or pipeline is deleted, the connector will automatically
 attempt to delete the replication slot and publication. This is the default behaviour
 and can be disabled by setting `logrepl.autoCleanup` to `false`.
+
+**Resuming after the replication slot was lost**
+
+The slot is what keeps Postgres from discarding the changes the pipeline has not
+acknowledged yet. If the pipeline has a saved position and its slot no longer
+exists, a new slot starts at the current WAL and every change in between is gone.
+This happens when the slot was dropped by hand, removed by `logrepl.autoCleanup`
+while the position was kept, invalidated and then dropped (`max_slot_wal_keep_size`),
+or not carried over by a failover or promotion to another server (slots are not
+copied to a standby before Postgres 17, or without `failover=true`). The connector
+does not carry on from there. It refuses to start with the error code
+`postgres.source.slot_wal_gap`, which names the slot, the position the pipeline
+stopped at and the WAL position a new slot would start at. The same applies to a
+position saved during an initial snapshot. A pipeline with no position (a fresh
+start) creates its slot as usual.
+
+To recover, first check that `logrepl.slotName` is the name the pipeline has
+always used. Then re-snapshot: stop the pipeline, delete the source connector and
+create it again so it has no position. With `snapshotMode: initial` every table is
+read again and every row is delivered again, so the destination must tolerate
+duplicates (an upsert or keyed destination does).
+
+To accept the loss instead, set `logrepl.allowWALGap` to `true`. This is data
+loss: the skipped changes are never delivered, and the connector logs a warning
+when it takes the setting. Remove it after the pipeline has resumed, or the next
+lost slot is accepted with a warning only.
+
+**Limit of the check.** The connector detects a slot that is missing. It cannot
+detect a slot that was dropped and created again under the same name by someone
+else between two runs: the new slot exists and looks like an idle healthy one,
+because the position does not carry a slot identity. Do not drop and recreate the
+slot of a running pipeline by hand.
+
+**Invalidated replication slots**
+
+Postgres can invalidate a slot that fell too far behind (`max_slot_wal_keep_size`):
+the slot still exists, but `wal_status` is `lost` (and, on Postgres 17+,
+`invalidation_reason` is set), the WAL it needs is removed and it cannot be
+streamed from. The connector refuses to start on it, with a fresh start or a saved
+position, with the error code `postgres.source.slot_invalidated`. `logrepl.allowWALGap`
+does not apply. Drop the slot (`SELECT pg_drop_replication_slot('<slot>')`), then
+re-snapshot as above; a pipeline with no position only needs the slot dropped.
 
 **Key Handling**
 
@@ -1092,6 +1156,7 @@ Author: Meroxa, Inc.
 | Key | Type | Default | Required | Description | Validations |
 | --- | --- | --- | --- | --- | --- |
 | `cdcMode` | string | auto | no | CDCMode determines how the connector should listen to changes. | inclusion(auto,logrepl) |
+| `logrepl.allowWALGap` | bool | false | no | LogreplAllowWALGap lets the connector resume from a saved position when the replication slot no longer exists and has to be created again. A new slot starts at the current WAL, so every change between the saved position and the slot's creation is skipped and never delivered: this setting accepts that DATA LOSS. Leave it false (the default) and the connector refuses to start with the error `postgres.source.slot_wal_gap` instead. Use it only after deciding that the destination can be repaired some other way, and remove it once the pipeline has resumed. |  |
 | `logrepl.autoCleanup` | bool | true | no | LogreplAutoCleanup determines if the replication slot and publication should be removed when the connector is deleted. |  |
 | `logrepl.import.debeziumOffset` | string |  | no | LogreplImportDebeziumOffset starts the pipeline from a Debezium Postgres connector's committed offset instead of a snapshot. It is written by `conduit migrate kafka-connect --cutover`, not by hand. It applies only while the pipeline has no position: the first acknowledged record writes an ordinary position and the setting is ignored from then on (remove it once the import is complete). Requires snapshotMode "never" and cdcMode "logrepl", and an existing slot and publication, which import mode never creates. Requires Conduit v0.19.0 or later, which acks a record only after its position is persisted. |  |
 | `logrepl.publicationName` | string | conduitpub | no | LogreplPublicationName determines the publication name in case the connector uses logical replication to listen to changes (see CDCMode). |  |
@@ -1127,7 +1192,7 @@ Author: Meroxa, Inc.
 | `table` | string | {{ index .Metadata "opencdc.collection" }} | no | Table is used as the target table into which records are inserted. |  |
 | `url` | string |  | yes | URL is the connection string for the Postgres database. With TLS, SCRAM authentication does not use channel binding by default (`channel_binding=disable`); add `channel_binding=require` to the URL to require SCRAM-SHA-256-PLUS. The destination describes every statement before it runs it (`describe_exec`), so a column type change on a running pipeline takes effect on the next write. Set `default_query_exec_mode` (in the URL or in a service file) to `exec`, `simple_protocol`, `cache_statement` or `cache_describe` to override. The cached modes save a round trip per batch and check a per-table schema fingerprint, but they are safe only on a direct connection or behind a pooler that does not share prepared statements between clients. Behind PgBouncer (at any `max_prepared_statements`) or another statement-sharing pooler, keep `describe_exec`: a cached mode can convert values silently after a column type change. | required |
 
-### s3 (v0.11.2)
+### s3 (v0.11.3-0.20261024022234-be255922a1ca)
 
 An S3 source and destination plugin for Conduit, written in Go.
 
@@ -1486,7 +1551,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (175)
+## 3. Error codes (176)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -1521,6 +1586,7 @@ Author: Meroxa, Inc.
 | `connector.redirect_refused` | PermissionDenied | CodeRedirectRefused is raised when a server redirects an ambient-credential request to another host or a non-https URL. |
 | `connector.resource_not_allowed` | PermissionDenied | CodeResourceNotAllowed is raised when a resource (an S3 bucket) is not an exact allow-resources entry, or is an ARN or alias form. |
 | `connector.running` | FailedPrecondition | CodeConnectorRunning is raised when an operation requires the connector to not be running, but a connector instance for it already exists. |
+| `connector.standalone_not_allowlisted` | PermissionDenied | CodeStandaloneNotAllowlisted is raised when a pipeline references a standalone connector while connectors.egress.allow is set. Standalone connectors are separate processes that never receive the engine's dialer, so the allowlist cannot bind them; they are refused at dispatch (fail closed) rather than run unconstrained. |
 | `connector.state_persist_failed` | Unavailable | CodeConnectorStatePersistFailed is raised when a connector's state write (source position, last active config) could not be committed to the store. When one connector's write fails, only that connector receives this error and the rest of the batch is committed. When opening or committing the transaction fails, every connector still in that attempt receives it. A source that receives it has not acked the affected positions upstream, so a restart re-reads from the last stored position. |
 | `debezium.avro_unsupported` | Unimplemented | CodeAvroUnsupported is raised when key.converter or value.converter is "avro": the Confluent AvroConverter (AvroData port, subject naming, Confluent wire format) is not implemented yet. It fails at configure time, before any record is encoded, so a misconfigured pipeline never emits a half-encoded message. |
 | `debezium.config_invalid` | InvalidArgument | CodeConfigInvalid is raised when the processor settings are invalid. |

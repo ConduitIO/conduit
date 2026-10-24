@@ -18,7 +18,7 @@
 (6 built-in connectors; full parameters in llms-full.txt)
 
 ## Error codes
-- 175 stable error codes, dotted `domain.name` reasons, each with a gRPC status class. Full list with descriptions in llms-full.txt.
+- 176 stable error codes, dotted `domain.name` reasons, each with a gRPC status class. Full list with descriptions in llms-full.txt.
 - CLI `--json`: a failing command prints one JSON object on stdout whose `error` carries `code`, `message`, `suggestion` and `configPath`; the exit code is 2 (validation), 3 (environment) or 1 (runtime).
 
 ## MCP tools
