@@ -26,6 +26,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/foundation/urlredact"
 	"github.com/conduitio/conduit/pkg/registry/boundedfetch"
 	"github.com/conduitio/conduit/pkg/registry/index"
 	"github.com/conduitio/conduit/pkg/registry/policy"
@@ -789,7 +790,7 @@ func fetchBundle(ctx context.Context, url string) ([]byte, error) {
 		if cerrors.Is(err, boundedfetch.ErrTooLarge) {
 			return nil, conduiterr.Wrap(trust.CodeBundleTooLarge, "signature/provenance bundle exceeds the maximum allowed size", err)
 		}
-		return nil, conduiterr.Wrap(CodeDownloadFailed, fmt.Sprintf("could not fetch bundle %q", url), err)
+		return nil, conduiterr.Wrap(CodeDownloadFailed, fmt.Sprintf("could not fetch bundle %q", urlredact.String(url)), err)
 	}
 	return data, nil
 }

@@ -23,6 +23,7 @@ import (
 	"os"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/foundation/urlredact"
 )
 
 // maxRedirects bounds a download's redirect chain (e.g. following a Scarf
@@ -76,17 +77,17 @@ func Download(ctx context.Context, client *http.Client, url, destPath string, ma
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
-		return DownloadResult{}, conduiterr.Wrap(CodeDownloadFailed, "could not build download request", err)
+		return DownloadResult{}, conduiterr.Wrap(CodeDownloadFailed, "could not build download request", urlredact.Error(err))
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return DownloadResult{}, conduiterr.Wrap(CodeDownloadFailed, fmt.Sprintf("could not download %q", url), err)
+		return DownloadResult{}, conduiterr.Wrap(CodeDownloadFailed, fmt.Sprintf("could not download %q", urlredact.String(url)), urlredact.Error(err))
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return DownloadResult{}, conduiterr.New(CodeDownloadFailed, fmt.Sprintf(
-			"downloading %q returned unexpected status %d", url, resp.StatusCode))
+			"downloading %q returned unexpected status %d", urlredact.String(url), resp.StatusCode))
 	}
 
 	f, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)

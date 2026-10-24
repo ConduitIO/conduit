@@ -21,6 +21,7 @@ import (
 	"os"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/urlredact"
 )
 
 // ErrTooLarge is returned by Fetch/ReadFile when the response/file body
@@ -38,21 +39,21 @@ var ErrTooLarge = cerrors.New("boundedfetch: body exceeded the size cap")
 func Fetch(ctx context.Context, url string, maxBytes int64) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
-		return nil, cerrors.Errorf("could not build request for %q: %w", url, err)
+		return nil, cerrors.Errorf("could not build request for %q: %w", urlredact.String(url), urlredact.Error(err))
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, cerrors.Errorf("could not fetch %q: %w", url, err)
+		return nil, cerrors.Errorf("could not fetch %q: %w", urlredact.String(url), urlredact.Error(err))
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, cerrors.Errorf("fetching %q returned unexpected status %d", url, resp.StatusCode)
+		return nil, cerrors.Errorf("fetching %q returned unexpected status %d", urlredact.String(url), resp.StatusCode)
 	}
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
 	if err != nil {
-		return nil, cerrors.Errorf("could not read response body for %q: %w", url, err)
+		return nil, cerrors.Errorf("could not read response body for %q: %w", urlredact.String(url), urlredact.Error(err))
 	}
 	if int64(len(data)) > maxBytes {
 		return nil, ErrTooLarge
