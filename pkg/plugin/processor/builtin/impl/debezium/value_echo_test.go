@@ -15,8 +15,11 @@
 package debezium
 
 import (
+	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/goccy/go-json"
 )
 
 // Decimal literals come from record fields; errors must not repeat them.
@@ -28,6 +31,20 @@ func TestDecimalUnscaled_ErrorsDoNotEchoTheLiteral(t *testing.T) {
 		}
 		if strings.Contains(err.Error(), "SECRET") {
 			t.Errorf("error repeats the literal: %v", err)
+		}
+	}
+}
+
+// An out-of-range float is a record value: the error says why, not which number.
+func TestWriteFloatValue_ErrorDoesNotEchoTheNumber(t *testing.T) {
+	var b bytes.Buffer
+	for _, v := range []any{json.Number("1e999SECRET"), json.Number("1e999")} {
+		err := writeFloatValue(&b, v, 64)
+		if err == nil {
+			t.Fatalf("%v: want an error", v)
+		}
+		if strings.Contains(err.Error(), "999") || strings.Contains(err.Error(), "SECRET") {
+			t.Errorf("error repeats the number: %v", err)
 		}
 	}
 }

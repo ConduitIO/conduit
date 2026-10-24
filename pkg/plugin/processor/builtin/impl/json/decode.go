@@ -27,6 +27,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/errsafe"
 	"github.com/goccy/go-json"
 )
 
@@ -136,7 +137,7 @@ func (p *DecodeProcessor) setJSONData(raw []byte, ref sdk.Reference) error {
 	dec.UseNumber()
 	var jsonData any
 	if err := dec.Decode(&jsonData); err != nil {
-		return cerrors.Errorf("failed to unmarshal raw data as JSON: %w", err)
+		return cerrors.Errorf("failed to unmarshal raw data as JSON: %w", errsafe.Sanitize(err))
 	}
 	// Decode reads a single value and stops; reject trailing data exactly as
 	// json.Unmarshal would.
@@ -144,12 +145,12 @@ func (p *DecodeProcessor) setJSONData(raw []byte, ref sdk.Reference) error {
 		if err == nil {
 			err = cerrors.New("invalid character after top-level value")
 		}
-		return cerrors.Errorf("failed to unmarshal raw data as JSON: %w", err)
+		return cerrors.Errorf("failed to unmarshal raw data as JSON: %w", errsafe.Sanitize(err))
 	}
 
 	jsonData, err := decodeNumbers(jsonData)
 	if err != nil {
-		return cerrors.Errorf("failed to unmarshal raw data as JSON: %w", err)
+		return cerrors.Errorf("failed to unmarshal raw data as JSON: %w", errsafe.Sanitize(err))
 	}
 	return ref.Set(jsonData)
 }
