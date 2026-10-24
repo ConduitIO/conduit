@@ -17,6 +17,7 @@
 package pipeline
 
 import (
+	"strings"
 	"sync"
 	"time"
 )
@@ -89,6 +90,19 @@ var DefaultDLQ = DLQ{
 	},
 	WindowSize:          1,
 	WindowNackThreshold: 0,
+}
+
+// LogsWithoutPayload reports whether the DLQ writes a nacked record to the
+// built-in log connector without payload:true. Such a DLQ preserves only
+// hashes of the key and position, so a record routed to it is unrecoverable
+// (invariant 3). It is exactly the default DLQ, so an operator who has not
+// configured a DLQ is refused at start until they point it at a destination
+// that stores the record or set payload:true explicitly.
+func (d DLQ) LogsWithoutPayload() bool {
+	if d.Plugin != "builtin:log" {
+		return false
+	}
+	return !strings.EqualFold(strings.TrimSpace(d.Settings["payload"]), "true")
 }
 
 func (p *Instance) SetStatus(s Status) {

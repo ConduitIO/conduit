@@ -169,6 +169,10 @@ pipelines:
   - id: dev-e2e
     status: running
     name: dev-e2e
+    dead-letter-queue:
+      plugin: builtin:file
+      settings:
+        path: %s
     connectors:
       - id: src
         type: source
@@ -189,7 +193,7 @@ pipelines:
         settings:
           field: .Payload.After.tag
           value: %q
-`, rate, outputPath, tagValue)
+`, outputPath+".dlq", rate, outputPath, tagValue)
 }
 
 func startedCount(logs *safeBuffer) int {

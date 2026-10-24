@@ -1699,6 +1699,7 @@ func TestServiceLifecycle_NSource_PartialGracefulStop_Escalates(t *testing.T) {
 	destDispenser.EXPECT().DispenseDestination().Return(destPlugin, nil).Times(1)
 
 	dlqA, dlqADispenser := asserterDestination(ctrl, persister, nil, false)
+	pl.DLQ.Plugin = dlqA.Plugin
 	dlqB, dlqBDispenser := asserterDestination(ctrl, persister, nil, false)
 	connSvc := &multiDLQConnectorService{
 		testConnectorService: testConnectorService{
@@ -1801,6 +1802,7 @@ func TestServiceLifecycle_NSource_FatalErrorOneSource_DegradesWholePipeline(t *t
 	destination, destDispenser := asserterDestination(ctrl, persister, recordsA, false)
 
 	dlqA, dlqADispenser := asserterDestination(ctrl, persister, nil, false)
+	pl.DLQ.Plugin = dlqA.Plugin
 	dlqB, dlqBDispenser := asserterDestination(ctrl, persister, nil, false)
 	connSvc := &multiDLQConnectorService{
 		testConnectorService: testConnectorService{
@@ -1882,6 +1884,7 @@ func TestServiceLifecycle_NSource_TransientErrorOneSource_Recovers(t *testing.T)
 	destination, destDispenser := destinationRecovers(ctrl, persister, healthyRecords)
 
 	dlqA, dlqADispenser := dlqDispenserTimes(ctrl, persister, 2)
+	pl.DLQ.Plugin = dlqA.Plugin
 	dlqB, dlqBDispenser := dlqDispenserTimes(ctrl, persister, 2)
 	connSvc := &multiDLQConnectorService{
 		testConnectorService: testConnectorService{
@@ -1986,6 +1989,7 @@ func TestServiceLifecycle_NSource_OneSourceFinishesGracefully_StaysRunningUntilA
 	destination, destDispenser := asserterDestination(ctrl, persister, recordsA, false)
 
 	dlqA, dlqADispenser := asserterDestination(ctrl, persister, nil, false)
+	pl.DLQ.Plugin = dlqA.Plugin
 	dlqB, dlqBDispenser := asserterDestination(ctrl, persister, nil, false)
 	connSvc := &multiDLQConnectorService{
 		testConnectorService: testConnectorService{

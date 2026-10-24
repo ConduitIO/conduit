@@ -124,6 +124,17 @@ func TestPipelineSimple(t *testing.T) {
 	pl, err := orc.Pipelines.Create(ctx, pipeline.Config{Name: "test pipeline"})
 	is.NoErr(err)
 
+	// The default DLQ is builtin:log, which is refused at start
+	// (GHSA-m3mw-fpw8-w765) because it would not preserve a nacked record.
+	// Point the DLQ at a real file destination so this end-to-end test can
+	// start; the file is never written because no record is nacked.
+	pl.DLQ = pipeline.DLQ{
+		Plugin:              "builtin:file",
+		Settings:            map[string]string{"path": t.TempDir() + "/dlq.txt"},
+		WindowSize:          1,
+		WindowNackThreshold: 0,
+	}
+
 	// create connectors
 	sourcePath := "./fixtures/file-source.txt"
 	destinationPath := t.TempDir() + "/destination.txt"
