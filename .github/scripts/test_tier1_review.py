@@ -1,5 +1,8 @@
 import json
 import os
+import re
+import shutil
+import subprocess
 import tempfile
 import unittest
 
@@ -187,6 +190,97 @@ class Tier1(unittest.TestCase):
             self.assertEqual(t.main([p, q]), 1)
             json.dump({"body": "Risk tier: Tier 3"}, open(p, "w"))  # no head sha
             self.assertEqual(t.main([p, q]), 1)
+
+    def test_cli_prints_the_verdict_when_it_fails(self):
+        # The workflow reads the verdict from stdout even though the exit
+        # status is 1.
+        with tempfile.TemporaryDirectory() as d:
+            prj, cm = os.path.join(d, "pr.json"), os.path.join(d, "c.json")
+            json.dump(pr(body="## Tier and roadmap\n\nTier 2"), open(prj, "w"))
+            json.dump([], open(cm, "w"))
+            r = subprocess.run(["python3", os.path.join(HERE, "tier1_review.py"), prj, cm],
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 1)
+            v = json.loads(r.stdout)
+            self.assertEqual(v["state"], "failure")
+            self.assertIn("Risk tier", v["description"])
+
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+WORKFLOW = os.path.join(HERE, "..", "workflows", "tier1-review.yml")
+
+
+@unittest.skipUnless(shutil.which("jq") and shutil.which("bash"), "needs jq and bash")
+class WorkflowStep(unittest.TestCase):
+    """Runs the workflow's `Decide and post the status` script under `bash -e`
+    with a fake `gh`, as the runner does."""
+
+    def step_script(self):
+        text = open(WORKFLOW).read()
+        m = re.search(r"- name: Decide and post the status\n\s+run: \|\n((?:(?:          .*)?\n)+)", text)
+        self.assertIsNotNone(m, "step not found")
+        return "\n".join(l[10:] for l in m.group(1).splitlines())
+
+    def run_step(self, body, gh_script=None):
+        with tempfile.TemporaryDirectory() as d:
+            bindir, tmp = os.path.join(d, "bin"), os.path.join(d, "tmp")
+            os.makedirs(bindir)
+            os.makedirs(tmp)
+            log = os.path.join(d, "posted.txt")
+            fake = gh_script or f"""#!/bin/bash
+case "$*" in
+  *"/pulls/7/files"*) ;;      # --jq '.[]' of an empty list prints nothing
+  *"/issues/7/comments"*) ;;
+  *"/pulls/7"*) echo '{json.dumps({"body": body, "labels": [], "head": {"sha": HEAD}})}' ;;
+  *"/statuses/"*) echo "$*" >> {log} ;;
+esac
+"""
+            open(os.path.join(bindir, "gh"), "w").write(fake)
+            os.chmod(os.path.join(bindir, "gh"), 0o755)
+            env = dict(os.environ, PATH=bindir + os.pathsep + os.environ["PATH"], RUNNER_TEMP=tmp,
+                       GITHUB_STEP_SUMMARY=os.path.join(d, "summary"), GITHUB_SERVER_URL="https://github.com",
+                       GITHUB_RUN_ID="1", REPO="o/r", PR="7", SIGNERS="devarismeroxa")
+            r = subprocess.run(["bash", "-e", "-c", self.step_script()], cwd=os.path.join(HERE, "..", ".."),
+                               env=env, capture_output=True, text=True)
+            posted = open(log).read() if os.path.exists(log) else ""
+            return r, posted
+
+    def test_failing_verdict_still_posts_a_status_with_a_description(self):
+        r, posted = self.run_step("## Tier and roadmap\n\nTier 2")  # no `Risk tier:` line
+        self.assertIn("state=failure", posted, r.stderr)
+        self.assertIn("context=tier1-review", posted)
+        self.assertIn("Risk tier", posted)  # the description says why
+
+    def test_passing_verdict_posts_success(self):
+        r, posted = self.run_step("Risk tier: Tier 3")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("state=success", posted)
+
+    def test_script_crash_posts_an_error_status(self):
+        # A script that prints nothing must not leave the PR without a status.
+        with tempfile.TemporaryDirectory() as d:
+            script = self.step_script().replace("tier1_review.py", "does_not_exist.py")
+            bindir = os.path.join(d, "bin")
+            os.makedirs(bindir)
+            log = os.path.join(d, "posted.txt")
+            open(os.path.join(bindir, "gh"), "w").write(f"""#!/bin/bash
+case "$*" in
+  *"/pulls/7/files"*) ;;      # --jq '.[]' of an empty list prints nothing
+  *"/issues/7/comments"*) ;;
+  *"/pulls/7"*) echo '{json.dumps({"body": "x", "labels": [], "head": {"sha": HEAD}})}' ;;
+  *"/statuses/"*) echo "$*" >> {log} ;;
+esac
+""")
+            os.chmod(os.path.join(bindir, "gh"), 0o755)
+            os.makedirs(os.path.join(d, "tmp"))
+            env = dict(os.environ, PATH=bindir + os.pathsep + os.environ["PATH"], RUNNER_TEMP=os.path.join(d, "tmp"),
+                       GITHUB_STEP_SUMMARY=os.path.join(d, "s"), GITHUB_SERVER_URL="https://github.com",
+                       GITHUB_RUN_ID="1", REPO="o/r", PR="7", SIGNERS="devarismeroxa")
+            subprocess.run(["bash", "-e", "-c", script], cwd=os.path.join(HERE, "..", ".."), env=env,
+                           capture_output=True, text=True)
+            posted = open(log).read()
+            self.assertIn("state=error", posted)
+            self.assertIn("produced no verdict", posted)
 
 
 if __name__ == "__main__":
