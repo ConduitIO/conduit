@@ -229,7 +229,7 @@ Author: Meroxa, Inc.
 
 (none)
 
-### kafka (v0.14.2)
+### kafka (v0.15.0)
 
 A Kafka source and destination plugin for Conduit, written in Go.
 
@@ -457,6 +457,7 @@ Author: Meroxa, Inc.
 | `insecureSkipVerify` | bool |  | no | InsecureSkipVerify defines whether to validate the broker's certificate chain and host name. If 'true', accepts any certificate presented by the server and any host name in that certificate. |  |
 | `readFromBeginning` | bool |  | no | ReadFromBeginning determines from whence the consumer group should begin consuming when it finds a partition without a committed offset. If this options is set to true it will start with the first message in that partition. |  |
 | `retryGroupJoinErrors` | bool | true | no | RetryGroupJoinErrors determines whether the connector will continually retry on group join errors. |  |
+| `saslAllowPlaintext` | bool |  | no | AllowPlaintext lets SASL authenticate over a connection that is not protected by TLS (tls.enabled is false). This exposes the SASL credentials, and with PLAIN the password itself, to anyone who can observe the network path to the brokers. By default the connector refuses to start in that configuration. Only set this for a trusted network, such as a local development cluster. |  |
 | `saslMechanism` | string |  | no | Mechanism configures the connector to use SASL authentication. If empty, no authentication will be performed. | inclusion(PLAIN,SCRAM-SHA-256,SCRAM-SHA-512) |
 | `saslPassword` | string |  | no | Password sets up the password used with SASL authentication. |  |
 | `saslUsername` | string |  | no | Username sets up the username used with SASL authentication. |  |
@@ -489,6 +490,7 @@ Author: Meroxa, Inc.
 | `insecureSkipVerify` | bool |  | no | InsecureSkipVerify defines whether to validate the broker's certificate chain and host name. If 'true', accepts any certificate presented by the server and any host name in that certificate. |  |
 | `mirror` | bool |  | no | Mirror enables Kafka-to-Kafka mirror mode: it writes the record's key, value, headers, timestamp and partition to Kafka verbatim from the mirror metadata the source emits when its emitMirrorMetadata option is on. It requires acks=all, rejects deliveryTimeout > 0 and a user-set sdk.record.format, and disables topic auto-creation. See the kafka mirror passthrough design in ConduitIO/conduit. |  |
 | `produceTimeout` | duration | 2m | no | ProduceTimeout is a connector-side bound on a Write in mirror mode, because deliveryTimeout must stay unset there. Minimum 30s, maximum 1h. |  |
+| `saslAllowPlaintext` | bool |  | no | AllowPlaintext lets SASL authenticate over a connection that is not protected by TLS (tls.enabled is false). This exposes the SASL credentials, and with PLAIN the password itself, to anyone who can observe the network path to the brokers. By default the connector refuses to start in that configuration. Only set this for a trusted network, such as a local development cluster. |  |
 | `saslMechanism` | string |  | no | Mechanism configures the connector to use SASL authentication. If empty, no authentication will be performed. | inclusion(PLAIN,SCRAM-SHA-256,SCRAM-SHA-512) |
 | `saslPassword` | string |  | no | Password sets up the password used with SASL authentication. |  |
 | `saslUsername` | string |  | no | Username sets up the username used with SASL authentication. |  |
