@@ -13,7 +13,7 @@ docker compose down            # keeps the state volume; add -v to delete it
 
 What you get:
 
-- `ghcr.io/conduitio/conduit:v0.20.4`, pinned. Verify its signature first, see
+- `ghcr.io/conduitio/conduit:v0.20.5`, pinned. Verify its signature first, see
   [`docs/releases.md`](../../docs/releases.md). Set `CONDUIT_IMAGE` to try another build.
 - The pipeline in [`pipelines/quickstart.yaml`](pipelines/quickstart.yaml): the built-in
   generator source writes five records per second to the built-in file destination at
