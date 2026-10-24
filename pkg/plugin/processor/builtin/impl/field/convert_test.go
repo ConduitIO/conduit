@@ -306,7 +306,7 @@ func TestConvertField_ProcessFail(t *testing.T) {
 			record: opencdc.Record{
 				Key: opencdc.StructuredData{"id": "21.01.2021 18:40:12"},
 			},
-			wantErr: `parsing time "21.01.2021 18:40:12" as "2006-01-02T15:04:05.999999999Z07:00": cannot parse "21.01.2021 18:40:12" as "2006"`,
+			wantErr: `cannot parse a time value: it does not match the layout element "2006"`,
 		},
 	}
 	for _, tc := range testCases {

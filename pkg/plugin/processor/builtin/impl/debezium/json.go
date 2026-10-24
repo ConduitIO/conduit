@@ -26,6 +26,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/goccy/go-json"
 )
 
@@ -314,7 +315,11 @@ func asFloat(v any, bits int) (float64, error) {
 	case json.Number:
 		x, err := f.Float64()
 		if err != nil {
-			return 0, err
+			// strconv's error quotes the number: report only why it failed
+			if ne := (*strconv.NumError)(nil); cerrors.As(err, &ne) {
+				return 0, fmt.Errorf("float field is not a number the type holds: %w", ne.Err)
+			}
+			return 0, cerrors.New("float field is not a number")
 		}
 		return x, nil
 	default:
