@@ -112,9 +112,10 @@ func openSource(t *testing.T, reg *conn_builtin.Registry, pluginName string, set
 	_, err = src.Configure(ctx, pconnector.SourceConfigureRequest{Config: settings})
 	is.NoErr(err)
 	_, err = src.Open(ctx, pconnector.SourceOpenRequest{})
-	if err == nil {
-		_, _ = src.Teardown(ctx, pconnector.SourceTeardownRequest{})
-	}
+	// Teardown in every case: a source whose Open failed can still hold a
+	// reconnect loop or a half-built pool, and leaving it would let a later
+	// dial race the accept counter. Teardown is safe after a failed Open.
+	_, _ = src.Teardown(ctx, pconnector.SourceTeardownRequest{})
 	return err
 }
 

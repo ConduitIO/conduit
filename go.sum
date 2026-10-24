@@ -170,12 +170,12 @@ github.com/conduitio/conduit-connector-file v0.10.10 h1:CSAGOgDRvzXUokxQvtCTu3oh
 github.com/conduitio/conduit-connector-file v0.10.10/go.mod h1:nYhAcrSHhYMnXPezqWOXYcV0THACWG7YT8Jye2WXBZA=
 github.com/conduitio/conduit-connector-generator v0.10.8 h1:jXn3hSe1zyehDxYmg80uuO5dqi/BwiaFQOXMmk8LrHQ=
 github.com/conduitio/conduit-connector-generator v0.10.8/go.mod h1:VQyVcQxWrrsUpMtFYLJRDYS7cSa/DWZFJpj6s9Hx4Qo=
-github.com/conduitio/conduit-connector-kafka v0.15.1-0.20261024021636-7ca45afaea26 h1:csb2xjb351Q6td5RoTf6ccDn+nw4wGqHspydnkxvU8c=
-github.com/conduitio/conduit-connector-kafka v0.15.1-0.20261024021636-7ca45afaea26/go.mod h1:Ec7u375cFjlvnF0tH9hLv3B+KiwUDG/Ha6iiNPjcPec=
+github.com/conduitio/conduit-connector-kafka v0.15.1-0.20261024022630-95a7c8b63ac6 h1:YmQbNRNKhyZrrbyeBaDQdWEUdICRRuXdGQDoN09UQgU=
+github.com/conduitio/conduit-connector-kafka v0.15.1-0.20261024022630-95a7c8b63ac6/go.mod h1:Ec7u375cFjlvnF0tH9hLv3B+KiwUDG/Ha6iiNPjcPec=
 github.com/conduitio/conduit-connector-log v0.7.6 h1:VRKWd0/BUysCNTyMILwqR0YcRrZcvkzup7iufG+5nIM=
 github.com/conduitio/conduit-connector-log v0.7.6/go.mod h1:ylVUEjz6oDP6V/XhhGXy30bksS1/ghBYBKTyTG1hlEQ=
-github.com/conduitio/conduit-connector-postgres v0.17.5-0.20261024021629-cbd414c7d4ae h1:orBtfgNCQwvO5EIdULSn/7EBfN6lh00tFjJCr+pF+MA=
-github.com/conduitio/conduit-connector-postgres v0.17.5-0.20261024021629-cbd414c7d4ae/go.mod h1:aRmf6kCIy7rIV9ofwBQZtlp4H+KTR7LAVZ4rzIN1vuA=
+github.com/conduitio/conduit-connector-postgres v0.17.5-0.20261024022616-4c2a74867cdb h1:7IqCYqhkm3K0BRTgLtSfIYhKdycXYhocE5l/JTR8Zvg=
+github.com/conduitio/conduit-connector-postgres v0.17.5-0.20261024022616-4c2a74867cdb/go.mod h1:aRmf6kCIy7rIV9ofwBQZtlp4H+KTR7LAVZ4rzIN1vuA=
 github.com/conduitio/conduit-connector-protocol v0.11.1 h1:eZezxQ4SBpVP0T7c17B3cCvDnahW4dJ2BnoTZabwEhY=
 github.com/conduitio/conduit-connector-protocol v0.11.1/go.mod h1:gUnoXOfz9ug9CEQoa4Dv88jj7kDf83o7aPj1ibCWjos=
 github.com/conduitio/conduit-connector-s3 v0.11.3-0.20261024022234-be255922a1ca h1:A0RKpyivgNMgl0AM9ZmTrJNj6lxkrVPZvyL3kRtq37s=
