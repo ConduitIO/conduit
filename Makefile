@@ -20,7 +20,7 @@ MARKDOWNLINT_GLOBS="**/*.md" "\#LICENSE.md" "\#pkg/http/openapi/**" "\#.github/*
 # The build target should stay at the top since we want it to be the default target.
 .PHONY: build
 build: check-go-version
-	go build -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit ./cmd/conduit/main.go
+	go build -trimpath -ldflags "-X 'github.com/conduitio/conduit/pkg/conduit.version=${VERSION}'" -o conduit ./cmd/conduit/main.go
 	@echo "\nBuild complete. Enjoy using Conduit!"
 	@echo "Get started by running:"
 	@echo " ./conduit run"
