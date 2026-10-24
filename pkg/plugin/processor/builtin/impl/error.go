@@ -28,6 +28,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/foundation/tplerr"
 )
 
 type errorConfig struct {
@@ -97,7 +98,8 @@ func (p *ErrorProcessor) errorMessage(record opencdc.Record) string {
 
 	var buf strings.Builder
 	if err := p.errorMessageTmpl.Execute(&buf, record); err != nil {
-		return err.Error()
+		// the text of an execution error can quote a record value
+		return tplerr.Exec(err).Error()
 	}
 	return buf.String()
 }

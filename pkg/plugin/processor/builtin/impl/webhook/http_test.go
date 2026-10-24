@@ -53,7 +53,7 @@ func TestHTTPProcessor_Configure(t *testing.T) {
 			config: config.Config{
 				"request.url": ":not/a/valid/url",
 			},
-			wantErr: "configuration check failed: parse \":not/a/valid/url\": missing protocol scheme",
+			wantErr: "configuration check failed: the URL cannot be parsed (details not shown)",
 		},
 		{
 			name: "invalid method returns error",

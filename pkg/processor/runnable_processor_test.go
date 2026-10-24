@@ -366,9 +366,8 @@ func TestRunnableProcessor_Process_ConditionError(t *testing.T) {
 	gotRec, gotErr := gotRecs[0].(sdk.ErrorRecord)
 	is.True(gotErr)
 	is.Equal(
-		"failed evaluating condition: error converting the condition go-template output to boolean, "+
-			"strconv.ParseBool: parsing \"junk\": invalid syntax: strconv.ParseBool: parsing \"junk\": "+
-			"invalid syntax",
+		"failed evaluating condition: error converting the condition go-template output to boolean: "+
+			"the output is not a boolean",
 		gotRec.Error.Error(),
 	)
 }
