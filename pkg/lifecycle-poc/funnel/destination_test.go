@@ -16,6 +16,7 @@ package funnel
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -229,7 +230,8 @@ func TestDestinationTask_Do_UnexpectedPosition(t *testing.T) {
 
 	task := NewDestinationTask("test", destinationMock, logger, NoOpConnectorMetrics{})
 	err := task.Do(ctx, batch)
-	is.Equal(err.Error(), `failed to validate acks: received unexpected ack, expected position "3" but got "4"`)
+	// positions embed record keys for some connectors: only hashes are reported
+	is.Equal(err.Error(), fmt.Sprintf("failed to validate acks: received unexpected ack, expected position hash %s but got %s", log.KeyHash([]byte("3")), log.KeyHash([]byte("4"))))
 }
 
 func TestDestinationTask_Do_TooManyAcks(t *testing.T) {

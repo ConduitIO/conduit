@@ -328,7 +328,7 @@ func (s *Source) Stop(ctx context.Context) (opencdc.Position, error) {
 	}
 
 	s.Instance.logger.Info(ctx).
-		Bytes(log.RecordPositionField, resp.LastPosition).
+		Str(log.RecordPositionHashField, log.KeyHash(resp.LastPosition)).
 		Msg("source connector plugin successfully responded to stop signal")
 	return resp.LastPosition, nil
 }

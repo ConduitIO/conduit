@@ -147,7 +147,7 @@ func (n *SourceNode) Run(ctx context.Context) (err error) {
 		if msg.ControlMessageType() == ControlMessageStopSourceNode {
 			// this is a control message telling us to stop
 			n.logger.Err(ctx, n.stop.reason).
-				Str(log.RecordPositionField, msg.Record.Position.String()).
+				Str(log.RecordPositionHashField, log.KeyHash(msg.Record.Position)).
 				Msg("stopping source node")
 			stopPosition = msg.Record.Position
 
@@ -232,7 +232,7 @@ func (n *SourceNode) stopGraceful(ctx context.Context, reason error) (err error)
 	}
 
 	n.logger.Trace(ctx).
-		Str(log.RecordPositionField, n.stop.position.String()).
+		Str(log.RecordPositionHashField, log.KeyHash(n.stop.position)).
 		Msg("injecting stop source node control message")
 
 	// InjectControlMessage will inject a message into the stream of messages

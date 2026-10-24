@@ -17,6 +17,7 @@ package stream
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/lifecycle/stream/mock"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
@@ -444,4 +446,48 @@ func TestDestinationAckerNode_MessageAckError(t *testing.T) {
 	case <-nodeDone:
 		// all good
 	}
+}
+
+// The nack reason for an unexpected ack names positions by salted hash only,
+// since a position can embed record key values.
+func TestDestinationAckerNode_UnexpectedPosition_ReasonHasPositionHashOnly(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	dest := mock.NewDestination(ctrl)
+
+	node := &DestinationAckerNode{Name: "destination-acker-node", Destination: dest}
+	in := make(chan *Message)
+	node.Sub(in)
+
+	nodeDone := make(chan struct{})
+	go func() {
+		defer close(nodeDone)
+		_ = node.Run(ctx)
+	}()
+
+	const secretA, secretB = "customer-SECRET-A", "customer-SECRET-B"
+	msg := &Message{Record: opencdc.Record{Position: opencdc.Position(secretA)}}
+	ackCall := dest.EXPECT().Ack(gomock.Any()).
+		Return([]connector.DestinationAck{{Position: opencdc.Position(secretB)}}, nil)
+	dest.EXPECT().Ack(gomock.Any()).
+		Return(nil, cerrors.New("stream closed")).After(ackCall.Call).AnyTimes()
+
+	reasonCh := make(chan string, 1)
+	msg.RegisterNackHandler(func(_ *Message, nm NackMetadata) error {
+		reasonCh <- nm.Reason.Error()
+		return nil
+	})
+	in <- msg
+
+	select {
+	case <-time.After(time.Second):
+		is.Fail() // expected nack handler to be called
+	case reason := <-reasonCh:
+		is.True(strings.Contains(reason, log.KeyHash(opencdc.Position(secretA))))
+		is.True(strings.Contains(reason, log.KeyHash(opencdc.Position(secretB))))
+		is.True(!strings.Contains(reason, secretA))
+		is.True(!strings.Contains(reason, secretB))
+	}
+	<-nodeDone
 }

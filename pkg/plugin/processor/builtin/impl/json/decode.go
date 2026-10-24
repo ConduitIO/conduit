@@ -200,7 +200,12 @@ func decodeJSONNumber(n json.Number) (any, error) {
 	}
 	f, err := n.Float64()
 	if err != nil {
-		return nil, cerrors.Errorf("number %q is outside the float64 range: %w", n, err)
+		// strconv.NumError repeats the number; keep only its cause.
+		var ne *strconv.NumError
+		if cerrors.As(err, &ne) {
+			err = ne.Err
+		}
+		return nil, cerrors.Errorf("a %d byte number is outside the float64 range: %w", len(n), err)
 	}
 	return f, nil
 }
