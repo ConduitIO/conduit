@@ -92,7 +92,9 @@ func TestJSProcessor_Error(t *testing.T) {
 	is.Equal(1, len(got))
 	gotErr, ok := got[0].(sdk.ErrorRecord)
 	is.True(ok)
-	is.True(strings.Contains(gotErr.Error.Error(), "something bad happened"))
+	// a message the script throws cannot be told from an engine message that
+	// quotes a record value, so it is withheld; the type and position stay
+	is.True(strings.HasPrefix(gotErr.Error.Error(), "Error: "+messageWithheld+" (at line "))
 }
 
 func TestJSProcessor_Process(t *testing.T) {
