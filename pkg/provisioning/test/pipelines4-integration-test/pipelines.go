@@ -37,6 +37,19 @@ var (
 	P3     *pipeline.Instance
 )
 
+// fileDLQ points the running pipeline's DLQ at a real file destination. The
+// production default (builtin:log) is refused at start because it preserves
+// only hashes of a nacked record (GHSA-m3mw-fpw8-w765); pipeline1 exercises a
+// running pipeline, so it opts into a destination that stores the record.
+func fileDLQ() pipeline.DLQ {
+	return pipeline.DLQ{
+		Plugin:              "builtin:file",
+		Settings:            map[string]string{"path": "./test/dlq-file.txt"},
+		WindowSize:          1,
+		WindowNackThreshold: 0,
+	}
+}
+
 func init() {
 	P1 = &pipeline.Instance{
 		ID: "pipeline1",
@@ -45,7 +58,7 @@ func init() {
 			Description: "desc1",
 		},
 		Error:        "",
-		DLQ:          pipeline.DefaultDLQ,
+		DLQ:          fileDLQ(),
 		ConnectorIDs: []string{"pipeline1:con1", "pipeline1:con2"},
 		ProcessorIDs: []string{"pipeline1:proc1"},
 

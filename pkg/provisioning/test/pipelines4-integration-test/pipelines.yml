@@ -7,6 +7,10 @@ pipelines:
     status: running
     name: name1
     description: desc1
+    dead-letter-queue:
+      plugin: builtin:file
+      settings:
+        path: ./test/dlq-file.txt
     connectors:
       - id: con1
         type: source

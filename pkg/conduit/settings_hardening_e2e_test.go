@@ -53,14 +53,20 @@ func TestSettingsHardening_EndToEnd(t *testing.T) {
 
 	// startRuntime provisions one pipeline file under a fresh data dir and
 	// returns the data dir, the files dir and the engine log.
-	startRuntime := func(t *testing.T, expect string, pipelineYAML func(dataDir, filesDir string) string) (string, string, *safeBuffer) {
+	startRuntime := func(t *testing.T, expect string, pipelineYAML func(dataDir, filesDir, dlqFile string) string) (string, string, *safeBuffer) {
 		t.Helper()
 		is := is.New(t)
 		tmp := t.TempDir()
 		filesDir := filepath.Join(tmp, "files")
 		pipelinesDir := filepath.Join(tmp, "pipelines")
 		is.NoErr(os.MkdirAll(pipelinesDir, 0o755))
-		is.NoErr(os.WriteFile(filepath.Join(pipelinesDir, "p.yaml"), []byte(pipelineYAML(tmp, filesDir)), 0o600))
+		// The hardened default DLQ (builtin:log) is refused at start
+		// (GHSA-m3mw-fpw8-w765); these pipelines opt into a real file DLQ. It
+		// is never written because no record is nacked.
+		is.NoErr(os.MkdirAll(filesDir, 0o755))
+		dlqFile := filepath.Join(filesDir, "dlq.ndjson")
+		is.NoErr(os.WriteFile(dlqFile, nil, 0o600))
+		is.NoErr(os.WriteFile(filepath.Join(pipelinesDir, "p.yaml"), []byte(pipelineYAML(tmp, filesDir, dlqFile)), 0o600))
 
 		logs := &safeBuffer{}
 		cfg := conduit.DefaultConfigWithBasePath(tmp) // the hardened defaults under test
@@ -106,7 +112,7 @@ func TestSettingsHardening_EndToEnd(t *testing.T) {
 	t.Run("file connector cannot read outside its directory", func(t *testing.T) {
 		is := is.New(t)
 		var outsideSecret, readOut string
-		_, _, logs := startRuntime(t, "is not allowed: the path is outside every allowed directory", func(dataDir, filesDir string) string {
+		_, _, logs := startRuntime(t, "is not allowed: the path is outside every allowed directory", func(dataDir, filesDir, dlqFile string) string {
 			outsideDir := filepath.Join(dataDir, "outside")
 			is.NoErr(os.MkdirAll(outsideDir, 0o755))
 			is.NoErr(os.MkdirAll(filesDir, 0o755))
@@ -118,6 +124,10 @@ pipelines:
   - id: read-outside
     status: running
     name: read-outside
+    dead-letter-queue:
+      plugin: builtin:file
+      settings:
+        path: %[3]s
     connectors:
       - id: src
         type: source
@@ -129,7 +139,7 @@ pipelines:
         plugin: builtin:file
         settings:
           path: %[2]s
-`, outsideSecret, readOut)
+`, outsideSecret, readOut, dlqFile)
 		})
 		// Raw data is base64 in the destination's JSON lines, so check that the
 		// output is empty rather than searching for the plaintext.
@@ -142,7 +152,7 @@ pipelines:
 	t.Run("generator file format cannot read outside the file directory", func(t *testing.T) {
 		is := is.New(t)
 		var genOut string
-		_, _, logs := startRuntime(t, "is not allowed: the path is outside every allowed directory", func(dataDir, filesDir string) string {
+		_, _, logs := startRuntime(t, "is not allowed: the path is outside every allowed directory", func(dataDir, filesDir, dlqFile string) string {
 			outsideDir := filepath.Join(dataDir, "outside")
 			is.NoErr(os.MkdirAll(outsideDir, 0o755))
 			is.NoErr(os.MkdirAll(filesDir, 0o755))
@@ -154,6 +164,10 @@ pipelines:
   - id: gen-file
     status: running
     name: gen-file
+    dead-letter-queue:
+      plugin: builtin:file
+      settings:
+        path: %[3]s
     connectors:
       - id: src
         type: source
@@ -168,14 +182,13 @@ pipelines:
         plugin: builtin:file
         settings:
           path: %[2]s
-`, outsideSecret, genOut)
+`, outsideSecret, genOut, dlqFile)
 		})
 		if b, err := os.ReadFile(genOut); err == nil {
 			is.Equal(strings.TrimSpace(string(b)), "") // the generator must not turn the outside file into records
 		}
 		is.True(strings.Contains(logs.String(), "is not allowed: the path is outside every allowed directory"))
 	})
-
 	t.Run("webhook cannot reach a loopback service", func(t *testing.T) {
 		is := is.New(t)
 		var internalHits atomic.Int64
@@ -186,7 +199,7 @@ pipelines:
 		defer internal.Close()
 
 		var hookOut string
-		_, _, logs := startRuntime(t, "refused by the egress guard", func(_, filesDir string) string {
+		_, _, logs := startRuntime(t, "refused by the egress guard", func(_, filesDir, dlqFile string) string {
 			is.NoErr(os.MkdirAll(filesDir, 0o755))
 			hookOut = filepath.Join(filesDir, "hook.out")
 			return fmt.Sprintf(`version: 2.2
@@ -194,6 +207,10 @@ pipelines:
   - id: ssrf
     status: running
     name: ssrf
+    dead-letter-queue:
+      plugin: builtin:file
+      settings:
+        path: %[3]s
     connectors:
       - id: src
         type: source
@@ -215,7 +232,7 @@ pipelines:
           request.url: %[2]q
           request.method: GET
           response.body: .Payload.After.leak
-`, hookOut, internal.URL)
+`, hookOut, internal.URL, dlqFile)
 		})
 		is.Equal(internalHits.Load(), int64(0)) // the loopback service must not be reached
 		if b, err := os.ReadFile(hookOut); err == nil {

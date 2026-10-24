@@ -837,8 +837,33 @@ func (s *Service) StopAndWait(ctx context.Context, pipelineID string) error {
 	return nil
 }
 
+// checkDLQRecoverable refuses a start before any node is built when the
+// pipeline's DLQ would not preserve the record content (the default builtin:log
+// without payload:true, GHSA-m3mw-fpw8-w765). A record routed to such a DLQ is
+// unrecoverable (invariant 3), so the operator must choose a destination that
+// stores the record or opt in to payload:true.
+func (s *Service) checkDLQRecoverable(pl *pipeline.Instance) error {
+	if !pl.DLQ.LogsWithoutPayload() {
+		return nil
+	}
+	err := conduiterr.Wrap(
+		pipeline.CodePipelineDLQNotRecoverable,
+		fmt.Sprintf("pipeline %s has a DLQ (%s) that would not preserve the record: it logs only hashes", pl.ID, pl.DLQ.Plugin),
+		cerrors.New("DLQ would drop record content"),
+	)
+	err.Suggestion = "configure a DLQ destination that stores the record (a connector other than builtin:log), " +
+		"or set payload:true on the builtin:log DLQ to write the full record to the log; " +
+		"the default DLQ is refused because a nacked record would otherwise be unrecoverable"
+	return err
+}
+
 // buildsNodes will build new nodes that will be assigned to the pipeline.Instance.
 func (s *Service) buildNodes(ctx context.Context, pl *pipeline.Instance) ([]stream.Node, error) {
+	// Invariant 3 (GHSA-m3mw-fpw8-w765): a DLQ that cannot preserve the record
+	// would silently drop nacked records; refuse before anything is built.
+	if err := s.checkDLQRecoverable(pl); err != nil {
+		return nil, err
+	}
 	// setup many to many channels
 	fanIn := stream.FaninNode{Name: "fanin"}
 	fanOut := stream.FanoutNode{Name: "fanout"}
