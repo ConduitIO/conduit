@@ -11,8 +11,35 @@ on:
 permissions: {}
 
 jobs:
+  # Release gates (postmortem docs/postmortems/20261021-data-loss-and-process-failures.md,
+  # items 10 and 12). `make release-check` fails the tag before anything is
+  # published. Nightly tags skip it; every publishing job below needs it, and
+  # runs only if it succeeded or was skipped (a failure, cancel or missing
+  # result stops the release).
+  release-check:
+    name: Release gates
+    if: ${{ !contains(github.ref, '-nightly') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Gate script tests
+        working-directory: .github/scripts
+        run: python3 -m unittest -v test_release_fixes test_release_notes_check
+
+      - name: Run the release gates
+        run: make release-check TAG="$GITHUB_REF_NAME"
+
   release:
     name: Release
+    needs: [release-check]
+    if: ${{ always() && (needs.release-check.result == 'success' || needs.release-check.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the GitHub release and upload assets
@@ -72,6 +99,8 @@ jobs:
 
   build-push-docker-image:
     name: Build and push Docker image
+    needs: [release-check]
+    if: ${{ always() && (needs.release-check.result == 'success' || needs.release-check.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
