@@ -1,0 +1,54 @@
+# Fixes v0.20.6 must carry. Format: module | commit | note
+#
+#   module  = "conduit" for this repository, or a Go module path resolved in go.mod
+#   commit  = SHA of at least 7 hex digits; must be an ancestor of the module's
+#             pinned version (or of HEAD for "conduit")
+#   note    = short description. release_notes_check.py requires every note (or
+#             the commit's 7-character prefix) to appear in the `## Fixed`
+#             section of docs/releases/v0.20.6.md, so keep it verbatim.
+#
+# A patch release (Z > 0) must have at least one entry, and at least one entry
+# that is NEW since v0.20.5 (its commit is not already in that tag). A list of
+# old commits does not pass. Verify before tagging with:
+#     make release-check TAG=v0.20.6
+#
+# Nothing below is final yet: the v0.20.6 fixes are still landing on this
+# branch, so every line is a commented placeholder. As each merge lands,
+# uncomment its line and replace <sha> with the final squash SHA on this
+# branch. The gate fails closed on a commit that is not an ancestor, so leave
+# a line commented until its SHA actually exists here. The private-fork fixes
+# get their real SHA from the advisory fork's squash merge, not from the
+# pre-squash fork commit (a fork SHA such as 506c3630 is not an ancestor after
+# squash).
+
+# Engine — API exposure (localhost default, token off-loopback, origin/host/UI
+# token checks, utilities-server auth):
+# conduit | <squash-sha> | bind the API to localhost by default and require a token off-loopback
+
+# Engine — misuse via the API (env.allow, file/JS directory allowlists, plugin
+# env minimal):
+# conduit | <squash-sha> | restrict plugin environment and file and JavaScript access to allowlists
+
+# Engine — server-side request forgery (outbound HTTP guarded at dial time):
+# conduit | <squash-sha> | guard outbound HTTP at dial time against the egress allowlist
+
+# Engine — log connector metadata-only:
+# conduit | <squash-sha> | make the log connector metadata-only by default
+
+# Engine — file source complete-lines follower and fail-loud rotation:
+# conduit | <squash-sha> | follow complete lines only and fail loudly on rotation
+
+# Engine — default-DLQ refusal (pipeline.dlq_not_recoverable):
+# conduit | <squash-sha> | refuse to start a pipeline with no recoverable DLQ
+
+# Toolchain — Go 1.26.10 for GO-2026-6809 (backport of the go.mod bump):
+# conduit | <squash-sha> | bump the Go toolchain to 1.26.10 for GO-2026-6809
+
+# Engine — sanitized-error hardening (record values, keys, URLs out of errors
+# and logs):
+# conduit | <squash-sha> | keep record values, keys, and URLs out of errors and logs
+
+# Postgres — slot-gap fail-loud. Bump go.mod to conduit-connector-postgres
+# v0.14.6, then uncomment with the fix commit in that repo (an ancestor of the
+# v0.14.6 tag):
+# github.com/conduitio/conduit-connector-postgres | <sha> | fail loudly when the replication slot no longer covers the saved position

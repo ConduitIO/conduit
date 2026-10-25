@@ -29,6 +29,15 @@ build: check-go-version
 test:
 	go test $(GOTEST_FLAGS) -race ./...
 
+# Gates a release tag must pass before anything is published. Also runnable
+# locally on a release branch: make release-check TAG=v0.20.6
+# See docs/releases.md, "Release gates".
+.PHONY: release-check
+release-check:
+	@test -n "$(TAG)" || { echo "usage: make release-check TAG=vX.Y.Z"; exit 2; }
+	python3 .github/scripts/release_fixes.py $(TAG)
+	python3 .github/scripts/release_notes_check.py $(TAG)
+
 .PHONY: escape-analysis
 escape-analysis:
 	go test -gcflags "-m -m"  $(GOTEST_FLAGS) ./... 2> escape_analysis_full.txt

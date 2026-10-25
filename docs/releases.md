@@ -12,6 +12,26 @@ A Conduit release has the following parts:
 - a GitHub package, which is the official Docker image for Conduit. It's available on GitHub's Container Registry. The
 latest Docker image which is not a nightly is tagged with `latest`.
 
+## Release gates
+
+`make release-check TAG=vX.Y.Z` runs in the `release-check` job of `release.yml` before anything is published
+(nightly tags skip it). A failure stops the GitHub release and the Docker image.
+
+- **Fixes the release must contain** (`.github/scripts/release_fixes.py`). `.github/release-fixes.txt` on the release
+  branch lists `module | commit | note` per fix; `conduit` means this repository. Each commit must be an ancestor of
+  the tag of that module's version in `go.mod` (or of the release commit). A patch release (`vX.Y.Z`, Z > 0) must
+  have at least one entry that is new since the previous stable tag, so a list of old commits does not pass. A
+  `replace` of a listed module to a fork or a local path fails, because the version then says nothing about the code
+  that ships; waive it with `waive-replace | <module> | <reason>`. A committed `go.work` is treated the same way
+  (its `replace` lines count, and a `use` of anything but the root needs `waive-replace | go.work | <reason>`). An
+  unresolvable module, tag or commit fails. The gate lives in the tagged commit's `release.yml`, so a release branch
+  has it only once this change is backported to it.
+- **Hand-written notes on patch releases** (`.github/scripts/release_notes_check.py`). A stable `vX.Y.Z` with Z > 0
+  needs `docs/releases/vX.Y.Z.md` in the tagged commit, not a draft, with a `## Fixed` section of bullets, prose
+  beyond lists, and not mostly generated changelog lines (`fix(scope): ... by @user in #123`). Every fix listed in
+  `.github/release-fixes.txt` must be named in `## Fixed`, by its 7-character commit prefix or by its note as a whole
+  phrase of 12 or more characters (no substring matching), so the notes and the fixes gate describe the same set.
+
 ## Nightly builds
 
 We provide nightly builds (binaries and Docker images). The last 5 nightly releases are kept, and nightly Docker images
