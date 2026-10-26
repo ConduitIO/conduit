@@ -17,10 +17,10 @@ package pipeline
 import "testing"
 
 // TestDLQ_LogsWithoutPayload is the regression test for GHSA-m3mw-fpw8-w765's
-// DLQ half: the default DLQ (builtin:log without payload:true) preserves only
-// hashes of a nacked record, so it must be refused at start. Only an explicit
-// payload:true (any casing, any surrounding space) or a plugin other than the
-// log connector makes the DLQ recoverable.
+// DLQ half: builtin:log without payload:true preserves only hashes of a nacked
+// record. Only an explicit payload:true (any casing, any surrounding space) or
+// a plugin other than the log connector preserves the content. Whether a start
+// is refused also depends on whether nacks are routed (DropsRecordContent).
 func TestDLQ_LogsWithoutPayload(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -42,6 +42,39 @@ func TestDLQ_LogsWithoutPayload(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := tt.d.LogsWithoutPayload(); got != tt.want {
 				t.Fatalf("LogsWithoutPayload() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestDLQ_DropsRecordContent is the regression test for the v0.21.0 default-DLQ
+// refusal: the default DLQ (builtin:log, window-size 1, threshold 0) logs only
+// hashes but routes no nacked record (the first nack stops the pipeline and the
+// record is not acked), so it must not be refused. A log DLQ without payload
+// that does receive records (threshold above 0, or window-size 0) must be.
+func TestDLQ_DropsRecordContent(t *testing.T) {
+	t.Parallel()
+	logDLQ := func(size, threshold int, settings map[string]string) DLQ {
+		return DLQ{Plugin: "builtin:log", Settings: settings, WindowSize: size, WindowNackThreshold: threshold}
+	}
+	payload := map[string]string{"payload": "true"}
+	tests := []struct {
+		name string
+		d    DLQ
+		want bool
+	}{
+		{name: "default DLQ", d: DefaultDLQ, want: false},
+		{name: "log, threshold 0", d: logDLQ(10, 0, nil), want: false},
+		{name: "log, threshold 1", d: logDLQ(10, 1, nil), want: true},
+		{name: "log, window disabled", d: logDLQ(0, 0, nil), want: true},
+		{name: "log with payload, threshold 1", d: logDLQ(10, 1, payload), want: false},
+		{name: "log with payload, window disabled", d: logDLQ(0, 0, payload), want: false},
+		{name: "non-log plugin, threshold 1", d: DLQ{Plugin: "builtin:file", WindowSize: 10, WindowNackThreshold: 1}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.d.DropsRecordContent(); got != tt.want {
+				t.Fatalf("DropsRecordContent() = %v, want %v", got, tt.want)
 			}
 		})
 	}
