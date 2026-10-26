@@ -193,7 +193,8 @@ docker compose down            # add -v to delete the state volume
 
 The API and UI are on <http://localhost:8080>, published on loopback only and requires
 `Authorization: Bearer $CONDUIT_API_TOKEN`. The container binds `0.0.0.0`, so the
-Host check is off and only that token stops DNS rebinding; it is plaintext without TLS. Swap `pipelines/quickstart.yaml` for your own pipeline to go
+Host check is off and only that token stops DNS rebinding; it is plaintext without TLS. Swap
+`pipelines/quickstart.yaml` for your own pipeline to go
 further. CI runs this stack end to end (`deploy-quickstart`).
 
 [`deploy/`](deploy) also has systemd, ECS and Nomad examples. They are examples, not

@@ -6,7 +6,7 @@
 
 Anything a pipeline author can put in a connector or processor setting is untrusted input, because
 settings arrive over the API as well as from YAML. Four things a setting could reach on the host are
-now closed by default and opened only by operator configuration (conduit.yaml, a flag, or
+now closed by default and opened only by operator configuration (`conduit.yaml`, a flag, or
 `CONDUIT_*` environment), never by a pipeline or an API field:
 
 1. `${VAR}` expansion: only names in `env.allow` expand.
