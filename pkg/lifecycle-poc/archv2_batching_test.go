@@ -357,3 +357,22 @@ func TestPreflightPipelineConfig_MixedPaddedAndPlainKeys(t *testing.T) {
 	ce := requireBatchingRefusal(t, err)
 	is.Equal(ce.ConfigPath, "/connectors/0/settings/sdk.batch.size") // the plain, offending key
 }
+
+// TestStart_ArchV2RefusesHashOnlyLogDLQThatReceivesNacks: arch-v2's half of
+// the GHSA-m3mw-fpw8-w765 DLQ guard. A builtin:log DLQ without payload:true
+// that receives nacked records (threshold above 0) would ack records while
+// keeping only hashes of them, so the start is refused before anything runs.
+func TestStart_ArchV2RefusesHashOnlyLogDLQThatReceivesNacks(t *testing.T) {
+	is := is.New(t)
+	h := newBatchingHarness(t, nil, nil, false)
+	h.pl.DLQ.Plugin = "builtin:log"
+	h.pl.DLQ.Settings = nil
+	h.pl.DLQ.WindowSize = 10
+	h.pl.DLQ.WindowNackThreshold = 1
+
+	err := h.ls.Start(context.Background(), h.pl.ID)
+	is.True(err != nil) // start must be refused
+	ce, ok := conduiterr.Get(err)
+	is.True(ok) // refusal must be a coded error
+	is.Equal(ce.Code, pipeline.CodePipelineDLQNotRecoverable)
+}
