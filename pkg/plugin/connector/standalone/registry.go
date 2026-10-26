@@ -28,11 +28,20 @@ import (
 	"github.com/conduitio/conduit-connector-protocol/pconnutils"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/foundation/connegress"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	"github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/rs/zerolog"
+	"google.golang.org/grpc/codes"
 )
+
+// CodeStandaloneNotAllowlisted is raised when a pipeline references a standalone
+// connector while connectors.egress.allow is set. Standalone connectors are
+// separate processes that never receive the engine's dialer, so the allowlist
+// cannot bind them; they are refused at dispatch (fail closed) rather than run
+// unconstrained.
+var CodeStandaloneNotAllowlisted = conduiterr.Register("connector.standalone_not_allowlisted", codes.PermissionDenied)
 
 type Registry struct {
 	logger    log.CtxLogger
@@ -52,6 +61,11 @@ type Registry struct {
 	// classifies. It defaults to os.Environ and is replaced only to supply a
 	// fixed environment in tests.
 	environ func() []string
+
+	// egressRestricted is true when connectors.egress.allow is set. A standalone
+	// connector cannot be bound by the allowlist, so dispatch is refused while
+	// it is set (see WithEgressRestricted).
+	egressRestricted bool
 
 	// plugins stores plugin blueprints in a 2D map, first key is the plugin
 	// name, the second key is the plugin version
@@ -95,6 +109,15 @@ func WithEnviron(environ func() []string) RegistryOption {
 // only the base set.
 func WithEnvPolicy(p EnvPolicy) RegistryOption {
 	return func(r *Registry) { r.envPolicy = p }
+}
+
+// WithEgressRestricted refuses to dispense any standalone connector while the
+// engine's connector egress allowlist (connectors.egress.allow) is set. A
+// standalone connector is a separate process that never receives the engine's
+// dialer, so the allowlist cannot restrict what it dials; refusing it at
+// dispatch is the fail-closed answer (see docs/operations/connector-egress.md).
+func WithEgressRestricted(restricted bool) RegistryOption {
+	return func(r *Registry) { r.egressRestricted = restricted }
 }
 
 func NewRegistry(logger log.CtxLogger, pluginDir string, opts ...RegistryOption) *Registry {
@@ -245,6 +268,20 @@ func (r *Registry) loadSpecifications(pluginPath string) (pconnector.Specificati
 }
 
 func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, cfg pconnector.PluginConfig) (connector.Dispenser, error) {
+	if r.egressRestricted {
+		// Fail closed: a standalone connector is a separate process that never
+		// receives the engine's dialer, so connectors.egress.allow cannot bind
+		// it. Refuse it here, at dispatch, rather than start an unconstrained
+		// process. The refusal precedes the plugin lookup so it also holds for a
+		// plugin name that does not resolve.
+		err := conduiterr.New(CodeStandaloneNotAllowlisted,
+			fmt.Sprintf("cannot run standalone connector %q: %s is set and standalone connectors are separate processes that the allowlist cannot restrict", fullName.PluginName(), connegress.AllowConfigPath))
+		err.ConfigPath = connegress.AllowConfigPath
+		err.Suggestion = "use a built-in connector (postgres, kafka or s3), which honors the allowlist, or remove " +
+			connegress.AllowConfigPath + " and restart (see docs/operations/connector-egress.md)"
+		return nil, err
+	}
+
 	r.m.RLock()
 	defer r.m.RUnlock()
 

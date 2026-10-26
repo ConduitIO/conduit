@@ -32,10 +32,11 @@ import (
 // the built-in connectors use (pgx, franz-go, the AWS SDK's HTTP client, a MySQL
 // driver).
 //
-// The built-in connectors do not take a dial hook from the engine yet: it needs
-// a seam in conduit-commons next to hostpolicy and a release of each connector.
-// Until then the configure-time check is the only enforcement in a running
-// engine; see docs/operations/connector-egress.md.
+// The engine hands [Policy.DialContext] to the built-in connectors through the
+// conduit-commons dialer seam (see pkg/conduit.withEgressPolicy); a connector
+// that reads the seam opens every connection through it. A connector release
+// that does not is guarded by the configure-time check only; see
+// docs/operations/connector-egress.md.
 
 // DialContext connects to addr like net.Dialer.DialContext, after vetting it.
 // It never trusts an earlier [Policy.Hint]: the host is resolved here, every
@@ -122,8 +123,9 @@ type policyKey struct{}
 
 // WithPolicy returns a context that carries p. The engine puts it on the call
 // context of the built-in connectors that connect somewhere (postgres, kafka,
-// s3), the way it hands the file connector its opener, so a connector that
-// takes a dial hook can build its client from [PolicyFrom](ctx).DialContext.
+// s3), the way it hands the file connector its opener. Connectors take the dial
+// guard from the conduit-commons dialer seam, which the engine fills with
+// [Policy.DialContext] at the same place.
 func WithPolicy(ctx context.Context, p *Policy) context.Context {
 	return context.WithValue(ctx, policyKey{}, p)
 }

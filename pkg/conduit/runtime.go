@@ -604,6 +604,16 @@ func createServices(r *Runtime) error {
 	if err != nil {
 		return cerrors.Errorf("invalid %s config: %w", SecretsAllowedDirsKey, err)
 	}
+	if connEgress.Restricted() {
+		// Standalone connectors are separate processes that never receive the
+		// engine's dialer, so the allowlist cannot bind them. The standalone
+		// registry refuses them at dispatch (see
+		// conn_standalone.WithEgressRestricted below); this is said once at
+		// startup so the scope of the setting is never a surprise.
+		r.logger.Info(context.Background()).
+			Str("setting", connegress.AllowConfigPath).
+			Msg("connector egress allowlist is set; standalone connectors are refused when a pipeline starts them (built-in connectors honor the allowlist)")
+	}
 	settingsResolver := engineSettingsResolver{env: envAllow, files: filePolicy, secrets: secretsPolicy, trust: trustPolicy, egress: connEgress}
 
 	procPluginService := proc_plugin.NewPluginService(
@@ -642,9 +652,10 @@ func createServices(r *Runtime) error {
 			r.Config.ConnectorPlugins,
 			connSchemaService,
 			conn_builtin.WithAmbientCredentialsPolicy(ambientPolicy),
-			// The egress policy rides on the call context of the connectors that
-			// connect somewhere, for the dial-time guard (see
-			// connegress.Policy.DialContext).
+			// The egress policy and its dial guard ride on the call context of
+			// the connectors that connect somewhere: a connector that honors the
+			// conduit-commons dialer seam opens every connection through
+			// connegress.Policy.DialContext (see withEgressPolicy).
 			conn_builtin.WithContextDecorator("postgres", withEgressPolicy(connEgress)),
 			conn_builtin.WithContextDecorator("kafka", withEgressPolicy(connEgress)),
 			conn_builtin.WithContextDecorator("s3", withEgressPolicy(connEgress)),
@@ -654,6 +665,10 @@ func createServices(r *Runtime) error {
 			r.Config.Connectors.Path,
 			conn_standalone.WithEnvWarning(r.Config.Connectors.Standalone.EnvWarning),
 			conn_standalone.WithEnvPolicy(standaloneEnv),
+			// Standalone connectors are separate processes that never receive
+			// the engine's dialer, so the egress allowlist cannot bind them;
+			// refuse them at dispatch (fail closed) while the allowlist is set.
+			conn_standalone.WithEgressRestricted(connEgress.Restricted()),
 		),
 		tokenService,
 		conn_plugin.WithSettingsGuard(settingsResolver.CheckSettings),

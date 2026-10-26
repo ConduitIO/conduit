@@ -229,7 +229,7 @@ Author: Meroxa, Inc.
 
 (none)
 
-### kafka (v0.15.0)
+### kafka (v0.16.0)
 
 A Kafka source and destination plugin for Conduit, written in Go.
 
@@ -440,6 +440,15 @@ mode works on both brokers; Redpanda does not return or enforce the
 `message.timestamp.before/after.max.ms` bounds, so only the timestamp type and
 retention rules can differ from Apache Kafka.
 
+**Host-supplied dialer**
+
+If the host that runs the connector puts a dialer on the context
+(`dialer.WithDialContext` from `conduit-commons`), the connector opens every
+broker connection through it: the seed brokers, brokers discovered from
+metadata, reconnects, and the admin and metadata requests. When TLS is
+enabled, the handshake runs over the connection the host dialer returns.
+Without a host dialer the connector dials directly, as before.
+
 Author: Meroxa, Inc.
 
 #### Source parameters
@@ -553,7 +562,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-### postgres (v0.17.5)
+### postgres (v0.18.0)
 
 Conduit connector for PostgreSQL
 
@@ -574,6 +583,17 @@ in the URL or in the environment, is also mapped to `disable`; `require` and
 ```
 postgres://user:pass@host:5432/db?sslmode=require&channel_binding=require
 ```
+
+**Dialer supplied by the host**
+
+If the process that runs the connector puts a dialer on the context (see
+`github.com/conduitio/conduit-commons/dialer`), the connector opens every
+network connection through it: the destination connection and its reconnects,
+and for the source the pool connections, the snapshot reads, the replication
+connection, and the slot and publication cleanup. Host
+names in the URL are then passed to the dialer unresolved, so it decides how to
+resolve them. Without a host dialer, nothing changes: the driver dials and
+resolves the addresses itself. A connector setting cannot supply the dialer.
 
 **Upgrading from v0.14.x: connection string parsing**
 
@@ -1331,7 +1351,7 @@ Author: Meroxa, Inc.
 | `table` | string | {{ index .Metadata "opencdc.collection" }} | no | Table is used as the target table into which records are inserted. |  |
 | `url` | string |  | yes | URL is the connection string for the Postgres database. With TLS, SCRAM authentication does not use channel binding by default (`channel_binding=disable`); add `channel_binding=require` to the URL to require SCRAM-SHA-256-PLUS. The destination describes every statement before it runs it (`describe_exec`), so a column type change on a running pipeline takes effect on the next write. Set `default_query_exec_mode` (in the URL or in a service file) to `exec`, `simple_protocol`, `cache_statement` or `cache_describe` to override. The cached modes save a round trip per batch and check a per-table schema fingerprint, but they are safe only on a direct connection or behind a pooler that does not share prepared statements between clients. Behind PgBouncer (at any `max_prepared_statements`) or another statement-sharing pooler, keep `describe_exec`: a cached mode can convert values silently after a column type change. | required |
 
-### s3 (v0.11.2)
+### s3 (v0.12.0)
 
 An S3 source and destination plugin for Conduit, written in Go.
 
@@ -1690,7 +1710,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (186)
+## 3. Error codes (187)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -1732,6 +1752,7 @@ Author: Meroxa, Inc.
 | `connector.redirect_refused` | PermissionDenied | CodeRedirectRefused is raised when a server redirects an ambient-credential request to another host or a non-https URL. |
 | `connector.resource_not_allowed` | PermissionDenied | CodeResourceNotAllowed is raised when a resource (an S3 bucket) is not an exact allow-resources entry, or is an ARN or alias form. |
 | `connector.running` | FailedPrecondition | CodeConnectorRunning is raised when an operation requires the connector to not be running, but a connector instance for it already exists. |
+| `connector.standalone_not_allowlisted` | PermissionDenied | CodeStandaloneNotAllowlisted is raised when a pipeline references a standalone connector while connectors.egress.allow is set. Standalone connectors are separate processes that never receive the engine's dialer, so the allowlist cannot bind them; they are refused at dispatch (fail closed) rather than run unconstrained. |
 | `connector.state_persist_failed` | Unavailable | CodeConnectorStatePersistFailed is raised when a connector's state write (source position, last active config) could not be committed to the store. When one connector's write fails, only that connector receives this error and the rest of the batch is committed. When opening or committing the transaction fails, every connector still in that attempt receives it. A source that receives it has not acked the affected positions upstream, so a restart re-reads from the last stored position. |
 | `debezium.avro_unsupported` | Unimplemented | CodeAvroUnsupported is raised when key.converter or value.converter is "avro": the Confluent AvroConverter (AvroData port, subject naming, Confluent wire format) is not implemented yet. It fails at configure time, before any record is encoded, so a misconfigured pipeline never emits a half-encoded message. |
 | `debezium.config_invalid` | InvalidArgument | CodeConfigInvalid is raised when the processor settings are invalid. |
