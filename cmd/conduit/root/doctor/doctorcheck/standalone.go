@@ -203,9 +203,13 @@ func (c standaloneCompatCheck) checkOne(ctx context.Context, pluginPath string) 
 // call shape exactly (same env vars) for behavioral fidelity with what
 // `conduit run` actually does when it scans connectors.path.
 func CheckConnectorPluginSpec(ctx context.Context, pluginPath string) error {
+	// Same minimal environment the registry gives plugins (base set only; the
+	// operator's connectors.standalone.env.allow is not known to this worker).
+	envPolicy, _ := standalone.NewEnvPolicy(nil)
 	dispenser, err := standalone.NewDispenser(
 		zerolog.Nop(),
 		pluginPath,
+		envPolicy.ClientOption(os.Environ()),
 		client.WithEnvVar(pconnutils.EnvConduitConnectorUtilitiesGRPCTarget, ""),
 		client.WithEnvVar(pconnutils.EnvConduitConnectorToken, "irrelevant-token"),
 		client.WithEnvVar(pconnector.EnvConduitConnectorID, "doctor-plugin-spec-check"),
