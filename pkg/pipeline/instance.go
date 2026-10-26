@@ -109,15 +109,35 @@ var DefaultDLQ = DLQ{
 
 // LogsWithoutPayload reports whether the DLQ writes a nacked record to the
 // built-in log connector without payload:true. Such a DLQ preserves only
-// hashes of the key and position, so a record routed to it is unrecoverable
-// (invariant 3). It is exactly the default DLQ, so an operator who has not
-// configured a DLQ is refused at start until they point it at a destination
-// that stores the record or set payload:true explicitly.
+// hashes of the key and position, so a record routed to it is unrecoverable.
+// It does not say whether any record is routed to it; see RoutesNacks and
+// DropsRecordContent.
 func (d DLQ) LogsWithoutPayload() bool {
 	if d.Plugin != "builtin:log" {
 		return false
 	}
 	return !strings.EqualFold(strings.TrimSpace(d.Settings["payload"]), "true")
+}
+
+// RoutesNacks reports whether a nacked record is written to the DLQ at all.
+// Both engines' DLQ windows (pkg/lifecycle/stream/dlq.go and
+// pkg/lifecycle-poc/funnel/dlq.go) route a nack when the window is disabled
+// (WindowSize 0) or the nack threshold is above 0. With a window and a
+// threshold of 0, which is the default, the first nack stops the pipeline with
+// the nack's error: nothing is written to the DLQ and the record is not acked,
+// so it is redelivered after a restart (invariant 3 holds without the DLQ).
+// TestRoutesNacks_MatchesWindow in both packages pins this to the windows.
+func (d DLQ) RoutesNacks() bool {
+	return d.WindowSize <= 0 || d.WindowNackThreshold > 0
+}
+
+// DropsRecordContent reports whether a nacked record would be acked upstream
+// while only hashes of it are kept: the DLQ receives nacked records
+// (RoutesNacks) and logs them without payload (LogsWithoutPayload). A start is
+// refused for such a DLQ (invariant 3, GHSA-m3mw-fpw8-w765). The default DLQ
+// does not drop record content, because it routes no nacks.
+func (d DLQ) DropsRecordContent() bool {
+	return d.RoutesNacks() && d.LogsWithoutPayload()
 }
 
 func (p *Instance) SetStatus(s Status) {
