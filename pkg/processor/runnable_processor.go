@@ -30,6 +30,11 @@ type RunnableProcessor struct {
 	*Instance
 	proc sdk.Processor
 	cond *processorCondition
+
+	// envAllow is the operator's env.allow list: the only environment
+	// variables a ${VAR} reference in the processor settings may expand. nil
+	// allows none.
+	envAllow *env.Allowlist
 }
 
 func newRunnableProcessor(
@@ -51,20 +56,23 @@ func (p *RunnableProcessor) Open(ctx context.Context) error {
 	// its declared parameters does not reject the operator's egress opt-in as an
 	// "unrecognized parameter". The guest must never see host-reserved config
 	// (design: 20260726-wasm-host-egress-capability.md).
-	settings, err := env.ResolveSettings(p.Config.Settings)
+	settings, err := env.ResolveSettings(p.envAllow, p.Config.Settings)
 	if err != nil {
 		return cerrors.Errorf("could not resolve processor settings: %w", err)
 	}
+	// What the processor says about its settings reaches whoever wrote them:
+	// the expanded values of environment variables stay out of it.
+	exps := env.Expansions(p.envAllow, p.Config.Settings)
 	egress.StripReservedKeys(settings)
 
 	err = p.proc.Configure(ctx, settings)
 	if err != nil {
-		return cerrors.Errorf("failed configuring processor: %w", err)
+		return cerrors.Errorf("failed configuring processor: %w", env.RedactError(err, exps))
 	}
 
 	err = p.proc.Open(ctx)
 	if err != nil {
-		return cerrors.Errorf("failed opening processor: %w", err)
+		return cerrors.Errorf("failed opening processor: %w", env.RedactError(err, exps))
 	}
 
 	return nil

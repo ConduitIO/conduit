@@ -49,6 +49,14 @@ var (
 	// refuses to start until it is deleted and created again, or Conduit is
 	// restarted after the resources were checked (#3137).
 	CodeConnectorDeleteHookRan = conduiterr.Register("connector.delete_hook_ran", codes.FailedPrecondition)
+	// CodeConnectorDeleteHookUnresolvable is raised when a connector is deleted
+	// while its stored settings no longer resolve (an environment variable that
+	// left env.allow or is gone, a path outside the allowed directories), so
+	// the plugin's "deleted" hook cannot run. Deleting anyway would leave what
+	// the hook cleans up behind: a Postgres replication slot keeps retaining WAL
+	// on the database until someone drops it. The delete is refused; restore the
+	// setting, or delete with force to skip the hook.
+	CodeConnectorDeleteHookUnresolvable = conduiterr.Register("connector.delete_hook_unresolvable", codes.FailedPrecondition)
 )
 
 // statePersistSuggestion is the Suggestion carried by

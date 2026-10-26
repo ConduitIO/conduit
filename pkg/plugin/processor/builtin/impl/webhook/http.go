@@ -32,8 +32,10 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/tplerr"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/jpillora/backoff"
 )
 
@@ -107,6 +109,11 @@ func (c *httpConfig) parseHeaders() error {
 
 type HTTPProcessor struct {
 	sdk.UnimplementedProcessor
+	// GuardHolder carries the dial-time egress guard (GHSA-m3mw-fpw8-w765).
+	// The request URL is a template over record data, so the destination is
+	// attacker-influenced: every connection, including redirect hops, goes
+	// through the guard, and the environment's proxy settings are ignored.
+	egress.GuardHolder
 
 	logger log.CtxLogger
 
@@ -257,8 +264,12 @@ func (p *HTTPProcessor) processRecord(ctx context.Context, r opencdc.Record) (sd
 		return nil, cerrors.Errorf("cannot create HTTP request: %w", errCause(err))
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := p.HTTPClient().Do(req)
 	if err != nil {
+		if _, coded := conduiterr.Get(err); coded {
+			// Keep the coded refusal (processor.egress_blocked) visible.
+			return nil, cerrors.Errorf("error executing HTTP request: %w", err)
+		}
 		return nil, cerrors.Errorf("error executing HTTP request: %w", errCause(err))
 	}
 	defer func() {

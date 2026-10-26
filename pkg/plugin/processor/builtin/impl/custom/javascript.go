@@ -18,14 +18,21 @@ package custom
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"sync"
+	"syscall"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/foundation/pathpolicy"
 	"github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/require"
 )
@@ -65,8 +72,22 @@ type javascriptConfig struct {
 	// The path to a .js file containing the processor code.
 	ScriptPath string `json:"script.path"`
 }
+
+// FileAccess is the operator's policy for the files a JavaScript processor may
+// read. The zero value allows nothing: script.path is refused and require() is
+// not defined (GHSA-m3mw-fpw8-w765).
+type FileAccess struct {
+	// ScriptDirs are the directories script.path may point into.
+	ScriptDirs *pathpolicy.Policy
+	// RequireDirs are the directories require() may load modules from. When it
+	// has no directory, require() is not installed in the script's runtime.
+	RequireDirs *pathpolicy.Policy
+}
+
 type JavascriptProcessor struct {
 	sdk.UnimplementedProcessor
+
+	files FileAccess
 
 	// src is the JavaScript code that will be executed
 	src string
@@ -78,6 +99,11 @@ type JavascriptProcessor struct {
 func NewJavascriptProcessor(logger log.CtxLogger) *JavascriptProcessor {
 	return &JavascriptProcessor{logger: logger}
 }
+
+// SetFileAccess sets the operator's file access policy. It is called by the
+// built-in registry before Configure. Without it the processor can read no
+// file and has no require().
+func (p *JavascriptProcessor) SetFileAccess(fa FileAccess) { p.files = fa }
 
 func (p *JavascriptProcessor) Specification() (sdk.Specification, error) {
 	return sdk.Specification{
@@ -114,7 +140,12 @@ func (p *JavascriptProcessor) Configure(ctx context.Context, c config.Config) er
 	case cfg.Script != "":
 		p.src = cfg.Script
 	case cfg.ScriptPath != "":
-		file, err := os.ReadFile(cfg.ScriptPath)
+		// Invariant (security boundary): script.path is API-influenced, so it is
+		// confined to the operator's script directories after symlink
+		// resolution, and enforced again when the file is opened (no symlink
+		// below the allowed directory is followed, so a swap after the check
+		// cannot redirect the read).
+		file, err := p.readFile(cfg.ScriptPath)
 		if err != nil {
 			return cerrors.Errorf("error reading script from path %v: %w", cfg.ScriptPath, err)
 		}
@@ -181,7 +212,13 @@ func (p *JavascriptProcessor) Teardown(context.Context) error {
 
 func (p *JavascriptProcessor) newRuntime(logger log.CtxLogger) (*goja.Runtime, error) {
 	rt := goja.New()
-	require.NewRegistry().Enable(rt)
+	// Invariant (security boundary): require() is only defined when the
+	// operator configured a directory for it, and its loader refuses every path
+	// outside that directory (absolute paths, "../", symlink escapes) and
+	// source-map reads alike. The default loader would read any file.
+	if len(p.files.RequireDirs.Dirs()) > 0 {
+		require.NewRegistry(require.WithLoader(p.files.requireLoader)).Enable(rt)
+	}
 
 	runtimeHelpers := map[string]interface{}{
 		"logger":         &logger,
@@ -344,4 +381,74 @@ func (p *JavascriptProcessor) toSDKRecords(v goja.Value) (sdk.ProcessedRecord, e
 			After:  convertData(jsr.Payload.After),
 		},
 	}, nil
+}
+
+// requireLoader is the require() source loader. A path outside RequireDirs is a
+// hard error (not "module not found", which the resolver would swallow and keep
+// searching).
+func (fa FileAccess) requireLoader(path string) ([]byte, error) {
+	f, err := fa.RequireDirs.OpenFile("processors.javascript.allowed-dirs", filepath.FromSlash(path), os.O_RDONLY|openNonBlock, 0)
+	switch {
+	case err == nil:
+	case cerrors.Is(err, fs.ErrNotExist), cerrors.Is(err, syscall.ENOTDIR):
+		return nil, require.ModuleFileDoesNotExistError
+	default:
+		return nil, err // includes a refusal (config.path_not_allowed): never "module not found"
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if fi.IsDir() {
+		return nil, require.ModuleFileDoesNotExistError
+	}
+	return readScript(f, path)
+}
+
+// maxScriptSize is the largest script or module that is read. A script is source
+// code; nothing legitimate is anywhere near it.
+const maxScriptSize = 10 << 20
+
+// readScript reads an opened script or module: a regular file, at most
+// maxScriptSize, never truncated.
+func readScript(f *os.File, what string) ([]byte, error) {
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		ce := conduiterr.New(CodeJSScriptNotRegular, fmt.Sprintf("%q is not a regular file", what))
+		ce.ConfigPath = "settings.script.path"
+		ce.Suggestion = "point script.path at a regular file"
+		return nil, ce
+	}
+	if fi.Size() > maxScriptSize {
+		return nil, tooLarge(what, fi.Size())
+	}
+	b, err := io.ReadAll(io.LimitReader(f, maxScriptSize+1)) // it can grow while we read
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > maxScriptSize {
+		return nil, tooLarge(what, int64(len(b)))
+	}
+	return b, nil
+}
+
+func tooLarge(what string, size int64) error {
+	ce := conduiterr.New(CodeJSScriptTooLarge, fmt.Sprintf("%q is %d bytes, more than the %d byte limit for a script", what, size, maxScriptSize))
+	ce.ConfigPath = "settings.script.path"
+	ce.Suggestion = "split the script or reduce it; scripts over 10 MiB are not read"
+	return ce
+}
+
+// readFile reads script.path through the open-time enforced policy.
+func (p *JavascriptProcessor) readFile(path string) ([]byte, error) {
+	f, err := p.files.ScriptDirs.OpenFile("settings.script.path", path, os.O_RDONLY|openNonBlock, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return readScript(f, path)
 }

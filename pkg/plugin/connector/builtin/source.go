@@ -49,6 +49,8 @@ type sourcePluginAdapter struct {
 	// policy is the operator's ambient-credentials policy, attached to the
 	// context of each call to the plugin.
 	policy hostpolicy.Policy
+	// decorate, when not nil, adds engine-owned values to every call context.
+	decorate func(context.Context) context.Context
 }
 
 var _ connector.SourcePlugin = (*sourcePluginAdapter)(nil)
@@ -71,7 +73,12 @@ func (s *sourcePluginAdapter) pluginContext(ctx context.Context) context.Context
 	// Invariant (ambient credentials): this is the only place the policy
 	// enters a built-in connector, and it comes from the engine, never from
 	// the request.
-	return hostpolicy.WithPolicy(contextWithSchemaService(s.ctxLogger.WithContext(ctx), s.schemaService), s.policy)
+	ctx = hostpolicy.WithPolicy(contextWithSchemaService(s.ctxLogger.WithContext(ctx), s.schemaService), s.policy)
+	if s.decorate != nil {
+		// Invariant (settings boundary): engine-owned, never from the request.
+		ctx = s.decorate(ctx)
+	}
+	return ctx
 }
 
 func (s *sourcePluginAdapter) Configure(ctx context.Context, in pconnector.SourceConfigureRequest) (pconnector.SourceConfigureResponse, error) {

@@ -42,16 +42,32 @@ type Service struct {
 	connectors map[string]*Instance
 	store      *Store
 	persister  *Persister
+
+	settingsResolver SettingsResolver
+}
+
+// ServiceOption configures a Service at construction.
+type ServiceOption func(*Service)
+
+// WithSettingsResolver sets the resolver every instance uses to vet and expand
+// its settings before the plugin is configured. Without it no ${VAR} reference
+// is expanded (DefaultSettingsResolver).
+func WithSettingsResolver(r SettingsResolver) ServiceOption {
+	return func(s *Service) { s.settingsResolver = r }
 }
 
 // NewService creates a Store-backed implementation of Service.
-func NewService(logger log.CtxLogger, db database.DB, persister *Persister) *Service {
-	return &Service{
+func NewService(logger log.CtxLogger, db database.DB, persister *Persister, opts ...ServiceOption) *Service {
+	s := &Service{
 		logger:     logger.WithComponent("connector.Service"),
 		store:      NewStore(db, logger),
 		connectors: make(map[string]*Instance),
 		persister:  persister,
 	}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 // Init fetches connectors from the store.
@@ -82,6 +98,7 @@ func (s *Service) Init(ctx context.Context) error {
 	for _, conn := range connectors {
 		measure.ConnectorsGauge.WithValues(strings.ToLower(conn.Type.String())).Inc()
 		conn.Init(s.logger, s.persister)
+		conn.settingsResolver = s.settingsResolver
 	}
 
 	return nil
@@ -178,6 +195,7 @@ func (s *Service) Create(
 		UpdatedAt:     now,
 	}
 	conn.Init(s.logger, s.persister)
+	conn.settingsResolver = s.settingsResolver
 
 	if p == ProvisionTypeDLQ {
 		// do not persist the instance, just return the connector
@@ -201,6 +219,12 @@ func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher Plugin
 	instance, err := s.Get(ctx, id)
 	if err != nil {
 		return err
+	}
+
+	// Refuse before anything is removed if the plugin's deletion hook could not
+	// run, unless the caller forces it.
+	if hookErr := instance.checkDeleteHook(ctx); hookErr != nil {
+		return hookErr
 	}
 
 	err = s.store.Delete(ctx, id)

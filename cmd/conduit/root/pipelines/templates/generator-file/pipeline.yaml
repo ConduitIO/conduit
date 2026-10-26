@@ -27,4 +27,4 @@ pipelines:
           # Update this to a path that suits your environment. Relative
           # paths are resolved against the working directory `conduit run`
           # is invoked from.
-          path: ./generator-file-output.ndjson
+          path: ./files/generator-file-output.ndjson

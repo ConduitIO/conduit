@@ -74,6 +74,15 @@ var (
 		"Number of built-in connector decisions about ambient cloud credentials (by plugin and outcome).",
 		[]string{labelPlugin, labelOutcome},
 	)
+	// ConnectorForceDeletesCounter counts connectors deleted with force while
+	// their settings no longer resolved, so the plugin's deletion hook was
+	// skipped (by connector type). Each one may have left plugin-side state
+	// behind, for example a Postgres replication slot.
+	ConnectorForceDeletesCounter = metrics.NewLabeledCounter(
+		"conduit_connector_force_deletes_total",
+		"Number of connectors deleted with force whose deletion hook was skipped because their settings no longer resolved (by connector type).",
+		[]string{labelType},
+	)
 	ConnectorsGauge = metrics.NewLabeledGauge("conduit_connectors",
 		"Number of connectors by type.",
 		[]string{labelType})

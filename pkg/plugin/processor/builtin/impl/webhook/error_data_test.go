@@ -26,6 +26,8 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress/egresstest"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
 )
@@ -38,10 +40,13 @@ func TestHTTPProcessor_ErrorsDoNotContainTheURLOrTheBody(t *testing.T) {
 		Metadata: opencdc.Metadata{"id": "customer-SECRET-4711", "url": "http://SECRET-user:SECRET-pass@host:" + "badport/x"},
 		Payload:  opencdc.Change{After: opencdc.RawData("x")},
 	}
-	process := func(t *testing.T, url string) error {
+	process := func(t *testing.T, url string, guard *egress.DialGuard) error {
 		t.Helper()
 		ctx := context.Background()
 		p := NewHTTPProcessor(log.Nop())
+		if guard != nil {
+			p.SetDialGuard(guard)
+		}
 		cfg := config.Config{"request.url": url, "request.method": "POST", "backoffRetry.count": "0"}
 		if err := p.Configure(ctx, cfg); err != nil {
 			t.Fatal(err)
@@ -61,7 +66,7 @@ func TestHTTPProcessor_ErrorsDoNotContainTheURLOrTheBody(t *testing.T) {
 			_, _ = w.Write([]byte("echo of request: customer-SECRET-4711"))
 		}))
 		defer srv.Close()
-		err := process(t, srv.URL)
+		err := process(t, srv.URL, egresstest.Guard(t, srv))
 		is.True(strings.Contains(err.Error(), "error status code 500"))
 		is.True(strings.Contains(err.Error(), "response body: 37 bytes, hash "))
 		is.True(!strings.Contains(err.Error(), "SECRET"))
@@ -71,8 +76,9 @@ func TestHTTPProcessor_ErrorsDoNotContainTheURLOrTheBody(t *testing.T) {
 		is := is.New(t)
 		srv := httptest.NewServer(http.NotFoundHandler())
 		url := srv.URL
+		guard := egresstest.Guard(t, srv)
 		srv.Close() // nothing listens any more
-		err := process(t, url+"/{{ index .Metadata \"id\" }}?token=SECRET-token")
+		err := process(t, url+"/{{ index .Metadata \"id\" }}?token=SECRET-token", guard)
 		is.True(strings.Contains(err.Error(), "error executing HTTP request: connection refused")) // the kind, not the host and port
 		is.True(!strings.Contains(err.Error(), "127.0.0.1"))
 		is.True(!strings.Contains(err.Error(), "SECRET"))
@@ -81,7 +87,7 @@ func TestHTTPProcessor_ErrorsDoNotContainTheURLOrTheBody(t *testing.T) {
 
 	t.Run("rendered URL does not parse", func(t *testing.T) {
 		is := is.New(t)
-		err := process(t, "{{ index .Metadata \"url\" }}")
+		err := process(t, "{{ index .Metadata \"url\" }}", nil)
 		is.True(strings.Contains(err.Error(), "error parsing the rendered URL"))
 		is.True(!strings.Contains(err.Error(), "SECRET"))
 	})
@@ -100,6 +106,7 @@ func TestHTTPProcessor_RetryLogDoesNotContainTheBody(t *testing.T) {
 	var buf bytes.Buffer
 	ctx := context.Background()
 	p := NewHTTPProcessor(log.New(zerolog.New(&buf).Level(zerolog.DebugLevel)))
+	p.SetDialGuard(egresstest.Guard(t, srv))
 	is.NoErr(p.Configure(ctx, config.Config{
 		"request.url": srv.URL, "request.method": "POST",
 		"backoffRetry.count": "2", "backoffRetry.min": "1ms", "backoffRetry.max": "2ms",

@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/env"
+
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -68,6 +70,13 @@ type Instance struct {
 	logger    log.CtxLogger
 	persister *Persister
 	inspector *inspector.Inspector
+	// settingsResolver vets and expands the stored settings right before the
+	// plugin is configured. Set by the Service; nil resolves no ${VAR}.
+	settingsResolver SettingsResolver
+	// redactions are the environment values substituted into the settings the
+	// plugin was last configured with; see redactError.
+	redactMu   sync.Mutex
+	redactions []env.Expansion
 
 	// connector stores the reference to a running connector. If the field is
 	// nil the connector is not running.
@@ -154,7 +163,8 @@ func (i *Instance) CheckStartable() error {
 		"connector %q (plugin %q, pipeline %q) was restored after a failed delete, but its plugin's delete hook "+
 			"had already run and may have released resources its saved position depends on "+
 			"(for example a Postgres replication slot); refusing to start from that position",
-		i.ID, i.Plugin, i.PipelineID))
+		i.ID, i.Plugin, i.PipelineID,
+	))
 	ce.Suggestion = "delete the connector and create it again to start it from the beginning; " +
 		"to resume from the saved position instead, first check that the resources it depends on still exist " +
 		"(for example the replication slot), then restart Conduit, which reloads the connector without this check"

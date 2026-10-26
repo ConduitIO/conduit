@@ -117,6 +117,10 @@ pipelines:
   - id: schema-plugin-pipeline
     status: running
     name: schema-plugin-pipeline
+    dead-letter-queue:
+      plugin: builtin:log
+      settings:
+        payload: "true"
     connectors:
       - id: src
         type: source

@@ -25,6 +25,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress/egresstest"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
@@ -389,6 +390,7 @@ func TestHTTPProcessor_Success(t *testing.T) {
 
 			tc.config["request.url"] = srv.URL
 			underTest := NewHTTPProcessor(log.Test(t))
+			underTest.SetDialGuard(egresstest.Guard(t, srv))
 			err := underTest.Configure(ctx, tc.config)
 			is.NoErr(err)
 
@@ -466,6 +468,7 @@ func TestHTTPProcessor_URLTemplate(t *testing.T) {
 				"request.url": srv.URL + tc.pathTmpl,
 			}
 			underTest := NewHTTPProcessor(log.Test(t))
+			underTest.SetDialGuard(egresstest.Guard(t, srv))
 			err := underTest.Configure(context.Background(), cfg)
 			is.NoErr(err)
 
@@ -519,6 +522,7 @@ func TestHTTPProcessor_RetrySuccess(t *testing.T) {
 	}
 
 	underTest := NewHTTPProcessor(log.Test(t))
+	underTest.SetDialGuard(egresstest.Guard(t, srv))
 	err := underTest.Configure(context.Background(), cfg)
 	is.NoErr(err)
 
@@ -555,6 +559,7 @@ func TestHTTPProcessor_RetryFail(t *testing.T) {
 	}
 
 	underTest := NewHTTPProcessor(log.Test(t))
+	underTest.SetDialGuard(egresstest.Guard(t, srv))
 	err := underTest.Configure(context.Background(), cfg)
 	is.NoErr(err)
 

@@ -1772,6 +1772,18 @@ func (s *Service) buildDLQ(
 	sourceID string,
 	logger log.CtxLogger,
 ) (*funnel.DLQ, error) {
+	if pl.DLQ.LogsWithoutPayload() {
+		err := conduiterr.Wrap(
+			pipeline.CodePipelineDLQNotRecoverable,
+			fmt.Sprintf("pipeline %s has a DLQ (%s) that would not preserve the record: it logs only hashes", pl.ID, pl.DLQ.Plugin),
+			cerrors.New("DLQ would drop record content"),
+		)
+		err.Suggestion = "configure a DLQ destination that stores the record (a connector other than builtin:log), " +
+			"or set payload:true on the builtin:log DLQ to write the full record to the log; " +
+			"the default DLQ is refused because a nacked record would otherwise be unrecoverable"
+		return nil, err
+	}
+
 	dlqName := buildDLQName(pl.ID, sourceID)
 
 	conn, err := s.connectors.Create(

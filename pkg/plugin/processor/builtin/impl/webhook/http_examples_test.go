@@ -28,6 +28,7 @@ import (
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	conduit_log "github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/exampleutil"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress/egresstest"
 )
 
 func ExampleHTTPProcessor() {
@@ -36,6 +37,9 @@ func ExampleHTTPProcessor() {
 	srv := newTestServer()
 	// Stop the server on return from the function.
 	defer srv.Close()
+	// The test server is on loopback, which the egress guard refuses unless
+	// the operator exempts it.
+	p.SetDialGuard(egresstest.MustGuardForAddr(srv.Listener.Addr().String()))
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Send a request to an HTTP server`,
@@ -97,6 +101,9 @@ func ExampleHTTPProcessor_dynamicURL() {
 	srv := newTestServer()
 	// Stop the server on return from the function.
 	defer srv.Close()
+	// The test server is on loopback, which the egress guard refuses unless
+	// the operator exempts it.
+	p.SetDialGuard(egresstest.MustGuardForAddr(srv.Listener.Addr().String()))
 
 	exampleutil.RunExample(p, exampleutil.Example{
 		Summary: `Send a request to an HTTP server with a dynamic URL`,

@@ -362,6 +362,26 @@ the rules, error codes and runbook, and run
 `conduit doctor --check connectors.ambient_credentials` to see the effective
 policy.
 
+## Settings and the host
+
+Connector and processor settings can come from the API, so they get no ambient access to the
+machine Conduit runs on. Four things are closed until the operator opens them in `conduit.yaml`, by
+flag, or by `CONDUIT_*` environment, and never through a pipeline or API field:
+
+- `${VAR}` expands only for names in [`env.allow`](docs/operations/env-allowlist.md).
+- `webhook.http`, `ollama.request`, `openai.*` and `cohere.*` refuse private, loopback, link-local and
+  metadata addresses unless the exact destination is in
+  [`processors.egress.builtin-allow`](docs/operations/outbound-http-egress.md).
+- The `file` connector and `custom.javascript` (`script.path`, `require()`) are confined to
+  [`connectors.file.allowed-dirs` and `processors.javascript.allowed-dirs`](docs/operations/file-access.md).
+- Built-in connectors never connect to a cloud metadata endpoint, and the operator can confine every
+  target with [`connectors.egress.allow`](docs/operations/connector-egress.md). Writers of the API are
+  trusted to choose the other targets (a database, a Kafka cluster, an S3 endpoint).
+- The log connector, and so the default dead-letter queue, does not write record keys or payloads
+  unless `payload: true`.
+
+Every refusal is a coded error that names the key to change.
+
 ## Processors
 
 A processor is a component that operates on a single record that flows through a

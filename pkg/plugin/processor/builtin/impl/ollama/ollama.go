@@ -30,12 +30,17 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/goccy/go-json"
 	"github.com/rs/zerolog"
 )
 
-var HTTPClient httpClient = http.DefaultClient
+// HTTPClient, when non-nil, replaces the processor's guarded HTTP client. It is
+// a test seam; production leaves it nil so every request goes through the
+// egress dial guard (GHSA-m3mw-fpw8-w765).
+var HTTPClient httpClient
 
 type httpClient interface {
 	Do(req *http.Request) (*http.Response, error)
@@ -59,6 +64,10 @@ type ollamaProcessorConfig struct {
 
 type OllamaProcessor struct {
 	sdk.UnimplementedProcessor
+	// GuardHolder carries the dial-time egress guard. The Ollama URL is
+	// pipeline-author input; a local Ollama needs an operator exemption such
+	// as 127.0.0.1:11434 in processors.egress.builtin-allow.
+	egress.GuardHolder
 
 	config      ollamaProcessorConfig
 	logger      log.CtxLogger
@@ -139,7 +148,11 @@ func (p *OllamaProcessor) processRecord(ctx context.Context, rec opencdc.Record,
 
 	resp, err := p.sendOllamaRequest(ctx, reqBody)
 	if err != nil {
-		return nil, cerrors.Errorf("error sending the ollama request: %w", err)
+		if _, coded := conduiterr.Get(err); coded {
+			// Keep the coded refusal (processor.egress_blocked) reachable.
+			return nil, cerrors.Errorf("error sending the ollama request: %w", err)
+		}
+		return nil, cerrors.Errorf("error sending the ollama request: %s", err)
 	}
 
 	respData, err := processOllamaResponse(resp)
@@ -181,8 +194,16 @@ func (p *OllamaProcessor) sendOllamaRequest(ctx context.Context, reqBody []byte)
 		return nil, fmt.Errorf("unable to create ollama request %w", errCause(err))
 	}
 
-	resp, err := HTTPClient.Do(req)
+	var client httpClient = p.HTTPClient()
+	if HTTPClient != nil {
+		client = HTTPClient
+	}
+	resp, err := client.Do(req)
 	if err != nil {
+		if _, coded := conduiterr.Get(err); coded {
+			// Keep the coded refusal (processor.egress_blocked) visible.
+			return nil, fmt.Errorf("request to ollama failed %w", err)
+		}
 		return nil, fmt.Errorf("request to ollama failed %w", errCause(err))
 	}
 	if resp.StatusCode != http.StatusOK {

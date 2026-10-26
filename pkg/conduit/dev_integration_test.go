@@ -69,7 +69,8 @@ func TestRunDev_HotReload_EndToEnd(t *testing.T) {
 	logs := &safeBuffer{}
 	cfg := conduit.DefaultConfig()
 	cfg.DB.Badger.Path = filepath.Join(tmp, "conduit.db")
-	cfg.API.Enabled = false // not needed for this test; keeps startup fast and simple
+	cfg.Connectors.File.AllowedDirs = []string{tmp} // the pipeline writes output.ndjson under tmp
+	cfg.API.Enabled = false                         // not needed for this test; keeps startup fast and simple
 	cfg.Pipelines.Path = pipelinesDir
 	cfg.Dev.Enabled = true
 	cfg.Log.Level = "debug"
@@ -168,6 +169,10 @@ pipelines:
   - id: dev-e2e
     status: running
     name: dev-e2e
+    dead-letter-queue:
+      plugin: builtin:file
+      settings:
+        path: %s
     connectors:
       - id: src
         type: source
@@ -188,7 +193,7 @@ pipelines:
         settings:
           field: .Payload.After.tag
           value: %q
-`, rate, outputPath, tagValue)
+`, outputPath+".dlq", rate, outputPath, tagValue)
 }
 
 func startedCount(logs *safeBuffer) int {

@@ -43,6 +43,20 @@ func WithAmbientCredentialsPolicy(p hostpolicy.Policy) RegistryOption {
 	return func(r *Registry) { r.ambient = p }
 }
 
+// WithContextDecorator makes the Registry pass the context of every call into
+// the built-in connector named pluginName (for example "file") through f. The
+// engine uses it to hand a connector values only the engine can supply, such
+// as an open function that enforces the operator's path policy at open time.
+// f must be cheap and must not retain the context.
+func WithContextDecorator(pluginName string, f func(context.Context) context.Context) RegistryOption {
+	return func(r *Registry) {
+		if r.decorators == nil {
+			r.decorators = map[string]func(context.Context) context.Context{}
+		}
+		r.decorators[pluginName] = f
+	}
+}
+
 const ambientLoggerComponent = "connector.AmbientCredentials"
 
 // knownOutcomes bounds the metric's outcome label to the values hostpolicy

@@ -81,8 +81,36 @@ type schemaRegistryProcessor interface {
 	SetSchemaRegistry(schemaregistry.Registry)
 }
 
+type dialGuardProcessor interface {
+	SetDialGuard(*egress.DialGuard)
+}
+
+type fileAccessProcessor interface {
+	SetFileAccess(custom.FileAccess)
+}
+
+// RegistryOption configures a Registry.
+type RegistryOption func(*Registry)
+
+// WithDialGuard sets the egress dial guard handed to every built-in processor
+// that opens outbound connections (webhook.http, ollama.request, openai.*,
+// cohere.*). Without it they use the default guard: private, loopback,
+// link-local and metadata ranges blocked, no exemption.
+func WithDialGuard(g *egress.DialGuard) RegistryOption {
+	return func(r *Registry) { r.dialGuard = g }
+}
+
+// WithJavaScriptFileAccess sets the files custom.javascript may read. Without
+// it the processor reads no file and has no require().
+func WithJavaScriptFileAccess(fa custom.FileAccess) RegistryOption {
+	return func(r *Registry) { r.jsFiles = fa }
+}
+
 type Registry struct {
 	logger log.CtxLogger
+
+	dialGuard *egress.DialGuard
+	jsFiles   custom.FileAccess
 
 	// plugins stores plugin blueprints in a 2D map, first key is the plugin
 	// name, the second key is the plugin version
@@ -110,6 +138,7 @@ func NewRegistry(
 	logger log.CtxLogger,
 	constructors map[string]ProcessorPluginConstructor,
 	schemaRegistry schemaregistry.Registry,
+	opts ...RegistryOption,
 ) *Registry {
 	// Built-in processors resolve schemas through the processor SDK's
 	// package-level service. It is installed once per process as a router
@@ -141,6 +170,9 @@ func NewRegistry(
 		logger:         logger,
 		schemaRegistry: schemaRegistry,
 		schemaService:  procutils.NewSchemaService(logger, schemaRegistry),
+	}
+	for _, opt := range opts {
+		opt(r)
 	}
 	logger.Info(context.Background()).Int("count", len(r.List())).Msg("builtin processor plugins initialized")
 	return r
@@ -213,9 +245,11 @@ func newFullName(pluginName, pluginVersion string) plugin.FullName {
 }
 
 // NewProcessor builds a built-in processor. The egressPolicy argument exists to
-// satisfy the shared registry interface; built-in processors are compiled into
-// the core binary with full net/http and are NOT sandboxed, so the WASM
-// host-egress gate does not apply to them and the policy is ignored here.
+// satisfy the shared registry interface and is ignored: it is the WASM
+// host-egress policy (an allowlist for sandboxed guests). Built-in processors
+// are compiled into the core binary with full net/http, so their outbound
+// connections are governed by the Registry's DialGuard instead (set with
+// WithDialGuard), which every processor that dials out receives here.
 func (r *Registry) NewProcessor(_ context.Context, fullName plugin.FullName, id string, _ egress.Policy) (sdk.Processor, error) {
 	versionMap, ok := r.plugins[fullName.PluginName()]
 	if !ok {
@@ -247,6 +281,12 @@ func (r *Registry) NewProcessor(_ context.Context, fullName plugin.FullName, id 
 	p := b.constructor(r.logger)
 	if sr, setSR := p.(schemaRegistryProcessor); setSR {
 		sr.SetSchemaRegistry(r.schemaRegistry)
+	}
+	if dg, ok := p.(dialGuardProcessor); ok {
+		dg.SetDialGuard(r.dialGuard)
+	}
+	if fa, ok := p.(fileAccessProcessor); ok {
+		fa.SetFileAccess(r.jsFiles)
 	}
 
 	// Apply default middleware since built-in processors are created

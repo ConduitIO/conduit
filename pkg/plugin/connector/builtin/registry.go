@@ -100,6 +100,10 @@ type Registry struct {
 	// name, the second key is the plugin version
 	plugins map[string]map[string]blueprint
 	service *connutils.SchemaService
+	// decorators add engine-owned values to the call context of the built-in
+	// connector with the given plugin name (for example the file connector's
+	// open-time path enforcement).
+	decorators map[string]func(context.Context) context.Context
 	// ambient is the operator's ambient-credentials policy; the zero value
 	// denies. Set once at construction, read-only afterwards.
 	ambient hostpolicy.Policy
@@ -239,7 +243,11 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, 
 
 	// Invariant (ambient credentials): the policy is bound here, by the engine,
 	// to this connector instance; nothing in cfg or the pipeline config feeds it.
-	return b.dispenserFactory(fullName, cfg, logger, r.policyFor(fullName.PluginName(), cfg.ConnectorID)), nil
+	d := b.dispenserFactory(fullName, cfg, logger, r.policyFor(fullName.PluginName(), cfg.ConnectorID))
+	if bd, ok := d.(*Dispenser); ok {
+		bd.decorate = r.decorators[fullName.PluginName()]
+	}
+	return d, nil
 }
 
 func (r *Registry) List() map[plugin.FullName]pconnector.Specification {

@@ -32,7 +32,7 @@ pipelines:
         type: destination
         plugin: builtin:file
         settings:
-          path: ./example.out
+          path: ./files/example.out
     processors:
       - id: extract-name
         plugin: field.set

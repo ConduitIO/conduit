@@ -20,9 +20,9 @@ pipelines:
         type: destination
         plugin: builtin:file
         settings:
-          path: ./example-1.out
+          path: ./files/example-1.out
       - id: file-destination-2
         type: destination
         plugin: builtin:file
         settings:
-          path: ./example-2.out
+          path: ./files/example-2.out

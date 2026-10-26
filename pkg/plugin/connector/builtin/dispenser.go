@@ -15,6 +15,8 @@
 package builtin
 
 import (
+	"context"
+
 	"github.com/conduitio/conduit-commons/hostpolicy"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit-connector-protocol/pconnutils"
@@ -35,6 +37,9 @@ type Dispenser struct {
 	// policy is put on the context of every source/destination call. The zero
 	// value (NewDispenser's default) denies ambient credentials.
 	policy hostpolicy.Policy
+	// decorate, when not nil, adds engine-owned values to the context of every
+	// source/destination call (see WithContextDecorator).
+	decorate func(context.Context) context.Context
 }
 
 func NewDispenser(
@@ -60,12 +65,14 @@ func (d *Dispenser) DispenseSpecifier() (connector.SpecifierPlugin, error) {
 func (d *Dispenser) DispenseSource() (connector.SourcePlugin, error) {
 	a := newSourcePluginAdapter(d.sourcePlugin(), d.pluginLogger("source"), d.policy)
 	a.schemaService = d.schemaService
+	a.decorate = d.decorate
 	return a, nil
 }
 
 func (d *Dispenser) DispenseDestination() (connector.DestinationPlugin, error) {
 	a := newDestinationPluginAdapter(d.destinationPlugin(), d.pluginLogger("destination"), d.policy)
 	a.schemaService = d.schemaService
+	a.decorate = d.decorate
 	return a, nil
 }
 

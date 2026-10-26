@@ -25,7 +25,6 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/env"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
@@ -1103,13 +1102,13 @@ func (s *Source) state() SourceState {
 
 func (s *Source) configure(ctx context.Context) error {
 	s.Instance.logger.Trace(ctx).Msg("configuring source connector plugin")
-	settings, err := env.ResolveSettings(s.Instance.Config.Settings)
+	settings, err := s.Instance.resolveSettings(s.Instance.Config.Settings)
 	if err != nil {
 		return cerrors.Errorf("could not resolve source connector settings: %w", err)
 	}
 	_, err = s.plugin.Configure(ctx, pconnector.SourceConfigureRequest{Config: settings})
 	if err != nil {
-		return cerrors.Errorf("could not configure source connector plugin: %w", err)
+		return cerrors.Errorf("could not configure source connector plugin: %w", s.Instance.redactError(err))
 	}
 	return nil
 }
@@ -1120,7 +1119,7 @@ func (s *Source) open(ctx context.Context) error {
 		Position: s.state().Position,
 	})
 	if err != nil {
-		return cerrors.Errorf("could not open source connector plugin: %w", err)
+		return cerrors.Errorf("could not open source connector plugin: %w", s.Instance.redactError(err))
 	}
 	return nil
 }
@@ -1132,7 +1131,7 @@ func (s *Source) run(ctx context.Context) error {
 	err := s.plugin.Run(ctx, stream)
 	if err != nil {
 		stopStream()
-		return cerrors.Errorf("could not run source connector plugin: %w", err)
+		return cerrors.Errorf("could not run source connector plugin: %w", s.Instance.redactError(err))
 	}
 	s.stream = stream.Client()
 	s.pendingRecv = nil
@@ -1144,6 +1143,29 @@ func (s *Source) run(ctx context.Context) error {
 func (s *Source) triggerLifecycleEvent(ctx context.Context, oldConfig, newConfig map[string]string) (ok bool, err error) {
 	if s.isEqual(oldConfig, newConfig) {
 		return false, nil // nothing to do, last active config is the same as current one
+	}
+
+	// Invariant (settings boundary): the plugin gets the same vetted, resolved
+	// settings it gets in Configure, never the raw stored text. A refusal here
+	// (for example a ${VAR} the operator has not allowed) fails the event.
+	oldConfig, err = s.Instance.resolveEventSettings(oldConfig)
+	if err != nil {
+		if newConfig == nil {
+			// "deleted": a setting that no longer resolves (a ${VAR} that left
+			// env.allow, or a path outside the allowed directories) must not
+			// make the connector undeletable. The plugin is not told, so its
+			// own cleanup (for example dropping a replication slot) does not
+			// run and has to be done by hand. Only the error is logged, never
+			// a setting value.
+			s.Instance.logger.Warn(ctx).Err(err).
+				Msg("skipping lifecycle event \"deleted\" on source connector plugin: its settings could not be resolved; plugin-side cleanup must be done manually")
+			return false, nil
+		}
+		return false, cerrors.Errorf("could not resolve the previous connector settings for the lifecycle event: %w", err)
+	}
+	newConfig, err = s.Instance.resolveEventSettings(newConfig)
+	if err != nil {
+		return false, cerrors.Errorf("could not resolve the connector settings for the lifecycle event: %w", err)
 	}
 
 	defer func() {

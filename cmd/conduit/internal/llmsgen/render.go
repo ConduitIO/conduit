@@ -106,7 +106,20 @@ func renderLLMSTxt(d generatedData) string {
 	b.WriteString("- [Ambient cloud credentials](https://github.com/ConduitIO/conduit/blob/main/docs/operations/ambient-credentials.md): " +
 		"built-in connectors use the host's identity (for example the AWS default chain) only when the operator sets " +
 		"`connectors.ambient-credentials.enabled=true` with exact `allow-resources`; a pipeline must name `builtin:s3`. " +
-		"Off by default.\n\n")
+		"Off by default.\n")
+	b.WriteString("- [Environment variables in settings](https://github.com/ConduitIO/conduit/blob/main/docs/operations/env-allowlist.md): " +
+		"`${VAR}` in a connector or processor setting expands only for names the operator lists in `env.allow`; " +
+		"otherwise `config.env_var_not_allowed`. Off by default; not settable over the API.\n")
+	b.WriteString("- [Outbound HTTP from built-in processors](https://github.com/ConduitIO/conduit/blob/main/docs/operations/outbound-http-egress.md): " +
+		"`webhook.http`, `ollama.request`, `openai.*` and `cohere.*` refuse private, loopback, link-local and metadata addresses " +
+		"(`processor.egress_blocked`), on every redirect hop, and ignore proxy variables; the operator exempts exact destinations with " +
+		"`processors.egress.builtin-allow`.\n")
+	b.WriteString("- [Connector egress](https://github.com/ConduitIO/conduit/blob/main/docs/operations/connector-egress.md): " +
+		"built-in connectors never connect to a cloud metadata endpoint (`connector.egress_blocked`); API writers are trusted to choose other targets, " +
+		"and the operator can confine them with `connectors.egress.allow`.\n")
+	b.WriteString("- [File access](https://github.com/ConduitIO/conduit/blob/main/docs/operations/file-access.md): " +
+		"the `file` connector and `custom.javascript` (`script.path`, `require()`) are confined to the operator's " +
+		"`connectors.file.allowed-dirs` and `processors.javascript.allowed-dirs` (`config.path_not_allowed`).\n\n")
 
 	// Static, like Deployment: the suite lives in conduit-connector-sdk, not in
 	// this module, so there is nothing here to derive it from.
