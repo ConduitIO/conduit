@@ -1,0 +1,7 @@
+# Guards that survive today: removing them leaves the package tests green.
+# Format: `name | why it survives and what would kill it`.
+#
+# This file is EMPTY and may only shrink: the workflow fails any PR that adds a
+# line (compared with the merge base), however well justified. A survivor is a
+# test gap; write the test. The gate itself (tools/guardmut) also fails a listed
+# guard that is now killed.

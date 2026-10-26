@@ -367,6 +367,26 @@ func (p *Persister) triggerFlush(ctx context.Context) {
 	go p.flushNow(ctx, batch, st)
 }
 
+// failMissingResults makes sure every connector in batch has a recorded write
+// outcome and returns how many outcomes are errors. Extracted from flushNow so
+// the fail-closed branch can be tested without a seam in writeBatch.
+func failMissingResults(batch map[string]persistData, results map[string]error) int {
+	failed := 0
+	for id := range batch {
+		// Invariant 1: a callback gets nil only for a recorded commit. A
+		// missing result (writeBatch always records one; this guards a
+		// future change to it) fails closed.
+		// guard: connector-persister-missing-result-fails-closed tests=^TestFailMissingResults_MissingOutcomeIsAnError$
+		if _, ok := results[id]; !ok {
+			results[id] = statePersistError("internal error", cerrors.Errorf("no write outcome recorded for connector %q", id))
+		}
+		if results[id] != nil {
+			failed++
+		}
+	}
+	return failed
+}
+
 // flushNow will flush the state to the store.
 //
 // Every connector's callback receives the outcome of its own write: nil if
@@ -379,18 +399,7 @@ func (p *Persister) flushNow(ctx context.Context, batch map[string]persistData, 
 	start := p.clock.Now()
 
 	results := p.writeBatch(ctx, batch)
-	failed := 0
-	for id := range batch {
-		// Invariant 1: a callback gets nil only for a recorded commit. A
-		// missing result (writeBatch always records one; this guards a
-		// future change to it) fails closed.
-		if _, ok := results[id]; !ok {
-			results[id] = statePersistError("internal error", cerrors.Errorf("no write outcome recorded for connector %q", id))
-		}
-		if results[id] != nil {
-			failed++
-		}
-	}
+	failed := failMissingResults(batch, results)
 
 	// Track every callback this flush spawns so WaitPendingWrites can observe
 	// not just "the write landed" but "every side effect the write's callback

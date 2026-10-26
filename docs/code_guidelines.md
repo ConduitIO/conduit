@@ -78,6 +78,39 @@ We have 3 test suites:
 - End-to-end tests are tests that spin up an instance of Conduit and test its operation as a black-box through the
   exposed APIs. These tests are located in the `e2e` folder.
 
+### Guard markers
+
+A guard is an `if` statement (or a call statement) that stops a data-path invariant from being
+violated: a refusal to start, an ack check, a wait that keeps shutdown from returning early. A test
+suite that stays green when the guard is deleted does not protect it, so guards are marked and
+checked mechanically.
+
+Put `// guard: <name> tests=<regexp>` on the line directly above the statement (or trailing it). `tests=` is
+required: it restricts `go test -run` and names the test(s) that must fail when the guard is removed. A kill
+counts only when a named test that `tests=` selects fails; a package-level failure (panic in init, `TestMain`,
+timeout) is an error, not a kill. Optional tokens: `pkgs=./a,./b` adds test packages, `env=KEY=VALUE` sets an
+environment variable for the run. Names are lowercase and unique, and every name is listed in
+`.github/guardmut-guards.txt`: deleting a marker fails the gate because its name is still listed.
+
+`make guardmut` (`tools/guardmut`) deletes each marked guard in turn (an `if` condition becomes
+`false && (cond)`; a call statement is not run), runs the guard's package tests and requires them to
+fail. A guard that survives fails the check. `.github/guardmut-baseline.txt` can list a survivor with a
+written reason, but it is empty today and the workflow fails any PR that adds a line to it (compared with
+the merge base), so the only way to pass is the test. A listed guard that is now killed must be removed
+from the list. Removing a name from `.github/guardmut-guards.txt` fails the workflow unless the PR body
+has a `guardmut-removed: <reason>` line. Only guards that are refusals can be marked: a condition whose
+removal means "always proceed" is the same mutation, but a condition that must hold for the success path
+(`if !ok { return nil }`) is not a guard.
+
+Why a purpose-built tool and not `go-mutesting`, `gremlins` or `ooze`. Those tools apply every
+operator to every line and report a score, which on a data-path package is hours of runtime and a
+number nobody acts on. The question this repo needs answered is narrow: "does a test notice when
+this specific refusal is deleted?" The marker names the statement, the single mutation (delete the
+guard) is the one that matters, and the verdict is binary and per guard, so a survivor names the
+test to write. The tool is about 700 lines of standard library (`go/ast`, `go test -overlay`), adds
+no dependency to `go.mod`, and lives in the separate `tools/go.mod` module. If a general mutation
+tool is wanted later, it can run next to this one; it does not replace the marker.
+
 ## Documentation
 
 We should write in-line documentation that can be read by `godoc`. This means that exported types, functions and

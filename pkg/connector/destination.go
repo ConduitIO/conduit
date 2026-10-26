@@ -451,6 +451,7 @@ func (d *Destination) triggerLifecycleEvent(ctx context.Context, oldConfig, newC
 	case oldConfig != nil && newConfig == nil:
 		d.Instance.logger.Trace(ctx).Msg("triggering lifecycle event \"deleted\" on destination connector plugin")
 		_, err := d.plugin.LifecycleOnDeleted(ctx, pconnector.DestinationLifecycleOnDeletedRequest{Config: oldConfig})
+		// guard: connector-destination-delete-hook-marks-instance tests=^TestService_Restore_AfterDeleteHook$
 		if !cerrors.Is(err, pconnector.ErrUnimplemented) {
 			// Invariant 3 (#3137): the plugin got the event and may have
 			// released what the position refers to, even if it failed. A

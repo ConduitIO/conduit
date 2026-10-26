@@ -1,0 +1,32 @@
+// log-call
+package fx
+
+import "errors"
+
+func Check(n int) error {
+	// guard: neg-input tests=^Test(Negative|Positive)$
+	if n < 0 {
+		return errors.New("negative")
+	}
+	// guard: log-call tests=^Test(Negative|Positive)$
+	_ = func() { note(n) }
+	return nil
+}
+
+func note(int) {}
+// neg-input
+package fx
+
+import "errors"
+
+func Check(n int) error {
+	// guard: neg-input tests=^Test(Negative|Positive)$
+	if false && (n < 0) {
+		return errors.New("negative")
+	}
+	// guard: log-call tests=^Test(Negative|Positive)$
+	note(n)
+	return nil
+}
+
+func note(int) {}
