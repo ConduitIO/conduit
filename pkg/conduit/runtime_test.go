@@ -42,8 +42,8 @@ func TestRuntime(t *testing.T) {
 
 	cfg := conduit.DefaultConfig()
 	cfg.DB.Badger.Path = t.TempDir() + "/testing.app.db"
-	cfg.API.GRPC.Address = ":0"
-	cfg.API.HTTP.Address = ":0"
+	cfg.API.GRPC.Address = "127.0.0.1:0"
+	cfg.API.HTTP.Address = "127.0.0.1:0"
 	cfg.Log.NewLogger = func(level, _ string) log.CtxLogger {
 		l, _ := zerolog.ParseLevel(level)
 		zl := zerolog.New(w).

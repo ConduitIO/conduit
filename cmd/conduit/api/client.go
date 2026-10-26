@@ -16,9 +16,11 @@ package api
 
 import (
 	"context"
+	"os"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/http/apisec"
 	apiv1 "github.com/conduitio/conduit/proto/api/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -33,11 +35,47 @@ type Client struct {
 	HealthClient           healthgrpc.HealthClient
 }
 
-func NewClient(ctx context.Context, address string) (*Client, error) {
-	conn, err := grpc.NewClient(
-		address,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+// Environment variables NewClient reads the API token from when no token
+// source is passed explicitly.
+const (
+	EnvToken     = "CONDUIT_API_TOKEN"      //nolint:gosec // an environment variable name, not a credential
+	EnvTokenFile = "CONDUIT_API_TOKEN_FILE" //nolint:gosec // an environment variable name, not a credential
+)
+
+// ClientOption configures NewClient.
+type ClientOption func(*clientOptions)
+
+type clientOptions struct {
+	token, tokenFile string
+}
+
+// WithTokenSource sets where the API bearer token comes from: token inline, or
+// tokenFile, a path to a file holding it (see apisec.ResolveToken). When both
+// are empty NewClient falls back to CONDUIT_API_TOKEN_FILE, then
+// CONDUIT_API_TOKEN.
+func WithTokenSource(token, tokenFile string) ClientOption {
+	return func(o *clientOptions) { o.token, o.tokenFile = token, tokenFile }
+}
+
+// NewClient dials a Conduit gRPC API and checks its health. If a token is
+// configured (see WithTokenSource) it is sent as a bearer token on every call.
+func NewClient(ctx context.Context, address string, opts ...ClientOption) (*Client, error) {
+	var o clientOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+	if o.token == "" && o.tokenFile == "" {
+		o.token, o.tokenFile = os.Getenv(EnvToken), os.Getenv(EnvTokenFile)
+	}
+	token, err := apisec.ResolveToken(o.token, o.tokenFile)
+	if err != nil {
+		return nil, err
+	}
+	dialOpts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	if token != "" {
+		dialOpts = append(dialOpts, grpc.WithPerRPCCredentials(apisec.BearerCredentials(token)))
+	}
+	conn, err := grpc.NewClient(address, dialOpts...)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to create gRPC client: %w", err)
 	}

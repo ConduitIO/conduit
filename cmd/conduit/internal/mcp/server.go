@@ -66,6 +66,11 @@ type Config struct {
 	// address — an MCP server may run with no Conduit instance nearby.
 	APIAddress string
 
+	// APITokenFile is the path of a file holding the bearer token the API at
+	// APIAddress requires. Empty falls back to CONDUIT_API_TOKEN_FILE and
+	// CONDUIT_API_TOKEN.
+	APITokenFile string
+
 	// newDeployService and newAPIClient construct the deploy/apply and
 	// inspect engines respectively. Both default to the real
 	// implementations in NewServer; overridable only from this package's
@@ -121,7 +126,10 @@ func NewServer(cfg Config) *sdkmcp.Server {
 		cfg.newDeployService = deploy.NewService
 	}
 	if cfg.newAPIClient == nil {
-		cfg.newAPIClient = newAPIInspectClient
+		tokenFile := cfg.APITokenFile
+		cfg.newAPIClient = func(ctx context.Context, address string) (inspectClient, error) {
+			return newAPIInspectClient(ctx, address, tokenFile)
+		}
 	}
 
 	s := &server{cfg: cfg}

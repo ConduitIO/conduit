@@ -37,6 +37,7 @@ func TestRootCommandFlags(t *testing.T) {
 	}{
 		{longName: "version", shortName: "v", usage: "show the current Conduit version"},
 		{longName: "api.grpc.address", usage: "address where Conduit is running", persistent: true},
+		{longName: "api.token-file", usage: "path to a file containing the API bearer token (or set CONDUIT_API_TOKEN / CONDUIT_API_TOKEN_FILE)", persistent: true},
 		{longName: "config.path", usage: "path to the configuration file", persistent: true},
 	}
 

@@ -1010,10 +1010,16 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (116)
+## 3. Error codes (122)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
+| `api.content_type_unsupported` | InvalidArgument | CodeContentTypeUnsupported is returned by the HTTP API when a mutating request (POST, PUT, PATCH, DELETE) with a body does not use Content-Type: application/json. |
+| `api.host_forbidden` | PermissionDenied | CodeHostForbidden is returned by the HTTP API on a loopback bind when the Host header is not localhost, 127.0.0.1, [::1] or a configured allowed host (DNS rebinding protection). |
+| `api.origin_forbidden` | PermissionDenied | CodeOriginForbidden is returned by the HTTP API when a request's Origin header is neither allowlisted nor same-origin. |
+| `api.token_invalid` | InvalidArgument | CodeTokenInvalid is raised at startup when the configured API token is unusable: the token file cannot be read, the token is empty or too short, or both api.token and api.token-file are set. |
+| `api.token_required` | FailedPrecondition | CodeTokenRequired is raised at startup when the HTTP or gRPC API is bound to a non-loopback address and no API token is configured. Conduit refuses to serve an unauthenticated API to the network. |
+| `api.unauthenticated` | Unauthenticated | CodeUnauthenticated is returned by the HTTP and gRPC APIs when a request carries no bearer token or the wrong one. |
 | `common.invalid_argument` | InvalidArgument | CodeInvalidArgument is a generic invalid-input error. |
 | `common.not_found` | NotFound | CodeNotFound is a generic not-found error. |
 | `common.unavailable` | Unavailable | CodeUnavailable is raised when Conduit itself cannot reach a required external dependency it needs to start or operate: the CLI can't reach a running server, the configured database can't be opened/dialed, or a listen address is already bound. It is deliberately generic (unlike the per-domain codes elsewhere in the registry) because these are environment-of-execution failures, not domain business errors — the caller's remediation is "check the environment", not "fix a config field".  It maps to the gRPC Unavailable category, which pkg/conduit/exitcode's classifier treats as an environment failure (process exit code 3), distinct from validation errors (exit 2) and internal/runtime errors (exit 1). |

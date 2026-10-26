@@ -34,12 +34,12 @@ func TestSchemaService_CreateSchema_ValidateToken(t *testing.T) {
 		{
 			name:    "no token",
 			token:   "",
-			wantErr: "\"\": invalid token",
+			wantErr: "invalid token",
 		},
 		{
 			name:    "invalid token",
 			token:   "abc",
-			wantErr: "\"abc\": invalid token",
+			wantErr: "invalid token",
 		},
 	}
 
@@ -69,12 +69,12 @@ func TestSchemaService_GetSchema_ValidateToken(t *testing.T) {
 		{
 			name:    "no token",
 			token:   "",
-			wantErr: "\"\": invalid token",
+			wantErr: "invalid token",
 		},
 		{
 			name:    "invalid token",
 			token:   "abc",
-			wantErr: "\"abc\": invalid token",
+			wantErr: "invalid token",
 		},
 	}
 

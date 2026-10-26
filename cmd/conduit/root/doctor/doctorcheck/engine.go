@@ -61,7 +61,7 @@ func (c engineReachableCheck) Run(ctx context.Context) check.CheckResult {
 
 	addr := c.cfg.API.GRPC.Address
 
-	client, err := api.NewClient(ctx, addr)
+	client, err := api.NewClient(ctx, addr, api.WithTokenSource(c.cfg.API.Token, c.cfg.API.TokenFile))
 	if err != nil {
 		status := check.StatusWarn
 		if c.requireServer {

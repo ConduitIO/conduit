@@ -165,6 +165,7 @@ func TestConfig_Validate(t *testing.T) {
 			setupConfig: func(c Config) Config {
 				c.API.Enabled = true
 				c.API.HTTP.Address = "0.0.0.0:9090"
+				c.API.Token = testToken // a non-loopback bind requires a token
 				c.API.HTTP.CORS.AllowedOrigins = []string{"https://ui.example.com"}
 				return c
 			},

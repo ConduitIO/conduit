@@ -93,8 +93,8 @@ func TestConfigWithFlags(t *testing.T) {
 				"db.postgres.table: conduit_kv_store",
 				"db.sqlite.table: conduit_kv_store",
 				"api.enabled: true",
-				"api.http.address: :8080",
-				"api.grpc.address: :8084",
+				"api.http.address: 127.0.0.1:8080",
+				"api.grpc.address: 127.0.0.1:8084",
 				"log.level: info",
 				"log.format: cli",
 				"processors.path: /opt/conduit/processors",
@@ -121,8 +121,8 @@ func TestConfigWithFlags(t *testing.T) {
 				"db.postgres.table: conduit_kv_store",
 				"db.sqlite.table: conduit_kv_store",
 				"api.enabled: true",
-				"api.http.address: :8080",
-				"api.grpc.address: :8084",
+				"api.http.address: 127.0.0.1:8080",
+				"api.grpc.address: 127.0.0.1:8084",
 				"log.level: info",
 				"log.format: cli",
 				"pipelines.exit-on-degraded: false",
@@ -190,6 +190,38 @@ func TestConfigWithFlags(t *testing.T) {
 					t.Errorf("output does not contain expected line: %q", line)
 				}
 			}
+		})
+	}
+}
+
+// TestConfigRedactsAPIToken checks that `conduit config` never prints the API
+// token, however it was supplied, while still showing that one is set. The
+// token is read from the documented CONDUIT_API_TOKEN environment variable.
+func TestConfigRedactsAPIToken(t *testing.T) {
+	const secret = "0123456789abcdef-secret-token-value"
+	for name, setup := range map[string]func(t *testing.T) []string{
+		"env":  func(t *testing.T) []string { t.Setenv("CONDUIT_API_TOKEN", secret); return nil },
+		"flag": func(*testing.T) []string { return []string{"--api.token", secret} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			args := setup(t)
+
+			readFrom, writeTo, err := os.Pipe()
+			is.NoErr(err)
+			cmd := ecdysis.New().MustBuildCobraCommand(&ConfigCommand{RunCmd: &run.RunCommand{}})
+			cmd.SetArgs(args)
+			cmd.SetOut(writeTo)
+			cmd.SetErr(writeTo)
+			is.NoErr(cmd.Execute())
+			is.NoErr(writeTo.Close())
+			var buf bytes.Buffer
+			_, err = io.Copy(&buf, readFrom)
+			is.NoErr(err)
+
+			out := buf.String()
+			is.True(!strings.Contains(out, secret))
+			is.True(slices.Contains(strings.Split(out, "\n"), "api.token: [redacted]"))
 		})
 	}
 }

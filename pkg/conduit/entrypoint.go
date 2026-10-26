@@ -23,6 +23,7 @@ import (
 
 	"github.com/conduitio/conduit/pkg/conduit/exitcode"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 )
 
 // Entrypoint provides methods related to the Conduit entrypoint (parsing
@@ -135,6 +136,18 @@ func hardExitCode(sig os.Signal) int {
 
 func (*Entrypoint) exitWithError(err error) {
 	_, _ = fmt.Fprintf(os.Stderr, "error: %+v\n", err)
+	// Machine-actionable errors (stable code, offending config path, fix) are
+	// part of the product: print them where an operator or an agent reads
+	// the failure, not just in the wrapped message.
+	if ce, ok := conduiterr.Get(err); ok {
+		_, _ = fmt.Fprintf(os.Stderr, "code: %s\n", ce.Code)
+		if ce.ConfigPath != "" {
+			_, _ = fmt.Fprintf(os.Stderr, "config path: %s\n", ce.ConfigPath)
+		}
+		if ce.Suggestion != "" {
+			_, _ = fmt.Fprintf(os.Stderr, "suggestion: %s\n", ce.Suggestion)
+		}
+	}
 	os.Exit(exitcode.ExitCode(err))
 }
 

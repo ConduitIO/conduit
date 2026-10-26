@@ -57,6 +57,10 @@ $ curl "http://localhost:8080/readyz"
 }
 ```
 
+When an API token is configured, `/readyz` stays open for probes but an unauthenticated caller gets only
+`{"status":"ready"}` (or the not-ready status), with no pipeline counts, IDs or error text. Send
+`Authorization: Bearer <token>` to get the full body.
+
 `degradedPipelines` lists only pipelines that failed on their own. A force-stopped pipeline is
 user-stopped, not degraded, so it does not appear there, even if its stop recorded an error.
 
