@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/pipeline"
+	"pgregory.net/rapid"
 )
 
 // TestRoutesNacks_MatchesWindow pins pipeline.DLQ.RoutesNacks, which the
@@ -38,4 +39,39 @@ func TestRoutesNacks_MatchesWindow(t *testing.T) {
 			})
 		}
 	}
+}
+
+// TestRoutesNacks_NeverUnderRefuses extends TestRoutesNacks_MatchesWindow to
+// any sequence of acks and nacks (and, in arch-v2, any batch size): when
+// RoutesNacks reports false, no nack may ever reach the DLQ, otherwise the
+// start-time guard would admit a hash-only log DLQ that acks records it
+// cannot preserve (invariant 3, GHSA-m3mw-fpw8-w765). When it reports true,
+// the first nack must reach the DLQ. Negative sizes and thresholds are
+// rejected when the DLQ is configured (pkg/pipeline/service.go).
+func TestRoutesNacks_NeverUnderRefuses(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		size := rapid.IntRange(0, 10).Draw(t, "size")
+		threshold := rapid.IntRange(0, 10).Draw(t, "threshold")
+		routes := pipeline.DLQ{WindowSize: size, WindowNackThreshold: threshold}.RoutesNacks()
+		w := newDLQWindow(size, threshold)
+		nacked := false
+		for i := range rapid.IntRange(1, 200).Draw(t, "ops") {
+			count := rapid.IntRange(1, 64).Draw(t, "count")
+			if rapid.Bool().Draw(t, "nack") {
+				accepted := w.Nack(count)
+				if !routes && accepted > 0 {
+					t.Fatalf("op %d: %d of %d nacks routed to the DLQ, but RoutesNacks() = false", i, accepted, count)
+				}
+				if routes && !nacked && accepted == 0 {
+					t.Fatalf("op %d: first nack batch not routed, but RoutesNacks() = true", i)
+				}
+				nacked = true
+				if accepted < count {
+					return // the engine stops the pipeline here
+				}
+			} else {
+				w.Ack(count)
+			}
+		}
+	})
 }
