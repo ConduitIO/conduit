@@ -50,8 +50,9 @@ type RootFlags struct {
 	Version bool `long:"version" short:"v" usage:"show the current Conduit version"`
 
 	// Global Flags
-	GRPCAddress string `long:"api.grpc.address" usage:"address where Conduit is running" persistent:"true"`
-	ConfigPath  string `long:"config.path" usage:"path to the configuration file" persistent:"true"`
+	GRPCAddress  string `long:"api.grpc.address" usage:"address where Conduit is running" persistent:"true"`
+	APITokenFile string `long:"api.token-file" usage:"path to a file containing the API bearer token (or set CONDUIT_API_TOKEN / CONDUIT_API_TOKEN_FILE)" persistent:"true"`
+	ConfigPath   string `long:"config.path" usage:"path to the configuration file" persistent:"true"`
 }
 
 type RootCommand struct {

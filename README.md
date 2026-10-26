@@ -160,8 +160,21 @@ Our Docker images are hosted on GitHub's Container Registry. To run the latest
 Conduit version, you should run the following command:
 
 ```sh
-docker run -p 8080:8080 conduit.docker.scarf.sh/conduitio/conduit:latest
+docker run \
+  -e CONDUIT_API_TOKEN="$(openssl rand -hex 32)" \
+  -p 127.0.0.1:8080:8080 \
+  conduit.docker.scarf.sh/conduitio/conduit:latest
 ```
+
+The API listens on all interfaces inside the container, so Conduit requires an
+API token there (`CONDUIT_API_TOKEN`, or `CONDUIT_API_TOKEN_FILE` for a mounted
+secret) and refuses to start without one. Publish the port on `127.0.0.1` as
+above; `-p 8080:8080` publishes it on every host interface. Because the bind is
+not loopback, the Host header check is off in the container and only the token
+stops DNS rebinding; the token is sent in plaintext without TLS, so put a
+TLS-terminating proxy in front for anything beyond your own machine. The image runs as
+the non-root user `conduit` (uid 10001). See
+[API hardening](docs/operations/api-hardening.md).
 
 ### Docker Compose quickstart
 
@@ -172,13 +185,15 @@ a named volume, a readiness health check and a graceful stop period:
 ```sh
 git clone https://github.com/ConduitIO/conduit.git
 cd conduit/deploy/docker-compose
+export CONDUIT_API_TOKEN="$(openssl rand -hex 32)"
 docker compose up -d --wait
 docker compose exec conduit tail -n 3 /data/records.ndjson
 docker compose down            # add -v to delete the state volume
 ```
 
-The API and UI are on <http://localhost:8080>, published on loopback only because the
-API is unauthenticated. Swap `pipelines/quickstart.yaml` for your own pipeline to go
+The API and UI are on <http://localhost:8080>, published on loopback only and requires
+`Authorization: Bearer $CONDUIT_API_TOKEN`. The container binds `0.0.0.0`, so the
+Host check is off and only that token stops DNS rebinding; it is plaintext without TLS. Swap `pipelines/quickstart.yaml` for your own pipeline to go
 further. CI runs this stack end to end (`deploy-quickstart`).
 
 [`deploy/`](deploy) also has systemd, ECS and Nomad examples. They are examples, not
@@ -422,6 +437,17 @@ for the full threat model and the two-tier resolution semantics.
 ## API
 
 Conduit exposes a gRPC API and an HTTP API.
+
+By default both APIs listen on `127.0.0.1` only. Binding either to a non-loopback
+address (for example `:8080`) requires an API token: set `api.token-file`
+(`CONDUIT_API_TOKEN_FILE`) or `CONDUIT_API_TOKEN`, otherwise Conduit refuses to
+start. When a token is set, HTTP, gRPC (including reflection), `/metrics` and
+the inspector WebSocket require `Authorization: Bearer <token>`, on loopback too.
+The CLI reads the same token from `--api.token-file`, `CONDUIT_API_TOKEN_FILE`
+or `CONDUIT_API_TOKEN`. Browser requests from another origin, requests with a
+non-JSON body and requests with an unexpected `Host` are refused. See
+[API hardening](docs/operations/api-hardening.md) for the full list and the
+runbook for each refusal.
 
 The gRPC API is by default running on port 8084. You can define a custom address
 using the CLI flag `-api.grpc.address`. To learn more about the gRPC API please have

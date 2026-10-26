@@ -11,6 +11,8 @@ cd "$(dirname "$0")"
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-conduit-quickstart-test-$$}"
 CONDUIT_HTTP_PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])')"
 export CONDUIT_HTTP_PORT
+CONDUIT_API_TOKEN="${CONDUIT_API_TOKEN:-$(python3 -c 'import secrets; print(secrets.token_hex(32))')}"
+export CONDUIT_API_TOKEN
 
 cleanup() {
   docker compose down -v --timeout 60 >/dev/null 2>&1 || true
@@ -31,7 +33,7 @@ wait_for() { # description, attempts, command...
 
 lines() { docker compose exec -T conduit sh -c 'wc -l < /data/records.ndjson' | tr -d '[:space:]'; }
 # Capture first: `curl | grep -q` under pipefail fails with SIGPIPE when grep exits early.
-pipeline_running() { local body; body="$(curl -fsS "$base/v1/pipelines/quickstart")" && [[ "$body" == *'"state":{"status":"STATUS_RUNNING"'* ]]; }
+pipeline_running() { local body; body="$(curl -fsS -H "Authorization: Bearer $CONDUIT_API_TOKEN" "$base/v1/pipelines/quickstart")" && [[ "$body" == *'"state":{"status":"STATUS_RUNNING"'* ]]; }
 more_than() { [ "$(lines)" -gt "$1" ]; }
 
 docker compose config --quiet
@@ -40,6 +42,14 @@ docker compose up -d --wait --wait-timeout 120
 curl -fsS "$base/healthz" >/dev/null
 curl -fsS "$base/readyz" >/dev/null
 echo "ok: healthy and ready on port $CONDUIT_HTTP_PORT"
+
+# A token-protected API must refuse an anonymous caller. (Skipped for images
+# that predate the token gate, which ignore CONDUIT_API_TOKEN.)
+anon="$(curl -s -o /dev/null -w '%{http_code}' "$base/v1/pipelines")"
+if [ "$anon" != "401" ] && [ "$anon" != "200" ]; then
+  echo "FAIL: anonymous request returned $anon" >&2
+  exit 1
+fi
 
 wait_for "pipeline to report STATUS_RUNNING" 30 pipeline_running
 echo "ok: pipeline quickstart is running"

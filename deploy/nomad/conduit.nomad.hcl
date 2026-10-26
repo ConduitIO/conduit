@@ -62,6 +62,17 @@ job "conduit" {
         CONDUIT_LOG_FORMAT     = "json"
       }
 
+      # The API token, from a Nomad Variable (nomad var put nomad/jobs/conduit
+      # api_token=$(openssl rand -hex 32)). Conduit listens on all interfaces in
+      # the container and refuses to start without a token.
+      template {
+        destination = "secrets/api-token.env"
+        env         = true
+        data        = <<-EOT
+          CONDUIT_API_TOKEN={{ with nomadVar "nomad/jobs/conduit" }}{{ .api_token }}{{ end }}
+        EOT
+      }
+
       template {
         destination = "local/pipelines/pipeline.yaml"
         data        = <<-EOT

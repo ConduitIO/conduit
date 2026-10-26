@@ -27,6 +27,12 @@ type cleanupDispenser struct {
 	cleanup func()
 }
 
+// DispenserWithCleanup wraps d so cleanup runs after a dispensed source or
+// destination is torn down, and also when a Dispense call fails (a plugin that
+// failed to dispense is never torn down). The dispenser is therefore single-use
+// after a failed dispense: cleanup has already run (for the connector token,
+// revoked), so dispensing again from the same dispenser is not supported. Get a
+// new dispenser instead. A nil cleanup returns d unchanged.
 func DispenserWithCleanup(d Dispenser, cleanup func()) Dispenser {
 	if cleanup == nil {
 		return d
@@ -42,6 +48,10 @@ func (c *cleanupDispenser) DispenseSpecifier() (SpecifierPlugin, error) {
 func (c *cleanupDispenser) DispenseSource() (SourcePlugin, error) {
 	plugin, err := c.target.DispenseSource()
 	if err != nil {
+		// A plugin that failed to dispense (for example, its process did not
+		// start or crashed during the handshake) is never torn down, so the
+		// token handed to it is revoked here.
+		c.cleanup()
 		return nil, err
 	}
 
@@ -54,6 +64,10 @@ func (c *cleanupDispenser) DispenseSource() (SourcePlugin, error) {
 func (c *cleanupDispenser) DispenseDestination() (DestinationPlugin, error) {
 	plugin, err := c.target.DispenseDestination()
 	if err != nil {
+		// A plugin that failed to dispense (for example, its process did not
+		// start or crashed during the handshake) is never torn down, so the
+		// token handed to it is revoked here.
+		c.cleanup()
 		return nil, err
 	}
 

@@ -553,7 +553,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-### postgres (v0.17.2)
+### postgres (v0.17.5)
 
 Conduit connector for PostgreSQL
 
@@ -651,6 +651,202 @@ pipelines:
 :warning: When the connector or pipeline is deleted, the connector will automatically
 attempt to delete the replication slot and publication. This is the default behaviour
 and can be disabled by setting `logrepl.autoCleanup` to `false`.
+
+**Resuming after the replication slot was lost**
+
+The slot is what keeps Postgres from discarding the changes the pipeline has not
+acknowledged yet. If the pipeline has a saved position and its slot no longer
+exists, a new slot starts at the current WAL and every change in between is gone.
+This happens when the slot was dropped by hand, removed by `logrepl.autoCleanup`
+while the position was kept, invalidated and then dropped (`max_slot_wal_keep_size`),
+or not carried over by a failover or promotion to another server (slots are not
+copied to a standby before Postgres 17, or without `failover=true`). The connector
+does not carry on from there. It refuses to start with the error code
+`postgres.source.slot_wal_gap`, which names the slot, the position the pipeline
+stopped at and the WAL position a new slot would start at. The same applies to a
+position saved during an initial snapshot. A pipeline with no position (a fresh
+start) creates its slot as usual.
+
+To recover, first check that `logrepl.slotName` is the name the pipeline has
+always used. Then re-snapshot: stop the pipeline, delete the source connector and
+create it again so it has no position. With `snapshotMode: initial` every table is
+read again and every row is delivered again, so the destination must tolerate
+duplicates (an upsert or keyed destination does).
+
+To accept the loss instead, set `logrepl.allowWALGap` to `true`. This is data
+loss: the skipped changes are never delivered, and the connector logs a warning
+when it takes the setting. Remove it after the pipeline has resumed, or the next
+lost slot is accepted with a warning only.
+
+**Resuming on a replication slot that was replaced**
+
+A slot dropped and created again under the same name exists and is healthy, but it
+starts at the WAL of its creation, so the changes between the saved position and
+then are gone just the same. Postgres gives a slot no identity to tell it from the
+original, so the connector keeps one itself (since v0.17.5). Every position carries
+a random slot identity, and the connector writes it into the WAL as a logical
+decoding message under the prefix `conduit.postgres.slot_identity` (a beacon). A
+beacon also names a WAL position before which the pipeline needed nothing more when
+it was written: every change committed before it had been delivered and acked (or,
+for the beacon written when a run opens the slot, the slot position that run
+checked). The connector never advances an idle slot past that position of the last
+beacon it received, so its own slot always still holds a beacon that covers it. On
+a resume whose slot is past the saved position, the connector reads the slot without
+consuming it (`pg_logical_slot_peek_binary_changes`) and looks for a beacon written
+after the slot's `confirmed_flush_lsn` whose position is at or past it. A slot that
+holds none is refused with the error code `postgres.source.slot_replaced`, which
+names the slot, the saved position and the slot's `confirmed_flush_lsn`. The same
+refusal covers the pipeline's own slot when another client advanced or consumed it
+(`pg_replication_slot_advance`, `pg_logical_slot_get_changes`) past changes the
+pipeline had not delivered, including changes the pipeline had received but not
+acked when it stopped. A slot another client moved only over changes the pipeline
+had already delivered and acked loses nothing and is accepted. A slot swapped between the check (or, on a fresh start, its creation) and the
+start of streaming is refused once streaming holds it, also after a snapshot of hours.
+A beacon is written only while this pipeline's own stream holds the slot (or, before
+streaming starts, while the slot is idle and where the pipeline checked it), so a beacon
+can never land in a slot that replaced it. Recover as from a lost slot: re-snapshot, or
+accept the loss with `logrepl.allowWALGap: true` for one start.
+
+The check also refuses a position written on another WAL history, with
+`postgres.source.wal_history_changed`: every position names the cluster's system
+identifier and timeline, so a different server at the same address, a point-in-time
+recovery or failover that left the position's timeline before the position, a restore
+to an earlier timeline, and a server whose WAL is behind the position (a restored backup,
+snapshot or VM image) are refused instead of resuming at LSNs that now name other
+changes. A restore on the same timeline whose new WAL has already passed the position
+when the pipeline starts is caught by the position's transaction: every position also
+names the xid and commit time of the transaction it was taken in (for a schema drift
+marker, of the transaction it halted before), and a resume whose slot is at or below
+the position checks that the slot still decodes that transaction, with the same xid and
+commit time, at that commit LSN. A position written before v0.17.5 names no xid; the
+check then requires a transaction committing at its commit LSN. On Postgres 15+, a
+publication or row filter changed since the position can hide the transaction and
+refuse a database that was not restored; start once with `logrepl.allowWALGap: true`
+then. Re-snapshot pipelines after restoring their source database.
+
+What it needs and what it costs:
+
+- The connector's role must be able to call `pg_logical_emit_message`, which
+  Postgres grants to `PUBLIC` by default. If it was revoked, the connector refuses to
+  start with `postgres.source.slot_beacon_failed`; grant it back with
+  `GRANT EXECUTE ON FUNCTION pg_logical_emit_message(boolean, text, text) TO <role>`
+  (Postgres 14 to 16) or
+  `GRANT EXECUTE ON FUNCTION pg_logical_emit_message(boolean, text, text, boolean) TO <role>`
+  (Postgres 17+). Peeking needs `REPLICATION`, which the connector already needs.
+- A beacon holds a random nonce, a WAL position and an HMAC-SHA256 made with a secret
+  key that exists only in the pipeline's position (Conduit's position store). The key
+  never reaches the database or a log (logs show an 8-digit fingerprint), so a role that
+  can call `pg_logical_emit_message` cannot forge a beacon, and a genuine one copied into
+  a replaced slot is refused. Treat the position store as sensitive. A beacon holds no
+  row data and no configuration.
+- Hardening: `pg_logical_emit_message` lets any role that can connect write messages into
+  the WAL. Consider `REVOKE EXECUTE ON FUNCTION <signature above> FROM PUBLIC` together
+  with the `GRANT` to the connector's role; the connector logs
+  `postgres.source.slot_beacon_public` at start while PUBLIC still has it.
+- **Who can read the key.** Records carry their positions, Conduit hands them to
+  destinations, and its API returns the source's position (`sourceState.position`). So
+  the key can be read wherever records or that API are, for example in a Kafka topic of
+  OpenCDC records. Forging a beacon with it still needs the rights to drop and recreate
+  the slot (`REPLICATION` or superuser) and to write into the WAL.
+- `logrepl.allowWALGap` gives the slot it accepts a new key. **Remove `allowWALGap` only
+  after a record has been delivered**: until a position with the new key is saved, a
+  restart from the old position is refused again, so an attempt that created the slot and
+  failed before saving never passes for the original. On an idle source that can take a
+  while; write a row to a captured table to get a record through.
+- Other logical consumers of the database that decode messages, such as Debezium with
+  messages enabled, see the beacons; Debezium can filter them with
+  `message.prefix.exclude.list`.
+- One small transaction per start, and at most one per status interval (10 seconds)
+  while the pipeline is idle, after it acked records or once the server has written at
+  least 512 bytes of WAL since the last beacon. An idle database stays idle. An idle
+  slot reaches the WAL end as of the last beacon about two status intervals after the
+  last ack (the beacon itself, and WAL written after it, stay until the next one). Beacons commit
+  with `synchronous_commit = local`, so a synchronous standby that is down does not block
+  them.
+- If beacons cannot be written while the pipeline runs (the connector logs
+  `postgres.source.slot_beacon_unavailable` with `retained_wal_bytes`), the idle slot is
+  held at the last beacon for at most `logrepl.slotIdentity.beaconFailureTimeout`
+  (default 5 minutes; the WAL held back is at most that time's worth). Then the slot
+  advances without beacons, so its WAL cannot fill the disk, and the connector logs the
+  same code as an error. Until a beacon is written and delivered again, a restart is
+  refused with `slot_replaced`. The connector keeps trying: fix the cause (usually the
+  `GRANT` above) while the pipeline runs, and it recovers on its own (it logs that the
+  slot can be proven again). If the pipeline was stopped in that state, start it once
+  with `logrepl.allowWALGap: true`.
+- The check reads the slot from its `restart_lsn`; a long-running transaction can hold
+  that far back and make it slow, and so can a large backlog: it reads as far as it must,
+  never giving up early. `logrepl.slotIdentity.checkTimeout` (default 10 minutes) bounds
+  it; a check that times out or cannot read the slot refuses the start with
+  `postgres.source.slot_identity_check_failed`, which is retried. Raise the timeout, or
+  start once with `logrepl.allowWALGap: true` to take the slot unproven.
+- Postgres 13 cannot send logical decoding messages to the connector, and a standby
+  cannot write them. There positions carry no identity and the check is the one before
+  v0.17.5: the connector logs `postgres.source.slot_identity_unsupported` and resumes on
+  a slot past the position. A position that does carry an identity (written on a
+  primary) is never accepted unproven there: it is refused with
+  `postgres.source.slot_identity_unprovable`. A slot on a standby is a slot of the
+  standby, never the primary's, even when it can decode the primary's beacons.
+
+Upgrading from v0.17.4 or earlier:
+
+- **Before the upgrade**, check that the connector's role may call
+  `pg_logical_emit_message` (only databases that revoked it from PUBLIC are affected):
+  `SELECT has_function_privilege('<role>', 'pg_logical_emit_message(boolean, text, text, boolean)', 'EXECUTE');`
+  on Postgres 17+, or with `(boolean, text, text)` on 14 to 16. If it returns false,
+  grant it, or the first start fails with `postgres.source.slot_beacon_failed`.
+- A saved position from those versions has no slot identity. If the slot is not past
+  it, it is proven by the position alone. Otherwise (the usual case, since older
+  versions advance an idle slot to the WAL end) the connector cannot tell whether the
+  slot was replaced before the upgrade. It takes the slot over and logs
+  `postgres.source.slot_identity_unverified` with `unproven_wal_bytes`, the stretch of
+  WAL nothing proves. **Protection begins at the first record saved after the
+  upgrade**; until then a restart adopts the slot again with the same warning.
+- Such a position also does not name the WAL history it was written on, so the first
+  start logs `postgres.source.wal_history_unverified` (with a fingerprint of the server's
+  system identifier and its timeline): a restore, point-in-time recovery or another server
+  at the same address before the upgrade would go unnoticed. That protection, too, starts
+  once the next position is saved.
+- If anyone dropped and recreated a pipeline's slot, or restored or replaced its source
+  database, since that pipeline last delivered a record, re-snapshot that pipeline: the
+  changes in between may be gone, and nothing can tell after the fact.
+
+Failover (Postgres 17+, `failover = true` slots synchronized to a standby): the
+identity survives a promotion when the primary lists the standby's physical slot in
+`synchronized_standby_slots`, the setting Postgres requires for a failover that keeps
+logical consumers consistent. Without it the standby can lag behind the beacon the
+slot was advanced to, and the first start after a promotion can be refused with
+`postgres.source.slot_replaced` (no data is lost; check the slot and start once with
+`logrepl.allowWALGap: true`). After a promotion, set `synchronized_standby_slots` on
+the new primary to slots that exist there: decoding a failover slot waits for every
+slot it names.
+
+After a `pg_upgrade`: the new cluster can have another system identifier, and the
+migrated slot is a new slot, so the start is refused with
+`postgres.source.wal_history_changed` or `postgres.source.slot_replaced`. pg_upgrade
+migrates logical slots only once they decoded all WAL. If the pipeline had delivered
+every change before the upgrade, nothing is lost: start once with
+`logrepl.allowWALGap: true` (the warning says `WAL HISTORY CHANGE ACCEPTED`), and remove
+it after a record has been delivered. Otherwise re-snapshot.
+
+Moving the slot by hand: `pg_upgrade` (which recreates logical slots), a manual
+`pg_replication_slot_advance`, and a rollback to v0.17.4 or earlier that ran while
+the pipeline was idle all move the slot past the last beacon. The next start is
+refused with `postgres.source.slot_replaced`. When you know nothing was skipped,
+start once with `logrepl.allowWALGap: true` and remove it after the pipeline resumed.
+`pg_upgrade` also refuses to migrate a slot that has not decoded all WAL, and the
+latest beacon is always ahead of the slot. Advance the stopped pipeline's slot with
+`pg_replication_slot_advance` before the upgrade, and only once the pipeline has
+delivered every change to the destination.
+
+**Invalidated replication slots**
+
+Postgres can invalidate a slot that fell too far behind (`max_slot_wal_keep_size`):
+the slot still exists, but `wal_status` is `lost` (and, on Postgres 17+,
+`invalidation_reason` is set), the WAL it needs is removed and it cannot be
+streamed from. The connector refuses to start on it, with a fresh start or a saved
+position, with the error code `postgres.source.slot_invalidated`. `logrepl.allowWALGap`
+does not apply. Drop the slot (`SELECT pg_drop_replication_slot('<slot>')`), then
+re-snapshot as above; a pipeline with no position only needs the slot dropped.
 
 **Key Handling**
 
@@ -772,7 +968,10 @@ sends the delete without the key. Check with
    Advancing to `<c>` is what skips the transaction. Advancing to the change LSN
    (`<a>`) or to the commit LSN `<b>` itself does not: Postgres replays the transaction
    and the pipeline fails on the same delete.
-6. Start the pipeline.
+6. Start the pipeline. The advance moved the slot past the pipeline's saved position,
+   so the connector can refuse it with `postgres.source.slot_replaced` (see "Resuming
+   on a replication slot that was replaced"). If it does, start it once with
+   `logrepl.allowWALGap: true`, and remove the setting once it runs.
 
 **Skipping the transaction skips that change, and it skips the whole transaction,
 including its other changes to captured tables.** Skipping data is your decision and the
@@ -1094,10 +1293,13 @@ Author: Meroxa, Inc.
 | Key | Type | Default | Required | Description | Validations |
 | --- | --- | --- | --- | --- | --- |
 | `cdcMode` | string | auto | no | CDCMode determines how the connector should listen to changes. | inclusion(auto,logrepl) |
+| `logrepl.allowWALGap` | bool | false | no | LogreplAllowWALGap lets the connector resume from a saved position when the replication slot no longer exists and has to be created again, or when the slot that exists is not the one the position was taken from (it was dropped and created again under the same name, or another client advanced it). Such a slot starts after the saved position, so every change in between is skipped and never delivered: this setting accepts that DATA LOSS. Leave it false (the default) and the connector refuses to start with the error `postgres.source.slot_wal_gap` or `postgres.source.slot_replaced` instead. Use it only after deciding that the destination can be repaired some other way, and remove it once the pipeline has resumed. |  |
 | `logrepl.autoCleanup` | bool | true | no | LogreplAutoCleanup determines if the replication slot and publication should be removed when the connector is deleted. |  |
 | `logrepl.import.debeziumOffset` | string |  | no | LogreplImportDebeziumOffset starts the pipeline from a Debezium Postgres connector's committed offset instead of a snapshot. It is written by `conduit migrate kafka-connect --cutover`, not by hand. It applies only while the pipeline has no position: the first acknowledged record writes an ordinary position and the setting is ignored from then on (remove it once the import is complete). Requires snapshotMode "never" and cdcMode "logrepl", and an existing slot and publication, which import mode never creates. Requires Conduit v0.19.0 or later, which acks a record only after its position is persisted. |  |
 | `logrepl.publicationName` | string | conduitpub | no | LogreplPublicationName determines the publication name in case the connector uses logical replication to listen to changes (see CDCMode). |  |
 | `logrepl.schemaDrift.policy` | string | halt | no | LogreplSchemaDriftPolicy determines how the connector handles schema drift (a DDL that changes a table's shape during CDC; DBZ-3 B1):   - "halt" (default): emit a drift marker record, checkpoint before it,     and stop with a terminal error until the pipeline is restarted to     approve the change.   - "evolve": accept additive changes silently; incompatible (narrowing)     changes still halt. "dlq" is reserved for a future version and rejected at validation. |  |
+| `logrepl.slotIdentity.beaconFailureTimeout` | duration | 5m | no | LogreplSlotIdentityBeaconFailureTimeout is how long the connector keeps an idle replication slot from advancing past its last identity beacon while new beacons cannot be written (#442). After it, the slot advances without a beacon so its WAL cannot fill the disk, and the connector logs `postgres.source.slot_beacon_unavailable` as an error. Until a beacon is written and delivered again, a restart is refused with `postgres.source.slot_replaced` (an outage, never a loss). The connector keeps trying, and recovers on its own once beacons can be written. The WAL held back meanwhile is at most what the server writes in this time. |  |
+| `logrepl.slotIdentity.checkTimeout` | duration | 10m | no | LogreplSlotIdentityCheckTimeout bounds the replication slot identity check at start (#442), which reads the slot without consuming it to find the connector's identity beacon. It decodes from the slot's restart_lsn, so a long-running transaction that holds restart_lsn far back makes it slower; on Postgres 17+ it also waits for the standbys in synchronized_standby_slots. When it times out the start is refused with postgres.source.slot_identity_check_failed and retried. |  |
 | `logrepl.slotName` | string | conduitslot | no | LogreplSlotName determines the replication slot name in case the connector uses logical replication to listen to changes (see CDCMode). Can only contain lower-case letters, numbers, and the underscore character. | regex(^[a-z0-9_]+$) |
 | `logrepl.withAvroSchema` | bool | true | no | WithAvroSchema determines whether the connector should attach an avro schema on each record. |  |
 | `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is read from the source. |  |
@@ -1488,10 +1690,16 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (170)
+## 3. Error codes (176)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
+| `api.content_type_unsupported` | InvalidArgument | CodeContentTypeUnsupported is returned by the HTTP API when a mutating request (POST, PUT, PATCH, DELETE) with a body does not use Content-Type: application/json. |
+| `api.host_forbidden` | PermissionDenied | CodeHostForbidden is returned by the HTTP API on a loopback bind when the Host header is not localhost, 127.0.0.1, [::1] or a configured allowed host (DNS rebinding protection). |
+| `api.origin_forbidden` | PermissionDenied | CodeOriginForbidden is returned by the HTTP API when a request's Origin header is neither allowlisted nor same-origin. |
+| `api.token_invalid` | InvalidArgument | CodeTokenInvalid is raised at startup when the configured API token is unusable: the token file cannot be read, the token is empty or too short, or both api.token and api.token-file are set. |
+| `api.token_required` | FailedPrecondition | CodeTokenRequired is raised at startup when the HTTP or gRPC API is bound to a non-loopback address and no API token is configured. Conduit refuses to serve an unauthenticated API to the network. |
+| `api.unauthenticated` | Unauthenticated | CodeUnauthenticated is returned by the HTTP and gRPC APIs when a request carries no bearer token or the wrong one. |
 | `cli.invalid_usage` | InvalidArgument | CodeInvalidUsage is raised when a command is invoked wrongly, before it does any work: an unknown or malformed flag, a missing or extra positional argument, a required flag left out, or flag values that fail to parse. It is distinct from common.invalid_argument because the fix is always to change the command line (see the command's --help), not the input it reads. InvalidArgument puts it in the validation exit bucket (exit 2, pkg/conduit/exitcode). |
 | `common.invalid_argument` | InvalidArgument | CodeInvalidArgument is a generic invalid-input error. |
 | `common.not_found` | NotFound | CodeNotFound is a generic not-found error. |

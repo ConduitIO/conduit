@@ -22,6 +22,10 @@ Point the `inspect` tool at a running Conduit:
 conduit mcp --api-address localhost:8084
 ```
 
+If that Conduit has an API token (`api.token-file`), pass `--api-token-file <path>`, or set
+`CONDUIT_API_TOKEN_FILE` or `CONDUIT_API_TOKEN` in the MCP server's environment. See
+[API hardening](api-hardening.md).
+
 ## Tool catalog
 
 | Tool | Mutates | Requires `--allow-mutations` | Same engine as |

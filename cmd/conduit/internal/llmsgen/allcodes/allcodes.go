@@ -63,6 +63,7 @@ import (
 	_ "github.com/conduitio/conduit/cmd/conduit/root/migrate"
 	_ "github.com/conduitio/conduit/cmd/conduit/root/pipelines"
 	_ "github.com/conduitio/conduit/pkg/connector"
+	_ "github.com/conduitio/conduit/pkg/http/apisec"
 	_ "github.com/conduitio/conduit/pkg/kcmigrate"
 	_ "github.com/conduitio/conduit/pkg/kcmigrate/migrate"
 	_ "github.com/conduitio/conduit/pkg/lifecycle-poc"

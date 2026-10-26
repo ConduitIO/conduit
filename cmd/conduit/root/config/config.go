@@ -74,6 +74,10 @@ func printStruct(ctx context.Context, v reflect.Value, parentPath string) {
 
 		if longName != "" {
 			value := fmt.Sprintf("%v", fieldValue.Interface())
+			if value != "" && field.Tag.Get("redact") == "true" {
+				// Secrets (the API token) never appear in `conduit config`.
+				value = "[redacted]"
+			}
 			if value != "" {
 				cobraCmd := ecdysis.CobraCmdFromContext(ctx)
 				_, err := fmt.Fprintf(cobraCmd.OutOrStdout(), "%s: %s\n", fullPath, value)

@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/http/apisec"
 	"github.com/gorilla/websocket"
 	"github.com/matryer/is"
 )
@@ -141,7 +142,7 @@ func TestAllowCORS_EmptyAllowlist_DeniesAll(t *testing.T) {
 
 func TestWSCheckOrigin(t *testing.T) {
 	allowed := []string{"http://localhost:5173"}
-	check := wsCheckOrigin(allowed)
+	check := apisec.BrowserPolicy{AllowedOrigins: allowed}.CheckWebSocketOrigin
 
 	// host is the request Host, so "http://<host>" is a same-origin request.
 	const host = "conduit.internal:8080"
@@ -174,14 +175,14 @@ func TestWSCheckOrigin(t *testing.T) {
 		})
 	}
 
-	// For a cross-origin request, wsCheckOrigin agrees with originAllowed, so the
+	// For a cross-origin request, the websocket check agrees with originAllowed, so the
 	// HTTP and WS surfaces never diverge on the allowlist decision.
 	is.New(t).Equal(check(newReq("http://localhost:5173")), originAllowed("http://localhost:5173", allowed))
 }
 
 func TestWSCheckOrigin_WildcardAllowsAny(t *testing.T) {
 	is := is.New(t)
-	check := wsCheckOrigin([]string{"*"})
+	check := apisec.BrowserPolicy{AllowedOrigins: []string{"*"}}.CheckWebSocketOrigin
 	r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/connectors/x/inspect", nil)
 	r.Header.Set("Origin", "http://whatever.example")
 	is.True(check(r))
@@ -202,7 +203,7 @@ func TestBuildAPIHandler_WSOriginWired(t *testing.T) {
 		_, err := w.Write([]byte("hi\n"))
 		is.NoErr(err)
 	})
-	h := buildAPIHandler(ctx, inner, []string{"http://allowed.example"}, log.Nop())
+	h := buildAPIHandler(ctx, inner, apisec.BrowserPolicy{AllowedOrigins: []string{"http://allowed.example"}}, log.Nop())
 	s := httptest.NewServer(h)
 	defer s.Close()
 	wsURL := "ws" + strings.TrimPrefix(s.URL, "http")

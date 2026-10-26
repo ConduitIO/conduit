@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"runtime"
 	"runtime/pprof"
@@ -49,6 +48,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/metrics/measure"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/prometheus"
 	"github.com/conduitio/conduit/pkg/http/api"
+	"github.com/conduitio/conduit/pkg/http/apisec"
 	"github.com/conduitio/conduit/pkg/http/openapi"
 	"github.com/conduitio/conduit/pkg/lifecycle"
 	lifecycle_v2 "github.com/conduitio/conduit/pkg/lifecycle-poc"
@@ -87,6 +87,15 @@ const (
 type Runtime struct {
 	Config Config
 
+	// apiToken is the bearer token enforced on the HTTP and gRPC APIs; ""
+	// means no token is configured (only possible on loopback binds).
+	apiToken string
+
+	// apiRejections counts and logs requests refused by the API access
+	// controls; created on first use, shared by the gRPC and HTTP listeners.
+	apiRejectionsOnce sync.Once
+	apiRejectionsVal  *apisec.Rejections
+
 	DB               database.DB
 	Orchestrator     *orchestrator.Orchestrator
 	ProvisionService *provisioning.Service
@@ -117,7 +126,10 @@ type Runtime struct {
 	connectorPluginService *conn_plugin.PluginService
 	processorPluginService *proc_plugin.PluginService
 
-	connSchemaService  *connutils.SchemaService
+	connSchemaService *connutils.SchemaService
+	// connTokenService issues the per-connector tokens the connector utilities
+	// server requires on every call.
+	connTokenService   *connutils.AuthManager
 	connectorPersister *connector.Persister
 	procSchemaService  *procutils.SchemaService
 
@@ -367,6 +379,12 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, cerrors.Errorf("invalid config: %w", err)
 	}
+	// Resolved once so every listener enforces the same token, and a token
+	// file that changes after startup cannot make the listeners disagree.
+	apiToken, err := cfg.APIToken()
+	if err != nil {
+		return nil, cerrors.Errorf("invalid config: %w", err)
+	}
 
 	// Process-wide, and before any service exists: conduit-commons caches
 	// parsed schemas, and a schema parsed before this call would keep the
@@ -456,6 +474,8 @@ func NewRuntime(cfg Config, opts ...RuntimeOption) (*Runtime, error) {
 		Config: cfg,
 		DB:     db,
 		Ready:  make(chan struct{}),
+
+		apiToken: apiToken,
 
 		connectorPersister: connectorPersister,
 
@@ -640,6 +660,7 @@ func createServices(r *Runtime) error {
 	r.connectorPluginService = connPluginService
 	r.processorPluginService = procPluginService
 	r.connSchemaService = connSchemaService
+	r.connTokenService = tokenService
 	r.procSchemaService = procSchemaService
 	r.lifecycleService = lifecycleService
 
@@ -790,9 +811,12 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 	}
 	defer cleanup()
 
-	t, ctx := tomb.WithContext(ctx)
+	t, ctx, setupDone := newRunTomb(ctx)
 
 	defer func() {
+		// Setup is over (or failed): the tomb may now end once its goroutines
+		// do. Must run before the Dying wait below.
+		close(setupDone)
 		if err != nil {
 			// This means run failed, we kill the tomb to stop any goroutines
 			// that might have been already started.
@@ -838,6 +862,37 @@ func (r *Runtime) Run(ctx context.Context) (err error) {
 
 	close(r.Ready)
 	return nil
+}
+
+// newRunTomb returns the tomb Run hangs every service goroutine on, and the
+// context derived from it. It also starts one long-lived goroutine that holds
+// the tomb alive until the tomb is dying AND setupDone is closed. It is also
+// the parent-context watcher that tomb.WithContext would have started.
+//
+// Why: a tomb with no live goroutine is dead, and tomb.Go on a dead tomb panics
+// ("tomb.Go called after all goroutines terminated"). With tomb.WithContext the
+// only goroutine is the one that watches the parent context, so a parent
+// canceled at any point during Run's setup (the embed API hands Run caller
+// contexts, e.g. one with a deadline) kills the tomb and the next t.Go in
+// initServices or serveGRPCAPI panics. The goroutine is started before the
+// parent is attached, so the tomb has a live goroutine from its first instant,
+// however early the parent is canceled.
+func newRunTomb(parent context.Context) (t *tomb.Tomb, ctx context.Context, setupDone chan<- struct{}) {
+	t = &tomb.Tomb{}
+	done := make(chan struct{})
+	t.Go(func() error {
+		// Also the watcher tomb.WithContext would have started: parent
+		// canceled means the tomb is dying.
+		select {
+		case <-t.Dying():
+		case <-parent.Done():
+			t.Kill(parent.Err())
+		}
+		<-done
+		return nil
+	})
+	ctx = t.Context(parent)
+	return t, ctx, done
 }
 
 func (r *Runtime) initProfiling(ctx context.Context) (deferred func(), err error) {
@@ -1058,12 +1113,29 @@ func (l promLogger) Println(v ...any) {
 	l.logger.Warn(context.Background()).Msg(strings.TrimSpace(fmt.Sprintln(v...)))
 }
 
+func (r *Runtime) apiRejections() *apisec.Rejections {
+	r.apiRejectionsOnce.Do(func() {
+		r.apiRejectionsVal = apisec.NewRejections(r.metricsRegisterer, r.logger)
+	})
+	return r.apiRejectionsVal
+}
+
 func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, error) {
+	unary := []grpc.UnaryServerInterceptor{
+		grpcutil.RequestIDUnaryServerInterceptor(r.logger),
+		grpcutil.LoggerUnaryServerInterceptor(r.logger),
+	}
+	var stream []grpc.StreamServerInterceptor
+	if r.apiToken != "" {
+		// The token check runs before anything else sees the call, and the
+		// stream interceptor also covers server reflection.
+		auth := apisec.NewAuthenticator(r.apiToken, r.apiRejections())
+		unary = append([]grpc.UnaryServerInterceptor{auth.UnaryInterceptor()}, unary...)
+		stream = append(stream, auth.StreamInterceptor())
+	}
 	grpcServer := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(
-			grpcutil.RequestIDUnaryServerInterceptor(r.logger),
-			grpcutil.LoggerUnaryServerInterceptor(r.logger),
-		),
+		grpc.ChainUnaryInterceptor(unary...),
+		grpc.ChainStreamInterceptor(stream...),
 		grpc.StatsHandler(r.metricsGrpcStatsHandler),
 		grpc.MaxRecvMsgSize(10*1024*1024),
 	)
@@ -1113,20 +1185,23 @@ func (r *Runtime) serveGRPCAPI(ctx context.Context, t *tomb.Tomb) (net.Addr, err
 // startConnectorUtils starts all the utility services needed by connectors.
 func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Addr, error) {
 	grpcServer := grpc.NewServer(
+		// The connector token check runs first, on every call (including
+		// streams and unknown methods).
 		grpc.ChainUnaryInterceptor(
+			r.connTokenService.UnaryServerInterceptor(r.apiRejections()),
 			grpcutil.RequestIDUnaryServerInterceptor(r.logger),
 			grpcutil.LoggerUnaryServerInterceptor(r.logger),
 		),
+		grpc.ChainStreamInterceptor(r.connTokenService.StreamServerInterceptor(r.apiRejections())),
 		grpc.StatsHandler(r.metricsGrpcStatsHandler),
 	)
 
 	schemaServiceAPI := pconnutils.NewSchemaServiceServer(r.connSchemaService)
 	connutilsv1.RegisterSchemaServiceServer(grpcServer, schemaServiceAPI)
 
-	// Makes it easier to use command line tools to interact
-	// with the gRPC API.
-	// https://github.com/grpc/grpc/blob/master/doc/server-reflection.md
-	reflection.Register(grpcServer)
+	// No server reflection here: it would list the services to any local
+	// process, and plugins do not use it. The API server has reflection, behind
+	// the API token.
 
 	// Names taken from schema.proto
 	healthServer := api.NewHealthServer(
@@ -1137,8 +1212,10 @@ func (r *Runtime) startConnectorUtils(ctx context.Context, t *tomb.Tomb) (net.Ad
 	)
 	grpc_health_v1.RegisterHealthServer(grpcServer, healthServer)
 
-	// Serve utilities on a random port
-	addr, err := r.serveGRPC(ctx, t, grpcServer, ":0")
+	// Serve utilities on a random loopback port. Only connector plugins that
+	// Conduit itself starts on this host dial it, and it has no
+	// authentication, so it must never be reachable from the network.
+	addr, err := r.serveGRPC(ctx, t, grpcServer, "127.0.0.1:0")
 	if err != nil {
 		return nil, err
 	}
@@ -1152,7 +1229,13 @@ func (r *Runtime) serveHTTPAPI(
 	t *tomb.Tomb,
 	grpcAddr net.Addr,
 ) (net.Addr, error) {
-	conn, err := grpc.NewClient(grpcAddr.String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	dialOpts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	if r.apiToken != "" {
+		// The gateway authenticates the HTTP request itself (see below) and
+		// then calls the gRPC server as a trusted in-process client.
+		dialOpts = append(dialOpts, grpc.WithPerRPCCredentials(apisec.BearerCredentials(r.apiToken)))
+	}
+	conn, err := grpc.NewClient(grpcAddr.String(), dialOpts...)
 	if err != nil {
 		return nil, cerrors.Errorf("failed to dial server: %w", err)
 	}
@@ -1251,11 +1334,36 @@ func (r *Runtime) serveHTTPAPI(
 				Msg("CORS wildcard '*' with a non-loopback bind and no API authentication: any website in any browser on this network can read and control this Conduit instance. Use exact origins, bind to loopback, or front it with an authenticating proxy.")
 		}
 	}
-	handler := buildAPIHandler(ctx, gwmux, allowedOrigins, r.logger)
+	policy := apisec.BrowserPolicy{
+		AllowedOrigins: allowedOrigins,
+		// Invariant: on a loopback bind the Host header must be a loopback
+		// name (or one the operator listed), so DNS rebinding cannot make an
+		// attacker origin look same-origin. On a network bind the token is the
+		// protection and the legitimate host names are unknowable.
+		ValidateHost: isLoopbackBind(r.Config.API.HTTP.Address),
+		AllowedHosts: r.Config.API.HTTP.AllowedHosts,
+		Rejections:   r.apiRejections(),
+	}
+	handler := buildAPIHandler(ctx, gwmux, policy, r.logger)
+	if r.apiToken != "" {
+		// Gates /v1, /openapi, /metrics and the inspector WebSocket. It sits
+		// inside uiMiddleware, so only the embedded UI's static assets are
+		// served without a token.
+		handler = apisec.NewAuthenticator(r.apiToken, r.apiRejections()).HTTP(handler)
+		r.logger.Info(ctx).Msg("API token authentication is enabled for the HTTP and gRPC APIs")
+	} else {
+		r.logger.Info(ctx).Msg("API token authentication is disabled: the loopback-only API accepts any local client; set api.token-file to require a token")
+	}
 	// UI-7: mount the embedded built-in UI at "/", last, so it can never
 	// shadow any route above (see pkg/conduit/ui.go and
 	// docs/design-documents/20260713-greenfield-built-in-ui.md §7).
 	handler = uiMiddleware(ctx, handler, r.Config.API.HTTP.UI.Enabled, r.logger)
+	// Outermost: Host, Origin and Content-Type are checked before anything
+	// else, including the UI and the token gate, on every method.
+	handler = policy.Guard(handler)
+	// Outermost of all: framing, CSP, nosniff and referrer headers on every
+	// response, including the guard's refusals.
+	handler = apisec.SecurityHeaders(handler)
 
 	addr, err := r.serveHTTP(
 		ctx,
@@ -1291,18 +1399,17 @@ func preflightHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Max-Age", "600")
 }
 
-// buildAPIHandler wraps the gateway mux with CORS and websocket proxying, both
-// driven by the same origin allowlist, exactly as serveHTTPAPI assembles it.
-// Extracted so the wiring — that allowCORS AND the websocket upgrader's
-// CheckOrigin are both applied from the same allowlist — is testable without
-// standing up the full runtime (a regression that dropped wsCheckOrigin here
-// would otherwise pass every unit test).
-func buildAPIHandler(ctx context.Context, gwmux http.Handler, allowedOrigins []string, logger log.CtxLogger) http.Handler {
+// buildAPIHandler wraps the gateway mux with CORS and websocket proxying. The
+// websocket upgrader checks origins with the same BrowserPolicy as the HTTP
+// guard, exactly as serveHTTPAPI assembles it. Extracted so the wiring is
+// testable without standing up the full runtime (a regression that dropped the
+// websocket check here would otherwise pass every unit test).
+func buildAPIHandler(ctx context.Context, gwmux http.Handler, policy apisec.BrowserPolicy, logger log.CtxLogger) http.Handler {
 	return grpcutil.WithWebsockets(
 		ctx,
-		grpcutil.WithDefaultGatewayMiddleware(allowCORS(gwmux, allowedOrigins)),
+		grpcutil.WithDefaultGatewayMiddleware(allowCORS(gwmux, policy.AllowedOrigins)),
 		logger,
-		wsCheckOrigin(allowedOrigins),
+		policy.CheckWebSocketOrigin,
 	)
 }
 
@@ -1339,33 +1446,6 @@ func allowCORS(h http.Handler, allowedOrigins []string) http.Handler {
 		}
 		h.ServeHTTP(w, r)
 	})
-}
-
-// wsCheckOrigin builds the websocket upgrader's origin guard: gorilla's
-// same-origin default as a floor, PLUS the configured cross-origin allowlist.
-// HTTP CORS middleware never runs on a websocket-upgrade request (webSocketProxy
-// intercepts it first), so the upgrader needs its own check. Browsers send an
-// Origin header even on SAME-origin websocket handshakes, so a bare allowlist
-// check would reject the same-origin embedded UI under the default (empty)
-// allowlist — hence the explicit same-origin allowance, which also preserves the
-// pre-change behavior (gorilla's unset CheckOrigin allowed same-origin). A
-// request with no Origin (curl / CLI / non-browser) is allowed, as gorilla does.
-func wsCheckOrigin(allowedOrigins []string) func(*http.Request) bool {
-	return func(r *http.Request) bool {
-		origin := r.Header.Get("Origin")
-		if origin == "" {
-			return true
-		}
-		// Same-origin: Origin's host:port equals the request Host. This is
-		// gorilla's own default and must hold regardless of the allowlist. The
-		// u.Host != "" guard is defense-in-depth: r.Host is never empty at a real
-		// handler (Go rejects HTTP/1.1 without Host), but this ensures an
-		// unparseable/host-less Origin can never match an empty Host.
-		if u, err := url.Parse(origin); err == nil && u.Host != "" && strings.EqualFold(u.Host, r.Host) {
-			return true
-		}
-		return originAllowed(origin, allowedOrigins)
-	}
 }
 
 // isLoopbackBind reports whether addr binds only the loopback interface. An empty

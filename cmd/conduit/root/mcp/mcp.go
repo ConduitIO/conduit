@@ -66,6 +66,7 @@ type MCPFlags struct {
 	TLSCert        string `long:"tls-cert" usage:"TLS certificate file for --http"`
 	TLSKey         string `long:"tls-key" usage:"TLS key file for --http"`
 	APIAddress     string `long:"api-address" usage:"gRPC address of a running Conduit, dialed by the inspect/start/stop tools"`
+	APITokenFile   string `long:"api-token-file" usage:"path to a file containing the bearer token the Conduit at --api-address requires (default: CONDUIT_API_TOKEN_FILE or CONDUIT_API_TOKEN)"`
 }
 
 // MCPCommand implements `conduit mcp`: a long-running server, like `conduit
@@ -174,6 +175,7 @@ func (c *MCPCommand) Execute(ctx context.Context) error {
 		AllowMutations: c.flags.AllowMutations,
 		StoreConfig:    c.flags.Config,
 		APIAddress:     c.flags.APIAddress,
+		APITokenFile:   c.flags.APITokenFile,
 	})
 
 	if c.flags.HTTP == "" {

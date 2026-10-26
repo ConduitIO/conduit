@@ -148,7 +148,11 @@ func TestService_NewDispenser(t *testing.T) {
 			ctrl := gomock.NewController(t)
 
 			authManager := mock.NewAuthManager(ctrl)
-			authManager.EXPECT().GenerateNew("foobar-connector-id")
+			authManager.EXPECT().GenerateNew("foobar-connector-id").Return("test-token")
+			if tc.wantErr {
+				// No plugin started, so no Teardown: the token is revoked here.
+				authManager.EXPECT().Deregister("test-token")
+			}
 
 			builtinReg := mock.NewBuiltinReg(ctrl)
 			builtinReg.EXPECT().Init(ctx)
@@ -184,7 +188,8 @@ func TestService_NewDispenser_InvalidPluginPrefix(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	authManager := mock.NewAuthManager(ctrl)
-	authManager.EXPECT().GenerateNew("foobar-connector-id")
+	authManager.EXPECT().GenerateNew("foobar-connector-id").Return("test-token")
+	authManager.EXPECT().Deregister("test-token") // nothing started, nothing to tear down
 
 	builtinReg := mock.NewBuiltinReg(ctrl)
 	builtinReg.EXPECT().Init(ctx)
