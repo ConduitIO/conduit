@@ -29,12 +29,12 @@ func TestDLQ_LogsWithoutPayload(t *testing.T) {
 		want bool
 	}{
 		{name: "default DLQ", d: DefaultDLQ, want: true},
-		{name: "log without settings", d: DLQ{Plugin: "builtin:log"}, want: true},
-		{name: "log with payload false", d: DLQ{Plugin: "builtin:log", Settings: map[string]string{"payload": "false"}}, want: true},
-		{name: "log with payload empty", d: DLQ{Plugin: "builtin:log", Settings: map[string]string{"payload": ""}}, want: true},
-		{name: "log with payload true", d: DLQ{Plugin: "builtin:log", Settings: map[string]string{"payload": "true"}}, want: false},
-		{name: "log with payload TRUE", d: DLQ{Plugin: "builtin:log", Settings: map[string]string{"payload": "TRUE"}}, want: false},
-		{name: "log with payload spaced", d: DLQ{Plugin: "builtin:log", Settings: map[string]string{"payload": " true "}}, want: false},
+		{name: "log without settings", d: DLQ{Plugin: builtinLogPlugin}, want: true},
+		{name: "log with payload false", d: DLQ{Plugin: builtinLogPlugin, Settings: map[string]string{"payload": "false"}}, want: true},
+		{name: "log with payload empty", d: DLQ{Plugin: builtinLogPlugin, Settings: map[string]string{"payload": ""}}, want: true},
+		{name: "log with payload true", d: DLQ{Plugin: builtinLogPlugin, Settings: map[string]string{"payload": "true"}}, want: false},
+		{name: "log with payload TRUE", d: DLQ{Plugin: builtinLogPlugin, Settings: map[string]string{"payload": "TRUE"}}, want: false},
+		{name: "log with payload spaced", d: DLQ{Plugin: builtinLogPlugin, Settings: map[string]string{"payload": " true "}}, want: false},
 		{name: "non-log plugin", d: DLQ{Plugin: "builtin:kafka"}, want: false},
 		{name: "standalone log plugin name", d: DLQ{Plugin: "builtin:file"}, want: false},
 	}
@@ -55,7 +55,7 @@ func TestDLQ_LogsWithoutPayload(t *testing.T) {
 func TestDLQ_DropsRecordContent(t *testing.T) {
 	t.Parallel()
 	logDLQ := func(size, threshold int, settings map[string]string) DLQ {
-		return DLQ{Plugin: "builtin:log", Settings: settings, WindowSize: size, WindowNackThreshold: threshold}
+		return DLQ{Plugin: builtinLogPlugin, Settings: settings, WindowSize: size, WindowNackThreshold: threshold}
 	}
 	payload := map[string]string{"payload": "true"}
 	tests := []struct {
