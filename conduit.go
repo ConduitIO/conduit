@@ -113,6 +113,13 @@ type Options struct {
 	// connectors.standalone.env-warning=false in the CLI.
 	SilenceStandalonePluginEnvWarning bool
 
+	// StandalonePluginEnvAllow lists the host environment variables, beyond
+	// PATH, HOME, the temp directory, TZ and locale, that standalone connector
+	// plugin processes receive. The zero value passes none: plugins no longer
+	// inherit the host environment. Equivalent to
+	// connectors.standalone.env.allow in the CLI.
+	StandalonePluginEnvAllow []string
+
 	// EnvAllow lists the environment variable names that ${VAR} references in
 	// connector and processor settings may expand. The zero value expands
 	// none: a setting that references any variable is refused with
@@ -411,6 +418,7 @@ func New(_ context.Context, opts Options) (*Engine, error) {
 	}
 
 	cfg.Connectors.Standalone.EnvWarning = !opts.SilenceStandalonePluginEnvWarning
+	cfg.Connectors.Standalone.Env.Allow = opts.StandalonePluginEnvAllow
 
 	cfg.Env.Allow = opts.EnvAllow
 	if len(opts.FileAllowedDirs) > 0 {

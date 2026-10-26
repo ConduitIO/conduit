@@ -630,6 +630,11 @@ func createServices(r *Runtime) error {
 	}
 	r.logAmbientCredentialsPolicy(ambientPolicy, ambientWarnings)
 
+	standaloneEnv, err := r.Config.StandaloneEnvPolicy()
+	if err != nil {
+		return cerrors.Errorf("invalid %s config: %w", conn_standalone.EnvAllowConfigPath, err)
+	}
+
 	connPluginService := conn_plugin.NewPluginService(
 		r.logger,
 		conn_builtin.NewRegistry(
@@ -648,6 +653,7 @@ func createServices(r *Runtime) error {
 			r.logger,
 			r.Config.Connectors.Path,
 			conn_standalone.WithEnvWarning(r.Config.Connectors.Standalone.EnvWarning),
+			conn_standalone.WithEnvPolicy(standaloneEnv),
 		),
 		tokenService,
 		conn_plugin.WithSettingsGuard(settingsResolver.CheckSettings),

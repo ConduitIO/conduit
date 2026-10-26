@@ -33,6 +33,7 @@ import (
 	"github.com/conduitio/conduit/pkg/http/apisec"
 	"github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
+	conn_standalone "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
 	proc_builtin "github.com/conduitio/conduit/pkg/plugin/processor/builtin"
 	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/conduitio/conduit/pkg/registry/index"
@@ -216,13 +217,23 @@ type Config struct {
 		} `mapstructure:"egress"`
 
 		Standalone struct {
-			// EnvWarning controls the one-time startup warning (and the
-			// plugins.standalone_env doctor finding) listing the names of
-			// sensitive host environment variables that standalone connector
-			// plugin processes inherit. Advisory only: it does not change the
-			// environment plugins receive. Operators who have reviewed the list
-			// can set it to false. See docs/operations/standalone-plugin-environment.md.
-			EnvWarning bool `long:"connectors.standalone.env-warning" mapstructure:"env-warning" usage:"warn at startup about sensitive host environment variables passed to standalone connector plugins"`
+			// EnvWarning controls the one-time startup warning that lists the
+			// names of host environment variables standalone connector plugin
+			// processes no longer receive (and any sensitive-looking name that
+			// Env.Allow passes). Advisory only: it does not change the
+			// environment plugins receive. Operators who have reviewed the
+			// list can set it to false. See
+			// docs/operations/standalone-plugin-environment.md.
+			EnvWarning bool `long:"connectors.standalone.env-warning" mapstructure:"env-warning" usage:"warn at startup about the host environment variables standalone connector plugins no longer receive, and about sensitive-looking ones the allowlist passes"`
+
+			// Env.Allow lists the host environment variables, beyond the base
+			// set (PATH, HOME, TMPDIR/TEMP/TMP, TZ, LANG, LANGUAGE, LC_*, and
+			// SYSTEMROOT/WINDIR on Windows), that standalone connector
+			// plugin processes receive. Exact names. Default none: plugins no
+			// longer inherit the engine's environment.
+			Env struct {
+				Allow []string `long:"connectors.standalone.env.allow" mapstructure:"allow" usage:"host environment variables, beyond PATH, HOME, TMPDIR, TZ, locale, SSL_CERT_FILE/SSL_CERT_DIR and the proxy variables, that standalone connector plugins receive (repeatable, exact names, default none)"`
+			} `mapstructure:"env"`
 		}
 
 		// AmbientCredentials is the operator's policy for built-in connectors
@@ -825,6 +836,9 @@ func (c Config) Validate() error {
 	if err := c.validateHardeningConfig(); err != nil {
 		return err
 	}
+	if _, err := c.StandaloneEnvPolicy(); err != nil {
+		return err
+	}
 
 	if err := c.validateEgressConfig(); err != nil {
 		return err
@@ -857,4 +871,11 @@ func requirePositiveValue[T constraints.Integer](name string, value T) error {
 	}
 
 	return nil
+}
+
+// StandaloneEnvPolicy returns the policy deciding which host environment
+// variables standalone connector plugin processes receive. A malformed
+// connectors.standalone.env.allow entry is an error, never silently dropped.
+func (c Config) StandaloneEnvPolicy() (conn_standalone.EnvPolicy, error) {
+	return conn_standalone.NewEnvPolicy(c.Connectors.Standalone.Env.Allow)
 }
