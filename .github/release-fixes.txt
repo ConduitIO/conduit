@@ -1,0 +1,38 @@
+# Fixes v0.21.0 must carry. Format: module | commit | note
+#   module  = "conduit" for this repository, or a Go module path resolved in go.mod
+#   commit  = SHA of at least 7 hex digits; must be an ancestor of the module's
+#             pinned version (or of HEAD for "conduit")
+#   note    = short description (used by release_notes_check.py to name the fix)
+# Verified against .github/scripts/release_fixes.py (make release-check).
+#
+# Engine — sanitized-error hardening (record values/keys/URLs out of errors and logs).
+conduit | 3d0dfe56 | bump Go toolchain to 1.26.10 for GO-2026-6809
+conduit | 0c9c5105 | sanitize library errors and redact the schema registry URL
+conduit | 1b7290d9 | log record positions as a salted hash, never as is
+conduit | ccbb8246 | redact the request URL and body in webhook and ollama errors
+conduit | abdca270 | do not echo URL user info in registry download and fetch errors
+conduit | ceb890fb | do not repeat record values in JavaScript exceptions
+conduit | d5b5ddbc | log the type of a Cohere retry error, not its text
+conduit | d7a023b3 | keep record keys and request bodies out of trace logs
+conduit | 4752f0f7 | do not log inspector messages from the websocket proxy
+conduit | d5ca728f | guard the pipeline Service instance maps with a mutex
+conduit | 5ddb3c67 | make Handle.Stop deterministic for an expired context
+# Engine — Kafka Connect migration refuses plaintext SASL.
+conduit | 7f9277bf | block SASL_PLAINTEXT in migrate kafka-connect
+# Kafka connector — refuse SASL without TLS unless saslAllowPlaintext is set.
+github.com/conduitio/conduit-connector-kafka | e52f836f | refuse SASL without TLS
+#
+# Engine — exposure-audit fixes (private advisory forks, coordinated release):
+conduit | ab570fd9 | bind the HTTP and gRPC API to localhost by default, require a token off-loopback
+conduit | 08028a6a | allowlist ${VAR} expansion with env.allow
+conduit | 08028a6a | allowlist file and JavaScript directories
+conduit | b9883e56 | enforce outbound HTTP at dial time (egress guard)
+github.com/conduitio/conduit-connector-log | 0784b0c | make the log connector metadata-only
+conduit | 08028a6a | refuse to start a pipeline with no recoverable DLQ (pipeline.dlq_not_recoverable)
+#
+# Connectors — merged upstream and bumped into go.mod (merge chain:
+# commons v0.13.0 -> connector bumps -> engine dialguard/c2 PR):
+github.com/conduitio/conduit-connector-postgres | 15a0865b | refuse a replaced replication slot (slot identity, v0.17.5)
+github.com/conduitio/conduit-commons | f26cc49 | logsafe: sanitize record values in errors
+github.com/conduitio/conduit-connector-postgres | 87d8e853 | redact record values in decode errors
+github.com/conduitio/conduit-connector-s3 | 0518355a | redact object keys in errors
