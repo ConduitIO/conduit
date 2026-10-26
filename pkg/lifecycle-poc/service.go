@@ -1777,6 +1777,7 @@ func (s *Service) buildDLQ(
 ) (*funnel.DLQ, error) {
 	// Invariant 3 (GHSA-m3mw-fpw8-w765): refuse a DLQ that would ack a nacked
 	// record while keeping only hashes of it.
+	// guard: lifecycle-poc-dlq-drops-record-content tests=^TestStart_ArchV2RefusesHashOnlyLogDLQThatReceivesNacks$
 	if pl.DLQ.DropsRecordContent() {
 		err := conduiterr.Wrap(
 			pipeline.CodePipelineDLQNotRecoverable,

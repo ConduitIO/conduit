@@ -928,6 +928,7 @@ func (s *Service) buildNodes(ctx context.Context, pl *pipeline.Instance) ([]stre
 	}
 	// Invariant 3 (GHSA-m3mw-fpw8-w765): a DLQ that cannot preserve the record
 	// would silently drop nacked records; refuse before anything is built.
+	// guard: lifecycle-dlq-drops-record-content tests=^TestService_StartRefusedWhenDLQLogsWithoutPayload$
 	if err := s.checkDLQRecoverable(pl); err != nil {
 		return nil, err
 	}
