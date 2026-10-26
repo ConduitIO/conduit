@@ -24,6 +24,12 @@ services:
       - -c
       - exec /app/conduit run --pipelines.path /app/pipelines ${CONDUIT_ENGINE_ARGS:-} ${CONDUIT_LOG_ARGS:-} ${CONDUIT_EXTRA_ARGS:-}
     stop_grace_period: 60s
+    environment:
+      # The image binds the API to 0.0.0.0 and refuses to start without
+      # CONDUIT_API_TOKEN (GHSA-v79j-j88p-m4ff). Nothing here calls the API, so
+      # it listens on the container's loopback only and needs no token.
+      - CONDUIT_API_HTTP_ADDRESS=127.0.0.1:8080
+      - CONDUIT_API_GRPC_ADDRESS=127.0.0.1:8084
     volumes:
       - ${PROF_DIR:-/tmp/cdcparity-prof}:/prof
       - ../pipelines/conduit-pg.yml:/app/pipelines/conduit-pg.yml:ro
