@@ -50,7 +50,7 @@ job "conduit" {
       driver = "docker"
 
       config {
-        image   = "ghcr.io/conduitio/conduit:v0.20.4"
+        image   = "ghcr.io/conduitio/conduit:v0.21.0"
         ports   = ["http"]
         volumes = ["local/pipelines:/app/pipelines:ro"]
       }

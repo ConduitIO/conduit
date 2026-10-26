@@ -13,7 +13,7 @@ services:
   conduit:
     # Pinned by version. Override with CONDUIT_IMAGE to test another build.
     # Verify the signature first: docs/releases.md.
-    image: ${CONDUIT_IMAGE:-ghcr.io/conduitio/conduit:v0.20.4}
+    image: ${CONDUIT_IMAGE:-ghcr.io/conduitio/conduit:v0.21.0}
     # Published on loopback only. The image listens on all interfaces inside the
     # container, so Conduit requires the API token below (docs/operations/api-hardening.md).
     ports:
