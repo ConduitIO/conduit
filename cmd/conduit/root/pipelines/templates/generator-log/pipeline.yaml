@@ -25,3 +25,8 @@ pipelines:
         plugin: "builtin:log"
         settings:
           level: info
+          # The log connector writes only hashes of a record's key and
+          # position unless payload is true (conduit-connector-log v0.8.0).
+          # The records here are synthetic, so logging them in full is safe;
+          # do not copy this setting to a pipeline that carries real data.
+          payload: "true"

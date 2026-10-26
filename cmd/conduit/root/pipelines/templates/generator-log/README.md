@@ -26,6 +26,7 @@ move records end to end.
 | | `operations` | Record operation(s) to generate; `create` only. |
 | | `rate` | Records per second (`"1"`). Raise or lower to change throughput. |
 | `builtin:log` (destination) | `level` | Log level used for each record (`info`). One of `trace\|debug\|info\|warn\|error`. |
+| | `payload` | `"true"`: log each record in full, key and payload included. The default (`false`) logs only hashes of the key and position. The records here are synthetic; leave `payload` off for real data. |
 | | `message` | Optional static message prefix (unset here). |
 
 ## Runnable example
