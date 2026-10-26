@@ -356,21 +356,22 @@ re-snapshot;** offset import for them is v0.22.
 
 ### v0.22 — Migrate from Kafka Connect, part 2: zero-downtime, on one engine
 
-- [ ] **Default engine flip and v1 engine deletion**: the single engine from v0.21 becomes the
-      default, and the v1 engine is removed after the flip, against a gate fixed in advance
-      (PRs #2978 staged batch engine, #3184 ProcessBatch, #2956/#3067 cross-engine harness + matrix)
-- [ ] **Protocol v2 deprecation:** warn on protocol v2 negotiation, announced in v0.21; protocol
-      v2 is removed no earlier than v0.24
-- [ ] Offset import for the other `migrate` outputs (MySQL and the rest), from Debezium offsets and
-      `connect-offsets`, so they resume without a re-snapshot as Postgres does from v0.21
-- [ ] Postgres offset import by reusing the Debezium replication slot (v0.21 ships the fresh-slot
-      strategy only)
-- [ ] **Debezium-compatible output mode for MySQL**, using the Postgres diff harness from v0.21
-      against real Debezium on the same database (PR #3076 data model + JsonConverter)
 - [ ] SMT compatibility pack: processor equivalents for the ~12 most-used Kafka Connect SMTs,
       mapped automatically by `migrate` — including the five missing today (Flatten,
       ExtractChangedRecordState, EventRouter, PartitionRouting, TimezoneConverter) and typed values
       for `field.set`
+- [ ] Postgres offset import by reusing the Debezium replication slot (v0.21 ships the fresh-slot
+      strategy only)
+- [ ] Offset import for the other `migrate` outputs (MySQL and the rest), from Debezium offsets and
+      `connect-offsets`, so they resume without a re-snapshot as Postgres does from v0.21
+- [ ] **Debezium-compatible output mode for MySQL**, using the Postgres diff harness from v0.21
+      against real Debezium on the same database (PR #3076 data model + JsonConverter)
+- [ ] **Default engine flip and v1 engine deletion**: arch-v2 ships as `preview` in v0.21; this flips
+      it to the default and removes the v1 engine, gated on the cross-engine benchi harness proving
+      parity-or-faster at shipped defaults (PRs #2956/#3067). The #2978 staged batch engine and
+      #3184 ProcessBatch land first as the performance substrate.
+- [ ] **Protocol v2 deprecation:** warn on protocol v2 negotiation, announced in v0.21; protocol
+      v2 is removed no earlier than v0.24
 - [ ] NATS JetStream source and destination (certified from labs `nats-jetstream`)
 - [ ] **Catalog:** Bento/Redpanda Connect adapter (preview) — a new build with ack propagation and
       resumable positions; the 2022 prototype acknowledges before the write is durable and is a
