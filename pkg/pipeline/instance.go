@@ -82,8 +82,12 @@ type DLQ struct {
 	WindowNackThreshold int
 }
 
+// builtinLogPlugin is the plugin name of the built-in log connector, the
+// default DLQ.
+const builtinLogPlugin = "builtin:log"
+
 var DefaultDLQ = DLQ{
-	Plugin: "builtin:log",
+	Plugin: builtinLogPlugin,
 	Settings: map[string]string{
 		"level":   "warn",
 		"message": "record delivery failed",
@@ -98,7 +102,7 @@ var DefaultDLQ = DLQ{
 // It does not say whether any record is routed to it; see RoutesNacks and
 // DropsRecordContent.
 func (d DLQ) LogsWithoutPayload() bool {
-	if d.Plugin != "builtin:log" {
+	if d.Plugin != builtinLogPlugin {
 		return false
 	}
 	return !strings.EqualFold(strings.TrimSpace(d.Settings["payload"]), "true")
