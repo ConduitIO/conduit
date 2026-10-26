@@ -50,8 +50,9 @@ func TestRoutesNacks_MatchesWindow(t *testing.T) {
 // rejected when the DLQ is configured (pkg/pipeline/service.go).
 func TestRoutesNacks_NeverUnderRefuses(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
-		size := rapid.IntRange(0, 10).Draw(t, "size")
-		threshold := rapid.IntRange(0, 10).Draw(t, "threshold")
+		// 0 is the boundary both windows special-case; draw it often.
+		size := rapid.OneOf(rapid.Just(0), rapid.IntRange(0, 10)).Draw(t, "size")
+		threshold := rapid.OneOf(rapid.Just(0), rapid.IntRange(0, 10)).Draw(t, "threshold")
 		routes := pipeline.DLQ{WindowSize: size, WindowNackThreshold: threshold}.RoutesNacks()
 		w := newDLQWindow(size, threshold)
 		nacked := false
