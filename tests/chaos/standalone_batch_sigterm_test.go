@@ -229,6 +229,10 @@ pipelines:
         plugin: standalone:log
         settings:
           level: warn
+          # conduit-connector-log v0.8.0 logs only hashes unless payload is
+          # true (GHSA-5c9c-5rf5-2r5q); loggedPayloads needs the payloads to
+          # check that every record was written (invariant 3).
+          payload: "true"
           sdk.batch.size: "%d"
           sdk.batch.delay: %q
 `, input, standaloneBatchSize, batchDelay)
@@ -239,7 +243,8 @@ pipelines:
 }
 
 // loggedPayloads returns how often each record payload was logged by the
-// destination (the log connector logs every record it is asked to write).
+// destination (the log connector logs every record it is asked to write, in
+// full because the pipeline sets payload:true).
 func loggedPayloads(t *testing.T, out string) map[string]int {
 	t.Helper()
 	got := map[string]int{}
