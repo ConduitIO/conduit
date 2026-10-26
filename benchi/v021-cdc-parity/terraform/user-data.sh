@@ -10,6 +10,8 @@ BENCHI_VERSION="${benchi_version}"
 BENCHI_ARCH="x86_64"
 
 export DEBIAN_FRONTEND=noninteractive
+# Hard runtime cap: halt (and so terminate) after 12 hours whatever happens.
+shutdown -h +720 || true
 
 apt-get update -y
 apt-get install -y --no-install-recommends \

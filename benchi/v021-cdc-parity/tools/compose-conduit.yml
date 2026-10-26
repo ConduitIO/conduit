@@ -19,6 +19,12 @@ services:
       - -c
       - exec /app/conduit run --pipelines.path /app/pipelines ${CONDUIT_ENGINE_ARGS:-} ${CONDUIT_LOG_ARGS:-} ${CONDUIT_EXTRA_ARGS:-}
     stop_grace_period: 60s
+    # The file connector may only write inside connectors.file.allowed-dirs
+    # (default <data dir>/files, since the 2026-10 settings hardening). The sink
+    # is /sink, so it is allowed explicitly: a required operator setting for
+    # this layout, not a tuning knob.
+    environment:
+      - CONDUIT_CONNECTORS_FILE_ALLOWED_DIRS=/sink
     volumes:
       - ${PROF_DIR:-/tmp/cdcparity-prof}:/prof
       - ../pipelines/conduit.yml:/app/pipelines/conduit.yml:ro

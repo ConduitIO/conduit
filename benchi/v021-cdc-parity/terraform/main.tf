@@ -23,6 +23,11 @@ terraform {
 
 provider "aws" {
   region = var.region
+  default_tags {
+    tags = {
+      "conduit-bench" = var.benchmark_name
+    }
+  }
 }
 
 # Latest Ubuntu 24.04 LTS (official Canonical AMI, via SSM parameter so the
@@ -76,6 +81,8 @@ resource "aws_instance" "bench" {
   instance_type          = var.instance_type
   key_name               = aws_key_pair.bench.key_name
   vpc_security_group_ids = [aws_security_group.bench.id]
+  # A halt (the user-data cap below, or a manual one) terminates the instance.
+  instance_initiated_shutdown_behavior = "terminate"
 
   # Fixed throughput + capacity; the benchmark depends on quiet, predictable IO.
   root_block_device {
