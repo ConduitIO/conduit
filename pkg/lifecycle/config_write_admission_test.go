@@ -214,7 +214,7 @@ func TestConfigWrite_PipelineUpdateDLQ_StartRefusedInsideWindow(t *testing.T) {
 	is := is.New(t)
 	r := newConfigWriteRun(t)
 
-	dlq := pipeline.DLQ{Plugin: "builtin:log", WindowSize: 3, WindowNackThreshold: 1}
+	dlq := pipeline.DLQ{Plugin: "builtin:log", Settings: map[string]string{"payload": "true"}, WindowSize: 3, WindowNackThreshold: 1}
 	_, err := r.orch.Pipelines.UpdateDLQ(r.probe.ctx, r.pl.ID, dlq)
 	is.NoErr(err)
 

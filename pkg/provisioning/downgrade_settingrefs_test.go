@@ -90,9 +90,9 @@ pipelines:
         settings:
           fields: '.Metadata["opencdc.createdAt"]'
     dead-letter-queue:
-      plugin: builtin:log
+      plugin: builtin:file
       settings:
-        message: failed
+        path: %[3]s
 `
 
 // dgTemplate is the v0.21-shaped value: the original template text.
@@ -245,15 +245,15 @@ func dgWrite(t *testing.T) (dir string) {
 	if err := os.WriteFile(src, []byte("a\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	body := dgPipelineFileFor(src, filepath.Join(dir, "dst.txt"))
+	body := dgPipelineFileFor(src, filepath.Join(dir, "dst.txt"), filepath.Join(dir, "dlq.txt"))
 	if err := os.WriteFile(filepath.Join(dir, "p.yml"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return dir
 }
 
-func dgPipelineFileFor(src, dst string) string {
-	r := strings.NewReplacer("%[1]s", src, "%[2]s", dst)
+func dgPipelineFileFor(src, dst, dlq string) string {
+	r := strings.NewReplacer("%[1]s", src, "%[2]s", dst, "%[3]s", dlq)
 	return r.Replace(dgPipelineFile)
 }
 
@@ -328,7 +328,7 @@ func dgSeed(t *testing.T, db database.DB, dir, entity, refsKey string) {
 	case "pipeline-processor":
 		rewrite("processor:instance:dg1:pproc", func(rec map[string]any) { move(rec, "Config", "fields") })
 	case "dlq":
-		rewrite("pipeline:instance:dg1", func(rec map[string]any) { move(rec, "DLQ", "message") })
+		rewrite("pipeline:instance:dg1", func(rec map[string]any) { move(rec, "DLQ", "path") })
 	default:
 		t.Fatalf("unknown entity %q", entity)
 	}
@@ -662,7 +662,7 @@ func TestDowngradeGuard_RollbackKeepsSettingRefs(t *testing.T) {
 				case "dlq":
 					pl, err := b.pipelines.Get(ctx, "dg1")
 					is.NoErr(err)
-					is.Equal(pl.DLQ.SettingRefs, map[string]string{"message": dgTemplate})
+					is.Equal(pl.DLQ.SettingRefs, map[string]string{"path": dgTemplate})
 				}
 
 				err := b.lc.Init(ctx) // auto-resume

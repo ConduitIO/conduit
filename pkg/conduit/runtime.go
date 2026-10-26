@@ -43,6 +43,7 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/foundation/connegress"
 	"github.com/conduitio/conduit/pkg/foundation/ctxutil"
 	"github.com/conduitio/conduit/pkg/foundation/grpcutil"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -557,9 +558,46 @@ func createServices(r *Runtime) error {
 		return cerrors.Errorf("failed creating processor registry: %w", err)
 	}
 
+	// Settings hardening (GHSA-m3mw-fpw8-w765). Operator config, validated in
+	// Config.Validate and rebuilt here as the single source of truth; an error
+	// fails closed.
+	filePolicy, err := r.Config.fileConnectorPolicy()
+	if err != nil {
+		return cerrors.Errorf("invalid %s config: %w", FileAllowedDirsKey, err)
+	}
+	if err := r.Config.ensureDefaultFilesDir(); err != nil {
+		r.logger.Warn(context.Background()).Err(err).Msg("could not create the default directory of the file connector")
+	}
+	jsFiles, err := r.Config.javascriptFileAccess()
+	if err != nil {
+		return cerrors.Errorf("invalid %s config: %w", JavaScriptAllowedDirsKey, err)
+	}
+	dialGuard, err := r.Config.builtinDialGuard()
+	if err != nil {
+		return cerrors.Errorf("invalid processor egress config: %w", err)
+	}
+
+	secretsPolicy, err := r.Config.secretsPolicy()
+	if err != nil {
+		return cerrors.Errorf("invalid %s config: %w", SecretsAllowedDirsKey, err)
+	}
+	connEgress, err := r.Config.connectorEgressPolicy()
+	if err != nil {
+		return cerrors.Errorf("invalid %s config: %w", connegress.AllowConfigPath, err)
+	}
+	trustPolicy, err := r.Config.trustPolicy()
+	if err != nil {
+		return cerrors.Errorf("invalid %s config: %w", SecretsAllowedDirsKey, err)
+	}
+	settingsResolver := engineSettingsResolver{files: filePolicy, secrets: secretsPolicy, trust: trustPolicy, egress: connEgress}
+
 	procPluginService := proc_plugin.NewPluginService(
 		r.logger,
-		proc_builtin.NewRegistry(r.logger, r.Config.ProcessorPlugins, schemaRegistry),
+		proc_builtin.NewRegistry(
+			r.logger, r.Config.ProcessorPlugins, schemaRegistry,
+			proc_builtin.WithDialGuard(dialGuard),
+			proc_builtin.WithJavaScriptFileAccess(jsFiles),
+		),
 		standaloneReg,
 	)
 
@@ -579,10 +617,12 @@ func createServices(r *Runtime) error {
 			conn_standalone.WithEnvWarning(r.Config.Connectors.Standalone.EnvWarning),
 		),
 		tokenService,
+		conn_plugin.WithSettingsGuard(settingsResolver.CheckSettings),
 	)
 
 	plService := pipeline.NewService(r.logger, r.DB)
-	connService := connector.NewService(r.logger, r.DB, r.connectorPersister)
+	connService := connector.NewService(r.logger, r.DB, r.connectorPersister,
+		connector.WithSettingsResolver(settingsResolver))
 
 	// Engine-level host-egress ceiling (processors.egress.*). Its default is
 	// deny-all, so on a stock instance this passes a closed ceiling and every

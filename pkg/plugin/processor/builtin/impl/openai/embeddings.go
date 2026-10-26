@@ -22,6 +22,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin/processor/egress"
 	"github.com/goccy/go-json"
 	"github.com/sashabaranov/go-openai"
 )
@@ -30,6 +31,8 @@ import (
 
 type EmbeddingsProcessor struct {
 	sdk.UnimplementedProcessor
+	// GuardHolder carries the dial-time egress guard (GHSA-m3mw-fpw8-w765).
+	egress.GuardHolder
 
 	config            embeddingsConfig
 	call              openaiCaller[[]float32]
@@ -70,7 +73,7 @@ func (p *EmbeddingsProcessor) Configure(ctx context.Context, cfg config.Config) 
 
 	if p.call == nil {
 		p.call = &embeddingsCaller{
-			client: openai.NewClient(p.config.APIKey),
+			client: newOpenAIClient(p.HTTPClient(), p.config.APIKey),
 			config: &p.config,
 		}
 	} else {

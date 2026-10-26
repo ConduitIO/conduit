@@ -134,6 +134,7 @@ func startConduit(t *testing.T, bin, dir, awaited string) *conduitProcess {
 		"--pipelines.path", filepath.Join(dir, "pipelines"),
 		"--connectors.path", filepath.Join(dir, "connectors"),
 		"--processors.path", filepath.Join(dir, "processors"),
+		"--connectors.file.allowed-dirs", dir,
 		"--db.type", "badger",
 		"--db.badger.path", filepath.Join(dir, "db"),
 		"--api.enabled=false",

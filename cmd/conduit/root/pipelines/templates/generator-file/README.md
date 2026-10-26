@@ -8,8 +8,11 @@ conduit run
 ```
 
 No external infrastructure required. Update the destination's `path` setting
-before running if `./generator-file-output.ndjson` (relative to wherever you
-invoke `conduit run` from) isn't where you want the output.
+before running if `./files/generator-file-output.ndjson` (relative to wherever you
+invoke `conduit run` from) isn't where you want the output. The file connector can
+only reach the `files` directory next to where Conduit runs (it creates it) unless an
+operator sets `connectors.file.allowed-dirs`, see
+[file access](https://github.com/ConduitIO/conduit/blob/main/docs/operations/file-access.md).
 
 ## What it does
 

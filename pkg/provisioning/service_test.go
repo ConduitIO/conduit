@@ -553,6 +553,16 @@ func TestService_IntegrationTestServices(t *testing.T) {
 		is.NoErr(err)
 	})
 
+	// create DLQ file (the running pipeline's DLQ is builtin:file; its Open
+	// appends to an existing file)
+	dlqFile := "./test/dlq-file.txt"
+	_, err = os.Create(dlqFile)
+	is.NoErr(err)
+	t.Cleanup(func() {
+		err := os.Remove(dlqFile)
+		is.NoErr(err)
+	})
+
 	service := NewService(db, logger, plService, connService, procService, connPluginService, lifecycleService, "./test/pipelines4-integration-test")
 	err = service.Init(context.Background())
 	is.NoErr(err)

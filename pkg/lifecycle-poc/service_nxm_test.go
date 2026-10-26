@@ -275,6 +275,7 @@ func TestServiceLifecycle_NxM_StartMovesRecordsStopsCleanly(t *testing.T) {
 	dest2, dest2Dispenser := unorderedAsserterDestination(ctrl, persister, allRecords)
 
 	dlqA, dlqADispenser := asserterDestination(ctrl, persister, nil, false)
+	pl.DLQ.Plugin = dlqA.Plugin
 	dlqB, dlqBDispenser := asserterDestination(ctrl, persister, nil, false)
 	connSvc := &multiDLQConnectorService{
 		testConnectorService: testConnectorService{
@@ -388,6 +389,7 @@ func TestServiceLifecycle_NxM_FatalErrorOneDestination_DegradesWholePipeline(t *
 	dest2, dest2Dispenser := asserterDestination(ctrl, persister, recordsA, false)
 
 	dlqA, dlqADispenser := asserterDestination(ctrl, persister, nil, false)
+	pl.DLQ.Plugin = dlqA.Plugin
 	dlqB, dlqBDispenser := asserterDestination(ctrl, persister, nil, false)
 	connSvc := &multiDLQConnectorService{
 		testConnectorService: testConnectorService{
@@ -472,6 +474,7 @@ func TestServiceLifecycle_NxM_TransientErrorOneSource_RecoversAllSourcesAndDesti
 	dest2, dest2Dispenser := destinationRecovers(ctrl, persister, healthyRecords)
 
 	dlqA, dlqADispenser := dlqDispenserTimes(ctrl, persister, 2)
+	pl.DLQ.Plugin = dlqA.Plugin
 	dlqB, dlqBDispenser := dlqDispenserTimes(ctrl, persister, 2)
 	connSvc := &multiDLQConnectorService{
 		testConnectorService: testConnectorService{
@@ -607,6 +610,7 @@ func TestServiceLifecycle_NxM_OneSourceExhausts_OtherStreams_BothDestinationsWri
 	dest2, dest2Dispenser := asserterDestination(ctrl, persister, recordsA, false)
 
 	dlqA, dlqADispenser := asserterDestination(ctrl, persister, nil, false)
+	pl.DLQ.Plugin = dlqA.Plugin
 	dlqB, dlqBDispenser := asserterDestination(ctrl, persister, nil, false)
 	connSvc := &multiDLQConnectorService{
 		testConnectorService: testConnectorService{
@@ -725,6 +729,7 @@ func TestServiceLifecycle_NxM_PartialGracefulStop_Escalates(t *testing.T) {
 	dest2, dest2Dispenser := asserterDestination(ctrl, persister, recordsA, false)
 
 	dlqA, dlqADispenser := asserterDestination(ctrl, persister, nil, false)
+	pl.DLQ.Plugin = dlqA.Plugin
 	dlqB, dlqBDispenser := asserterDestination(ctrl, persister, nil, false)
 	connSvc := &multiDLQConnectorService{
 		testConnectorService: testConnectorService{

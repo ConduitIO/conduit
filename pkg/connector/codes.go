@@ -41,6 +41,14 @@ var (
 	// receives it. A source that receives it has not acked the affected
 	// positions upstream, so a restart re-reads from the last stored position.
 	CodeConnectorStatePersistFailed = conduiterr.Register("connector.state_persist_failed", codes.Unavailable)
+	// CodeConnectorDeleteHookUnresolvable is raised when a connector is deleted
+	// while its stored settings no longer resolve (a path outside the allowed
+	// directories, a refused target), so the plugin's "deleted" hook cannot run.
+	// Deleting anyway would leave what the hook cleans up behind: a Postgres
+	// replication slot keeps retaining WAL on the database until someone drops
+	// it. The delete is refused; restore the setting, or delete with force to
+	// skip the hook.
+	CodeConnectorDeleteHookUnresolvable = conduiterr.Register("connector.delete_hook_unresolvable", codes.FailedPrecondition)
 )
 
 // statePersistSuggestion is the Suggestion carried by

@@ -161,11 +161,44 @@ type Config struct {
 		Format    string `long:"log.format" usage:"sets the format of the logging; accepts json, cli"`
 	}
 
+	// Secrets confines the TLS and credential files that connector settings name
+	// (for Postgres, the sslcert, sslkey, sslrootcert and sslcrl
+	// parameters of the connection string). Deny by default outside
+	// <data dir>/secrets and the system CA directories. Separate from
+	// connectors.file.allowed-dirs on purpose: certificate material lives where
+	// the data files do not (/etc/ssl, mounted secrets). See
+	// docs/operations/file-access.md.
+	Secrets struct {
+		AllowedDirs []string `long:"secrets.allowed-dirs" mapstructure:"allowed-dirs" usage:"directories connector settings may read TLS and credential files from (repeatable); replaces the default <data dir>/secrets; CA bundles (sslrootcert, sslcrl) may also come from the system CA directories"`
+	}
+
 	Connectors struct {
 		Path string `long:"connectors.path" usage:"path to standalone connectors' directory"`
 
 		// MaxReceiveRecordSize is the maximum size of a processed record in bytes. Default value is limited by the gRPC default server max receive message size.
 		MaxReceiveRecordSize int `long:"connectors.max-receive-record-size" mapstructure:"max-receive-record-size" usage:"maximum size of a processed record in bytes for standalone connectors"`
+
+		// File confines the built-in file connector (source and destination) to
+		// operator-configured directories. Deny by default outside the
+		// default directory under the Conduit data dir. See
+		// docs/operations/file-access.md.
+		File struct {
+			AllowedDirs []string `long:"connectors.file.allowed-dirs" mapstructure:"allowed-dirs" usage:"directories the file connector may read and write (repeatable); paths are resolved through symlinks first; replaces the default <data dir>/files"`
+
+			// defaultDir is <data dir>/files. Conduit creates it (0700) at
+			// startup while it is still in AllowedDirs, so the default works
+			// without setup. Unexported: a default, not an operator key.
+			defaultDir string
+		} `mapstructure:"file"`
+
+		// Egress is the operator's allowlist for where built-in connectors may
+		// connect (postgres url, kafka servers, s3 endpoint). Empty means no
+		// allowlist; cloud metadata endpoints are refused either way. API
+		// writers are trusted to choose connection targets; this narrows them
+		// to what the operator lists. See docs/operations/connector-egress.md.
+		Egress struct {
+			Allow []string `long:"connectors.egress.allow" mapstructure:"allow" usage:"when set, built-in connectors may only connect to these host:port, ip:port or cidr:port targets (repeatable, for example db.internal:5432 or 10.0.0.0/8:9092); cloud metadata endpoints are refused whether or not this is set"`
+		} `mapstructure:"egress"`
 
 		Standalone struct {
 			// EnvWarning controls the one-time startup warning (and the
@@ -208,6 +241,18 @@ type Config struct {
 	Processors struct {
 		Path string `long:"processors.path" usage:"path to standalone processors' directory"`
 
+		// JavaScript confines custom.javascript's file access. script.path may
+		// only read from AllowedDirs (default: <data dir>/scripts), and
+		// require() is defined only when AllowedDirs is set explicitly, and
+		// then only loads from those directories.
+		JavaScript struct {
+			AllowedDirs []string `long:"processors.javascript.allowed-dirs" mapstructure:"allowed-dirs" usage:"directories custom.javascript may load script.path and require() modules from (repeatable); require() is disabled when unset"`
+
+			// scriptsDir is the default script.path directory. Unexported on
+			// purpose: it is a default, not an operator key.
+			scriptsDir string
+		} `mapstructure:"javascript"`
+
 		// Egress is the engine-level host-egress ceiling for standalone (WASM)
 		// processors — the operator's outer bound on the network hosts a
 		// processor may reach via the host `http_request` capability. It clamps
@@ -246,6 +291,14 @@ type Config struct {
 			// ceiling cap (the per-processor value / egress.DefaultMaxResponseBytes
 			// applies).
 			MaxResponseBytes int64 `long:"processors.egress.max-response-bytes" mapstructure:"max-response-bytes" usage:"engine-level upper bound on the buffered egress response body in bytes (0 = no ceiling cap)"`
+			// BuiltinAllow exempts exact destinations from the dial-time guard
+			// of the built-in outbound-HTTP processors (webhook.http,
+			// ollama.request, openai.*, cohere.*), which otherwise refuse
+			// private, loopback, link-local and metadata addresses. Unlike
+			// Allow, it never restricts public destinations. Exact
+			// host[:port] / http://ip[:port] entries; a local Ollama needs
+			// http://127.0.0.1:11434. See docs/operations/outbound-http-egress.md.
+			BuiltinAllow []string `long:"processors.egress.builtin-allow" mapstructure:"builtin-allow" usage:"destinations the built-in outbound-HTTP processors may reach despite being private/loopback/link-local, e.g. http://127.0.0.1:11434 for a local Ollama (repeatable, exact entries, default none)"`
 		} `mapstructure:"egress"`
 	}
 
@@ -406,6 +459,13 @@ func DefaultConfigWithBasePath(basePath string) Config {
 	cfg.Install.AllowStaleBundle = false
 
 	cfg.Processors.Path = filepath.Join(basePath, "processors")
+	cfg.Processors.JavaScript.scriptsDir = filepath.Join(basePath, "scripts")
+	// Deny by default outside <data dir>/files: the file connector cannot reach
+	// conduit.db, conduit.yaml, the process's other files or the rest of the
+	// host unless an operator widens this.
+	cfg.Secrets.AllowedDirs = []string{filepath.Join(basePath, "secrets")}
+	cfg.Connectors.File.defaultDir = filepath.Join(basePath, "files")
+	cfg.Connectors.File.AllowedDirs = []string{cfg.Connectors.File.defaultDir}
 	// Deny-all by default: the host-egress ceiling is closed until an operator
 	// affirmatively opens it (processors.egress.enabled=true). Set explicitly so
 	// the security default is legible here and anchored by a test.
@@ -727,6 +787,10 @@ func (c Config) Validate() error {
 
 	if err := c.validateErrorRecovery(); err != nil {
 		return cerrors.Errorf("invalid error recovery config: %w", err)
+	}
+
+	if err := c.validateHardeningConfig(); err != nil {
+		return err
 	}
 
 	if err := c.validateEgressConfig(); err != nil {

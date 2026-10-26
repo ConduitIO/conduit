@@ -15,7 +15,7 @@ pipelines:
         type: destination
         plugin: builtin:file
         settings:
-          path: /file_destination.txt
+          path: ./files/file_destination.txt
     processors:
       - id: extract-name
         type: extractfieldpayload

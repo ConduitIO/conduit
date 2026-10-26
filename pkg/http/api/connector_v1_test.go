@@ -20,6 +20,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
+
 	"github.com/conduitio/conduit-commons/cchan"
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -471,7 +475,10 @@ func TestConnectorAPIv1_DeleteConnector(t *testing.T) {
 
 	id := uuid.NewString()
 
-	csMock.EXPECT().Delete(ctx, id).Return(nil).Times(1)
+	csMock.EXPECT().Delete(gomock.Any(), id).DoAndReturn(func(ctx context.Context, _ string) error {
+		is.True(!connector.ForceDelete(ctx)) // not forced unless asked
+		return nil
+	}).Times(1)
 
 	want := &apiv1.DeleteConnectorResponse{}
 
@@ -484,6 +491,35 @@ func TestConnectorAPIv1_DeleteConnector(t *testing.T) {
 
 	is.NoErr(err)
 	is.Equal(want, got)
+}
+
+// force is passed through to the delete, and a refused delete keeps its code so
+// a client can tell it from other failures and retry with force.
+func TestConnectorAPIv1_DeleteConnector_Force(t *testing.T) {
+	is := is.New(t)
+	ctrl := gomock.NewController(t)
+	csMock := apimock.NewConnectorOrchestrator(ctrl)
+	api := NewConnectorAPIv1(csMock, nil)
+	id := uuid.NewString()
+
+	refused := conduiterr.New(connector.CodeConnectorDeleteHookUnresolvable, "cannot be deleted")
+	csMock.EXPECT().Delete(gomock.Any(), id).DoAndReturn(func(ctx context.Context, _ string) error {
+		if connector.ForceDelete(ctx) {
+			return nil
+		}
+		return refused
+	}).Times(2)
+
+	_, err := api.DeleteConnector(context.Background(), &apiv1.DeleteConnectorRequest{Id: id})
+	is.True(err != nil)
+	st, _ := grpcstatus.FromError(err)
+	is.Equal(st.Code(), codes.FailedPrecondition)
+	ce := conduiterr.FromStatus(st)
+	is.Equal(ce.Code.Reason(), "connector.delete_hook_unresolvable")
+
+	got, err := api.DeleteConnector(context.Background(), &apiv1.DeleteConnectorRequest{Id: id, Force: true})
+	is.NoErr(err)
+	is.Equal(len(got.Warnings), 0)
 }
 
 func TestConnectorAPIv1_ValidateConnector(t *testing.T) {

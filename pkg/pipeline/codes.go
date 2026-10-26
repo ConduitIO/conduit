@@ -78,4 +78,12 @@ var (
 	// Check the database (/healthz, free disk) and whether position writes
 	// are failing too. Unavailable: the store may accept the write later.
 	CodeStatusPersistFailed = conduiterr.Register("pipeline.status_persist_failed", codes.Unavailable)
+	// CodePipelineDLQNotRecoverable is raised when a pipeline's dead-letter
+	// queue cannot preserve the record content, so a record routed to it would
+	// be unrecoverable (invariant 3: at-least-once, no silent drop). Today that
+	// is the built-in log connector without payload:true, which is also the
+	// default DLQ; by default it logs only hashes, so a nacked record's key and
+	// payload are lost. The operator must configure a destination that stores
+	// the record, or set payload:true on builtin:log explicitly.
+	CodePipelineDLQNotRecoverable = conduiterr.Register("pipeline.dlq_not_recoverable", codes.FailedPrecondition)
 )
