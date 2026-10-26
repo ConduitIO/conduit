@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/lifecycle/starthook"
 	"github.com/conduitio/conduit/pkg/lifecycle/stream"
 )
 
@@ -82,7 +83,11 @@ func (s *Service) ReconfigureProcessor(ctx context.Context, pipelineID, processo
 	// standalone plugin on the path into debezium.encode is refused here,
 	// before anything is built. The old processor keeps running and the
 	// caller rolls the stored config back.
-	if err := s.startChecks(ctx, rp.pipeline); err != nil {
+	if err := starthook.CheckProcessorChange(ctx, rp.pipeline, processorID, starthook.Services{
+		Connectors:       s.connectors,
+		Processors:       s.processors,
+		ConnectorPlugins: s.connectorPlugins,
+	}); err != nil {
 		return err
 	}
 	runnableProc, err := s.processors.MakeRunnableProcessorForReconfigure(ctx, instance)
