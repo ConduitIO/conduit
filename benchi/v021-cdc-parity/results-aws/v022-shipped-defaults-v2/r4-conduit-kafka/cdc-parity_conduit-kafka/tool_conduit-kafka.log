@@ -1,0 +1,722 @@
+ Container cdcparity-kafka Creating 
+ Container cdcparity-kafka Created 
+ Container cdcparity-conduit-kafka Creating 
+ Container cdcparity-conduit-kafka Created 
+Attaching to cdcparity-conduit-kafka, cdcparity-kafka
+ Container cdcparity-kafka Starting 
+cdcparity-kafka  | ===> User
+cdcparity-kafka  | uid=1000(appuser) gid=1000(appuser) groups=1000(appuser)
+cdcparity-kafka  | ===> Setting default values of environment variables if not already set.
+cdcparity-kafka  | ===> Configuring ...
+ Container cdcparity-kafka Started 
+ Container cdcparity-kafka Waiting 
+cdcparity-kafka  | Running in KRaft mode...
+cdcparity-kafka  | ===> Launching ... 
+cdcparity-kafka  | ===> Using provided cluster id cdcparity-kafka-cluster ...
+cdcparity-kafka  | [2026-10-27 04:05:13,209] INFO Registered kafka:type=kafka.Log4jController MBean (kafka.utils.Log4jControllerRegistration$)
+cdcparity-kafka  | [2026-10-27 04:05:13,292] INFO Registered signal handlers for TERM, INT, HUP (org.apache.kafka.common.utils.LoggingSignalHandler)
+cdcparity-kafka  | [2026-10-27 04:05:13,293] INFO [ControllerServer id=1] Starting controller (kafka.server.ControllerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,404] INFO Updated connection-accept-rate max connection creation rate to 2147483647 (kafka.network.ConnectionQuotas)
+cdcparity-kafka  | [2026-10-27 04:05:13,421] INFO [SocketServer listenerType=CONTROLLER, nodeId=1] Created data-plane acceptor and processors for endpoint : ListenerName(CONTROLLER) (kafka.network.SocketServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,424] INFO CONTROLLER: resolved wildcard host to 8aac4be49d07 (org.apache.kafka.metadata.ListenerInfo)
+cdcparity-kafka  | [2026-10-27 04:05:13,428] INFO authorizerStart completed for endpoint CONTROLLER. Endpoint is now READY. (org.apache.kafka.server.network.EndpointReadyFutures)
+cdcparity-kafka  | [2026-10-27 04:05:13,429] INFO [SharedServer id=1] Starting SharedServer (kafka.server.SharedServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,451] INFO [LogLoader partition=__cluster_metadata-0, dir=/tmp/kafka-logs] Loading producer state till offset 0 (org.apache.kafka.storage.internals.log.UnifiedLog)
+cdcparity-kafka  | [2026-10-27 04:05:13,451] INFO [LogLoader partition=__cluster_metadata-0, dir=/tmp/kafka-logs] Reloading from producer snapshot and rebuilding producer state from offset 0 (org.apache.kafka.storage.internals.log.UnifiedLog)
+cdcparity-kafka  | [2026-10-27 04:05:13,456] INFO [LogLoader partition=__cluster_metadata-0, dir=/tmp/kafka-logs] Producer state recovery took 0ms for snapshot load and 0ms for segment recovery from offset 0 (org.apache.kafka.storage.internals.log.UnifiedLog)
+cdcparity-kafka  | [2026-10-27 04:05:13,464] INFO Initialized snapshots with IDs SortedSet() from /tmp/kafka-logs/__cluster_metadata-0 (kafka.raft.KafkaMetadataLog$)
+cdcparity-kafka  | [2026-10-27 04:05:13,469] INFO [raft-expiration-reaper]: Starting (kafka.raft.TimingWheelExpirationService$ExpiredOperationReaper)
+cdcparity-kafka  | [2026-10-27 04:05:13,472] INFO [RaftManager id=1] Reading KRaft snapshot and log as part of the initialization (org.apache.kafka.raft.KafkaRaftClient)
+cdcparity-kafka  | [2026-10-27 04:05:13,473] INFO [RaftManager id=1] Starting voters are VoterSet(voters={1=VoterNode(voterKey=ReplicaKey(id=1, directoryId=<undefined>), listeners=Endpoints(endpoints={ListenerName(CONTROLLER)=cdcparity-kafka/172.18.0.6:9093}), supportedKRaftVersion=SupportedVersionRange[min_version:0, max_version:0])}) (org.apache.kafka.raft.KafkaRaftClient)
+cdcparity-kafka  | [2026-10-27 04:05:13,473] INFO [RaftManager id=1] Starting request manager with static voters: [cdcparity-kafka:9093 (id: 1 rack: null isFenced: false)] (org.apache.kafka.raft.KafkaRaftClient)
+cdcparity-kafka  | [2026-10-27 04:05:13,476] INFO [RaftManager id=1] Attempting durable transition to UnattachedState(epoch=0, leaderId=OptionalInt.empty, votedKey=Optional.empty, voters=[1], electionTimeoutMs=1527, highWatermark=Optional.empty) from null (org.apache.kafka.raft.QuorumState)
+cdcparity-kafka  | [2026-10-27 04:05:13,481] INFO [RaftManager id=1] Completed transition to UnattachedState(epoch=0, leaderId=OptionalInt.empty, votedKey=Optional.empty, voters=[1], electionTimeoutMs=1527, highWatermark=Optional.empty) from null (org.apache.kafka.raft.QuorumState)
+cdcparity-kafka  | [2026-10-27 04:05:13,483] INFO [RaftManager id=1] Completed transition to ProspectiveState(epoch=0, leaderId=OptionalInt.empty, retries=1, votedKey=Optional.empty, epochElection=EpochElection(voterStates={1=VoterState(replicaKey=ReplicaKey(id=1, directoryId=<undefined>), state=GRANTED)}), electionTimeoutMs=1893, highWatermark=Optional.empty) from UnattachedState(epoch=0, leaderId=OptionalInt.empty, votedKey=Optional.empty, voters=[1], electionTimeoutMs=1527, highWatermark=Optional.empty) (org.apache.kafka.raft.QuorumState)
+cdcparity-kafka  | [2026-10-27 04:05:13,484] INFO [RaftManager id=1] Attempting durable transition to CandidateState(localId=1, localDirectoryId=qaO2PTS36Ziou4EapBCl-w, epoch=1, retries=1, epochElection=EpochElection(voterStates={1=VoterState(replicaKey=ReplicaKey(id=1, directoryId=<undefined>), state=GRANTED)}), highWatermark=Optional.empty, electionTimeoutMs=1454) from ProspectiveState(epoch=0, leaderId=OptionalInt.empty, retries=1, votedKey=Optional.empty, epochElection=EpochElection(voterStates={1=VoterState(replicaKey=ReplicaKey(id=1, directoryId=<undefined>), state=GRANTED)}), electionTimeoutMs=1893, highWatermark=Optional.empty) (org.apache.kafka.raft.QuorumState)
+cdcparity-kafka  | [2026-10-27 04:05:13,487] INFO [RaftManager id=1] Completed transition to CandidateState(localId=1, localDirectoryId=qaO2PTS36Ziou4EapBCl-w, epoch=1, retries=1, epochElection=EpochElection(voterStates={1=VoterState(replicaKey=ReplicaKey(id=1, directoryId=<undefined>), state=GRANTED)}), highWatermark=Optional.empty, electionTimeoutMs=1454) from ProspectiveState(epoch=0, leaderId=OptionalInt.empty, retries=1, votedKey=Optional.empty, epochElection=EpochElection(voterStates={1=VoterState(replicaKey=ReplicaKey(id=1, directoryId=<undefined>), state=GRANTED)}), electionTimeoutMs=1893, highWatermark=Optional.empty) (org.apache.kafka.raft.QuorumState)
+cdcparity-kafka  | [2026-10-27 04:05:13,489] INFO [RaftManager id=1] Attempting durable transition to Leader(localReplicaKey=ReplicaKey(id=1, directoryId=qaO2PTS36Ziou4EapBCl-w), epoch=1, epochStartOffset=0, highWatermark=Optional.empty, voterStates={1=ReplicaState(replicaKey=ReplicaKey(id=1, directoryId=<undefined>), endOffset=Optional.empty, lastFetchTimestamp=-1, lastCaughtUpTimestamp=-1, hasAcknowledgedLeader=true)}) from CandidateState(localId=1, localDirectoryId=qaO2PTS36Ziou4EapBCl-w, epoch=1, retries=1, epochElection=EpochElection(voterStates={1=VoterState(replicaKey=ReplicaKey(id=1, directoryId=<undefined>), state=GRANTED)}), highWatermark=Optional.empty, electionTimeoutMs=1454) (org.apache.kafka.raft.QuorumState)
+cdcparity-kafka  | [2026-10-27 04:05:13,491] INFO [RaftManager id=1] Completed transition to Leader(localReplicaKey=ReplicaKey(id=1, directoryId=qaO2PTS36Ziou4EapBCl-w), epoch=1, epochStartOffset=0, highWatermark=Optional.empty, voterStates={1=ReplicaState(replicaKey=ReplicaKey(id=1, directoryId=<undefined>), endOffset=Optional.empty, lastFetchTimestamp=-1, lastCaughtUpTimestamp=-1, hasAcknowledgedLeader=true)}) from CandidateState(localId=1, localDirectoryId=qaO2PTS36Ziou4EapBCl-w, epoch=1, retries=1, epochElection=EpochElection(voterStates={1=VoterState(replicaKey=ReplicaKey(id=1, directoryId=<undefined>), state=GRANTED)}), highWatermark=Optional.empty, electionTimeoutMs=1454) (org.apache.kafka.raft.QuorumState)
+cdcparity-kafka  | [2026-10-27 04:05:13,504] INFO [kafka-1-raft-outbound-request-thread]: Starting (org.apache.kafka.raft.KafkaNetworkChannel$SendThread)
+cdcparity-kafka  | [2026-10-27 04:05:13,504] INFO [kafka-1-raft-io-thread]: Starting (org.apache.kafka.raft.KafkaRaftClientDriver)
+cdcparity-kafka  | [2026-10-27 04:05:13,509] INFO [MetadataLoader id=1] initializeNewPublishers: the loader is still catching up because we still don't know the high water mark yet. (org.apache.kafka.image.loader.MetadataLoader)
+cdcparity-kafka  | [2026-10-27 04:05:13,509] INFO [ControllerServer id=1] Waiting for controller quorum voters future (kafka.server.ControllerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,510] INFO [ControllerServer id=1] Finished waiting for controller quorum voters future (kafka.server.ControllerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,517] INFO [RaftManager id=1] High watermark set to LogOffsetMetadata(offset=1, metadata=Optional[(segmentBaseOffset=0,relativePositionInSegment=91)]) for the first time for epoch 1 based on indexOfHw 0 and voters [ReplicaState(replicaKey=ReplicaKey(id=1, directoryId=<undefined>), endOffset=Optional[LogOffsetMetadata(offset=1, metadata=Optional[(segmentBaseOffset=0,relativePositionInSegment=91)])], lastFetchTimestamp=-1, lastCaughtUpTimestamp=-1, hasAcknowledgedLeader=true)] (org.apache.kafka.raft.LeaderState)
+cdcparity-kafka  | [2026-10-27 04:05:13,520] INFO [controller-1-ThrottledChannelReaper-Fetch]: Starting (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka  | [2026-10-27 04:05:13,521] INFO [controller-1-ThrottledChannelReaper-Produce]: Starting (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka  | [2026-10-27 04:05:13,522] INFO [controller-1-ThrottledChannelReaper-Request]: Starting (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka  | [2026-10-27 04:05:13,522] INFO [controller-1-ThrottledChannelReaper-ControllerMutation]: Starting (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka  | [2026-10-27 04:05:13,525] INFO [RaftManager id=1] Registered the listener org.apache.kafka.image.loader.MetadataLoader@2123927347 (org.apache.kafka.raft.KafkaRaftClient)
+cdcparity-kafka  | [2026-10-27 04:05:13,525] INFO [RaftManager id=1] Registered the listener org.apache.kafka.controller.QuorumController$QuorumMetaLogListener@954528255 (org.apache.kafka.raft.KafkaRaftClient)
+cdcparity-kafka  | [2026-10-27 04:05:13,525] INFO [ExpirationReaper-0-null]: Starting (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka  | [2026-10-27 04:05:13,526] INFO [RaftManager id=1] Setting the next offset of org.apache.kafka.image.loader.MetadataLoader@2123927347 to 0 since there are no snapshots (org.apache.kafka.raft.KafkaRaftClient)
+cdcparity-kafka  | [2026-10-27 04:05:13,527] INFO [RaftManager id=1] Setting the next offset of org.apache.kafka.controller.QuorumController$QuorumMetaLogListener@954528255 to 0 since there are no snapshots (org.apache.kafka.raft.KafkaRaftClient)
+cdcparity-kafka  | [2026-10-27 04:05:13,527] INFO [MetadataLoader id=1] maybePublishMetadata(LOG_DELTA): The loader is still catching up because we have not loaded a controller record as of offset 0 and high water mark is 1 (org.apache.kafka.image.loader.MetadataLoader)
+cdcparity-kafka  | [2026-10-27 04:05:13,533] INFO [ControllerServer id=1] Waiting for the controller metadata publishers to be installed (kafka.server.ControllerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,533] INFO [MetadataLoader id=1] initializeNewPublishers: The loader is still catching up because we have not loaded a controller record as of offset 0 and high water mark is 1 (org.apache.kafka.image.loader.MetadataLoader)
+cdcparity-kafka  | [2026-10-27 04:05:13,533] INFO [ControllerServer id=1] Finished waiting for the controller metadata publishers to be installed (kafka.server.ControllerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,534] INFO [SocketServer listenerType=CONTROLLER, nodeId=1] Enabling request processing. (kafka.network.SocketServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,535] INFO Awaiting socket connections on 0.0.0.0:9093. (kafka.network.DataPlaneAcceptor)
+cdcparity-kafka  | [2026-10-27 04:05:13,550] INFO [controller-1-to-controller-registration-channel-manager]: Starting (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka  | [2026-10-27 04:05:13,551] INFO [ControllerServer id=1] Waiting for all of the authorizer futures to be completed (kafka.server.ControllerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,551] INFO [ControllerRegistrationManager id=1 incarnation=gQZsdbm9SoWL4yTkgMAkxA] initialized channel manager. (kafka.server.ControllerRegistrationManager)
+cdcparity-kafka  | [2026-10-27 04:05:13,551] INFO [controller-1-to-controller-registration-channel-manager]: Recorded new KRaft controller, from now on will use node cdcparity-kafka:9093 (id: 1 rack: null isFenced: false) (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka  | [2026-10-27 04:05:13,551] INFO [ControllerServer id=1] Finished waiting for all of the authorizer futures to be completed (kafka.server.ControllerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,552] INFO [ControllerServer id=1] Waiting for all of the SocketServer Acceptors to be started (kafka.server.ControllerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,552] INFO [ControllerServer id=1] Finished waiting for all of the SocketServer Acceptors to be started (kafka.server.ControllerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,552] INFO [ControllerRegistrationManager id=1 incarnation=gQZsdbm9SoWL4yTkgMAkxA] maybeSendControllerRegistration: cannot register yet because the metadata.version is not known yet. (kafka.server.ControllerRegistrationManager)
+cdcparity-kafka  | [2026-10-27 04:05:13,553] INFO [BrokerServer id=1] Transition from SHUTDOWN to STARTING (kafka.server.BrokerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,553] INFO [BrokerServer id=1] Starting broker (kafka.server.BrokerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,558] INFO [broker-1-ThrottledChannelReaper-Fetch]: Starting (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka  | [2026-10-27 04:05:13,558] INFO [broker-1-ThrottledChannelReaper-Produce]: Starting (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka  | [2026-10-27 04:05:13,558] INFO [broker-1-ThrottledChannelReaper-Request]: Starting (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka  | [2026-10-27 04:05:13,559] INFO [MetadataLoader id=1] maybePublishMetadata(LOG_DELTA): The loader finished catching up to the current high water mark of 6 (org.apache.kafka.image.loader.MetadataLoader)
+cdcparity-kafka  | [2026-10-27 04:05:13,560] INFO [MetadataLoader id=1] InitializeNewPublishers: initializing SnapshotGenerator with a snapshot at offset 5 (org.apache.kafka.image.loader.MetadataLoader)
+cdcparity-kafka  | [2026-10-27 04:05:13,560] INFO [broker-1-ThrottledChannelReaper-ControllerMutation]: Starting (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka  | [2026-10-27 04:05:13,561] INFO [MetadataLoader id=1] InitializeNewPublishers: initializing KRaftMetadataCachePublisher with a snapshot at offset 5 (org.apache.kafka.image.loader.MetadataLoader)
+cdcparity-kafka  | [2026-10-27 04:05:13,561] INFO [MetadataLoader id=1] InitializeNewPublishers: initializing FeaturesPublisher with a snapshot at offset 5 (org.apache.kafka.image.loader.MetadataLoader)
+cdcparity-kafka  | [2026-10-27 04:05:13,563] INFO [ControllerServer id=1] Loaded new metadata Features(metadataVersion=4.0-IV3, finalizedFeatures={group.version=1, transaction.version=2, metadata.version=25}, finalizedFeaturesEpoch=5). (org.apache.kafka.metadata.publisher.FeaturesPublisher)
+cdcparity-kafka  | [2026-10-27 04:05:13,563] INFO [MetadataLoader id=1] InitializeNewPublishers: initializing ControllerRegistrationsPublisher with a snapshot at offset 5 (org.apache.kafka.image.loader.MetadataLoader)
+cdcparity-kafka  | [2026-10-27 04:05:13,563] INFO [MetadataLoader id=1] InitializeNewPublishers: initializing ControllerRegistrationManager with a snapshot at offset 5 (org.apache.kafka.image.loader.MetadataLoader)
+cdcparity-kafka  | [2026-10-27 04:05:13,563] INFO [MetadataLoader id=1] InitializeNewPublishers: initializing DynamicConfigPublisher controller id=1 with a snapshot at offset 5 (org.apache.kafka.image.loader.MetadataLoader)
+cdcparity-kafka  | [2026-10-27 04:05:13,564] INFO [MetadataLoader id=1] InitializeNewPublishers: initializing DynamicClientQuotaPublisher controller id=1 with a snapshot at offset 5 (org.apache.kafka.image.loader.MetadataLoader)
+cdcparity-kafka  | [2026-10-27 04:05:13,565] INFO [MetadataLoader id=1] InitializeNewPublishers: initializing DynamicTopicClusterQuotaPublisher controller id=1 with a snapshot at offset 5 (org.apache.kafka.image.loader.MetadataLoader)
+cdcparity-kafka  | [2026-10-27 04:05:13,565] INFO [MetadataLoader id=1] InitializeNewPublishers: initializing ScramPublisher controller id=1 with a snapshot at offset 5 (org.apache.kafka.image.loader.MetadataLoader)
+cdcparity-kafka  | [2026-10-27 04:05:13,566] INFO [MetadataLoader id=1] InitializeNewPublishers: initializing DelegationTokenPublisher controller id=1 with a snapshot at offset 5 (org.apache.kafka.image.loader.MetadataLoader)
+cdcparity-kafka  | [2026-10-27 04:05:13,568] INFO [MetadataLoader id=1] InitializeNewPublishers: initializing ControllerMetadataMetricsPublisher with a snapshot at offset 5 (org.apache.kafka.image.loader.MetadataLoader)
+cdcparity-kafka  | [2026-10-27 04:05:13,568] INFO [BrokerServer id=1] Waiting for controller quorum voters future (kafka.server.BrokerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,568] INFO [BrokerServer id=1] Finished waiting for controller quorum voters future (kafka.server.BrokerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,568] INFO [MetadataLoader id=1] InitializeNewPublishers: initializing AclPublisher controller id=1 with a snapshot at offset 5 (org.apache.kafka.image.loader.MetadataLoader)
+cdcparity-kafka  | [2026-10-27 04:05:13,569] INFO [broker-1-to-controller-forwarding-channel-manager]: Starting (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka  | [2026-10-27 04:05:13,570] INFO [broker-1-to-controller-forwarding-channel-manager]: Recorded new KRaft controller, from now on will use node cdcparity-kafka:9093 (id: 1 rack: null isFenced: false) (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka  | [2026-10-27 04:05:13,572] INFO [ControllerRegistrationManager id=1 incarnation=gQZsdbm9SoWL4yTkgMAkxA] sendControllerRegistration: attempting to send ControllerRegistrationRequestData(controllerId=1, incarnationId=gQZsdbm9SoWL4yTkgMAkxA, zkMigrationReady=false, listeners=[Listener(name='CONTROLLER', host='8aac4be49d07', port=9093, securityProtocol=0)], features=[Feature(name='group.version', minSupportedVersion=0, maxSupportedVersion=1), Feature(name='transaction.version', minSupportedVersion=0, maxSupportedVersion=2), Feature(name='eligible.leader.replicas.version', minSupportedVersion=0, maxSupportedVersion=1), Feature(name='kraft.version', minSupportedVersion=0, maxSupportedVersion=1), Feature(name='metadata.version', minSupportedVersion=7, maxSupportedVersion=25)]) (kafka.server.ControllerRegistrationManager)
+cdcparity-kafka  | [2026-10-27 04:05:13,574] INFO [client-metrics-reaper]: Starting (org.apache.kafka.server.util.timer.SystemTimerReaper$Reaper)
+cdcparity-kafka  | [2026-10-27 04:05:13,598] INFO Updated connection-accept-rate max connection creation rate to 2147483647 (kafka.network.ConnectionQuotas)
+cdcparity-kafka  | [2026-10-27 04:05:13,602] INFO [SocketServer listenerType=BROKER, nodeId=1] Created data-plane acceptor and processors for endpoint : ListenerName(PLAINTEXT) (kafka.network.SocketServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,604] INFO [broker-1-to-controller-alter-partition-channel-manager]: Starting (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka  | [2026-10-27 04:05:13,605] INFO [broker-1-to-controller-alter-partition-channel-manager]: Recorded new KRaft controller, from now on will use node cdcparity-kafka:9093 (id: 1 rack: null isFenced: false) (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka  | [2026-10-27 04:05:13,609] INFO [broker-1-to-controller-directory-assignments-channel-manager]: Starting (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka  | [2026-10-27 04:05:13,609] INFO [broker-1-to-controller-directory-assignments-channel-manager]: Recorded new KRaft controller, from now on will use node cdcparity-kafka:9093 (id: 1 rack: null isFenced: false) (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka  | [2026-10-27 04:05:13,612] INFO [ExpirationReaper-0-null]: Starting (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka  | [2026-10-27 04:05:13,612] INFO [ExpirationReaper-0-null]: Starting (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka  | [2026-10-27 04:05:13,613] INFO [ExpirationReaper-0-null]: Starting (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka  | [2026-10-27 04:05:13,613] INFO [ExpirationReaper-0-null]: Starting (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka  | [2026-10-27 04:05:13,614] INFO [ExpirationReaper-0-null]: Starting (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka  | [2026-10-27 04:05:13,615] INFO [ExpirationReaper-0-null]: Starting (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka  | [2026-10-27 04:05:13,623] INFO [BrokerServer id=1] Using no op persister (kafka.server.BrokerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,624] INFO [group-coordinator-reaper]: Starting (org.apache.kafka.server.util.timer.SystemTimerReaper$Reaper)
+cdcparity-kafka  | [2026-10-27 04:05:13,625] INFO [ControllerRegistrationManager id=1 incarnation=gQZsdbm9SoWL4yTkgMAkxA] Our registration has been persisted to the metadata log. (kafka.server.ControllerRegistrationManager)
+cdcparity-kafka  | [2026-10-27 04:05:13,626] INFO [ControllerRegistrationManager id=1 incarnation=gQZsdbm9SoWL4yTkgMAkxA] RegistrationResponseHandler: controller acknowledged ControllerRegistrationRequest. (kafka.server.ControllerRegistrationManager)
+cdcparity-kafka  | [2026-10-27 04:05:13,630] INFO [group-coordinator-event-processor-0]: Starting (org.apache.kafka.coordinator.common.runtime.MultiThreadedEventProcessor$EventProcessorThread)
+cdcparity-kafka  | [2026-10-27 04:05:13,630] INFO [group-coordinator-event-processor-1]: Starting (org.apache.kafka.coordinator.common.runtime.MultiThreadedEventProcessor$EventProcessorThread)
+cdcparity-kafka  | [2026-10-27 04:05:13,632] INFO [group-coordinator-event-processor-2]: Starting (org.apache.kafka.coordinator.common.runtime.MultiThreadedEventProcessor$EventProcessorThread)
+cdcparity-kafka  | [2026-10-27 04:05:13,632] INFO [group-coordinator-event-processor-3]: Starting (org.apache.kafka.coordinator.common.runtime.MultiThreadedEventProcessor$EventProcessorThread)
+cdcparity-kafka  | [2026-10-27 04:05:13,638] INFO Unable to read the broker epoch in /tmp/kafka-logs. (kafka.log.LogManager)
+cdcparity-kafka  | [2026-10-27 04:05:13,639] INFO [broker-1-to-controller-heartbeat-channel-manager]: Starting (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka  | [2026-10-27 04:05:13,639] INFO [broker-1-to-controller-heartbeat-channel-manager]: Recorded new KRaft controller, from now on will use node cdcparity-kafka:9093 (id: 1 rack: null isFenced: false) (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka  | [2026-10-27 04:05:13,641] INFO [BrokerLifecycleManager id=1] Incarnation 2oOpVo4DTf-h7rJ-mdfaHw of broker 1 in cluster cdcparity-kafka-cluster is now STARTING. (kafka.server.BrokerLifecycleManager)
+cdcparity-kafka  | [2026-10-27 04:05:13,641] INFO [share-group-lock-timeout-reaper]: Starting (org.apache.kafka.server.util.timer.SystemTimerReaper$Reaper)
+cdcparity-kafka  | [2026-10-27 04:05:13,643] INFO [ExpirationReaper-0-null]: Starting (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka  | [2026-10-27 04:05:13,651] INFO [BrokerServer id=1] Waiting for the broker metadata publishers to be installed (kafka.server.BrokerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,651] INFO [MetadataLoader id=1] InitializeNewPublishers: initializing MetadataVersionPublisher(id=1) with a snapshot at offset 6 (org.apache.kafka.image.loader.MetadataLoader)
+cdcparity-kafka  | [2026-10-27 04:05:13,652] INFO [MetadataLoader id=1] InitializeNewPublishers: initializing BrokerMetadataPublisher with a snapshot at offset 6 (org.apache.kafka.image.loader.MetadataLoader)
+cdcparity-kafka  | [2026-10-27 04:05:13,652] INFO [BrokerServer id=1] Finished waiting for the broker metadata publishers to be installed (kafka.server.BrokerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,652] INFO [BrokerServer id=1] Waiting for the controller to acknowledge that we are caught up (kafka.server.BrokerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,652] INFO [BrokerMetadataPublisher id=1] Publishing initial metadata at offset OffsetAndEpoch(offset=6, epoch=1) with metadata.version Optional[4.0-IV3]. (kafka.server.metadata.BrokerMetadataPublisher)
+cdcparity-kafka  | [2026-10-27 04:05:13,654] INFO Loading logs from log dirs ArrayBuffer(/tmp/kafka-logs) (kafka.log.LogManager)
+cdcparity-kafka  | [2026-10-27 04:05:13,656] INFO No logs found to be loaded in /tmp/kafka-logs (kafka.log.LogManager)
+cdcparity-kafka  | [2026-10-27 04:05:13,666] INFO Loaded 0 logs in 10ms (kafka.log.LogManager)
+cdcparity-kafka  | [2026-10-27 04:05:13,667] INFO Starting log cleanup with a period of 300000 ms. (kafka.log.LogManager)
+cdcparity-kafka  | [2026-10-27 04:05:13,668] INFO Starting log flusher with a default period of 9223372036854775807 ms. (kafka.log.LogManager)
+cdcparity-kafka  | [2026-10-27 04:05:13,675] INFO [BrokerLifecycleManager id=1] Successfully registered broker 1 with broker epoch 7 (kafka.server.BrokerLifecycleManager)
+cdcparity-kafka  | [2026-10-27 04:05:13,728] INFO [kafka-log-cleaner-thread-0]: Starting (kafka.log.LogCleaner$CleanerThread)
+cdcparity-kafka  | [2026-10-27 04:05:13,730] INFO [LogDirFailureHandler]: Starting (kafka.server.ReplicaManager$LogDirFailureHandler)
+cdcparity-kafka  | [2026-10-27 04:05:13,731] INFO [AddPartitionsToTxnSenderThread-1]: Starting (kafka.server.AddPartitionsToTxnManager)
+cdcparity-kafka  | [2026-10-27 04:05:13,731] INFO [GroupCoordinator id=1] Starting up. (org.apache.kafka.coordinator.group.GroupCoordinatorService)
+cdcparity-kafka  | [2026-10-27 04:05:13,731] INFO [GroupCoordinator id=1] Startup complete. (org.apache.kafka.coordinator.group.GroupCoordinatorService)
+cdcparity-kafka  | [2026-10-27 04:05:13,732] INFO [TransactionCoordinator id=1] Starting up. (kafka.coordinator.transaction.TransactionCoordinator)
+cdcparity-kafka  | [2026-10-27 04:05:13,733] INFO [TxnMarkerSenderThread-1]: Starting (kafka.coordinator.transaction.TransactionMarkerChannelManager)
+cdcparity-kafka  | [2026-10-27 04:05:13,733] INFO [TransactionCoordinator id=1] Startup complete. (kafka.coordinator.transaction.TransactionCoordinator)
+cdcparity-kafka  | [2026-10-27 04:05:13,736] INFO [MetadataLoader id=1] InitializeNewPublishers: initializing BrokerRegistrationTracker(id=1) with a snapshot at offset 6 (org.apache.kafka.image.loader.MetadataLoader)
+cdcparity-kafka  | [2026-10-27 04:05:13,748] INFO [BrokerLifecycleManager id=1] The broker has caught up. Transitioning from STARTING to RECOVERY. (kafka.server.BrokerLifecycleManager)
+cdcparity-kafka  | [2026-10-27 04:05:13,748] INFO [BrokerServer id=1] Finished waiting for the controller to acknowledge that we are caught up (kafka.server.BrokerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,748] INFO [BrokerServer id=1] Waiting for the initial broker metadata update to be published (kafka.server.BrokerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,748] INFO [BrokerServer id=1] Finished waiting for the initial broker metadata update to be published (kafka.server.BrokerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,749] INFO KafkaConfig values: 
+cdcparity-kafka  | 	add.partitions.to.txn.retry.backoff.max.ms = 100
+cdcparity-kafka  | 	add.partitions.to.txn.retry.backoff.ms = 20
+cdcparity-kafka  | 	advertised.listeners = PLAINTEXT://cdcparity-kafka:9092
+cdcparity-kafka  | 	alter.config.policy.class.name = null
+cdcparity-kafka  | 	alter.log.dirs.replication.quota.window.num = 11
+cdcparity-kafka  | 	alter.log.dirs.replication.quota.window.size.seconds = 1
+cdcparity-kafka  | 	authorizer.class.name = 
+cdcparity-kafka  | 	auto.create.topics.enable = true
+cdcparity-kafka  | 	auto.leader.rebalance.enable = true
+cdcparity-kafka  | 	background.threads = 10
+cdcparity-kafka  | 	broker.heartbeat.interval.ms = 2000
+cdcparity-kafka  | 	broker.id = 1
+cdcparity-kafka  | 	broker.rack = null
+cdcparity-kafka  | 	broker.session.timeout.ms = 9000
+cdcparity-kafka  | 	client.quota.callback.class = null
+cdcparity-kafka  | 	compression.gzip.level = -1
+cdcparity-kafka  | 	compression.lz4.level = 9
+cdcparity-kafka  | 	compression.type = producer
+cdcparity-kafka  | 	compression.zstd.level = 3
+cdcparity-kafka  | 	connection.failed.authentication.delay.ms = 100
+cdcparity-kafka  | 	connections.max.idle.ms = 600000
+cdcparity-kafka  | 	connections.max.reauth.ms = 0
+cdcparity-kafka  | 	controlled.shutdown.enable = true
+cdcparity-kafka  | 	controller.listener.names = CONTROLLER
+cdcparity-kafka  | 	controller.performance.always.log.threshold.ms = 2000
+cdcparity-kafka  | 	controller.performance.sample.period.ms = 60000
+cdcparity-kafka  | 	controller.quorum.append.linger.ms = 25
+cdcparity-kafka  | 	controller.quorum.bootstrap.servers = []
+cdcparity-kafka  | 	controller.quorum.election.backoff.max.ms = 1000
+cdcparity-kafka  | 	controller.quorum.election.timeout.ms = 1000
+cdcparity-kafka  | 	controller.quorum.fetch.timeout.ms = 2000
+cdcparity-kafka  | 	controller.quorum.request.timeout.ms = 2000
+cdcparity-kafka  | 	controller.quorum.retry.backoff.ms = 20
+cdcparity-kafka  | 	controller.quorum.voters = [1@cdcparity-kafka:9093]
+cdcparity-kafka  | 	controller.quota.window.num = 11
+cdcparity-kafka  | 	controller.quota.window.size.seconds = 1
+cdcparity-kafka  | 	controller.socket.timeout.ms = 30000
+cdcparity-kafka  | 	create.topic.policy.class.name = null
+cdcparity-kafka  | 	default.replication.factor = 1
+cdcparity-kafka  | 	delegation.token.expiry.check.interval.ms = 3600000
+cdcparity-kafka  | 	delegation.token.expiry.time.ms = 86400000
+cdcparity-kafka  | 	delegation.token.max.lifetime.ms = 604800000
+cdcparity-kafka  | 	delegation.token.secret.key = null
+cdcparity-kafka  | 	delete.records.purgatory.purge.interval.requests = 1
+cdcparity-kafka  | 	delete.topic.enable = true
+cdcparity-kafka  | 	early.start.listeners = null
+cdcparity-kafka  | 	fetch.max.bytes = 57671680
+cdcparity-kafka  | 	fetch.purgatory.purge.interval.requests = 1000
+cdcparity-kafka  | 	group.consumer.assignors = [uniform, range]
+cdcparity-kafka  | 	group.consumer.heartbeat.interval.ms = 5000
+cdcparity-kafka  | 	group.consumer.max.heartbeat.interval.ms = 15000
+cdcparity-kafka  | 	group.consumer.max.session.timeout.ms = 60000
+cdcparity-kafka  | 	group.consumer.max.size = 2147483647
+cdcparity-kafka  | 	group.consumer.migration.policy = bidirectional
+cdcparity-kafka  | 	group.consumer.min.heartbeat.interval.ms = 5000
+cdcparity-kafka  | 	group.consumer.min.session.timeout.ms = 45000
+cdcparity-kafka  | 	group.consumer.session.timeout.ms = 45000
+cdcparity-kafka  | 	group.coordinator.append.linger.ms = 5
+cdcparity-kafka  | 	group.coordinator.new.enable = true
+cdcparity-kafka  | 	group.coordinator.rebalance.protocols = [classic, consumer]
+cdcparity-kafka  | 	group.coordinator.threads = 4
+cdcparity-kafka  | 	group.initial.rebalance.delay.ms = 0
+cdcparity-kafka  | 	group.max.session.timeout.ms = 1800000
+cdcparity-kafka  | 	group.max.size = 2147483647
+cdcparity-kafka  | 	group.min.session.timeout.ms = 6000
+cdcparity-kafka  | 	group.share.delivery.count.limit = 5
+cdcparity-kafka  | 	group.share.enable = false
+cdcparity-kafka  | 	group.share.heartbeat.interval.ms = 5000
+cdcparity-kafka  | 	group.share.max.groups = 10
+cdcparity-kafka  | 	group.share.max.heartbeat.interval.ms = 15000
+cdcparity-kafka  | 	group.share.max.record.lock.duration.ms = 60000
+cdcparity-kafka  | 	group.share.max.session.timeout.ms = 60000
+cdcparity-kafka  | 	group.share.max.size = 200
+cdcparity-kafka  | 	group.share.min.heartbeat.interval.ms = 5000
+cdcparity-kafka  | 	group.share.min.record.lock.duration.ms = 15000
+cdcparity-kafka  | 	group.share.min.session.timeout.ms = 45000
+cdcparity-kafka  | 	group.share.partition.max.record.locks = 200
+cdcparity-kafka  | 	group.share.persister.class.name = org.apache.kafka.server.share.persister.DefaultStatePersister
+cdcparity-kafka  | 	group.share.record.lock.duration.ms = 30000
+cdcparity-kafka  | 	group.share.session.timeout.ms = 45000
+cdcparity-kafka  | 	initial.broker.registration.timeout.ms = 60000
+cdcparity-kafka  | 	inter.broker.listener.name = null
+cdcparity-kafka  | 	kafka.metrics.polling.interval.secs = 10
+cdcparity-kafka  | 	kafka.metrics.reporters = []
+cdcparity-kafka  | 	leader.imbalance.check.interval.seconds = 300
+cdcparity-kafka  | 	listener.security.protocol.map = CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+cdcparity-kafka  | 	listeners = PLAINTEXT://:9092,CONTROLLER://:9093
+cdcparity-kafka  | 	log.cleaner.backoff.ms = 15000
+cdcparity-kafka  | 	log.cleaner.dedupe.buffer.size = 134217728
+cdcparity-kafka  | 	log.cleaner.delete.retention.ms = 86400000
+cdcparity-kafka  | 	log.cleaner.enable = true
+cdcparity-kafka  | 	log.cleaner.io.buffer.load.factor = 0.9
+cdcparity-kafka  | 	log.cleaner.io.buffer.size = 524288
+cdcparity-kafka  | 	log.cleaner.io.max.bytes.per.second = 1.7976931348623157E308
+cdcparity-kafka  | 	log.cleaner.max.compaction.lag.ms = 9223372036854775807
+cdcparity-kafka  | 	log.cleaner.min.cleanable.ratio = 0.5
+cdcparity-kafka  | 	log.cleaner.min.compaction.lag.ms = 0
+cdcparity-kafka  | 	log.cleaner.threads = 1
+cdcparity-kafka  | 	log.cleanup.policy = [delete]
+cdcparity-kafka  | 	log.dir = /tmp/kafka-logs
+cdcparity-kafka  | 	log.dir.failure.timeout.ms = 30000
+cdcparity-kafka  | 	log.dirs = null
+cdcparity-kafka  | 	log.flush.interval.messages = 9223372036854775807
+cdcparity-kafka  | 	log.flush.interval.ms = null
+cdcparity-kafka  | 	log.flush.offset.checkpoint.interval.ms = 60000
+cdcparity-kafka  | 	log.flush.scheduler.interval.ms = 9223372036854775807
+cdcparity-kafka  | 	log.flush.start.offset.checkpoint.interval.ms = 60000
+cdcparity-kafka  | 	log.index.interval.bytes = 4096
+cdcparity-kafka  | 	log.index.size.max.bytes = 10485760
+cdcparity-kafka  | 	log.initial.task.delay.ms = 30000
+cdcparity-kafka  | 	log.local.retention.bytes = -2
+cdcparity-kafka  | 	log.local.retention.ms = -2
+cdcparity-kafka  | 	log.message.timestamp.after.max.ms = 3600000
+cdcparity-kafka  | 	log.message.timestamp.before.max.ms = 9223372036854775807
+cdcparity-kafka  | 	log.message.timestamp.type = CreateTime
+cdcparity-kafka  | 	log.preallocate = false
+cdcparity-kafka  | 	log.retention.bytes = -1
+cdcparity-kafka  | 	log.retention.check.interval.ms = 300000
+cdcparity-kafka  | 	log.retention.hours = 168
+cdcparity-kafka  | 	log.retention.minutes = null
+cdcparity-kafka  | 	log.retention.ms = null
+cdcparity-kafka  | 	log.roll.hours = 168
+cdcparity-kafka  | 	log.roll.jitter.hours = 0
+cdcparity-kafka  | 	log.roll.jitter.ms = null
+cdcparity-kafka  | 	log.roll.ms = null
+cdcparity-kafka  | 	log.segment.bytes = 1073741824
+cdcparity-kafka  | 	log.segment.delete.delay.ms = 60000
+cdcparity-kafka  | 	max.connection.creation.rate = 2147483647
+cdcparity-kafka  | 	max.connections = 2147483647
+cdcparity-kafka  | 	max.connections.per.ip = 2147483647
+cdcparity-kafka  | 	max.connections.per.ip.overrides = 
+cdcparity-kafka  | 	max.incremental.fetch.session.cache.slots = 1000
+cdcparity-kafka  | 	max.request.partition.size.limit = 2000
+cdcparity-kafka  | 	message.max.bytes = 1048588
+cdcparity-kafka  | 	metadata.log.dir = null
+cdcparity-kafka  | 	metadata.log.max.record.bytes.between.snapshots = 20971520
+cdcparity-kafka  | 	metadata.log.max.snapshot.interval.ms = 3600000
+cdcparity-kafka  | 	metadata.log.segment.bytes = 1073741824
+cdcparity-kafka  | 	metadata.log.segment.min.bytes = 8388608
+cdcparity-kafka  | 	metadata.log.segment.ms = 604800000
+cdcparity-kafka  | 	metadata.max.idle.interval.ms = 500
+cdcparity-kafka  | 	metadata.max.retention.bytes = 104857600
+cdcparity-kafka  | 	metadata.max.retention.ms = 604800000
+cdcparity-kafka  | 	metric.reporters = [org.apache.kafka.common.metrics.JmxReporter]
+cdcparity-kafka  | 	metrics.num.samples = 2
+cdcparity-kafka  | 	metrics.recording.level = INFO
+cdcparity-kafka  | 	metrics.sample.window.ms = 30000
+cdcparity-kafka  | 	min.insync.replicas = 1
+cdcparity-kafka  | 	node.id = 1
+cdcparity-kafka  | 	num.io.threads = 8
+cdcparity-kafka  | 	num.network.threads = 3
+cdcparity-kafka  | 	num.partitions = 1
+cdcparity-kafka  | 	num.recovery.threads.per.data.dir = 2
+cdcparity-kafka  | 	num.replica.alter.log.dirs.threads = null
+cdcparity-kafka  | 	num.replica.fetchers = 1
+cdcparity-kafka  | 	offset.metadata.max.bytes = 4096
+cdcparity-kafka  | 	offsets.commit.timeout.ms = 5000
+cdcparity-kafka  | 	offsets.load.buffer.size = 5242880
+cdcparity-kafka  | 	offsets.retention.check.interval.ms = 600000
+cdcparity-kafka  | 	offsets.retention.minutes = 10080
+cdcparity-kafka  | 	offsets.topic.compression.codec = 0
+cdcparity-kafka  | 	offsets.topic.num.partitions = 50
+cdcparity-kafka  | 	offsets.topic.replication.factor = 1
+cdcparity-kafka  | 	offsets.topic.segment.bytes = 104857600
+cdcparity-kafka  | 	principal.builder.class = class org.apache.kafka.common.security.authenticator.DefaultKafkaPrincipalBuilder
+cdcparity-kafka  | 	process.roles = [broker, controller]
+cdcparity-kafka  | 	producer.id.expiration.check.interval.ms = 600000
+cdcparity-kafka  | 	producer.id.expiration.ms = 86400000
+cdcparity-kafka  | 	producer.purgatory.purge.interval.requests = 1000
+cdcparity-kafka  | 	queued.max.request.bytes = -1
+cdcparity-kafka  | 	queued.max.requests = 500
+cdcparity-kafka  | 	quota.window.num = 11
+cdcparity-kafka  | 	quota.window.size.seconds = 1
+cdcparity-kafka  | 	remote.fetch.max.wait.ms = 500
+cdcparity-kafka  | 	remote.list.offsets.request.timeout.ms = 30000
+cdcparity-kafka  | 	remote.log.index.file.cache.total.size.bytes = 1073741824
+cdcparity-kafka  | 	remote.log.manager.copier.thread.pool.size = 10
+cdcparity-kafka  | 	remote.log.manager.copy.max.bytes.per.second = 9223372036854775807
+cdcparity-kafka  | 	remote.log.manager.copy.quota.window.num = 11
+cdcparity-kafka  | 	remote.log.manager.copy.quota.window.size.seconds = 1
+cdcparity-kafka  | 	remote.log.manager.expiration.thread.pool.size = 10
+cdcparity-kafka  | 	remote.log.manager.fetch.max.bytes.per.second = 9223372036854775807
+cdcparity-kafka  | 	remote.log.manager.fetch.quota.window.num = 11
+cdcparity-kafka  | 	remote.log.manager.fetch.quota.window.size.seconds = 1
+cdcparity-kafka  | 	remote.log.manager.task.interval.ms = 30000
+cdcparity-kafka  | 	remote.log.manager.task.retry.backoff.max.ms = 30000
+cdcparity-kafka  | 	remote.log.manager.task.retry.backoff.ms = 500
+cdcparity-kafka  | 	remote.log.manager.task.retry.jitter = 0.2
+cdcparity-kafka  | 	remote.log.manager.thread.pool.size = 2
+cdcparity-kafka  | 	remote.log.metadata.custom.metadata.max.bytes = 128
+cdcparity-kafka  | 	remote.log.metadata.manager.class.name = org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemoteLogMetadataManager
+cdcparity-kafka  | 	remote.log.metadata.manager.class.path = null
+cdcparity-kafka  | 	remote.log.metadata.manager.impl.prefix = rlmm.config.
+cdcparity-kafka  | 	remote.log.metadata.manager.listener.name = null
+cdcparity-kafka  | 	remote.log.reader.max.pending.tasks = 100
+cdcparity-kafka  | 	remote.log.reader.threads = 10
+cdcparity-kafka  | 	remote.log.storage.manager.class.name = null
+cdcparity-kafka  | 	remote.log.storage.manager.class.path = null
+cdcparity-kafka  | 	remote.log.storage.manager.impl.prefix = rsm.config.
+cdcparity-kafka  | 	remote.log.storage.system.enable = false
+cdcparity-kafka  | 	replica.fetch.backoff.ms = 1000
+cdcparity-kafka  | 	replica.fetch.max.bytes = 1048576
+cdcparity-kafka  | 	replica.fetch.min.bytes = 1
+cdcparity-kafka  | 	replica.fetch.response.max.bytes = 10485760
+cdcparity-kafka  | 	replica.fetch.wait.max.ms = 500
+cdcparity-kafka  | 	replica.high.watermark.checkpoint.interval.ms = 5000
+cdcparity-kafka  | 	replica.lag.time.max.ms = 30000
+cdcparity-kafka  | 	replica.selector.class = null
+cdcparity-kafka  | 	replica.socket.receive.buffer.bytes = 65536
+cdcparity-kafka  | 	replica.socket.timeout.ms = 30000
+cdcparity-kafka  | 	replication.quota.window.num = 11
+cdcparity-kafka  | 	replication.quota.window.size.seconds = 1
+cdcparity-kafka  | 	request.timeout.ms = 30000
+cdcparity-kafka  | 	sasl.client.callback.handler.class = null
+cdcparity-kafka  | 	sasl.enabled.mechanisms = [GSSAPI]
+cdcparity-kafka  | 	sasl.jaas.config = null
+cdcparity-kafka  | 	sasl.kerberos.kinit.cmd = /usr/bin/kinit
+cdcparity-kafka  | 	sasl.kerberos.min.time.before.relogin = 60000
+cdcparity-kafka  | 	sasl.kerberos.principal.to.local.rules = [DEFAULT]
+cdcparity-kafka  | 	sasl.kerberos.service.name = null
+cdcparity-kafka  | 	sasl.kerberos.ticket.renew.jitter = 0.05
+cdcparity-kafka  | 	sasl.kerberos.ticket.renew.window.factor = 0.8
+cdcparity-kafka  | 	sasl.login.callback.handler.class = null
+cdcparity-kafka  | 	sasl.login.class = null
+cdcparity-kafka  | 	sasl.login.connect.timeout.ms = null
+cdcparity-kafka  | 	sasl.login.read.timeout.ms = null
+cdcparity-kafka  | 	sasl.login.refresh.buffer.seconds = 300
+cdcparity-kafka  | 	sasl.login.refresh.min.period.seconds = 60
+cdcparity-kafka  | 	sasl.login.refresh.window.factor = 0.8
+cdcparity-kafka  | 	sasl.login.refresh.window.jitter = 0.05
+cdcparity-kafka  | 	sasl.login.retry.backoff.max.ms = 10000
+cdcparity-kafka  | 	sasl.login.retry.backoff.ms = 100
+cdcparity-kafka  | 	sasl.mechanism.controller.protocol = GSSAPI
+cdcparity-kafka  | 	sasl.mechanism.inter.broker.protocol = GSSAPI
+cdcparity-kafka  | 	sasl.oauthbearer.clock.skew.seconds = 30
+cdcparity-kafka  | 	sasl.oauthbearer.expected.audience = null
+cdcparity-kafka  | 	sasl.oauthbearer.expected.issuer = null
+cdcparity-kafka  | 	sasl.oauthbearer.jwks.endpoint.refresh.ms = 3600000
+cdcparity-kafka  | 	sasl.oauthbearer.jwks.endpoint.retry.backoff.max.ms = 10000
+cdcparity-kafka  | 	sasl.oauthbearer.jwks.endpoint.retry.backoff.ms = 100
+cdcparity-kafka  | 	sasl.oauthbearer.jwks.endpoint.url = null
+cdcparity-kafka  | 	sasl.oauthbearer.scope.claim.name = scope
+cdcparity-kafka  | 	sasl.oauthbearer.sub.claim.name = sub
+cdcparity-kafka  | 	sasl.oauthbearer.token.endpoint.url = null
+cdcparity-kafka  | 	sasl.server.callback.handler.class = null
+cdcparity-kafka  | 	sasl.server.max.receive.size = 524288
+cdcparity-kafka  | 	security.inter.broker.protocol = PLAINTEXT
+cdcparity-kafka  | 	security.providers = null
+cdcparity-kafka  | 	server.max.startup.time.ms = 9223372036854775807
+cdcparity-kafka  | 	share.coordinator.append.linger.ms = 10
+cdcparity-kafka  | 	share.coordinator.load.buffer.size = 5242880
+cdcparity-kafka  | 	share.coordinator.snapshot.update.records.per.snapshot = 500
+cdcparity-kafka  | 	share.coordinator.state.topic.compression.codec = 0
+cdcparity-kafka  | 	share.coordinator.state.topic.min.isr = 2
+cdcparity-kafka  | 	share.coordinator.state.topic.num.partitions = 50
+cdcparity-kafka  | 	share.coordinator.state.topic.prune.interval.ms = 300000
+cdcparity-kafka  | 	share.coordinator.state.topic.replication.factor = 3
+cdcparity-kafka  | 	share.coordinator.state.topic.segment.bytes = 104857600
+cdcparity-kafka  | 	share.coordinator.threads = 1
+cdcparity-kafka  | 	share.coordinator.write.timeout.ms = 5000
+cdcparity-kafka  | 	share.fetch.max.fetch.records = 2147483647
+cdcparity-kafka  | 	share.fetch.purgatory.purge.interval.requests = 1000
+cdcparity-kafka  | 	socket.connection.setup.timeout.max.ms = 30000
+cdcparity-kafka  | 	socket.connection.setup.timeout.ms = 10000
+cdcparity-kafka  | 	socket.listen.backlog.size = 50
+cdcparity-kafka  | 	socket.receive.buffer.bytes = 102400
+cdcparity-kafka  | 	socket.request.max.bytes = 104857600
+cdcparity-kafka  | 	socket.send.buffer.bytes = 102400
+cdcparity-kafka  | 	ssl.allow.dn.changes = false
+cdcparity-kafka  | 	ssl.allow.san.changes = false
+cdcparity-kafka  | 	ssl.cipher.suites = []
+cdcparity-kafka  | 	ssl.client.auth = none
+cdcparity-kafka  | 	ssl.enabled.protocols = [TLSv1.2, TLSv1.3]
+cdcparity-kafka  | 	ssl.endpoint.identification.algorithm = https
+cdcparity-kafka  | 	ssl.engine.factory.class = null
+cdcparity-kafka  | 	ssl.key.password = null
+cdcparity-kafka  | 	ssl.keymanager.algorithm = SunX509
+cdcparity-kafka  | 	ssl.keystore.certificate.chain = null
+cdcparity-kafka  | 	ssl.keystore.key = null
+cdcparity-kafka  | 	ssl.keystore.location = null
+cdcparity-kafka  | 	ssl.keystore.password = null
+cdcparity-kafka  | 	ssl.keystore.type = JKS
+cdcparity-kafka  | 	ssl.principal.mapping.rules = DEFAULT
+cdcparity-kafka  | 	ssl.protocol = TLSv1.3
+cdcparity-kafka  | 	ssl.provider = null
+cdcparity-kafka  | 	ssl.secure.random.implementation = null
+cdcparity-kafka  | 	ssl.trustmanager.algorithm = PKIX
+cdcparity-kafka  | 	ssl.truststore.certificates = null
+cdcparity-kafka  | 	ssl.truststore.location = null
+cdcparity-kafka  | 	ssl.truststore.password = null
+cdcparity-kafka  | 	ssl.truststore.type = JKS
+cdcparity-kafka  | 	telemetry.max.bytes = 1048576
+cdcparity-kafka  | 	transaction.abort.timed.out.transaction.cleanup.interval.ms = 10000
+cdcparity-kafka  | 	transaction.max.timeout.ms = 900000
+cdcparity-kafka  | 	transaction.partition.verification.enable = true
+cdcparity-kafka  | 	transaction.remove.expired.transaction.cleanup.interval.ms = 3600000
+cdcparity-kafka  | 	transaction.state.log.load.buffer.size = 5242880
+cdcparity-kafka  | 	transaction.state.log.min.isr = 1
+cdcparity-kafka  | 	transaction.state.log.num.partitions = 50
+cdcparity-kafka  | 	transaction.state.log.replication.factor = 1
+cdcparity-kafka  | 	transaction.state.log.segment.bytes = 104857600
+cdcparity-kafka  | 	transactional.id.expiration.ms = 604800000
+cdcparity-kafka  | 	unclean.leader.election.enable = false
+cdcparity-kafka  | 	unclean.leader.election.interval.ms = 300000
+cdcparity-kafka  | 	unstable.api.versions.enable = false
+cdcparity-kafka  | 	unstable.feature.versions.enable = false
+cdcparity-kafka  |  (org.apache.kafka.common.config.AbstractConfig)
+cdcparity-kafka  | [2026-10-27 04:05:13,753] INFO [BrokerServer id=1] Waiting for the broker to be unfenced (kafka.server.BrokerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,781] INFO [BrokerLifecycleManager id=1] The broker has been unfenced. Transitioning from RECOVERY to RUNNING. (kafka.server.BrokerLifecycleManager)
+cdcparity-kafka  | [2026-10-27 04:05:13,782] INFO [BrokerServer id=1] Finished waiting for the broker to be unfenced (kafka.server.BrokerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,783] INFO authorizerStart completed for endpoint PLAINTEXT. Endpoint is now READY. (org.apache.kafka.server.network.EndpointReadyFutures)
+cdcparity-kafka  | [2026-10-27 04:05:13,783] INFO [SocketServer listenerType=BROKER, nodeId=1] Enabling request processing. (kafka.network.SocketServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,783] INFO Awaiting socket connections on 0.0.0.0:9092. (kafka.network.DataPlaneAcceptor)
+cdcparity-kafka  | [2026-10-27 04:05:13,784] INFO [BrokerServer id=1] Waiting for all of the authorizer futures to be completed (kafka.server.BrokerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,784] INFO [BrokerServer id=1] Finished waiting for all of the authorizer futures to be completed (kafka.server.BrokerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,784] INFO [BrokerServer id=1] Waiting for all of the SocketServer Acceptors to be started (kafka.server.BrokerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,784] INFO [BrokerServer id=1] Finished waiting for all of the SocketServer Acceptors to be started (kafka.server.BrokerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,784] INFO [BrokerServer id=1] Transition from STARTING to STARTED (kafka.server.BrokerServer)
+cdcparity-kafka  | [2026-10-27 04:05:13,785] INFO Kafka version: 4.0.0 (org.apache.kafka.common.utils.AppInfoParser)
+cdcparity-kafka  | [2026-10-27 04:05:13,785] INFO Kafka commitId: 985bc99521dd22bb (org.apache.kafka.common.utils.AppInfoParser)
+cdcparity-kafka  | [2026-10-27 04:05:13,785] INFO Kafka startTimeMs: 1793073913784 (org.apache.kafka.common.utils.AppInfoParser)
+cdcparity-kafka  | [2026-10-27 04:05:13,786] INFO [KafkaRaftServer nodeId=1] Kafka Server started (kafka.server.KafkaRaftServer)
+ Container cdcparity-kafka Healthy 
+ Container cdcparity-conduit-kafka Starting 
+ Container cdcparity-conduit-kafka Started 
+cdcparity-conduit-kafka  |              ....            
+cdcparity-conduit-kafka  |          .::::::::::.        
+cdcparity-conduit-kafka  |        .:::::‘‘‘‘:::::.      
+cdcparity-conduit-kafka  |       .::::        ::::.     
+cdcparity-conduit-kafka  |  .::::::::          ::::::::.
+cdcparity-conduit-kafka  |  `::::::::          ::::::::‘
+cdcparity-conduit-kafka  |       `::::        ::::‘     
+cdcparity-conduit-kafka  |        `:::::....:::::‘      
+cdcparity-conduit-kafka  |          `::::::::::‘        Conduit v0.22.0-nightly.20261027-9-g5975af5f-dirty linux/amd64
+cdcparity-conduit-kafka  |              ‘‘‘‘            
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mAll 0 tables opened in 0s[0m [36mcomponent=[0mbadger.DB
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mDiscard stats nextEmptySlot: 0[0m [36mcomponent=[0mbadger.DB
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mSet nextTxnTs to 0[0m [36mcomponent=[0mbadger.DB
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mloading processor plugins from directory /app/processors ...[0m [36mcomponent=[0mplugin.processor.standalone.Registry
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [33mWRN[0m [1mcould not read processor plugin directory[0m [36merror=[0m[31m[1m"open /app/processors: no such file or directory"[0m[0m [36mcomponent=[0mplugin.processor.standalone.Registry [36mstack=[0mnull
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mstandalone processor plugins initialized[0m [36mcomponent=[0mplugin.processor.standalone.Registry [36mcount=[0m0 [36mplugin_path=[0m/app/processors
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mbuiltin processor plugins initialized[0m [36mcomponent=[0mplugin.processor.builtin.Registry [36mcount=[0m26
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mambient credentials policy[0m [36mallow_endpoints_count=[0m0 [36mallow_proxy=[0mfalse [36mallow_resources_count=[0m0 [36mcomponent=[0mconnector.AmbientCredentials [36menabled=[0mfalse
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1musing lifecycle service v2[0m
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mprocessors initialized[0m [36mcomponent=[0mprocessor.Service [36mcount=[0m0
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mconnector utilities started[0m [36maddress=[0m127.0.0.1:42201
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mconnector utilities started on 127.0.0.1:42201[0m
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mbuiltin connector plugins initialized[0m [36mcomponent=[0mplugin.connector.builtin.Registry [36mcount=[0m6
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [33mWRN[0m [1mcould not read connector plugin directory[0m [36merror=[0m[31m[1m"open /app/connectors: no such file or directory"[0m[0m [36mcomponent=[0mplugin.connector.standalone.Registry [36mstack=[0mnull
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mstandalone connector plugins initialized[0m [36mcomponent=[0mplugin.connector.standalone.Registry [36mcount=[0m0 [36mplugin_path=[0m/app/connectors
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mconnectors initialized[0m [36mcomponent=[0mconnector.Service [36mcount=[0m0
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mpipelines initialized[0m [36mcomponent=[0mpipeline.Service [36mcount=[0m0
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mpipeline tasks[0m [36mcomponent=[0mlifecycle.Service [36mpipeline_id=[0mcdc-parity-kafka-0 [36mshared=[0m["cdc-parity-kafka-0:cdc-parity-kafka-0:kafka-dest(*funnel.DestinationTask)"] [36msource_id=[0mcdc-parity-kafka-0:cdc-parity-kafka-0:pg-src [36mtasks=[0m["cdc-parity-kafka-0:cdc-parity-kafka-0:pg-src(*funnel.SourceTask)"]
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mdestination connector plugin successfully started[0m [36mcomponent=[0mconnector.Destination [36mconnector_id=[0mcdc-parity-kafka-0:cdc-parity-kafka-0:kafka-dest
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [33mWRN[0m [1mevery role that can connect may call pg_logical_emit_message(boolean, text, text, boolean) and write logical decoding messages into the WAL. The connector's slot identity beacons are authenticated and cannot be forged that way, but as hardening run `REVOKE EXECUTE ON FUNCTION pg_logical_emit_message(boolean, text, text, boolean) FROM PUBLIC` and `GRANT EXECUTE ON FUNCTION pg_logical_emit_message(boolean, text, text, boolean) TO <connector role>`[0m [36mcode=[0mpostgres.source.slot_beacon_public [36mcomponent=[0mplugin [36mconnector_id=[0mcdc-parity-kafka-0:cdc-parity-kafka-0:pg-src [36mplugin_name=[0mbuiltin:postgres [36mplugin_type=[0msource
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mStarting logical replication at 0/1927608[0m [36mcomponent=[0mplugin [36mconnector_id=[0mcdc-parity-kafka-0:cdc-parity-kafka-0:pg-src [36mplugin_name=[0mbuiltin:postgres [36mplugin_type=[0msource [36mpublication=[0mconduit_kafka_pub_0 [36mslot=[0mconduit_kafka_slot_0
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mLogical replication started[0m [36mcomponent=[0mplugin [36mconnector_id=[0mcdc-parity-kafka-0:cdc-parity-kafka-0:pg-src [36mplugin_name=[0mbuiltin:postgres [36mplugin_type=[0msource [36mpublication=[0mconduit_kafka_pub_0 [36mslot=[0mconduit_kafka_slot_0
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1msource connector plugin successfully started[0m [36mcomponent=[0mconnector.Source [36mconnector_id=[0mcdc-parity-kafka-0:cdc-parity-kafka-0:pg-src
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mdestination connector plugin successfully started[0m [36mcomponent=[0mconnector.Destination [36mconnector_id=[0mcdc-parity-kafka-0-dlq-e375ce8509a19e7c
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mpipeline started[0m [36mcomponent=[0mlifecycle.Service [36mpipeline_id=[0mcdc-parity-kafka-0
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mpipeline configs provisioned[0m [36mcomponent=[0mprovisioning.Service [36mcreated=[0m["cdc-parity-kafka-0"] [36mdeleted=[0m[] [36mpipelines_path=[0m/app/pipelines
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mgrpc API started[0m [36maddress=[0m127.0.0.1:8084
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mAPI token authentication is disabled: the loopback-only API accepts any local client; set api.token-file to require a token[0m
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mhttp API started[0m [36maddress=[0m127.0.0.1:8080
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m [1mclick here to navigate to explore the HTTP API: http://localhost:8080/openapi[0m
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:15+00:00[0m [32mINF[0m
+cdcparity-kafka          | [2026-10-27 04:05:16,035] INFO Sent auto-creation request for Set(cdcparitykafka.public.bench_source_0) to the active controller. (kafka.server.DefaultAutoTopicCreationManager)
+cdcparity-kafka          | [2026-10-27 04:05:16,064] INFO [ReplicaFetcherManager on broker 1] Removed fetcher for partitions Set(cdcparitykafka.public.bench_source_0-0) (kafka.server.ReplicaFetcherManager)
+cdcparity-kafka          | [2026-10-27 04:05:16,075] INFO [LogLoader partition=cdcparitykafka.public.bench_source_0-0, dir=/tmp/kafka-logs] Loading producer state till offset 0 (org.apache.kafka.storage.internals.log.UnifiedLog)
+cdcparity-kafka          | [2026-10-27 04:05:16,078] INFO Created log for partition cdcparitykafka.public.bench_source_0-0 in /tmp/kafka-logs/cdcparitykafka.public.bench_source_0-0 with properties {} (kafka.log.LogManager)
+cdcparity-kafka          | [2026-10-27 04:05:16,080] INFO [Partition cdcparitykafka.public.bench_source_0-0 broker=1] No checkpointed highwatermark is found for partition cdcparitykafka.public.bench_source_0-0 (kafka.cluster.Partition)
+cdcparity-kafka          | [2026-10-27 04:05:16,082] INFO [Partition cdcparitykafka.public.bench_source_0-0 broker=1] Log loaded for partition cdcparitykafka.public.bench_source_0-0 with initial high watermark 0 (kafka.cluster.Partition)
+cdcparity-conduit-kafka  | [90m2026-10-27T04:05:16+00:00[0m [33mWRN[0m [1mrecord payloads produced by this connector are not structured and won't be encoded"[0m [36mcomponent=[0mplugin [36mconnector_id=[0mcdc-parity-kafka-0:cdc-parity-kafka-0:pg-src [36mplugin_name=[0mbuiltin:postgres [36mplugin_type=[0msource
+cdcparity-conduit-kafka  | [90m2026-10-27T04:06:36+00:00[0m [32mINF[0m [1mstopping 1 pipelines gracefully[0m [36mcomponent=[0mlifecycle.Service
+cdcparity-conduit-kafka  | [90m2026-10-27T04:06:36+00:00[0m [32mINF[0m [1mgracefully stopping pipeline[0m [36mcomponent=[0mlifecycle.Service [36mpipeline_id=[0mcdc-parity-kafka-0 [36mpipeline_status=[0m1
+cdcparity-conduit-kafka  | [90m2026-10-27T04:06:36+00:00[0m [33mWRN[0m [1mconduit is stopping, stand by for shutdown ...[0m
+cdcparity-conduit-kafka  | [90m2026-10-27T04:06:36+00:00[0m [31mERR[0m [1mreplication exited with an error[0m [36merror=[0m[31m[1m"failed to receive message: receive message failed: context canceled"[0m[0m [36mcomponent=[0mplugin [36mconnector_id=[0mcdc-parity-kafka-0:cdc-parity-kafka-0:pg-src [36mplugin_name=[0mbuiltin:postgres [36mplugin_type=[0msource [36mstack=[0mnull
+cdcparity-conduit-kafka  | [90m2026-10-27T04:06:36+00:00[0m [32mINF[0m [1msource connector plugin successfully torn down[0m [36mcomponent=[0mconnector.Source [36mconnector_id=[0mcdc-parity-kafka-0:cdc-parity-kafka-0:pg-src
+cdcparity-conduit-kafka  | [90m2026-10-27T04:06:36+00:00[0m [33mWRN[0m [1mstop signal received just before starting to process next batch, gracefully stopping without flushing the batch[0m [36mbatch_size=[0m1000 [36mcomponent=[0mfunnel.Worker [36mpipeline_id=[0mcdc-parity-kafka-0 [36mtask_id=[0mcdc-parity-kafka-0:cdc-parity-kafka-0:pg-src
+cdcparity-conduit-kafka  | [90m2026-10-27T04:06:36+00:00[0m [32mINF[0m [1mpipeline source worker stopped[0m [36mcomponent=[0mlifecycle.Service [36mconnector_id=[0mcdc-parity-kafka-0:cdc-parity-kafka-0:pg-src [36mpipeline_id=[0mcdc-parity-kafka-0
+cdcparity-conduit-kafka  | [90m2026-10-27T04:06:36+00:00[0m [32mINF[0m [1mwaiting for pipelines to stop running (time left: 30s)[0m
+cdcparity-conduit-kafka  | [90m2026-10-27T04:06:36+00:00[0m [32mINF[0m [1mdestination connector plugin successfully torn down[0m [36mcomponent=[0mconnector.Destination [36mconnector_id=[0mcdc-parity-kafka-0-dlq-e375ce8509a19e7c
+cdcparity-conduit-kafka  | [90m2026-10-27T04:06:36+00:00[0m [32mINF[0m [1mdestination connector plugin successfully torn down[0m [36mcomponent=[0mconnector.Destination [36mconnector_id=[0mcdc-parity-kafka-0:cdc-parity-kafka-0:kafka-dest
+cdcparity-conduit-kafka  | [90m2026-10-27T04:06:36+00:00[0m [32mINF[0m [1mpipeline stopped[0m [36mcomponent=[0mlifecycle.Service [36mpipeline_id=[0mcdc-parity-kafka-0
+cdcparity-conduit-kafka  | [90m2026-10-27T04:06:36+00:00[0m [32mINF[0m [1mall pipelines stopped gracefully[0m
+cdcparity-conduit-kafka  | [90m2026-10-27T04:06:36+00:00[0m [32mINF[0m [1mLifetime L0 stalled for: 0s[0m [36mcomponent=[0mbadger.DB
+cdcparity-conduit-kafka  | [90m2026-10-27T04:06:36+00:00[0m [32mINF[0m [1m
+cdcparity-conduit-kafka  | Level 0 [ ]: NumTables: 01. Size: 54 KiB of 0 B. Score: 0.00->0.00 StaleData: 0 B Target FileSize: 64 MiB
+cdcparity-conduit-kafka  | Level 1 [ ]: NumTables: 00. Size: 0 B of 10 MiB. Score: 0.00->0.00 StaleData: 0 B Target FileSize: 2.0 MiB
+cdcparity-conduit-kafka  | Level 2 [ ]: NumTables: 00. Size: 0 B of 10 MiB. Score: 0.00->0.00 StaleData: 0 B Target FileSize: 2.0 MiB
+cdcparity-conduit-kafka  | Level 3 [ ]: NumTables: 00. Size: 0 B of 10 MiB. Score: 0.00->0.00 StaleData: 0 B Target FileSize: 2.0 MiB
+cdcparity-conduit-kafka  | Level 4 [ ]: NumTables: 00. Size: 0 B of 10 MiB. Score: 0.00->0.00 StaleData: 0 B Target FileSize: 2.0 MiB
+cdcparity-conduit-kafka  | Level 5 [ ]: NumTables: 00. Size: 0 B of 10 MiB. Score: 0.00->0.00 StaleData: 0 B Target FileSize: 2.0 MiB
+cdcparity-conduit-kafka  | Level 6 [B]: NumTables: 00. Size: 0 B of 10 MiB. Score: 0.00->0.00 StaleData: 0 B Target FileSize: 2.0 MiB
+cdcparity-conduit-kafka  | Level Done[0m [36mcomponent=[0mbadger.DB
+[Kcdcparity-conduit-kafka exited with code 0
+cdcparity-kafka          | [2026-10-27 04:06:36,888] INFO Terminating process due to signal SIGTERM (org.apache.kafka.common.utils.LoggingSignalHandler)
+cdcparity-kafka          | [2026-10-27 04:06:36,892] INFO [BrokerServer id=1] Transition from STARTED to SHUTTING_DOWN (kafka.server.BrokerServer)
+cdcparity-kafka          | [2026-10-27 04:06:36,892] INFO [BrokerServer id=1] shutting down (kafka.server.BrokerServer)
+cdcparity-kafka          | [2026-10-27 04:06:36,893] INFO [BrokerLifecycleManager id=1] Beginning controlled shutdown. (kafka.server.BrokerLifecycleManager)
+cdcparity-kafka          | [2026-10-27 04:06:36,921] INFO [BrokerLifecycleManager id=1] The broker is in PENDING_CONTROLLED_SHUTDOWN state, still waiting for the active controller. (kafka.server.BrokerLifecycleManager)
+cdcparity-kafka          | [2026-10-27 04:06:36,927] INFO [ReplicaFetcherManager on broker 1] Removed fetcher for partitions Set(cdcparitykafka.public.bench_source_0-0) (kafka.server.ReplicaFetcherManager)
+cdcparity-kafka          | [2026-10-27 04:06:36,928] INFO [ReplicaAlterLogDirsManager on broker 1] Removed fetcher for partitions Set(cdcparitykafka.public.bench_source_0-0) (kafka.server.ReplicaAlterLogDirsManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,000] INFO [BrokerLifecycleManager id=1] The controller has asked us to exit controlled shutdown. (kafka.server.BrokerLifecycleManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,000] INFO [BrokerLifecycleManager id=1] beginShutdown: shutting down event queue. (org.apache.kafka.queue.KafkaEventQueue)
+cdcparity-kafka          | [2026-10-27 04:06:37,001] INFO [BrokerLifecycleManager id=1] Transitioning from PENDING_CONTROLLED_SHUTDOWN to SHUTTING_DOWN. (kafka.server.BrokerLifecycleManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,001] INFO [broker-1-to-controller-heartbeat-channel-manager]: Shutting down (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,001] INFO [broker-1-to-controller-heartbeat-channel-manager]: Stopped (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,001] INFO [broker-1-to-controller-heartbeat-channel-manager]: Shutdown completed (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,001] INFO [SocketServer listenerType=BROKER, nodeId=1] Stopping socket server request processors (kafka.network.SocketServer)
+cdcparity-kafka          | [2026-10-27 04:06:37,008] INFO Node to controller channel manager for heartbeat shutdown (kafka.server.NodeToControllerChannelManagerImpl)
+cdcparity-kafka          | [2026-10-27 04:06:37,009] INFO [SocketServer listenerType=BROKER, nodeId=1] Stopped socket server request processors (kafka.network.SocketServer)
+cdcparity-kafka          | [2026-10-27 04:06:37,010] INFO [data-plane Kafka Request Handler on Broker 1], shutting down (kafka.server.KafkaRequestHandlerPool)
+cdcparity-kafka          | [2026-10-27 04:06:37,011] INFO [data-plane Kafka Request Handler on Broker 1], shut down completely (kafka.server.KafkaRequestHandlerPool)
+cdcparity-kafka          | [2026-10-27 04:06:37,012] INFO [ExpirationReaper-0-null]: Shutting down (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,012] INFO [ExpirationReaper-0-null]: Stopped (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,013] INFO [ExpirationReaper-0-null]: Shutdown completed (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,013] INFO [KafkaApi-1] Shutdown complete. (kafka.server.KafkaApis)
+cdcparity-kafka          | [2026-10-27 04:06:37,015] INFO [TransactionCoordinator id=1] Shutting down. (kafka.coordinator.transaction.TransactionCoordinator)
+cdcparity-kafka          | [2026-10-27 04:06:37,016] INFO [Transaction State Manager 1]: Shutdown complete (kafka.coordinator.transaction.TransactionStateManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,016] INFO [TxnMarkerSenderThread-1]: Shutting down (kafka.coordinator.transaction.TransactionMarkerChannelManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,016] INFO [TxnMarkerSenderThread-1]: Shutdown completed (kafka.coordinator.transaction.TransactionMarkerChannelManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,016] INFO [TxnMarkerSenderThread-1]: Stopped (kafka.coordinator.transaction.TransactionMarkerChannelManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,018] INFO [TransactionCoordinator id=1] Shutdown complete. (kafka.coordinator.transaction.TransactionCoordinator)
+cdcparity-kafka          | [2026-10-27 04:06:37,018] INFO [GroupCoordinator id=1] Shutting down. (org.apache.kafka.coordinator.group.GroupCoordinatorService)
+cdcparity-kafka          | [2026-10-27 04:06:37,018] INFO [GroupCoordinator id=1] Closing coordinator runtime. (org.apache.kafka.coordinator.common.runtime.CoordinatorRuntime)
+cdcparity-kafka          | [2026-10-27 04:06:37,019] INFO [group-coordinator-reaper]: Shutting down (org.apache.kafka.server.util.timer.SystemTimerReaper$Reaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,019] INFO [group-coordinator-reaper]: Shutdown completed (org.apache.kafka.server.util.timer.SystemTimerReaper$Reaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,019] INFO [group-coordinator-reaper]: Stopped (org.apache.kafka.server.util.timer.SystemTimerReaper$Reaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,019] INFO [GroupCoordinator id=1] Shutting down event processor. (org.apache.kafka.coordinator.common.runtime.MultiThreadedEventProcessor)
+cdcparity-kafka          | [2026-10-27 04:06:37,019] INFO [group-coordinator-event-processor-2]: Shutting down. Draining the remaining events. (org.apache.kafka.coordinator.common.runtime.MultiThreadedEventProcessor$EventProcessorThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,019] INFO [group-coordinator-event-processor-0]: Shutting down. Draining the remaining events. (org.apache.kafka.coordinator.common.runtime.MultiThreadedEventProcessor$EventProcessorThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,019] INFO [group-coordinator-event-processor-1]: Shutting down. Draining the remaining events. (org.apache.kafka.coordinator.common.runtime.MultiThreadedEventProcessor$EventProcessorThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,019] INFO [group-coordinator-event-processor-3]: Shutting down. Draining the remaining events. (org.apache.kafka.coordinator.common.runtime.MultiThreadedEventProcessor$EventProcessorThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,019] INFO [group-coordinator-event-processor-2]: Shutdown completed (org.apache.kafka.coordinator.common.runtime.MultiThreadedEventProcessor$EventProcessorThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,019] INFO [group-coordinator-event-processor-0]: Shutdown completed (org.apache.kafka.coordinator.common.runtime.MultiThreadedEventProcessor$EventProcessorThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,019] INFO [group-coordinator-event-processor-1]: Shutdown completed (org.apache.kafka.coordinator.common.runtime.MultiThreadedEventProcessor$EventProcessorThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,019] INFO [group-coordinator-event-processor-3]: Shutdown completed (org.apache.kafka.coordinator.common.runtime.MultiThreadedEventProcessor$EventProcessorThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,019] INFO [GroupCoordinator id=1] Event processor closed. (org.apache.kafka.coordinator.common.runtime.MultiThreadedEventProcessor)
+cdcparity-kafka          | [2026-10-27 04:06:37,020] INFO [GroupCoordinator id=1] Coordinator runtime closed. (org.apache.kafka.coordinator.common.runtime.CoordinatorRuntime)
+cdcparity-kafka          | [2026-10-27 04:06:37,021] INFO [GroupCoordinator id=1] Shutdown complete. (org.apache.kafka.coordinator.group.GroupCoordinatorService)
+cdcparity-kafka          | [2026-10-27 04:06:37,021] INFO [AssignmentsManager id=1]KafkaEventQueue#close: shutting down event queue. (org.apache.kafka.queue.KafkaEventQueue)
+cdcparity-kafka          | [2026-10-27 04:06:37,021] INFO [AssignmentsManager id=1] shutting down. (org.apache.kafka.server.AssignmentsManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,021] INFO [broker-1-to-controller-directory-assignments-channel-manager]: Shutting down (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,021] INFO [broker-1-to-controller-directory-assignments-channel-manager]: Shutdown completed (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,021] INFO [broker-1-to-controller-directory-assignments-channel-manager]: Stopped (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,021] INFO Node to controller channel manager for directory-assignments shutdown (kafka.server.NodeToControllerChannelManagerImpl)
+cdcparity-kafka          | [2026-10-27 04:06:37,022] INFO [AssignmentsManager id=1]closed event queue. (org.apache.kafka.queue.KafkaEventQueue)
+cdcparity-kafka          | [2026-10-27 04:06:37,022] INFO [ReplicaManager broker=1] Shutting down (kafka.server.ReplicaManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,022] INFO [LogDirFailureHandler]: Shutting down (kafka.server.ReplicaManager$LogDirFailureHandler)
+cdcparity-kafka          | [2026-10-27 04:06:37,023] INFO [LogDirFailureHandler]: Stopped (kafka.server.ReplicaManager$LogDirFailureHandler)
+cdcparity-kafka          | [2026-10-27 04:06:37,023] INFO [LogDirFailureHandler]: Shutdown completed (kafka.server.ReplicaManager$LogDirFailureHandler)
+cdcparity-kafka          | [2026-10-27 04:06:37,023] INFO [ReplicaFetcherManager on broker 1] shutting down (kafka.server.ReplicaFetcherManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,024] INFO [ReplicaFetcherManager on broker 1] shutdown completed (kafka.server.ReplicaFetcherManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,024] INFO [ReplicaAlterLogDirsManager on broker 1] shutting down (kafka.server.ReplicaAlterLogDirsManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,024] INFO [ReplicaAlterLogDirsManager on broker 1] shutdown completed (kafka.server.ReplicaAlterLogDirsManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,025] INFO [ExpirationReaper-0-null]: Shutting down (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,025] INFO [ExpirationReaper-0-null]: Stopped (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,025] INFO [ExpirationReaper-0-null]: Shutdown completed (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,025] INFO [ExpirationReaper-0-null]: Shutting down (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,025] INFO [ExpirationReaper-0-null]: Shutdown completed (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,025] INFO [ExpirationReaper-0-null]: Stopped (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,026] INFO [ExpirationReaper-0-null]: Shutting down (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,026] INFO [ExpirationReaper-0-null]: Stopped (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,026] INFO [ExpirationReaper-0-null]: Shutdown completed (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,026] INFO [ExpirationReaper-0-null]: Shutting down (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,026] INFO [ExpirationReaper-0-null]: Stopped (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,026] INFO [ExpirationReaper-0-null]: Shutdown completed (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,027] INFO [ExpirationReaper-0-null]: Shutting down (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,027] INFO [ExpirationReaper-0-null]: Shutdown completed (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,027] INFO [ExpirationReaper-0-null]: Stopped (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,027] INFO [ExpirationReaper-0-null]: Shutting down (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,027] INFO [ExpirationReaper-0-null]: Stopped (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,027] INFO [ExpirationReaper-0-null]: Shutdown completed (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,031] INFO [AddPartitionsToTxnSenderThread-1]: Shutting down (kafka.server.AddPartitionsToTxnManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,031] INFO [AddPartitionsToTxnSenderThread-1]: Stopped (kafka.server.AddPartitionsToTxnManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,031] INFO [AddPartitionsToTxnSenderThread-1]: Shutdown completed (kafka.server.AddPartitionsToTxnManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,031] INFO [ReplicaManager broker=1] Shut down completely (kafka.server.ReplicaManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,032] INFO [broker-1-to-controller-alter-partition-channel-manager]: Shutting down (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,032] INFO [broker-1-to-controller-alter-partition-channel-manager]: Stopped (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,032] INFO [broker-1-to-controller-alter-partition-channel-manager]: Shutdown completed (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,032] INFO Node to controller channel manager for alter-partition shutdown (kafka.server.NodeToControllerChannelManagerImpl)
+cdcparity-kafka          | [2026-10-27 04:06:37,033] INFO [broker-1-to-controller-forwarding-channel-manager]: Shutting down (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,033] INFO [broker-1-to-controller-forwarding-channel-manager]: Stopped (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,033] INFO [broker-1-to-controller-forwarding-channel-manager]: Shutdown completed (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,033] INFO Node to controller channel manager for forwarding shutdown (kafka.server.NodeToControllerChannelManagerImpl)
+cdcparity-kafka          | [2026-10-27 04:06:37,034] INFO Shutting down. (kafka.log.LogManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,035] INFO [kafka-log-cleaner-thread-0]: Shutting down (kafka.log.LogCleaner$CleanerThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,035] INFO [kafka-log-cleaner-thread-0]: Stopped (kafka.log.LogCleaner$CleanerThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,035] INFO [kafka-log-cleaner-thread-0]: Shutdown completed (kafka.log.LogCleaner$CleanerThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,041] INFO [ProducerStateManager partition=cdcparitykafka.public.bench_source_0-0] Wrote producer snapshot at offset 1601478 with 1 producer ids in 2 ms. (org.apache.kafka.storage.internals.log.ProducerStateManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,057] INFO Shutdown complete. (kafka.log.LogManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,058] INFO [broker-1-ThrottledChannelReaper-Fetch]: Shutting down (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,058] INFO [broker-1-ThrottledChannelReaper-Fetch]: Stopped (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,058] INFO [broker-1-ThrottledChannelReaper-Fetch]: Shutdown completed (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,059] INFO [broker-1-ThrottledChannelReaper-Produce]: Shutting down (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,059] INFO [broker-1-ThrottledChannelReaper-Produce]: Shutdown completed (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,059] INFO [broker-1-ThrottledChannelReaper-Produce]: Stopped (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,059] INFO [broker-1-ThrottledChannelReaper-Request]: Shutting down (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,059] INFO [broker-1-ThrottledChannelReaper-Request]: Stopped (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,059] INFO [broker-1-ThrottledChannelReaper-Request]: Shutdown completed (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,059] INFO [broker-1-ThrottledChannelReaper-ControllerMutation]: Shutting down (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,059] INFO [broker-1-ThrottledChannelReaper-ControllerMutation]: Stopped (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,059] INFO [broker-1-ThrottledChannelReaper-ControllerMutation]: Shutdown completed (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,060] INFO [SocketServer listenerType=BROKER, nodeId=1] Shutting down socket server (kafka.network.SocketServer)
+cdcparity-kafka          | [2026-10-27 04:06:37,066] INFO [SocketServer listenerType=BROKER, nodeId=1] Shutdown completed (kafka.network.SocketServer)
+cdcparity-kafka          | [2026-10-27 04:06:37,067] INFO Broker and topic stats closed (org.apache.kafka.storage.log.metrics.BrokerTopicStats)
+cdcparity-kafka          | [2026-10-27 04:06:37,067] INFO [share-group-lock-timeout-reaper]: Shutting down (org.apache.kafka.server.util.timer.SystemTimerReaper$Reaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,067] INFO [share-group-lock-timeout-reaper]: Shutdown completed (org.apache.kafka.server.util.timer.SystemTimerReaper$Reaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,067] INFO [share-group-lock-timeout-reaper]: Stopped (org.apache.kafka.server.util.timer.SystemTimerReaper$Reaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,068] INFO [BrokerLifecycleManager id=1] closed event queue. (org.apache.kafka.queue.KafkaEventQueue)
+cdcparity-kafka          | [2026-10-27 04:06:37,068] INFO [client-metrics-reaper]: Shutting down (org.apache.kafka.server.util.timer.SystemTimerReaper$Reaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,068] INFO [client-metrics-reaper]: Stopped (org.apache.kafka.server.util.timer.SystemTimerReaper$Reaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,068] INFO [client-metrics-reaper]: Shutdown completed (org.apache.kafka.server.util.timer.SystemTimerReaper$Reaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,068] INFO [BrokerServer id=1] shut down completed (kafka.server.BrokerServer)
+cdcparity-kafka          | [2026-10-27 04:06:37,069] INFO [BrokerServer id=1] Transition from SHUTTING_DOWN to SHUTDOWN (kafka.server.BrokerServer)
+cdcparity-kafka          | [2026-10-27 04:06:37,069] INFO [ControllerServer id=1] shutting down (kafka.server.ControllerServer)
+cdcparity-kafka          | [2026-10-27 04:06:37,070] INFO [raft-expiration-reaper]: Shutting down (kafka.raft.TimingWheelExpirationService$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,115] INFO [raft-expiration-reaper]: Stopped (kafka.raft.TimingWheelExpirationService$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,115] INFO [raft-expiration-reaper]: Shutdown completed (kafka.raft.TimingWheelExpirationService$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,116] INFO [kafka-1-raft-io-thread]: Shutting down (org.apache.kafka.raft.KafkaRaftClientDriver)
+cdcparity-kafka          | [2026-10-27 04:06:37,116] INFO [RaftManager id=1] Beginning graceful shutdown (org.apache.kafka.raft.KafkaRaftClient)
+cdcparity-kafka          | [2026-10-27 04:06:37,116] INFO [RaftManager id=1] Graceful shutdown completed (org.apache.kafka.raft.KafkaRaftClient)
+cdcparity-kafka          | [2026-10-27 04:06:37,116] INFO [RaftManager id=1] Completed graceful shutdown of RaftClient (org.apache.kafka.raft.KafkaRaftClientDriver)
+cdcparity-kafka          | [2026-10-27 04:06:37,116] INFO [kafka-1-raft-io-thread]: Stopped (org.apache.kafka.raft.KafkaRaftClientDriver)
+cdcparity-kafka          | [2026-10-27 04:06:37,116] INFO [kafka-1-raft-io-thread]: Shutdown completed (org.apache.kafka.raft.KafkaRaftClientDriver)
+cdcparity-kafka          | [2026-10-27 04:06:37,117] INFO [kafka-1-raft-outbound-request-thread]: Shutting down (org.apache.kafka.raft.KafkaNetworkChannel$SendThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,117] INFO [kafka-1-raft-outbound-request-thread]: Shutdown completed (org.apache.kafka.raft.KafkaNetworkChannel$SendThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,117] INFO [kafka-1-raft-outbound-request-thread]: Stopped (org.apache.kafka.raft.KafkaNetworkChannel$SendThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,119] INFO [ProducerStateManager partition=__cluster_metadata-0] Wrote producer snapshot at offset 182 with 0 producer ids in 2 ms. (org.apache.kafka.storage.internals.log.ProducerStateManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,120] INFO [ControllerRegistrationManager id=1 incarnation=gQZsdbm9SoWL4yTkgMAkxA] beginShutdown: shutting down event queue. (org.apache.kafka.queue.KafkaEventQueue)
+cdcparity-kafka          | [2026-10-27 04:06:37,120] INFO [ControllerRegistrationManager id=1 incarnation=gQZsdbm9SoWL4yTkgMAkxA] shutting down. (kafka.server.ControllerRegistrationManager)
+cdcparity-kafka          | [2026-10-27 04:06:37,120] INFO [controller-1-to-controller-registration-channel-manager]: Shutting down (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,120] INFO [controller-1-to-controller-registration-channel-manager]: Shutdown completed (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,120] INFO [controller-1-to-controller-registration-channel-manager]: Stopped (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,121] INFO Node to controller channel manager for registration shutdown (kafka.server.NodeToControllerChannelManagerImpl)
+cdcparity-kafka          | [2026-10-27 04:06:37,121] INFO [ControllerRegistrationManager id=1 incarnation=gQZsdbm9SoWL4yTkgMAkxA] closed event queue. (org.apache.kafka.queue.KafkaEventQueue)
+cdcparity-kafka          | [2026-10-27 04:06:37,121] INFO [controller-1-to-controller-registration-channel-manager]: Shutdown completed (kafka.server.NodeToControllerRequestThread)
+cdcparity-kafka          | [2026-10-27 04:06:37,121] WARN [NodeToControllerChannelManager id=1 name=registration] Attempting to close NetworkClient that has already been closed. (org.apache.kafka.clients.NetworkClient)
+cdcparity-kafka          | [2026-10-27 04:06:37,121] INFO Node to controller channel manager for registration shutdown (kafka.server.NodeToControllerChannelManagerImpl)
+cdcparity-kafka          | [2026-10-27 04:06:37,122] INFO [ControllerRegistrationManager id=1 incarnation=gQZsdbm9SoWL4yTkgMAkxA] closed event queue. (org.apache.kafka.queue.KafkaEventQueue)
+cdcparity-kafka          | [2026-10-27 04:06:37,122] INFO [SocketServer listenerType=CONTROLLER, nodeId=1] Stopping socket server request processors (kafka.network.SocketServer)
+cdcparity-kafka          | [2026-10-27 04:06:37,124] INFO [SocketServer listenerType=CONTROLLER, nodeId=1] Stopped socket server request processors (kafka.network.SocketServer)
+cdcparity-kafka          | [2026-10-27 04:06:37,124] INFO [QuorumController id=1] QuorumController#beginShutdown: shutting down event queue. (org.apache.kafka.queue.KafkaEventQueue)
+cdcparity-kafka          | [2026-10-27 04:06:37,124] INFO [SocketServer listenerType=CONTROLLER, nodeId=1] Shutting down socket server (kafka.network.SocketServer)
+cdcparity-kafka          | [2026-10-27 04:06:37,126] INFO [SocketServer listenerType=CONTROLLER, nodeId=1] Shutdown completed (kafka.network.SocketServer)
+cdcparity-kafka          | [2026-10-27 04:06:37,127] INFO [data-plane Kafka Request Handler on Broker 1], shutting down (kafka.server.KafkaRequestHandlerPool)
+cdcparity-kafka          | [2026-10-27 04:06:37,127] INFO [data-plane Kafka Request Handler on Broker 1], shut down completely (kafka.server.KafkaRequestHandlerPool)
+cdcparity-kafka          | [2026-10-27 04:06:37,127] INFO [ExpirationReaper-0-null]: Shutting down (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,128] INFO [ExpirationReaper-0-null]: Shutdown completed (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,128] INFO [ExpirationReaper-0-null]: Stopped (org.apache.kafka.server.purgatory.DelayedOperationPurgatory$ExpiredOperationReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,128] INFO [controller-1-ThrottledChannelReaper-Fetch]: Shutting down (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,128] INFO [controller-1-ThrottledChannelReaper-Fetch]: Shutdown completed (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,128] INFO [controller-1-ThrottledChannelReaper-Fetch]: Stopped (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,128] INFO [controller-1-ThrottledChannelReaper-Produce]: Shutting down (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,129] INFO [controller-1-ThrottledChannelReaper-Produce]: Shutdown completed (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,129] INFO [controller-1-ThrottledChannelReaper-Produce]: Stopped (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,129] INFO [controller-1-ThrottledChannelReaper-Request]: Shutting down (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,129] INFO [controller-1-ThrottledChannelReaper-Request]: Shutdown completed (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,129] INFO [controller-1-ThrottledChannelReaper-Request]: Stopped (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,129] INFO [controller-1-ThrottledChannelReaper-ControllerMutation]: Shutting down (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,129] INFO [controller-1-ThrottledChannelReaper-ControllerMutation]: Stopped (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,129] INFO [controller-1-ThrottledChannelReaper-ControllerMutation]: Shutdown completed (kafka.server.ClientQuotaManager$ThrottledChannelReaper)
+cdcparity-kafka          | [2026-10-27 04:06:37,129] INFO [QuorumController id=1] closed event queue. (org.apache.kafka.queue.KafkaEventQueue)
+cdcparity-kafka          | [2026-10-27 04:06:37,130] INFO [SharedServer id=1] Stopping SharedServer (kafka.server.SharedServer)
+cdcparity-kafka          | [2026-10-27 04:06:37,130] INFO [MetadataLoader id=1] beginShutdown: shutting down event queue. (org.apache.kafka.queue.KafkaEventQueue)
+cdcparity-kafka          | [2026-10-27 04:06:37,130] INFO [SnapshotGenerator id=1] close: shutting down event queue. (org.apache.kafka.queue.KafkaEventQueue)
+cdcparity-kafka          | [2026-10-27 04:06:37,131] INFO [SnapshotGenerator id=1] closed event queue. (org.apache.kafka.queue.KafkaEventQueue)
+cdcparity-kafka          | [2026-10-27 04:06:37,131] INFO [MetadataLoader id=1] closed event queue. (org.apache.kafka.queue.KafkaEventQueue)
+cdcparity-kafka          | [2026-10-27 04:06:37,131] INFO [SnapshotGenerator id=1] closed event queue. (org.apache.kafka.queue.KafkaEventQueue)
+cdcparity-kafka          | [2026-10-27 04:06:37,131] INFO Metrics scheduler closed (org.apache.kafka.common.metrics.Metrics)
+cdcparity-kafka          | [2026-10-27 04:06:37,131] INFO Closing reporter org.apache.kafka.common.metrics.JmxReporter (org.apache.kafka.common.metrics.Metrics)
+cdcparity-kafka          | [2026-10-27 04:06:37,131] INFO Metrics reporters closed (org.apache.kafka.common.metrics.Metrics)
+cdcparity-kafka          | [2026-10-27 04:06:37,132] INFO App info kafka.server for 1 unregistered (org.apache.kafka.common.utils.AppInfoParser)
+cdcparity-kafka          | [2026-10-27 04:06:37,132] INFO App info kafka.server for 1 unregistered (org.apache.kafka.common.utils.AppInfoParser)
+[Kcdcparity-kafka exited with code 143

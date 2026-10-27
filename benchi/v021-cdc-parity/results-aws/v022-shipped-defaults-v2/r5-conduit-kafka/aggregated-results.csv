@@ -1,0 +1,2 @@
+test,tool,cpu-percentage[cdcparity-postgres],memory-usage[cdcparity-postgres],cpu-percentage[cdcparity-loader],memory-usage[cdcparity-loader]
+cdc-parity,conduit-kafka,33.60,416.87,4.37,8.28
