@@ -302,7 +302,8 @@ func (t *DestinationTask) deferOrdered(ctx context.Context, ack func(context.Con
 // run of them must not wait for more records), or the flush deadline has passed.
 // t.mu must be held.
 func (t *DestinationTask) releasableLocked() bool {
-	if len(t.pending) == 0 {
+	// After a failed flush nothing queued behind it may run (Invariant 3).
+	if len(t.pending) == 0 || t.flushErr != nil {
 		return false
 	}
 	return t.bufferedCount == 0 ||
