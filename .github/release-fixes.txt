@@ -37,5 +37,8 @@ github.com/conduitio/conduit-commons | f26cc49 | logsafe: sanitize record values
 github.com/conduitio/conduit-connector-postgres | 87d8e853 | redact record values in decode errors
 github.com/conduitio/conduit-connector-s3 | 0518355a | redact object keys in errors
 conduit | 36990a32 | guard the mutation gate for the connector and lifecycle packages
-conduit | 9560e356 | persist the arch-v2 batching refusal as Degraded
 conduit | 94f819b0 | pin the deploy examples to conduit v0.21.0
+#
+# v0.21.2 (v0.21.1 was tagged but never built; #3131 was reverted in #3285):
+conduit | 70aabfce | start pipelines that use the default DLQ again
+conduit | 70aabfce | log full records in the generator-log template
