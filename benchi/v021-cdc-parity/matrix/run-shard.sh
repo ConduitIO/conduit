@@ -14,6 +14,9 @@
 set -uo pipefail
 K=${1:?K}; I=${2:?I}; PLAN=${3:?plan}; OUT=${4:?out}
 export MATRIX_SHARD=$I
+# benchi is a terminal UI (bubbletea) run under script(1)'s pty; user data
+# gives it no TERM and no HOME, and it then never starts (shakedown, 2026-10-27).
+export TERM=${TERM:-xterm-256color} HOME=${HOME:-/root}
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../../.." && pwd)
 mkdir -p "$OUT"

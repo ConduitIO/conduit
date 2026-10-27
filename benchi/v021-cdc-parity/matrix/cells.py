@@ -375,13 +375,19 @@ def smoke_cells(cs: list) -> list:
 # The shakedown (review round 2): four cells, smoke-length, on one instance,
 # to flush wiring bugs before the gated smoke. Never results, never a gate.
 SHAKEDOWN_CELLS = ["A2-pg-kafka-p1-b64", "A2-pg-pg-p4-b64", "B-kafka-pg-p1-b64", "G-pg-kafka-kill9"]
+# One arm per wiring path (each side, JSON and Avro, the multi-table and
+# scale-out paths, one tuned Conduit arm), to stay under the $5 cap; the
+# other tuned arms are first exercised by the smoke run.
+SHAKEDOWN_ARMS = {
+    "A2-pg-kafka-p1-b64": ("conduit-avro-s", "connect-avro-s", "dbzserver-avro-s", "conduit-s", "connect-s"),
+    "A2-pg-pg-p4-b64": ("conduit-s", "conduit-t", "connect-avro-s", "dbzserver-avro-s", "dbzserver-avro-xn-s"),
+    "B-kafka-pg-p1-b64": ("conduit-s", "connect-s"),
+    "G-pg-kafka-kill9": ("conduit-avro-s", "connect-avro-s", "dbzserver-avro-s"),
+}
 
 
 def shakedown_cells(cs: list) -> list:
-    # A/A twins are byte-identical to their arm (own slots only): not needed
-    # to test wiring, and dropping them keeps the shakedown under its $5 cap.
-    return [replace(c, plan="shakedown", arms=tuple(a for a in c.arms if not parse_arm(a)[2]))
-            for c in smoke_cells(cs) if c.id in SHAKEDOWN_CELLS]
+    return [replace(c, plan="shakedown", arms=SHAKEDOWN_ARMS[c.id]) for c in smoke_cells(cs) if c.id in SHAKEDOWN_CELLS]
 
 
 CELLS = smoke_cells(build_cells()) if SMOKE else build_cells()
