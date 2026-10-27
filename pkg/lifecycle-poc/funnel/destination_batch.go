@@ -133,6 +133,9 @@ func (t *DestinationTask) doBuffered(ctx context.Context, batch *Batch, acker ac
 	if err := t.flushError(); err != nil {
 		return err
 	}
+	if t.testAfterBufferErrCheck != nil {
+		t.testAfterBufferErrCheck()
+	}
 
 	records := batch.ActiveRecords()
 	if len(records) == 0 {
@@ -159,6 +162,14 @@ func (t *DestinationTask) doBuffered(ctx context.Context, batch *Batch, acker ac
 	}
 
 	t.mu.Lock()
+	// Invariant 3: re-check under the lock that decides. The early check above
+	// is only a fast path; a flush can fail between it and here, and buffering
+	// (then flushing and acking) this batch would move the source past the
+	// batches that flush dropped.
+	if err := t.flushErr; err != nil {
+		t.mu.Unlock()
+		return err
+	}
 	if t.closed {
 		t.mu.Unlock()
 		return cerrors.Errorf("destination %s is closed", t.id)
@@ -230,12 +241,24 @@ func (t *DestinationTask) deferOrdered(ctx context.Context, ack func(context.Con
 	if err := t.flushError(); err != nil {
 		return err
 	}
+	if t.testAfterDeferErrCheck != nil {
+		t.testAfterDeferErrCheck()
+	}
 	if t.flushCh != nil {
 		t.enqueueMu.Lock() // see doBuffered
 		defer t.enqueueMu.Unlock()
 	}
 
 	t.mu.Lock()
+	// Invariant 3: read the flush error in the same critical section that decides
+	// inline-vs-queue. The early check above is only a fast path: a flush that
+	// fails after it releases its slot and records its error atomically
+	// (finishFlush), and this section would otherwise see an idle task and ack
+	// inline past the batch that flush dropped.
+	if err := t.flushErr; err != nil {
+		t.mu.Unlock()
+		return err
+	}
 	if t.closed {
 		// Close runs after every worker has exited; nothing can be ahead.
 		t.mu.Unlock()

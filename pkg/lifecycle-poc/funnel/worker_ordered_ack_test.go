@@ -543,3 +543,73 @@ func TestDestinationTask_FlushFailure_NoIdleWindowBeforeFlushError(t *testing.T)
 		})
 	}
 }
+
+// TestDestinationTask_DeferOrdered_FlushFailsBetweenErrCheckAndDecision: the flush
+// error must be read in the same critical section that decides inline-vs-queue.
+// Checked only up front, a flush that fails afterwards (releasing its slot and
+// recording its error atomically) leaves deferOrdered looking at an idle task
+// with no pending work, and it acks inline past the batch the flush dropped.
+func TestDestinationTask_DeferOrdered_FlushFailsBetweenErrCheckAndDecision(t *testing.T) {
+	for name, pipelined := range map[string]bool{"synchronous": false, "pipelined": true} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+			task := NewBatchingDestinationTask("d", failingWriteDestination{newFakeDestination("d")}, log.Test(t), NoOpConnectorMetrics{}, 2, 0)
+			if pipelined {
+				task.SetPipelined()
+			}
+			is.NoErr(task.Open(ctx))
+			recs := randomRecords(2)
+			is.True(isBuffered(task.doBuffered(ctx, NewBatch(recs[:1]), newRecordingAckNacker(&eventLog{})))) // r0 in flight soon
+
+			var once sync.Once
+			task.testAfterDeferErrCheck = func() {
+				once.Do(func() {
+					// The early check passed (no error yet); now the flush that
+					// carries r0 fails.
+					_ = task.doBuffered(ctx, NewBatch(recs[1:]), newRecordingAckNacker(&eventLog{}))
+					waitForCondition(t, time.Second, func() bool { return task.flushError() != nil })
+					waitForCondition(t, time.Second, func() bool {
+						task.mu.Lock()
+						defer task.mu.Unlock()
+						return task.outstanding == 0
+					})
+				})
+			}
+
+			var ran atomic.Bool
+			err := task.deferOrdered(ctx, func(context.Context) error {
+				ran.Store(true)
+				return nil
+			})
+			is.True(err != nil)  // fails closed
+			is.True(!ran.Load()) // and the ack never ran
+			_ = task.Close(ctx)
+		})
+	}
+}
+
+// TestDestinationTask_DoBuffered_FlushFailsBetweenErrCheckAndBuffering: same
+// window in doBuffered. A batch buffered after a flush failure would be flushed
+// and acked later, moving the source past the batches the failed flush dropped.
+func TestDestinationTask_DoBuffered_FlushFailsBetweenErrCheckAndBuffering(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	task := NewBatchingDestinationTask("d", failingWriteDestination{newFakeDestination("d")}, log.Test(t), NoOpConnectorMetrics{}, 2, 0)
+	is.NoErr(task.Open(ctx))
+	recs := randomRecords(3)
+	is.True(isBuffered(task.doBuffered(ctx, NewBatch(recs[:1]), newRecordingAckNacker(&eventLog{}))))
+
+	var fired atomic.Bool
+	task.testAfterBufferErrCheck = func() {
+		if fired.CompareAndSwap(false, true) {
+			_ = task.doBuffered(ctx, NewBatch(recs[1:2]), newRecordingAckNacker(&eventLog{})) // flush of r0,r1 fails
+		}
+	}
+	err := task.doBuffered(ctx, NewBatch(recs[2:]), newRecordingAckNacker(&eventLog{}))
+	is.True(err != nil) // refused, not buffered
+	task.mu.Lock()
+	is.Equal(len(task.pending), 0)
+	task.mu.Unlock()
+	_ = task.Close(ctx)
+}
