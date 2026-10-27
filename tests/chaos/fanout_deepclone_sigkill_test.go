@@ -332,10 +332,10 @@ func checkFanoutDeepRecords(t *testing.T, phase string, d fanoutDeepDest, recs [
 			}
 			continue
 		}
-		if want := strconv.Itoa(seq * fanoutDeepLineLen); r.Position != want {
+		if off, err := fileSourceOffset(r.Position); err != nil || off != uint64(seq*fanoutDeepLineLen) {
 			bad++
 			if bad <= 3 {
-				t.Errorf("%s: destination %s record %d has position %q, want %q", phase, d.name, seq, r.Position, want)
+				t.Errorf("%s: destination %s record %d has position %q, want offset %d (err %v)", phase, d.name, seq, r.Position, seq*fanoutDeepLineLen, err)
 			}
 		}
 		if diff := cmp.Diff(d.want(seq), r.After); diff != "" {
@@ -472,7 +472,7 @@ func persistedFanoutDeepPosition(t *testing.T, dir string) uint64 {
 		if !ok || len(state.Position) == 0 {
 			return 0
 		}
-		pos, err := strconv.ParseUint(string(state.Position), 10, 64)
+		pos, err := fileSourceOffset(string(state.Position))
 		if err != nil {
 			t.Fatalf("source %s: position %q is not a file offset: %v", id, state.Position, err)
 		}
@@ -570,4 +570,21 @@ func indentYAML(s string, n int) string {
 		lines[i] = pad + l
 	}
 	return strings.Join(lines, "\n")
+}
+
+// fileSourceOffset returns the byte offset in a builtin:file source position.
+// Up to conduit-connector-file v0.10.x a position is the decimal offset; from
+// v0.11.0 it is "v1:<offset>:<dev>:<inode>:<n>:<fingerprint>" with the same
+// offset semantics (the connector's position.go). The invariant checks here
+// only need the offset; the identity fields are the connector's business and
+// are covered by its own restart and rotation tests.
+func fileSourceOffset(pos string) (uint64, error) {
+	if rest, ok := strings.CutPrefix(pos, "v1:"); ok {
+		f := strings.Split(rest, ":")
+		if len(f) != 5 {
+			return 0, fmt.Errorf("v1 position %q: want 5 fields after the prefix, got %d", pos, len(f))
+		}
+		pos = f[0]
+	}
+	return strconv.ParseUint(pos, 10, 64)
 }

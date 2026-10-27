@@ -20,7 +20,6 @@ import (
 	"sync"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
 )
@@ -242,61 +241,4 @@ func (s *Service) recordTakeoverOutcome(ctx context.Context, pipelineID string, 
 	if ok && o.notify {
 		s.notify(pipelineID, o.termErr)
 	}
-}
-
-// recordBootRefusal writes StatusDegraded with refusal as the pipeline error,
-// for a boot-path start (StartOnBoot) that checkDestinationBatching refused
-// (#2989). The caller still holds res, the start's reservation, so no other
-// run of the pipeline can be admitted or published while the write is made
-// (invariant 2), and the write takes the pipeline's status lock like every
-// other status write (R4). Together that orders it before any later run's
-// StatusRunning, never after it.
-//
-// The write is skipped when it would describe the wrong outcome: the
-// reservation is no longer this start's, a Stop arrived while the start was
-// being admitted (the user asked for the pipeline to be stopped), or shutdown
-// has begun (the pipeline keeps StatusSystemStopped and the next boot checks
-// it again). A failed write is logged, not returned: the refusal itself is
-// the error the caller gets.
-//
-// It neither records a terminal error nor notifies OnFailure: no run existed,
-// and exit-on-degraded is for runs that fail, not for a pipeline that was
-// never started. The boot path already logs and returns the refusal.
-func (s *Service) recordBootRefusal(ctx context.Context, pipelineID string, res *reservation, refusal error) {
-	unlock := s.lockStatus(pipelineID)
-	defer unlock()
-
-	s.publishMu.Lock()
-	ok := s.starting[pipelineID] == res && res.stop == nil
-	s.publishMu.Unlock()
-	if !ok || s.isShuttingDown() {
-		return
-	}
-
-	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.runningWriteTimeout())
-	defer cancel()
-	if err := s.pipelines.UpdateStatus(wctx, pipelineID, pipeline.StatusDegraded, bootRefusalMessage(refusal)); err != nil {
-		s.logStatusNotPersisted(ctx, pipelineID, pipeline.StatusDegraded, err)
-		return
-	}
-	s.logger.Warn(ctx).
-		Err(refusal).
-		Str(log.PipelineIDField, pipelineID).
-		Any(log.PipelineStatusField, pipeline.StatusDegraded).
-		Msg("pipeline refused at boot; its status is now degraded with the refusal as the error")
-}
-
-// bootRefusalMessage renders a refusal as the stored pipeline error. The code
-// and the suggestion are included because the stored error is a plain string:
-// it is all `pipelines list` and the API show.
-func bootRefusalMessage(err error) string {
-	ce, ok := conduiterr.Get(err)
-	if !ok {
-		return err.Error()
-	}
-	msg := ce.Code.Reason() + ": " + ce.Message
-	if ce.Suggestion != "" {
-		msg += " (suggestion: " + ce.Suggestion + ")"
-	}
-	return msg
 }

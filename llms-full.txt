@@ -68,7 +68,7 @@ v1 pipeline configs key `pipelines`, `connectors`, and `processors` by map (`pip
 
 ## 2. Built-in connectors (6)
 
-### file (v0.10.10)
+### file (v0.11.0)
 
 A file source and destination plugin for Conduit.
 
@@ -83,11 +83,72 @@ The Destination connector receives records and writes them to a file.
 The Source connector only cares to have a valid path, even if the file
 doesn't exist, it will still run and wait until a file with the configured
 name is there, then it will start listening to changes and sending records.
+The file is followed by the connector itself.
+A line is read once its newline has been written; a record is never a piece
+of a line. A last line without a newline is held until its newline is
+written or the file is rotated or truncated. A graceful stop does not emit
+it either: the position stays at the start of that line and the whole line
+is read after the restart. For writers that never terminate their last line, set
+`quietPeriod` (off by default) and the line is also read once the file has
+not changed for that long.
+A line longer than `maxLineSize` (default 16 MiB) stops the source with
+FILE_LINE_TOO_LONG; lines are never truncated. A path that is not a regular
+file (a FIFO, a device) is refused.
+When the file is rotated (renamed, removed or replaced) the source reads the
+old file until its size has been stable for `rotation.settle` (default 1s):
+a writer that still holds the old file open keeps appending until it is told
+to reopen. Then it reads the new file from its first byte. The old file is
+kept open for a few minutes and read again if it grows once more. When the file
+is truncated (copytruncate) it is read again from its start; lines that
+were written but not yet read when it was truncated now exist only in the
+copy: with `rotatedPattern` the source finds the copy by its first bytes and
+reads them from there, without it the source stops with
+FILE_ROTATION_TAIL_UNREADABLE.
+The source never skips the unread data of a rotated file silently. If it
+cannot account for it, it stops with error code FILE_ROTATION_TAIL_UNREADABLE
+(naming the path and the fix). That happens when the file the saved position
+belongs to cannot be found after a restart (deleted, compressed, moved
+away, or truncated in place), when a file was written between the rotated
+file and the current one that the source never saw at the path (two
+rotations in a row), and when a file is truncated with unread data in it. Set
+`rotatedPattern`, a glob such as `app.log.*`, and the source finds the
+rotation chain itself, orders it by modification time and reads each file
+in turn: the old file's tail, the files in between from their first byte,
+then the current file. A compressed rotated file cannot be read and stops
+the source too. Operators who prefer to continue can set
+`rotation.acceptLoss: true`: the source then logs the same code as a
+warning, with the size of what it skips, and carries on.
+A position records the file's identity (device, inode, a hash of its first
+4 KiB) and the byte offset. On restart the source resumes at the offset if
+the file at the path is that file (same inode, size at least the offset and
+same first bytes; the device number may differ, it changes across remounts); if it was rotated while the connector
+was stopped it finishes the rotated-away file (found by inode next to the
+path, or among the files `rotatedPattern` matches) and then reads the new
+file from its start. Positions written by
+v0.10.x (a bare offset) are accepted if the offset is within the file and
+follows a newline, with a warning (code FILE_POSITION_UNVERIFIABLE) that
+gives the offset, size, inode and modification time, because such a position
+carries no file identity: if the file was rotated while upgrading, the first
+offset bytes of the current file are skipped. Otherwise the source refuses to
+start with error code FILE_POSITION_UNVERIFIABLE. Other codes: FILE_POSITION_INVALID,
+FILE_IDENTITY_UNKNOWN. After the first record, positions are in the new
+format, which v0.10.x cannot read.
 
 **Destination**
 
+> **Output files created by earlier versions stay world-readable (0644).**
+> This version creates them 0600, but it never changes the mode of an
+> existing file: run `chmod 600` on the output files of existing pipelines.
+
 The Destination connector will create the file if it doesn't exist, and
 records with changes will be appended to the destination file when received.
+A file created by the connector is readable and writable by its owner only
+(mode 0600, further restricted by the process umask). The mode of an
+existing file is never changed: **output files created by earlier versions
+are world-readable (0644); run `chmod 600` on them after upgrading.**
+An embedding engine can supply the open function through `file.WithOpener`
+(both the source and the destination use it) and a check for the directories
+the source lists to find rotated files through `file.WithDirChecker`.
 
 Author: Meroxa, Inc.
 
@@ -95,7 +156,12 @@ Author: Meroxa, Inc.
 
 | Key | Type | Default | Required | Description | Validations |
 | --- | --- | --- | --- | --- | --- |
+| `maxLineSize` | int | 16777216 | no | MaxLineSize is the longest line, in bytes, that is read. A longer line stops the source with the error FILE_LINE_TOO_LONG; a line is never truncated. | greater-than(0) |
 | `path` | string |  | yes | Path is the file path used by the connector to read/write records. | required |
+| `quietPeriod` | duration | 0 | no | QuietPeriod is opt-in and off (0) by default. By default the last line of the file, when it has no trailing newline yet, is held until its newline is written, the file is rotated or truncated, or the connector is stopped gracefully, so a record is never a piece of a line. Set a duration to also read such a line once the file has not changed for that long, for writers that never terminate their last line. |  |
+| `rotatedPattern` | string |  | no | RotatedPattern is a glob that matches the rotated files of the path, for example "app.log.*" (relative to the directory of path unless it is absolute). Wildcards are only allowed in the last component, so the directory is literal; an embedding engine may refuse it (file.WithDirChecker). With it the source finds the rotation chain itself, orders it by modification time and reads every file in turn: the tail of the file it was reading, the files rotated in between from their first byte, then the current file. Without it the source stops with the error FILE_ROTATION_TAIL_UNREADABLE when it cannot account for a rotated file's unread tail. Compressed files are not read. |  |
+| `rotation.acceptLoss` | bool | false | no | RotationAcceptLoss makes the source continue, with a warning that names the code and the size of what is skipped, when the unread tail of a rotated file cannot be read, instead of stopping. |  |
+| `rotation.settle` | duration | 1s | no | RotationSettle is how long a rotated file's size must stay unchanged before the source leaves it for the next file. A writer that still holds the old file open (logrotate renames, then signals the program later) keeps appending to it, and those lines are read first. A file that grows again after the source left it is read again for a while. 0 switches at once. |  |
 | `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is read from the source. |  |
 | `sdk.batch.size` | int | 0 | no | Maximum size of batch before it gets read from the source. | greater-than(-1) |
 | `sdk.schema.context.enabled` | bool | true | no | Specifies whether to use a schema context name. If set to false, no schema context name will be used, and schemas will be saved with the subject name specified in the connector (not safe because of name conflicts). |  |
@@ -515,7 +581,7 @@ Author: Meroxa, Inc.
 | `tls.enabled` | bool |  | no | TLSEnabled defines whether TLS is needed to communicate with the Kafka cluster. |  |
 | `topic` | string | {{ index .Metadata "opencdc.collection" }} | no | Topic is the Kafka topic. It can contain a [Go template](https://pkg.go.dev/text/template) that will be executed for each record to determine the topic. By default, the topic is the value of the `opencdc.collection` metadata field. |  |
 
-### log (v0.7.6)
+### log (v0.8.0)
 
 A destination connector that logs all incoming records.
 
@@ -523,14 +589,46 @@ A destination connector that logs all incoming records.
 
 The destination connector logs records using the built-in Conduit logger.
 
-Example log message:
+By default a record is logged **without its key or payload**: only the
+operation, a salted hash of the position (`position_hash`), a salted hash of
+the key (`key_hash`) and an allowlist of metadata keys are written. This keeps
+record data out of logs, which matters because Conduit's default dead-letter
+queue writes through this connector. Set `payload: true` to log the full
+record.
+
+The hashes are HMAC-SHA-256 under a random salt that is generated when the
+connector starts: the same key or position gives the same hash during one run
+(so records can be correlated) and a different one after a restart, and a
+hash cannot be brute-forced offline from the logs alone.
+
+The metadata that is logged as it is: `opencdc.version`,
+`conduit.source.plugin.name`, `conduit.source.plugin.version`,
+`conduit.destination.plugin.name`, `conduit.destination.plugin.version`,
+`conduit.source.connector.id` and `conduit.dlq.nack.node.id`. Processors can
+set the collection and the timestamps from the payload, so `opencdc.collection`
+is logged as a salted hash (`opencdc.collection.hash`), and `opencdc.createdAt`
+and `opencdc.readAt` only when they are integers (otherwise as a hash). The
+value of every other key is dropped and only their number is logged
+(`dropped`). For `conduit.dlq.nack.error` the text is never logged, because
+error text often echoes the value that failed: only a Go qualifier of a known
+package such as `strconv.Atoi` (at most 64 characters, otherwise `redacted`)
+and a salted hash of the text are written.
+
+Example log message (default):
+
+```
+{"level":"info","position_hash":"9c1f...","operation":"create","key_hash":"5f...","metadata":{"opencdc.version":"v1","opencdc.collection.hash":"c04e...","dropped":1}}
+```
+
+Example log message with `payload: true`:
 
 ```
 {"level":"info","record":{"position":"cjI=","operation":"create","metadata":{"foo":"bar","opencdc.version":"v1"},"key":{"my-id-field":1},"payload":{"before":nil,"after":{"my-payload-field":false}}}}
 ```
 
-Note that the `position` field is base64 encoded, same goes for a key or payload
-that contains raw byte data.
+With `payload: true` the full record is logged as before: metadata unfiltered,
+and the `position` field is base64 encoded, same goes for a key or payload that
+contains raw byte data.
 
 Keep in mind that Conduit's log level needs to be configured lower or equal to
 the log level of the connector in order for the records to show up in the logs.
@@ -553,6 +651,7 @@ Author: Meroxa, Inc.
 | --- | --- | --- | --- | --- | --- |
 | `level` | string | info | no | The log level used to log records. | inclusion(trace,debug,info,warn,error) |
 | `message` | string |  | no | Optional message that should be added to the log output of every record. |  |
+| `payload` | bool | false | no | Log the full record, including key and payload. Disabled by default because log output is commonly shipped to systems that are not authorized to read record data (the default Conduit DLQ writes through this connector). When disabled, only a salted hash of the position and of the key, the operation and an allowlist of safe metadata keys are logged; every other metadata value is dropped. |  |
 | `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is written to the destination. |  |
 | `sdk.batch.size` | int | 0 | no | Maximum size of batch before it gets written to the destination. | greater-than(-1) |
 | `sdk.rate.burst` | int | 0 | no | Allow bursts of at most X records (0 or less means that bursts are not limited). Only takes effect if a rate limit per second is set. Note that if `sdk.batch.size` is bigger than `sdk.rate.burst`, the effective batch size will be equal to `sdk.rate.burst`. | greater-than(-1) |
@@ -1809,10 +1908,9 @@ Author: Meroxa, Inc.
 | `orchestrator.redacted_setting_with_other_changes` | InvalidArgument | CodeRedactedSettingWithOtherChanges is raised when an update sends "***" (keep the stored value) for a setting while any other setting in the same update changes: a different value, an added key, or a removed key. A stored value is kept only by a pure round trip, so an update that repoints a host or URL cannot also ask Conduit to send the stored credential there. The update must send real values. |
 | `orchestrator.redacted_setting_without_stored_value` | InvalidArgument | CodeRedactedSettingWithoutStoredValue is raised when an update sends the redacted placeholder "***" for a setting that has no stored value. "***" in an update means "keep the stored value"; with nothing stored there is nothing to keep, and storing "***" itself would silently break the setting. |
 | `pipeline.archv2_destination_batching_unsupported` | FailedPrecondition | CodeArchV2DestinationBatchingUnsupported is returned by Start, and by the live-apply preflight (PreflightPipelineConfig), when a pipeline would run on the preview pipeline architecture v2 (--preview.pipeline-arch-v2) and the dead-letter-queue connector sets sdk.batch.size above 1 (#2979).  Regular destinations are no longer refused by this code: the funnel now batches destination writes itself using the destination's sdk.batch.size/sdk.batch.delay (see docs/design-documents/20261017-funnel-destination-batching.md) and strips the settings from the SDK plugin, so a destination batch can no longer withhold its acks and stall the stop-and-wait loop. The DLQ is not wired through that path, so its SDK destination batching still withholds acks and is refused.  The v2 destination task writes a batch and then waits for every ack of it before the next read. With sdk.batch.size > 1 the SDK destination only enqueues on Write and acks when its batch flushes: when it reaches sdk.batch.size, or sdk.batch.delay after its first record. When a destination batch is larger than the records per write, acks are withheld, and with the default sdk.batch.delay of 0 nothing flushes by time, so the pipeline stops delivering while still reporting Running. With a delay it delivers, but one flush per write (one measurement: 83 rec/s against 56.7k rec/s on the default engine, with one-record reads and a 10ms delay). The classic engine reads acks on their own goroutine and is not affected.  The guard is conservative: any sdk.batch.size above 1 is refused, even where a particular write size would happen to align with the batch. Size 0 or 1, or sdk.batch.delay on its own, is safe (the SDK flushes synchronously at the size). Refusing turns a silent liveness failure into an actionable error. It fires before any connector is opened, so nothing is read and nothing is acked (invariants 1 and 3). Values that do not parse as an integer are left to the plugin's own config validation. The SDK trims keys and values before reading them, so the guard does too.  The error names every offending connector; ConfigPath and Fix address the first one, as a JSON pointer into the pipeline config document (/dead-letter-queue/settings/sdk.batch.size). Remove sdk.batch.size (and sdk.batch.delay) from the dead-letter queue, or run without --preview.pipeline-arch-v2 if the pipeline does not need record fan-out. See docs/operations/archv2-destination-batching.md.  A pipeline created through the API has no config document, so for it the error carries no ConfigPath and no Fix; the message still names the connector id and name and the setting. |
-| `pipeline.archv2_destination_batching_unsupported` | FailedPrecondition | CodeArchV2DestinationBatchingUnsupported is returned by Start, and by the live-apply preflight (PreflightPipelineConfig), when a pipeline would run on the preview pipeline architecture v2 (--preview.pipeline-arch-v2) and a destination connector, or the dead-letter-queue connector, sets sdk.batch.size above 1 (#2979).  The v2 destination task writes a batch and then waits for every ack of it before the next read. With sdk.batch.size > 1 the SDK destination only enqueues on Write and acks when its batch flushes: when it reaches sdk.batch.size, or sdk.batch.delay after its first record. When a destination batch is larger than the records per write, acks are withheld, and with the default sdk.batch.delay of 0 nothing flushes by time, so the pipeline stops delivering while still reporting Running. With a delay it delivers, but one flush per write (one measurement: 83 rec/s against 56.7k rec/s on the default engine, with one-record reads and a 10ms delay). The classic engine reads acks on their own goroutine and is not affected.  The guard is conservative: any sdk.batch.size above 1 is refused, even where a particular write size would happen to align with the batch. Size 0 or 1, or sdk.batch.delay on its own, is safe (the SDK flushes synchronously at the size). Refusing turns a silent liveness failure into an actionable error. It fires before any connector is opened, so nothing is read and nothing is acked (invariants 1 and 3). Values that do not parse as an integer are left to the plugin's own config validation. The SDK trims keys and values before reading them, so the guard does too.  The error names every offending connector; ConfigPath and Fix address the first one, as a JSON pointer into the pipeline config document (/connectors/<index>/settings/sdk.batch.size or /dead-letter-queue/settings/sdk.batch.size). Remove sdk.batch.size (and sdk.batch.delay) from the destination, or run without --preview.pipeline-arch-v2 if the pipeline does not need record fan-out. See docs/operations/archv2-destination-batching.md.  A pipeline created through the API has no config document, so for it the error carries no ConfigPath and no Fix; the message still names the connector id and name and the setting.  Where the refusal is recorded depends on who started the pipeline. A Start through the API returns it to the caller and leaves the pipeline's status untouched. At boot (resuming a pipeline the previous process left running, or provisioning a config pipeline whose status is running) the pipeline is set to Degraded with the refusal, code and suggestion included, as its error, so it shows in `conduit pipelines list` and the API (#2989). A recovery restart refused this way also ends Degraded. A Degraded pipeline is not resumed at the next boot; fix the config and start it again. |
 | `pipeline.config_changing` | Unavailable | CodePipelineConfigChanging is raised when a pipeline start is refused because an update, delete or connector/processor change on that pipeline is writing its config. Starting inside that window would build the run from a half-applied config, or for a pipeline that is being deleted. The change is a short store write, never a node operation. Unavailable: retry the start shortly. |
 | `pipeline.config_persist_unknown` | Unavailable | CodeConfigPersistUnknown is raised when a pipeline create, update or delete could not be confirmed in the pipeline store: the write timed out, was retried once, and timed out again. The store may or may not hold the change, and until the next start this instance's view of the pipeline may differ from it; the next start loads what the store holds. Unavailable: check the database, then get the pipeline after the next start and repeat the change if it is missing. |
-| `pipeline.dlq_not_recoverable` | FailedPrecondition | CodePipelineDLQNotRecoverable is raised when a pipeline's dead-letter queue cannot preserve the record content, so a record routed to it would be unrecoverable (invariant 3: at-least-once, no silent drop). Today that is the built-in log connector without payload:true, which is also the default DLQ; by default it logs only hashes, so a nacked record's key and payload are lost. The operator must configure a destination that stores the record, or set payload:true on builtin:log explicitly. |
+| `pipeline.dlq_not_recoverable` | FailedPrecondition | CodePipelineDLQNotRecoverable is raised when a pipeline's dead-letter queue cannot preserve the record content, so a record routed to it would be unrecoverable (invariant 3: at-least-once, no silent drop). Today that is the built-in log connector without payload:true when nacked records are routed to it (window-nack-threshold above 0, or window-size 0); it logs only hashes, so a nacked record's key and payload are lost. The default DLQ (window-size 1, threshold 0) routes no records and is not refused. The operator must configure a destination that stores the record, set payload:true on builtin:log explicitly, or set the nack threshold to 0 so a nack stops the pipeline instead. |
 | `pipeline.duplicate_source_position` | FailedPrecondition | CodeDuplicateSourcePosition is returned when a single batch read from a source contains two or more records carrying identical position bytes, and that batch is fanned out to multiple destinations.  A position is a record's identity: multiAckNacker keys its per-position unanimity tally on it, and connector.Source.Ack advances the persisted position from it. Two records sharing one position make those two things ambiguous — the tally cannot tell the records apart, so one of them could never reach unanimity, and because positions are released to the source strictly in order (invariant 4), a single unresolvable slot silently stops the WHOLE batch from ever being acked. The pipeline would keep running, reading and writing records, while its source position never advanced and no error was ever surfaced.  Failing loudly here is deliberate. At-least-once is not violated by the stall (nothing is acked, so nothing is lost — the records replay on restart), but a silent, unbounded liveness failure is far worse for an operator than a clear error naming the offending connector behaviour. Emitting duplicate positions within one batch is a connector contract violation, so this is a user-actionable error, not an internal assertion. |
 | `pipeline.empty_source_position` | FailedPrecondition | CodeEmptySourcePosition is returned when a batch about to be acked to the source contains a record with an empty/nil position.  connector.Source.Ack persists State.Position = p[len(p)-1] unconditionally, so acking an empty position OVERWRITES the durable source position with nothing: on restart the source resumes from an empty position — a full re-snapshot for Postgres, offset 0 for file/Kafka. That is an invariant-2 (monotonic, crash-safe positions) violation.  There are two distinct causes, and the suggestion names both because they call for different fixes.  The one reachable today is a SOURCE CONNECTOR emitting a record with an empty position, which is then acked or nacked. Nothing in the read path validates positions, so it reaches Worker.Ack/Worker.Nack unaltered. Like CodeDuplicateSourcePosition, that is a connector contract violation — every record must carry a distinct, non-empty position.  The second is a processor-chain shape: Batch.SplitRecord gives every piece after the first a nil position, so a sub-batch covering only the tail of a split run collapses to nils. On the ack path this is reachable; on the nack path the run ledger currently withholds split members and forwards the run's own non-nil origPos instead, so the guard there is a contract check rather than a live route. |
 | `pipeline.fanout_requires_arch_v2` | FailedPrecondition | CodeFanOutRequiresArchV2 is raised when a processor returns a fan-out result (sdk.MultiRecord — one input record producing N output records, e.g. ai.chunk, split, clone) on the classic default pipeline engine, which is one-record-in-one-record-out and cannot run it. Record fan-out needs the preview engine, pipeline architecture v2 (pkg/lifecycle-poc/funnel), enabled with --preview.pipeline-arch-v2 or preview.pipeline-arch-v2: true; the postgres-pgvector-rag template is one such pipeline. A single pipeline engine that supports record fan-out is planned (design #2971). FailedPrecondition: the pipeline as configured cannot run on this engine. |

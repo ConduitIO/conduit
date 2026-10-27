@@ -70,7 +70,6 @@ working as before.
 
 ## Errors
 
-
 | Code | Symptom | Fix |
 | --- | --- | --- |
 | `config.env_var_not_allowed` | `environment variable X is not in the operator allowlist (env.allow)`, config path `settings.<key>` | Add `X` to `env.allow` and restart. The error never says whether `X` is set. |

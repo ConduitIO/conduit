@@ -15,7 +15,9 @@ funnel-multiack-ack-after-terminal-noop
 funnel-multiack-nack-after-terminal-noop
 funnel-nack-rejects-empty-position
 lifecycle-checkstartable-before-build
+lifecycle-dlq-drops-record-content
 lifecycle-poc-checkstartable-before-build
+lifecycle-poc-dlq-drops-record-content
 lifecycle-poc-waitpipeline-chain
 lifecycle-poc-waitpipeline-last
 lifecycle-waitpipeline-chain

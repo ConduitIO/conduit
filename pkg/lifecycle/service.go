@@ -900,13 +900,13 @@ func (s *Service) checkConnectorsStartable(ctx context.Context, pl *pipeline.Ins
 	return nil
 }
 
-// checkDLQRecoverable refuses a start before any node is built when the
-// pipeline's DLQ would not preserve the record content (the default builtin:log
-// without payload:true, GHSA-m3mw-fpw8-w765). A record routed to such a DLQ is
-// unrecoverable (invariant 3), so the operator must choose a destination that
-// stores the record or opt in to payload:true.
+// checkDLQRecoverable refuses a start before any node is built when nacked
+// records are routed to a DLQ that would not preserve their content
+// (builtin:log without payload:true, GHSA-m3mw-fpw8-w765). A record routed to
+// such a DLQ is acked upstream and unrecoverable (invariant 3). The default DLQ
+// routes no records (pipeline.DLQ.RoutesNacks) and is not refused.
 func (s *Service) checkDLQRecoverable(pl *pipeline.Instance) error {
-	if !pl.DLQ.LogsWithoutPayload() {
+	if !pl.DLQ.DropsRecordContent() {
 		return nil
 	}
 	err := conduiterr.Wrap(
@@ -915,8 +915,8 @@ func (s *Service) checkDLQRecoverable(pl *pipeline.Instance) error {
 		cerrors.New("DLQ would drop record content"),
 	)
 	err.Suggestion = "configure a DLQ destination that stores the record (a connector other than builtin:log), " +
-		"or set payload:true on the builtin:log DLQ to write the full record to the log; " +
-		"the default DLQ is refused because a nacked record would otherwise be unrecoverable"
+		"set payload:true on the builtin:log DLQ to write the full record to the log, " +
+		"or set window-nack-threshold to 0 so a nacked record stops the pipeline instead of being acked"
 	return err
 }
 
@@ -928,6 +928,7 @@ func (s *Service) buildNodes(ctx context.Context, pl *pipeline.Instance) ([]stre
 	}
 	// Invariant 3 (GHSA-m3mw-fpw8-w765): a DLQ that cannot preserve the record
 	// would silently drop nacked records; refuse before anything is built.
+	// guard: lifecycle-dlq-drops-record-content tests=^TestService_StartRefusedWhenDLQLogsWithoutPayload$
 	if err := s.checkDLQRecoverable(pl); err != nil {
 		return nil, err
 	}

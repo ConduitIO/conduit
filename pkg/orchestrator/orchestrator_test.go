@@ -17,9 +17,12 @@ package orchestrator
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"reflect"
+	"regexp"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -207,18 +210,38 @@ func TestPipelineSimple(t *testing.T) {
 	is.NoErr(err)
 	t.Log("successfully stopped pipeline")
 
-	want := `{"position":"Mg==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt"},"key":"MQ==","payload":{"before":null,"after":"MQ=="}}
-{"position":"NA==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt"},"key":"Mg==","payload":{"before":null,"after":"Mg=="}}
-{"position":"Ng==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt"},"key":"Mw==","payload":{"before":null,"after":"Mw=="}}
-{"position":"OA==","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt"},"key":"NA==","payload":{"before":null,"after":"NA=="}}
-{"position":"MTA=","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt"},"key":"NQ==","payload":{"before":null,"after":"NQ=="}}
+	// The file source writes a versioned position from conduit-connector-file
+	// v0.11.0: "v1:<offset>:<dev>:<inode>:<n>:<sha256>". The device and inode
+	// differ per machine, so each position is checked by its offset and then
+	// cleared before the rest of the record is compared.
+	wantOffsets := []string{"2", "4", "6", "8", "10"}
+	want := `{"position":"","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt"},"key":"MQ==","payload":{"before":null,"after":"MQ=="}}
+{"position":"","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt"},"key":"Mg==","payload":{"before":null,"after":"Mg=="}}
+{"position":"","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt"},"key":"Mw==","payload":{"before":null,"after":"Mw=="}}
+{"position":"","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt"},"key":"NA==","payload":{"before":null,"after":"NA=="}}
+{"position":"","operation":"create","metadata":{"conduit.source.connector.id":"%[1]v","file.path":"./fixtures/file-source.txt"},"key":"NQ==","payload":{"before":null,"after":"NQ=="}}
 `
 	want = fmt.Sprintf(want, conn.ID)
 
 	// make sure destination file matches source file
 	got, err := os.ReadFile(destinationPath)
 	is.NoErr(err)
-	if diff := cmp.Diff(want, string(got)); diff != "" {
+	positionRe := regexp.MustCompile(`"position":"([^"]*)"`)
+	i := 0
+	gotCleared := positionRe.ReplaceAllStringFunc(string(got), func(m string) string {
+		enc := positionRe.FindStringSubmatch(m)[1]
+		pos, decErr := base64.StdEncoding.DecodeString(enc)
+		is.NoErr(decErr)
+		is.True(i < len(wantOffsets))
+		prefix := "v1:" + wantOffsets[i] + ":"
+		if !strings.HasPrefix(string(pos), prefix) {
+			t.Errorf("record %d position %q, want prefix %q", i, pos, prefix)
+		}
+		i++
+		return `"position":""`
+	})
+	is.Equal(i, len(wantOffsets))
+	if diff := cmp.Diff(want, gotCleared); diff != "" {
 		t.Fatal(diff)
 	}
 }

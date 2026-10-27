@@ -1,1 +1,8 @@
-{ "gitignore": true }
+{
+  "gitignore": true,
+  // Merged ADRs are immutable (CLAUDE.md, "Repo conventions"); one merged with
+  // a lint error is excluded rather than edited.
+  "ignores": [
+    "docs/architecture-decision-records/20261021-deny-by-default-settings-and-outbound-access.md"
+  ]
+}

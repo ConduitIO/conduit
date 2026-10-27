@@ -16,6 +16,7 @@ package webhook
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -51,7 +52,11 @@ func TestHTTPProcessor_RedirectToBlockedTargetIsRefused(t *testing.T) {
 
 			ctx := context.Background()
 			p := NewHTTPProcessor(log.Test(t))
-			p.SetDialGuard(egresstest.Guard(t, redirector))
+			// Resolve the numeric spellings the way getaddrinfo does (to
+			// loopback) instead of with the host's resolver: Go's own resolver
+			// sends "2130706433" to DNS, where it fails with an uncoded error
+			// instead of reaching the guard, so the case depended on the OS.
+			p.SetDialGuard(egresstest.Guard(t, redirector).WithResolver(numericLoopbackResolver{}))
 			is.NoErr(p.Configure(ctx, config.Config{"request.url": redirector.URL}))
 
 			out := p.Process(ctx, []opencdc.Record{{}})
@@ -77,4 +82,16 @@ func TestHTTPProcessor_OperatorExemptionWorks(t *testing.T) {
 	_, ok := out[0].(sdk.SingleRecord)
 	is.True(ok)
 	is.Equal(hits.Load(), int64(1))
+}
+
+// numericLoopbackResolver answers the decimal spelling of 127.0.0.1 with the
+// loopback address, as a system resolver (getaddrinfo) does, and resolves
+// every other name with the default resolver.
+type numericLoopbackResolver struct{}
+
+func (numericLoopbackResolver) LookupIP(ctx context.Context, host string) ([]net.IP, error) {
+	if host == "2130706433" {
+		return []net.IP{net.IPv4(127, 0, 0, 1)}, nil
+	}
+	return net.DefaultResolver.LookupIP(ctx, "ip", host)
 }
