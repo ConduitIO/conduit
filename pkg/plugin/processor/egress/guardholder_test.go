@@ -41,7 +41,8 @@ func TestGuardHolder_DefaultBlocksThenExempts(t *testing.T) {
 	c := h.HTTPClient()
 	is.True(c == h.HTTPClient()) // built once and reused
 	_, err := guardedGet(t, c, srv.URL)
-	is.True(err != nil) // default guard refuses loopback
+	is.True(err != nil)                                                   // default guard refuses loopback
+	is.True(strings.Contains(err.Error(), "refused by the egress guard")) // the guard refused it, not a network error
 
 	e, err := ParseAllowEntry("http://" + srv.Listener.Addr().String())
 	is.NoErr(err)
@@ -87,7 +88,7 @@ func TestErrorMessages(t *testing.T) {
 	is.Equal(dnsErr.Unwrap(), error(inner))
 }
 
-// get issues a GET with a context and closes the body, so a refused request
+// guardedGet issues a GET with a context and closes the body, so a refused request
 // returns only its error.
 func guardedGet(t *testing.T, c *http.Client, url string) (int, error) {
 	t.Helper()

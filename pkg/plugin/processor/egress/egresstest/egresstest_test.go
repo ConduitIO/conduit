@@ -18,6 +18,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit/pkg/plugin/processor/egress/egresstest"
@@ -40,7 +41,8 @@ func TestGuard_ExemptsOnlyTheServer(t *testing.T) {
 	is.Equal(status, http.StatusNoContent)
 
 	_, err = get(t, c, other.URL)
-	is.True(err != nil) // a different loopback port is not exempt
+	is.True(err != nil)                                                   // a different loopback port is not exempt
+	is.True(strings.Contains(err.Error(), "refused by the egress guard")) // the guard refused it, not a network error
 }
 
 // TestMustGuardForAddr builds a guard for a valid address and panics on a
