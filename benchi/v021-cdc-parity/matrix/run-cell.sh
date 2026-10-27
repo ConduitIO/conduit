@@ -140,6 +140,7 @@ start_watch() { # run_dir label
       sleep 60
       mkdir -p "$1/live"
       docker ps -a --filter name=cdcparity --format '{{.Names}} {{.Status}}' > "$1/live/ps.txt" 2>&1
+      ps -eo pid,pgid,tpgid,stat,etime,args | grep -E 'benchi|script|timeout|docker compose' | grep -v grep > "$1/live/procs.txt" 2>&1
       for c in $(docker ps -a --filter name=cdcparity --format '{{.Names}}'); do
         docker logs --tail 300 "$c" > "$1/live/$c.log" 2>&1
       done
@@ -165,7 +166,10 @@ run_benchi() { # label arm diag
   local slack=1200; [ "${MATRIX_SMOKE:-0}" = 1 ] && slack=600
   local cap=$(( $(meta run_seconds) + slack + 3600 * $( [ "$MODE" = snapshot ] || [ "$MODE" = correct ] && echo 1 || echo 0) ))
   # -k: if benchi does not exit within 60 s of SIGTERM (a hung cleanup), KILL it.
-  (cd "$rd/cfg" && with_tty "$rd/benchi-tty.log" timeout -k 60 "$cap" "$BENCHI" -config bench.yml -tool "$arm" -out "$rd/benchi" </dev/null >"$rd/benchi-stdout.log" 2>&1)
+  # --foreground: timeout must leave benchi in the pty's foreground process
+  # group; otherwise its terminal UI's first read gets SIGTTIN and it stops
+  # (the shakedown's runs hung exactly so).
+  (cd "$rd/cfg" && with_tty "$rd/benchi-tty.log" timeout --foreground -k 60 "$cap" "$BENCHI" -config bench.yml -tool "$arm" -out "$rd/benchi" </dev/null >"$rd/benchi-stdout.log" 2>&1)
   local rc=$?
   stop_watch
   # Whatever benchi left behind (a killed cleanup) must not leak into the next run.
