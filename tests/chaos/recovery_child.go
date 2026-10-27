@@ -597,6 +597,13 @@ func (p *recoverySourcePlugin) Run(ctx context.Context, stream pconnector.Source
 // further records ever produced by this process. That is a hard ceiling on
 // how far this process can get, which is what lets a parent test SIGKILL it
 // mid-run without racing it - see lcChildConfig.holdAt.
+// lcProduced is the highest position this process's source plugin has sent.
+// The graceful child uses it, when destination batching is on, to know the
+// source has produced everything before it stops: a trailing partial batch has
+// no flush timer, so it is flushed and acked by Worker.Stop's drain (#3231), and
+// the source cannot be waited on to ack through total beforehand.
+var lcProduced atomic.Uint64
+
 func (p *recoverySourcePlugin) produceLoop(inmemStream *builtin.InMemorySourceRunStream, server pconnector.SourceRunStreamServer, start uint64) {
 	pos := start
 	for {
@@ -615,6 +622,7 @@ func (p *recoverySourcePlugin) produceLoop(inmemStream *builtin.InMemorySourceRu
 		p.mu.Lock()
 		p.lastSent = rec.Position
 		p.mu.Unlock()
+		lcProduced.Store(pos)
 		printProgress("READ", pos)
 
 		if p.total > 0 && pos >= p.total {
@@ -1118,6 +1126,19 @@ func waitForLCTotalAcked(instance *connector.Instance, total uint64, timeout tim
 	os.Exit(exitOpenOtherError)
 }
 
+// waitForLCProduced blocks until the source plugin has sent position total.
+func waitForLCProduced(total uint64, timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if lcProduced.Load() >= total {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	fmt.Fprintf(os.Stderr, "%s: timed out waiting for source to produce position %d\n", markerFatal, total)
+	os.Exit(exitOpenOtherError)
+}
+
 // lcEngine is the part of the two lifecycle services (pkg/lifecycle and
 // pkg/lifecycle-poc) runChildLifecycle drives.
 type lcEngine interface {
@@ -1215,7 +1236,15 @@ func runChildLifecycle() {
 	// that proves the pipeline finishes end-to-end (invariant 3,
 	// at-least-once) despite the earlier kill. Resumes from whatever position
 	// was durably persisted by the killed process and runs to cfg.total.
-	waitForLCTotalAcked(built.sourceInstance, cfg.total, 30*time.Second)
+	if cfg.destBatchSize > 0 {
+		// Batched: the trailing partial batch is acked by Stop's drain, so wait
+		// for production (then a short settle for the worker to read it) rather
+		// than for the ack. waitForUpstreamCommitted below is the real check.
+		waitForLCProduced(cfg.total, 30*time.Second)
+		time.Sleep(300 * time.Millisecond)
+	} else {
+		waitForLCTotalAcked(built.sourceInstance, cfg.total, 30*time.Second)
+	}
 
 	if err := ls.Stop(ctx, built.pipelineID, false); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: stop failed: %v\n", markerFatal, err)

@@ -55,9 +55,14 @@ var errBuffered = cerrors.New("(internal) records buffered, awaiting flush")
 // pendingBatch is one source batch whose records are buffered, awaiting flush.
 // It carries the source *Batch (to mark per-record nacks and to ack/nack) and
 // the ackNacker that would have acked it had it been written immediately.
+//
+// A pendingBatch with a non-nil done channel carries no records: it is a drain
+// barrier (see Drain) that the flusher closes once every earlier pendingBatch
+// has been written and acked.
 type pendingBatch struct {
 	batch *Batch
 	acker ackNacker
+	done  chan struct{}
 }
 
 // flushSpan is one pending batch's contiguous range in the concatenated record
@@ -188,6 +193,9 @@ func (t *DestinationTask) flushPending(ctx context.Context, pending []pendingBat
 	var records []opencdc.Record
 	var positions []opencdc.Position
 	for _, p := range pending {
+		if p.done != nil {
+			continue // drain barrier, no records
+		}
 		active := p.batch.ActiveRecords()
 		if len(active) == 0 {
 			continue // filtered-only batch: acked after the write below
@@ -227,6 +235,9 @@ func (t *DestinationTask) flushPending(ctx context.Context, pending []pendingBat
 	// Ack/nack every pending batch in source order, including filtered-only
 	// batches (their records were filtered, not written).
 	for _, p := range pending {
+		if p.done != nil {
+			continue // drain barrier, closed by the flusher after this returns
+		}
 		if err := t.ackPending(ctx, p); err != nil {
 			return err
 		}
@@ -323,12 +334,84 @@ func (t *DestinationTask) runFlusher(ctx context.Context) {
 			if !ok {
 				return // channel closed by Close after the trailing flush
 			}
-			if err := t.flushPending(ctx, pending); err != nil {
+			err := t.flushPending(ctx, pending)
+			if err != nil {
 				t.setFlushErr(err)
 				return
 			}
+			for _, p := range pending {
+				if p.done != nil {
+					close(p.done)
+				}
+			}
 		}
 	}
+}
+
+// Drain writes everything this task has buffered and waits until the
+// destination has acked it and the source acks have been issued. It returns the
+// flusher's error if a flush failed (the records then replay on restart).
+//
+// Invariant 1/7 (enforcement site): Worker.Stop calls it BEFORE it tears the
+// source down. Close drains the same buffers, but only after every worker has
+// exited and the source is gone, so the source acks it issues fail with
+// plugin.ErrPluginNotRunning and the records, though durably written, replay on
+// restart as duplicates (#3231). Draining first lets those acks land.
+//
+// On the synchronous path (no flusher) Drain flushes on the calling goroutine;
+// the caller must hold whatever serialises entry to the destination (see
+// Worker.drainDestinations). Safe to call repeatedly and concurrently with
+// doBuffered; a task already closed is a no-op.
+func (t *DestinationTask) Drain(ctx context.Context) error {
+	if !t.batchingEnabled() {
+		return nil
+	}
+	if t.flushCh == nil {
+		return t.flush(ctx)
+	}
+
+	done := make(chan struct{})
+	t.mu.Lock()
+	if t.closed {
+		t.mu.Unlock()
+		return nil
+	}
+	toFlush := make([]pendingBatch, 0, len(t.pending)+1)
+	toFlush = append(toFlush, t.pending...)
+	toFlush = append(toFlush, pendingBatch{done: done})
+	t.pending = nil
+	t.bufferedCount = 0
+	t.flushDeadline = time.Time{}
+	t.mu.Unlock()
+
+	select {
+	case t.flushCh <- toFlush:
+	case <-t.flusherDone:
+		return t.drainStopped(len(toFlush) - 1)
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	select {
+	case <-done:
+		return nil
+	case <-t.flusherDone:
+		select {
+		case <-done:
+			return nil
+		default:
+		}
+		return t.drainStopped(len(toFlush) - 1)
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// drainStopped is the error for a Drain that found the flusher already dead.
+func (t *DestinationTask) drainStopped(batches int) error {
+	if err := t.flushError(); err != nil {
+		return err
+	}
+	return cerrors.Errorf("destination %s flusher stopped before draining %d buffered batches", t.id, batches)
 }
 
 // stopFlusher drains and stops the flusher goroutine before teardown. It is

@@ -14,6 +14,7 @@ funnel-fanout-whole-runs-only
 funnel-multiack-ack-after-terminal-noop
 funnel-multiack-nack-after-terminal-noop
 funnel-nack-rejects-empty-position
+funnel-stop-drains-before-teardown
 lifecycle-checkstartable-before-build
 lifecycle-dlq-drops-record-content
 lifecycle-poc-checkstartable-before-build

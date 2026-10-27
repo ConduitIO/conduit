@@ -250,10 +250,50 @@ func (w *Worker) Stop(ctx context.Context) error {
 	// TestServiceLifecycle_PipelineStop flaking with "failed to read from
 	// source: plugin is not running").
 	w.stop.Store(true)
+	// Invariant 1/7 (enforcement site, #3231): flush and ack everything the
+	// destinations hold BEFORE the source goes away; afterwards every source ack
+	// fails with plugin.ErrPluginNotRunning and the written records replay.
+	// guard: funnel-stop-drains-before-teardown tests=^TestWorker_Stop_DrainsDestinationBeforeSourceTeardown$
+	w.drainDestinationsBeforeTeardown(ctx)
 	if err := w.tearDownSource(ctx); err != nil {
 		return cerrors.Errorf("failed to tear down source: %w", err)
 	}
 	return nil
+}
+
+// drainDestinationsBeforeTeardown flushes every batching destination below this
+// worker and waits for its source acks, so they are issued while the source is
+// still running. A drain failure is logged, not returned: the records were not
+// acked and replay on restart (at-least-once), and teardown must still run.
+func (w *Worker) drainDestinationsBeforeTeardown(ctx context.Context) {
+	if err := drainNode(ctx, w.FirstTask, nil); err != nil {
+		w.logger.Err(ctx, err).Msg("failed to drain buffered records before source teardown (records replay on restart)")
+	}
+}
+
+// drainNode drains the batching destinations at and below n. A synchronous
+// (non-pipelined) drain writes on the calling goroutine, so it takes the
+// outermost shared-boundary mutex on the way down, the same lock doTask holds
+// around a pass through a shared destination; a pipelined drain goes through
+// the flusher goroutine, which already serialises the destination.
+func drainNode(ctx context.Context, n *TaskNode, shared *sync.Mutex) error {
+	if n.sharedBoundary && shared == nil {
+		shared = n.sharedMu
+	}
+	var errs []error
+	if dt, ok := n.Task.(*DestinationTask); ok && dt.batchingEnabled() {
+		if shared != nil && dt.flushCh == nil {
+			shared.Lock()
+			errs = append(errs, dt.Drain(ctx))
+			shared.Unlock()
+		} else {
+			errs = append(errs, dt.Drain(ctx))
+		}
+	}
+	for _, next := range n.Next {
+		errs = append(errs, drainNode(ctx, next, shared))
+	}
+	return cerrors.Join(errs...)
 }
 
 // Stopping reports whether this worker has armed its stop — i.e. w.stop was set
@@ -641,6 +681,7 @@ func (w *Worker) doTaskAttempt(
 			// as long as any sibling worker is still running. See
 			// docs/design-documents/20260801-archv2-multiconnector-nsource.md.
 			w.stop.Store(true)
+			w.drainDestinationsBeforeTeardown(ctx)
 			if tdErr := w.tearDownSource(ctx); tdErr != nil {
 				return cerrors.Errorf("source finished but failed to tear down: %w", tdErr)
 			}
