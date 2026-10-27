@@ -450,3 +450,49 @@ func TestWorker_ProcessorNack_DLQDisabled_FailsPipelineOnStop(t *testing.T) {
 	is.True(err != nil)
 	is.True(isDeferredAckError(err))
 }
+
+// failingWriteDestination fails every Write.
+type failingWriteDestination struct{ *fakeDestination }
+
+func (failingWriteDestination) Write(context.Context, []opencdc.Record) error {
+	return cerrors.New("destination unavailable")
+}
+
+// TestWorker_NSource_SyncFlushFailure_SiblingOrderedAckFailsClosed: on a shared
+// synchronous destination a flush failure drops the batches it took, which can
+// include a sibling's, and poisons the shared node. doTask checks the poison on
+// entry, but the ordered-ack path (ackInOrder -> deferOrdered) is reached from
+// the sibling's own source-side processors, outside the shared lock, and used to
+// ack inline: Source.Ack then persisted a position past the dropped batch.
+func TestWorker_NSource_SyncFlushFailure_SiblingOrderedAckFailsClosed(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Test(t)
+	recs := randomRecords(3) // s2a (buffered), s1a (triggers the failing flush), s2b (filtered)
+
+	dt := NewBatchingDestinationTask("dest", failingWriteDestination{newFakeDestination("dest")}, logger, NoOpConnectorMetrics{}, 2, 0)
+	destNode := &TaskNode{Task: dt}
+	destNode.MarkSharedBoundary()
+	mk := func(id string) (*Worker, *fakeSource, *TaskNode) {
+		src := newFakeSource(id, nil)
+		sn := &TaskNode{Task: NewSourceTask(id, src, logger, NoOpConnectorMetrics{}), Next: []*TaskNode{destNode}}
+		dlq := NewDLQ("dlq-"+id, newFakeDestination("dlq"), logger, NoOpConnectorMetrics{}, 10, 10)
+		w, err := NewWorker(sn, dlq, logger, noop.Timer{})
+		is.NoErr(err)
+		return w, src, sn
+	}
+	w1, _, _ := mk("s1")
+	w2, src2, n2 := mk("s2")
+
+	is.NoErr(w2.doTask(ctx, destNode, NewBatch(recs[:1]), newRunAckNacker(w2))) // s2a buffered
+	err := w1.doTask(ctx, destNode, NewBatch(recs[1:2]), newRunAckNacker(w1))   // flush of [s2a, s1a] fails
+	is.True(err != nil)
+	is.True(destNode.poisoned.Load())
+
+	// s2's next batch is fully filtered by its source-side processor.
+	err = w2.ackInOrder(ctx, n2, func(ctx context.Context) error {
+		return newRunAckNacker(w2).Ack(ctx, NewBatch(recs[2:3]))
+	})
+	is.True(err != nil)                                      // refused: fails closed
+	is.Equal(src2.ackedPositions(), []opencdc.Position(nil)) // s2a was dropped, nothing may be acked past it
+}

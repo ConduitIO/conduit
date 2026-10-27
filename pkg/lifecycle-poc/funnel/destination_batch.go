@@ -208,6 +208,13 @@ func (t *DestinationTask) doBuffered(ctx context.Context, batch *Batch, acker ac
 		t.mu.Lock()
 		t.outstanding--
 		t.mu.Unlock()
+		if err != nil {
+			// Invariant 3: the flush may have taken a sibling's batches with it.
+			// Record the failure so deferOrdered (reached from the sibling's own
+			// processors, outside the shared lock) and doBuffered fail closed
+			// instead of acking a later batch past the gap.
+			t.setFlushErr(err)
+		}
 		return err
 	}
 	return t.enqueueFlush(ctx, toFlush)
@@ -639,8 +646,10 @@ func (t *DestinationTask) enqueueFlush(ctx context.Context, pending []pendingBat
 	}
 }
 
-// setFlushErr records the first flush error. Called only by the flusher
-// goroutine; read by doBuffered/Close under mu.
+// setFlushErr records the first flush error and makes the task fail closed:
+// doBuffered and deferOrdered return it from then on. Called by the flusher
+// goroutine, by a failed synchronous flush, and by whoever poisons the shared
+// node over this task (see Worker.poisonBatchingDestinations); guarded by mu.
 func (t *DestinationTask) setFlushErr(err error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
