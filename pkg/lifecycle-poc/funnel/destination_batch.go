@@ -205,16 +205,12 @@ func (t *DestinationTask) doBuffered(ctx context.Context, batch *Batch, acker ac
 		// Pipelining not running (fan-out, or Open not called): flush
 		// synchronously on the worker, the pre-pipelining behavior.
 		err := t.flushPending(ctx, toFlush)
-		t.mu.Lock()
-		t.outstanding--
-		t.mu.Unlock()
-		if err != nil {
-			// Invariant 3: the flush may have taken a sibling's batches with it.
-			// Record the failure so deferOrdered (reached from the sibling's own
-			// processors, outside the shared lock) and doBuffered fail closed
-			// instead of acking a later batch past the gap.
-			t.setFlushErr(err)
-		}
+		// Invariant 3: the flush may have taken a sibling's batches with it.
+		// finishFlush records the failure in the same step that releases the
+		// slot, so deferOrdered (reached from the sibling's own processors,
+		// outside the shared lock) and doBuffered fail closed instead of acking
+		// a later batch past the gap.
+		t.finishFlush(err)
 		return err
 	}
 	return t.enqueueFlush(ctx, toFlush)
@@ -294,10 +290,28 @@ func (t *DestinationTask) flush(ctx context.Context) error {
 	t.outstanding++
 	t.mu.Unlock()
 	err := t.flushPending(ctx, pending)
+	t.finishFlush(err)
+	return err
+}
+
+// finishFlush releases a flush's slot in outstanding and, if the flush failed,
+// records the flush error in the SAME critical section.
+//
+// Invariant 3 (enforcement site): deferOrdered treats "nothing pending and
+// outstanding == 0" as "nothing ahead of me" and acks inline. If the slot were
+// released first and the error recorded afterwards, a sibling arriving between
+// the two would see an idle task with no error and ack past the batch the failed
+// flush took.
+func (t *DestinationTask) finishFlush(err error) {
 	t.mu.Lock()
 	t.outstanding--
+	if err != nil && t.flushErr == nil {
+		t.flushErr = err
+	}
 	t.mu.Unlock()
-	return err
+	if t.testAfterFlushRelease != nil {
+		t.testAfterFlushRelease()
+	}
 }
 
 // flushPending writes all buffered records in one Write, drains their acks,
@@ -466,11 +480,8 @@ func (t *DestinationTask) runFlusher(ctx context.Context) {
 				return // channel closed by Close after the trailing flush
 			}
 			err := t.flushPending(ctx, pending)
-			t.mu.Lock()
-			t.outstanding--
-			t.mu.Unlock()
+			t.finishFlush(err)
 			if err != nil {
-				t.setFlushErr(err)
 				return
 			}
 			for _, p := range pending {
