@@ -35,6 +35,12 @@ func TestDLQ_LogsWithoutPayload(t *testing.T) {
 		{name: "log with payload true", d: DLQ{Plugin: builtinLogPlugin, Settings: map[string]string{"payload": "true"}}, want: false},
 		{name: "log with payload TRUE", d: DLQ{Plugin: builtinLogPlugin, Settings: map[string]string{"payload": "TRUE"}}, want: false},
 		{name: "log with payload spaced", d: DLQ{Plugin: builtinLogPlugin, Settings: map[string]string{"payload": " true "}}, want: false},
+		{name: "versioned log", d: DLQ{Plugin: "builtin:log@v0.8.0"}, want: true},
+		{name: "log at latest", d: DLQ{Plugin: "builtin:log@latest"}, want: true},
+		{name: "bare log", d: DLQ{Plugin: "log"}, want: true},
+		{name: "bare versioned log", d: DLQ{Plugin: "log@v0.8.0"}, want: true},
+		{name: "standalone log", d: DLQ{Plugin: "standalone:log"}, want: false},
+		{name: "log-like name", d: DLQ{Plugin: "builtin:logger"}, want: false},
 		{name: "non-log plugin", d: DLQ{Plugin: "builtin:kafka"}, want: false},
 		{name: "standalone log plugin name", d: DLQ{Plugin: "builtin:file"}, want: false},
 	}

@@ -20,6 +20,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/conduitio/conduit/pkg/plugin"
 )
 
 const (
@@ -102,10 +104,26 @@ var DefaultDLQ = DLQ{
 // It does not say whether any record is routed to it; see RoutesNacks and
 // DropsRecordContent.
 func (d DLQ) LogsWithoutPayload() bool {
-	if d.Plugin != builtinLogPlugin {
+	if !isBuiltinLog(d.Plugin) {
 		return false
 	}
 	return !strings.EqualFold(strings.TrimSpace(d.Settings["payload"]), "true")
+}
+
+// isBuiltinLog reports whether plugin names the built-in log connector at any
+// version: "builtin:log", "builtin:log@v0.8.0", "builtin:log@latest", and a
+// bare "log" or "log@..." (type "any", which resolves to the built-in connector
+// unless a standalone plugin of that name is installed; treating it as the
+// built-in fails closed). A standalone plugin named log is a different
+// connector and is not matched.
+func isBuiltinLog(name string) bool {
+	fn := plugin.FullName(name)
+	switch fn.PluginType() {
+	case plugin.PluginTypeBuiltin, plugin.PluginTypeAny:
+		return fn.PluginName() == "log"
+	default:
+		return false
+	}
 }
 
 // RoutesNacks reports whether a nacked record is written to the DLQ at all.
