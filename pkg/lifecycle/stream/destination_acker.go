@@ -27,6 +27,10 @@ import (
 
 // DestinationAckerNode is responsible for handling acknowledgments received
 // from the destination and forwarding them to the correct message.
+// maxConsecutiveEmptyAcks bounds how many ack responses in a row may carry no
+// ack. The protocol allows an empty response, so this is engine policy.
+const maxConsecutiveEmptyAcks = 1000
+
 type DestinationAckerNode struct {
 	Name        string
 	Destination Destination
@@ -147,14 +151,23 @@ func (n *DestinationAckerNode) worker(
 				continue
 			}
 
-			if len(acks) == 0 {
-				// Ack can return multiple acks, store them and check the position
-				// for the current message
+			// Ack can return multiple acks, store them and check the position
+			// for the current message. A response may carry no acks at all (the
+			// connector protocol allows it), so keep reading until there is one;
+			// engine policy bounds the run of empty responses so a misbehaving
+			// destination cannot keep this goroutine spinning.
+			for empty := 0; len(acks) == 0; {
 				var err error
 				acks, err = n.Destination.Ack(ctx)
 				if err != nil {
 					handleError(msg, cerrors.Errorf("error while fetching acks: %w", err))
 					return
+				}
+				if len(acks) == 0 {
+					if empty++; empty >= maxConsecutiveEmptyAcks {
+						handleError(msg, cerrors.Errorf("destination sent %d consecutive ack responses with no acks", empty))
+						return
+					}
 				}
 			}
 
