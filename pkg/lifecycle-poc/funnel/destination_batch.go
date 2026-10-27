@@ -132,8 +132,17 @@ func (t *DestinationTask) doBuffered(ctx context.Context, batch *Batch, acker ac
 	}
 	t.pending = append(t.pending, pendingBatch{batch: batch, acker: acker})
 	t.bufferedCount += len(records)
+	if t.writeLimit > 0 {
+		for _, r := range records {
+			t.bufferedBytes += recordWireSize(r)
+		}
+	}
 
-	shouldFlush := t.bufferedCount >= t.effectiveBatchSize()
+	// A byte cap alongside the record cap: 3000 large records would otherwise
+	// accumulate into one Write the standalone connector cannot receive, and
+	// into memory the count alone does not bound.
+	shouldFlush := t.bufferedCount >= t.effectiveBatchSize() ||
+		(t.writeLimit > 0 && t.bufferedBytes >= t.writeLimit)
 	if !shouldFlush && t.batchDelay > 0 && !t.flushDeadline.IsZero() && now.After(t.flushDeadline) {
 		shouldFlush = true
 	}
@@ -142,6 +151,7 @@ func (t *DestinationTask) doBuffered(ctx context.Context, batch *Batch, acker ac
 		toFlush = t.pending
 		t.pending = nil
 		t.bufferedCount = 0
+		t.bufferedBytes = 0
 		t.flushDeadline = time.Time{}
 	}
 	t.mu.Unlock()
@@ -165,6 +175,7 @@ func (t *DestinationTask) flush(ctx context.Context) error {
 	pending := t.pending
 	t.pending = nil
 	t.bufferedCount = 0
+	t.bufferedBytes = 0
 	t.flushDeadline = time.Time{}
 	t.mu.Unlock()
 	return t.flushPending(ctx, pending)
@@ -201,26 +212,34 @@ func (t *DestinationTask) flushPending(ctx context.Context, pending []pendingBat
 
 	start := time.Now()
 	if len(records) > 0 {
-		err := t.destination.Write(ctx, records)
-		if err != nil {
-			t.metrics.ObserveError()
-			return cerrors.Errorf("failed to write %d records to destination: %w", len(positions), err)
-		}
-
+		// Invariant 1: a coalesced flush larger than the destination can receive
+		// is written in chunks, each fully acked before the next is sent, so
+		// acks reach markSpans in position order and the source acks below stay
+		// in source order. A failure in any chunk acks nothing upstream.
 		ackCount := 0
-		for ackCount < len(positions) {
-			acks, err := t.destination.Ack(ctx)
+		for from := 0; from < len(records); {
+			end := chunkEnd(records, from, t.writeLimit)
+			err := t.destination.Write(ctx, records[from:end])
 			if err != nil {
 				t.metrics.ObserveError()
-				return cerrors.Errorf("failed to receive acks for %d records from destination: %w", len(positions), err)
+				return cerrors.Errorf("failed to write %d records to destination: %w", end-from, err)
 			}
-			if err := t.validateAcks(acks, positions[ackCount:]); err != nil {
-				t.metrics.ObserveError()
-				return cerrors.Errorf("failed to validate acks: %w", err)
+
+			for ackCount < end {
+				acks, err := t.destination.Ack(ctx)
+				if err != nil {
+					t.metrics.ObserveError()
+					return cerrors.Errorf("failed to receive acks for %d records from destination: %w", end-ackCount, err)
+				}
+				if err := t.validateAcks(acks, positions[ackCount:end]); err != nil {
+					t.metrics.ObserveError()
+					return cerrors.Errorf("failed to validate acks: %w", err)
+				}
+				t.markSpans(spans, acks, ackCount)
+				t.metrics.Observe(records[ackCount:ackCount+len(acks)], start)
+				ackCount += len(acks)
 			}
-			t.markSpans(spans, acks, ackCount)
-			t.metrics.Observe(records[ackCount:ackCount+len(acks)], start)
-			ackCount += len(acks)
+			from = end
 		}
 	}
 
@@ -344,6 +363,7 @@ func (t *DestinationTask) stopFlusher(ctx context.Context) error {
 		trailing = t.pending
 		t.pending = nil
 		t.bufferedCount = 0
+		t.bufferedBytes = 0
 		t.flushDeadline = time.Time{}
 	}
 	t.mu.Unlock()

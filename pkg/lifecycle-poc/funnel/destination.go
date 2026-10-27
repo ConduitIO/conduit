@@ -41,9 +41,15 @@ type DestinationTask struct {
 	batchSize  int
 	batchDelay time.Duration
 
+	// writeLimit is the byte budget of one destination Write, derived from
+	// connectors.max-receive-record-size (0 = unlimited). Set once, before Open,
+	// by SetMaxReceiveRecordSize.
+	writeLimit int
+
 	mu            sync.Mutex
 	pending       []pendingBatch // buffered source batches awaiting flush
 	bufferedCount int            // number of active records currently buffered
+	bufferedBytes int            // estimated wire size of the buffered records (only when writeLimit > 0)
 	flushDeadline time.Time      // zero when nothing is buffered
 
 	// Pipelining state (see destination_batch.go). Zero values mean the
@@ -133,6 +139,17 @@ func (t *DestinationTask) ID() string {
 	return t.id
 }
 
+// SetMaxReceiveRecordSize bounds every Write to this destination by the
+// estimated wire size of its records (see recordWireSize): a batch, or a
+// coalesced flush, larger than connectors.max-receive-record-size is sent as
+// several Writes whose acks are drained in order. It exists for standalone
+// connectors, whose gRPC server rejects a request over that size; leave it
+// unset (0) for a built-in connector, which has no such limit. Must be called
+// before Open.
+func (t *DestinationTask) SetMaxReceiveRecordSize(n int) {
+	t.writeLimit = writeLimit(n)
+}
+
 // SetPipelined enables read-ahead pipelining (a dedicated flusher goroutine)
 // for this destination. It must be called before Open, and only for a
 // destination that is not part of a destination fan-out: with M>1 destinations,
@@ -197,7 +214,34 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 		positions[i] = rec.Position
 	}
 
+	// Invariant 1: a batch larger than the destination can receive is written as
+	// several chunks, each fully acked before the next is sent, so acks stay in
+	// source order. Nothing is acked upstream until Do returns, so a failure in
+	// a later chunk replays the whole batch (at-least-once).
 	start := time.Now()
+	from := 0
+	for {
+		end := chunkEnd(records, from, t.writeLimit)
+		if err := t.writeChunk(ctx, batch, records[from:end], positions[from:end], from, start); err != nil {
+			return err
+		}
+		from = end
+		if from >= len(records) {
+			return nil
+		}
+	}
+}
+
+// writeChunk writes records (a chunk of the batch starting at active index base)
+// and drains the acks for exactly those records.
+func (t *DestinationTask) writeChunk(
+	ctx context.Context,
+	batch *Batch,
+	records []opencdc.Record,
+	positions []opencdc.Position,
+	base int,
+	start time.Time,
+) error {
 	err := t.destination.Write(ctx, records)
 	if err != nil {
 		t.metrics.ObserveError()
@@ -217,7 +261,7 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 			return cerrors.Errorf("failed to validate acks: %w", err)
 		}
 		t.metrics.Observe(records[ackCount:ackCount+len(acks)], start)
-		t.markBatchRecords(batch, ackCount, acks)
+		t.markBatchRecords(batch, base+ackCount, acks)
 
 		ackCount += len(acks)
 		if ackCount >= len(positions) {
