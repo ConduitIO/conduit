@@ -204,8 +204,14 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 		return cerrors.Errorf("failed to write %d records to destination: %w", len(positions), err)
 	}
 
+	// Invariant 1 (enforcement site): count acked RECORDS, never responses. The
+	// protocol allows a response with no acks (the Go SDK never sends one), so
+	// bounding this loop by len(positions) responses could leave it with records
+	// unacked and return nil, and the worker would then ack them upstream. Keep
+	// reading until every record has its ack; a stream that ends first surfaces
+	// as an Ack error, and an over-long response is rejected by validateAcks.
 	ackCount := 0
-	for range len(positions) {
+	for ackCount < len(positions) {
 		acks, err := t.destination.Ack(ctx)
 		if err != nil {
 			t.metrics.ObserveError()
@@ -220,9 +226,6 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 		t.markBatchRecords(batch, ackCount, acks)
 
 		ackCount += len(acks)
-		if ackCount >= len(positions) {
-			break
-		}
 	}
 
 	return nil
