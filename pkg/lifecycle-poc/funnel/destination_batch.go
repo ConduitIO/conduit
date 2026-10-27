@@ -173,7 +173,9 @@ func (t *DestinationTask) doBuffered(ctx context.Context, batch *Batch, acker ac
 	t.pending = append(t.pending, pendingBatch{batch: batch, acker: acker})
 	t.bufferedCount += len(records)
 
-	shouldFlush := t.bufferedCount >= t.effectiveBatchSize()
+	// len(pending) counts queued source acks too: each pins a *Batch and the
+	// source position, so a long run of them must not wait for more records.
+	shouldFlush := t.bufferedCount >= t.effectiveBatchSize() || len(t.pending) >= t.effectiveBatchSize()
 	if !shouldFlush && t.batchDelay > 0 && !t.flushDeadline.IsZero() && now.After(t.flushDeadline) {
 		shouldFlush = true
 	}
@@ -200,7 +202,7 @@ func (t *DestinationTask) doBuffered(ctx context.Context, batch *Batch, acker ac
 	if t.flushCh == nil {
 		// Pipelining not running (fan-out, or Open not called): flush
 		// synchronously on the worker, the pre-pipelining behavior.
-		err := t.flushPending(ctx, toFlush)
+		err := t.syncFlush(ctx, toFlush)
 		t.mu.Lock()
 		t.outstanding--
 		t.mu.Unlock()
@@ -242,16 +244,17 @@ func (t *DestinationTask) deferOrdered(ctx context.Context, ack func(context.Con
 	if len(t.pending) > 0 || t.outstanding > 0 {
 		t.pending = append(t.pending, pendingBatch{action: ack})
 		var toFlush []pendingBatch
-		// Hand the buffer to the flusher now when no record is waiting in it,
-		// when the queue (actions count: each pins a *Batch and the source
-		// position) holds a full batch worth of entries, or when the flush
-		// deadline has passed. Only the pipelined path can: the synchronous
-		// path flushes on the worker under the shared lock, which this caller
-		// does not hold, so there the ack waits for the next record or Close.
-		if t.flushCh != nil &&
-			(t.bufferedCount == 0 ||
-				len(t.pending) >= t.effectiveBatchSize() ||
-				(t.batchDelay > 0 && !t.flushDeadline.IsZero() && time.Now().After(t.flushDeadline))) {
+		// Release the buffer now when no record is waiting in it, when the queue
+		// (actions count: each pins a *Batch and the source position) holds a
+		// full batch worth of entries, or when the flush deadline has passed.
+		// Pipelined: hand it to the flusher. Synchronous (fan-out): flush on this
+		// goroutine under syncMu, which serialises every synchronous flush of
+		// this task, so it cannot interleave with the flush another worker runs
+		// under the shared lock; it waits for that flush, then runs the queued
+		// acks behind it.
+		if t.bufferedCount == 0 ||
+			len(t.pending) >= t.effectiveBatchSize() ||
+			(t.batchDelay > 0 && !t.flushDeadline.IsZero() && time.Now().After(t.flushDeadline)) {
 			toFlush = t.pending
 			t.pending = nil
 			t.bufferedCount = 0
@@ -262,6 +265,13 @@ func (t *DestinationTask) deferOrdered(ctx context.Context, ack func(context.Con
 		if toFlush == nil {
 			return nil
 		}
+		if t.flushCh == nil {
+			err := t.syncFlush(ctx, toFlush)
+			t.mu.Lock()
+			t.outstanding--
+			t.mu.Unlock()
+			return err
+		}
 		if err := t.enqueueFlush(ctx, toFlush); !isBuffered(err) {
 			return err
 		}
@@ -269,6 +279,16 @@ func (t *DestinationTask) deferOrdered(ctx context.Context, ack func(context.Con
 	}
 	t.mu.Unlock()
 	return ack(ctx)
+}
+
+// syncFlush is flushPending for the synchronous path. syncMu serialises every
+// synchronous flush of this task: besides the worker that holds the shared lock,
+// deferOrdered may flush from a source-scoped processor that does not, and both
+// would otherwise interleave Write/Ack on the one destination stream.
+func (t *DestinationTask) syncFlush(ctx context.Context, pending []pendingBatch) error {
+	t.syncMu.Lock()
+	defer t.syncMu.Unlock()
+	return t.flushPending(ctx, pending)
 }
 
 // flush writes all buffered records (taken from t.pending) in one Write. It is
@@ -282,7 +302,7 @@ func (t *DestinationTask) flush(ctx context.Context) error {
 	t.flushDeadline = time.Time{}
 	t.outstanding++
 	t.mu.Unlock()
-	err := t.flushPending(ctx, pending)
+	err := t.syncFlush(ctx, pending)
 	t.mu.Lock()
 	t.outstanding--
 	t.mu.Unlock()
