@@ -186,17 +186,46 @@ one `Write`. The notes, §4: +66% at 1x1 default (54.5k → 90.8k), +412% per si
 - **Defaults.** `SourceWithBatch` tags become `size=100`, `delay=0`, with the adaptive drain
   semantics (B). If the benchmark rules B out, the tags become 100 and 10ms with today's semantics
   (A), and the `Configure` rules below still apply. Destination tags stay at 0.
-- **Normalize or reject inconsistent combinations at `Configure`.** Each rule gets a stable error
-  code, the config path, and a fix, so nothing depends on a release note:
+- **Handle inconsistent combinations at `Configure`.** Each rule has a stable code, the config path,
+  and a fix. Nothing that works today becomes a start failure in the release that introduces the
+  rule (see Deprecation below). The SDK can tell explicit settings from defaulted ones because
+  `parseConfig` receives the raw config before `ApplyDefaults`.
   - `size=0`, `delay>0` (delay-only). Today `runReadN` calls `ReadN(ctx, 0)`. Postgres's `NextN`
     errors on that ("n must be greater than 0"), and a connector that accepts 0 hits the collector's
     `len(resp) >= 0` early return, so it does not batch at all. Only `Read` connectors get real
     delay-only batching. Normalize: use the SDK's destination-side cap
     (`defaultMaxBatchSize = 1000`, #428) as `n` and as the record bound, and log a WARN with code
-    `sdk.batch.size_defaulted`.
-  - Under A only: `size>0`, `delay=0` means waiting for a full batch with no deadline. That covers a
-    user who sets only `sdk.batch.delay: 0` and inherits size 100. Reject with code
-    `sdk.batch.unbounded_wait`. Under B this combination is the adaptive drain and is valid.
+    `sdk.batch.size_defaulted`. For `Read` connectors this caps delay-only batches that were
+    uncapped, which the release notes state.
+  - Under A, a user who sets only `sdk.batch.delay: 0` would inherit size 100 with no deadline, a
+    stall the upgrade itself creates. The SDK keeps that user on today's passthrough (size treated
+    as 0) and logs a WARN with code `sdk.batch.unbounded_wait`.
+  - Under A, an explicit `size>0` with `delay=0` (wait until full, no deadline) works today and
+    already logs an uncoded warning. It gets a WARN with code `sdk.batch.unbounded_wait`, and is
+    rejected no earlier than two minors later.
+  - Under B, an explicit `size>0` with `delay=0` changes meaning from wait-until-full to drain. That
+    is a config-meaning change and follows the deprecation policy below.
+- **Deprecation (B).** Announce, warn, then switch, over two minor releases:
+  - SDK v0.18.0 (N). The defaults change. A user-set `size>0` with no user-set delay keeps today's
+    wait-until-full meaning and logs a WARN with code `sdk.batch.drain_semantics_pending`. The
+    release notes show the old and new meanings and the setting that keeps full batches
+    (`sdk.batch.delay` above 0).
+  - SDK N+1. The same, plus the notice in the connector docs.
+  - SDK N+2. A user-set `size>0` with `delay=0` means drain.
+
+  Only explicit settings follow this schedule. Pipelines that rely on the defaults get drain from N,
+  since they had no batching before.
+- **How the codes reach users.** The SDK has no error-code mechanism, and a `Configure` error reaches
+  Conduit as a plain string. The SDK will:
+  - export the codes as string constants in a new `sdk/codes.go`;
+  - log WARNs with a structured `code` field, the convention the S3 connector already uses (`code`,
+    `s3.source.lookback_short`);
+  - when a rule becomes a rejection, start the error message with the code and a colon.
+
+  Conduit registers the same codes with `conduiterr.Register` and maps a connector `Configure`
+  error whose message starts with a registered SDK code to that code, keeping the original message.
+  Agents and `--json` output then match the code, not the text. Old SDKs emit no codes, so the
+  mapping is a no-op for them.
 - **Bound the batch at `size` with a carry-over buffer.** `collectWithReadN` currently appends whole
   `ReadN` results. Worse, its `len(batch)==0 && len(resp) >= size` early return passes a connector
   that ignores `n` through unclamped; Postgres's first blocking batch can be 1000 whatever `n` is.
@@ -206,8 +235,17 @@ one `Write`. The notes, §4: +66% at 1x1 default (54.5k → 90.8k), +412% per si
 - **Flush then fail.** On a `Read`/`ReadN` error mid-collection, both collectors currently return
   `nil, err` and drop the records already collected (`collectWithRead`, `collectWithReadN`). A poison
   record would then discard up to `size−1` good records that today are delivered before the error.
-  The collector returns the collected records and stashes the error for the next call. At-least-once
-  holds either way; this keeps the delivered set the same as at batch 1.
+  The collector returns the collected records and stashes the error. Each following call returns
+  the carry first, in order, at most `size` per call. Once the carry is empty, the next call returns
+  the stashed error at once, without reading the channel. The read goroutine has exited and closed
+  it, and the closed-channel path (`return batch, ctx.Err()`) would otherwise return an empty slice
+  with a nil error, which `runRead` treats as "no records" and retries forever. The closed-channel
+  path itself must never return an empty slice with a nil error.
+
+  This applies only to errors from the connector. Context cancellation (`Stop`, `Teardown`) is not
+  an error to flush around: the collector returns `nil, ctx.Err()`, discarding the partial batch and
+  the carry, as described under Graceful stop. At-least-once holds in both cases; flush-then-fail
+  keeps the delivered set the same as at batch 1.
 - **Log the effective batching at `Open`**: one INFO line with size, delay, mode (adaptive or
   window), and the `ReadN` or `Read` path.
 - **Opt-out:** `sdk.batch.size: 0` together with `sdk.batch.delay: 0` restores today's passthrough
@@ -215,11 +253,18 @@ one `Write`. The notes, §4: +66% at 1x1 default (54.5k → 90.8k), +412% per si
 
 ### Engine (Conduit)
 
-- **Persister threshold counts positions, with `>=`.** `Persist` triggers on
+- **Persister threshold counts positions, with `>=`.** API change: `Persist(ctx, conn, callback)`
+  becomes `Persist(ctx, conn, count, callback)`, where `count` is the number of positions the call
+  covers. The package is internal and all three callers break at compile time, so none can be missed:
+  - `source.go:652` (`Source.Ack`) passes `len(p)`;
+  - `source.go:278` (source lifecycle-event persist) passes 1;
+  - `destination.go:139` (destination lifecycle-event persist) passes 1.
+
+  These keep counting 1, as today. `Persist` triggers on
   `p.bundleCount == p.bundleCountThreshold` (`persister.go:190`) and counts calls; arch-v2 makes one
   call per batch. Counting `len(p)` alone would make the counter step past 10000 with unaligned
   batches (100, 37, a Postgres 1000) and never equal it, so the flush would quietly fall back to the
-  1s timer. The change: `bundleCount += len(positions)`, trigger on `>=`, and keep the reset in
+  1s timer. The change: `bundleCount += count`, trigger on `>=`, and keep the reset in
   `triggerFlush`. This needs a test with unaligned batch sizes (for example 37, 100, 1000, repeated)
   that asserts a flush once the threshold is crossed. That test fails both before the change and
   with `==`. v1 acks one position per call and is unaffected.
@@ -254,8 +299,9 @@ connectors).
 
 - **B:** no collection wait. A record waits only behind records already queued ahead of it. That is
   bounded by the read-ahead (`S` in `readCh` or one `ReadN` result) plus one batch in the engine,
-  about `2S` records at the pipeline's throughput: ~1ms at 200k rec/s, and nothing for a sparse
-  source.
+  about `2S` records at the pipeline's throughput, and nothing for a sparse source. We will not
+  publish a time figure for this, in release notes or anywhere else, until the benchmark measures
+  it.
 - **A:** the same queueing, plus up to `D` for the first record of a batch when the source produces
   fewer than `S` records per `D`.
 - **Postgres** is unchanged because it pins today's settings. Its 1s handler flush is a pre-existing
@@ -267,7 +313,7 @@ the record's `opencdc.readAt`, in both engines (`funnel/worker.go` `updateTimer`
 metric includes collector wait and read-ahead queueing. After the upgrade, latency panels and alerts
 will move: for dense sources by the queueing term (records now wait behind up to ~`2S` others,
 instead of one), and under A also by up to `D` for sparse sources. The release notes must say this
-and give the expected magnitude per variant.
+and give the magnitude per variant, taken only from the committed benchmark results.
 
 ### Memory
 
@@ -341,11 +387,15 @@ sub-batch path (`worker_nack_position_test.go`, `multi_ack_nacker_test.go`,
   the bound above. New chaos scenario asserting the bound, not only absence of loss.
 - **Persister counter steps past the threshold.** Prevented by `>=`, and the unaligned-batch test
   pins it.
-- **Read error mid-batch.** Flush-then-fail delivers the good records first. An SDK test injects an
-  error after `k < S` records and asserts that those `k` are delivered, followed by the error.
+- **Read error mid-batch.** Flush-then-fail delivers the good records first. SDK tests:
+  - An error after `k < S` records delivers those `k`, then the error.
+  - With a carry larger than `S`, calls return the carry in order (at most `S` each), then the
+    stashed error, and never an empty slice with a nil error. A spinning `runRead` fails the test
+    on a deadline.
+  - Cancellation mid-collection returns `nil, ctx.Err()` and nothing collected is sent.
 - **SIGTERM with a partial batch.** Dropped unsent, then replayed. The existing `sigterm_test.go` and
   drain tests must run with a batched source.
-- **Single-setting configurations.** Normalized or rejected at `Configure` (Decision). Without that:
+- **Single-setting configurations.** Handled at `Configure`, WARN first (Decision). Without that:
   `delay: 0` alone under A stalls a sparse source with records unacked, and `size: 0` alone on a
   `ReadN` connector errors (Postgres) or silently does not batch.
 - **Postgres adopts the SDK without pinning.** CDC batches drop to 100 and snapshots to `FETCH 100`.
@@ -354,8 +404,10 @@ sub-batch path (`worker_nack_position_test.go`, `multi_ack_nacker_test.go`,
 
 ## Upgrade, rollback and versioning
 
-- **SDK:** v0.17.x → v0.18.0, a minor bump for a default and a semantics change (`delay=0` under B).
-  The changelog states the new defaults, the opt-out, the `Configure` rules and their codes.
+- **SDK:** v0.17.x → v0.18.0, a minor bump for a default change. Under B, it also starts the
+  two-minor deprecation of explicit `size>0, delay=0` meaning wait-until-full (see Decision). The
+  changelog states the new defaults, the opt-out, the `Configure` rules, their codes, and the
+  deprecation schedule.
 - **Connectors:** each built-in source gets a minor release on SDK v0.18.0. Conduit bumps each in a
   separate PR, which is that connector's switch.
 - **Standalone connectors built with older SDKs:** unaffected. They adopt on their own SDK bump.
@@ -392,7 +444,9 @@ sub-batch path (`worker_nack_position_test.go`, `multi_ack_nacker_test.go`,
 
 - **SDK:** new defaults. Adaptive drain: a full queue yields `S`, an empty queue yields 1, and
   nothing waits on a timer. The size cap with carry, including a connector that ignores `n`.
-  Flush-then-fail. The `Configure` rules and their codes. Opt-out is byte-for-byte today's
+  Flush-then-fail, ordered carry then stashed error, and discard on cancellation (see Failure
+  modes). The `Configure` rules: WARN with a `code` field, defaulted versus explicit handling, and
+  the deprecation-window behavior. Opt-out is byte-for-byte today's
   passthrough.
 - **Postgres:** the `connector.yaml` golden shows 0/0; effective CDC and snapshot sizes at shipped
   defaults; `snapshot.fetchSize` is honored (fails before the fix).
