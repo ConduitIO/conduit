@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# User data for one matrix instance. Terraform template: shell $ are doubled.
+# No credentials here: the AWS CLI uses the instance role, scoped to one bucket.
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+BUCKET="${bucket}"
+SHARD=${shard}
+SHARDS=${shards}
+PHASES="${phases}"
+CONDUIT_SHA="${conduit_sha}"
+SMOKE=${smoke}
+S3="s3://$${BUCKET}/results"
+
+# Hard cap first, before anything can hang.
+shutdown -h +${max_minutes} || true
+
+status() { echo "$(date -u +%FT%TZ) $*" >> /var/log/matrix-status.txt; aws s3 cp --quiet /var/log/matrix-status.txt "$${S3}/shard-$${SHARD}/status.txt" || true; }
+fail() { status "FAILED: $*"; sleep 30; shutdown -h now; exit 1; }
+
+apt-get update -y
+apt-get install -y --no-install-recommends ca-certificates curl git unzip python3 sysstat procps
+# AWS CLI v2, pinned.
+curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.31.20.zip -o /tmp/awscli.zip
+unzip -q /tmp/awscli.zip -d /tmp && /tmp/aws/install >/dev/null
+status "boot shard $${SHARD}/$${SHARDS} phases $${PHASES} conduit $${CONDUIT_SHA}"
+
+# Docker from the official repository (the version is recorded in environment.txt).
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
+apt-get update -y
+apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+systemctl enable --now docker
+
+# benchi 0.4.1, checksum-verified.
+curl -fsSL https://github.com/ConduitIO/benchi/releases/download/v0.4.1/benchi_0.4.1_Linux_x86_64.tar.gz -o /tmp/benchi.tgz
+echo "829842d4db3fcf63f1d8e138bb7d83837616089103e08e07b3e9d056ea35af81  /tmp/benchi.tgz" | sha256sum -c - || fail "benchi checksum"
+tar -xzf /tmp/benchi.tgz -C /tmp && install -m 0755 /tmp/benchi /usr/local/bin/benchi
+
+# Conduit at the pinned commit, then the kit (from this run's bucket) over it.
+W=/opt/matrix
+mkdir -p "$W" && cd "$W"
+git clone -q https://github.com/ConduitIO/conduit.git conduit
+git -C conduit fetch -q origin "+refs/pull/*/head:refs/remotes/pr/*" || true
+git -C conduit checkout -q "$${CONDUIT_SHA}" || fail "commit $${CONDUIT_SHA} not found"
+aws s3 cp --quiet "s3://$${BUCKET}/kit/kit.tgz" /tmp/kit.tgz || fail "kit download"
+rm -rf conduit/benchi/v021-cdc-parity
+tar -xzf /tmp/kit.tgz -C conduit/benchi || fail "kit extract"
+status "kit extracted: $(cat conduit/benchi/v021-cdc-parity/matrix/KIT_COMMIT 2>/dev/null)"
+
+# async-profiler needs this on the host for its itimer fallback to resolve symbols.
+sysctl -w kernel.perf_event_paranoid=1 >/dev/null || true
+sysctl -w kernel.kptr_restrict=0 >/dev/null || true
+
+export MATRIX_S3="$${S3}"
+export MATRIX_SMOKE="$${SMOKE}"
+cd conduit
+status "matrix start"
+bash benchi/v021-cdc-parity/matrix/run-shard.sh "$${SHARDS}" "$${SHARD}" "$${PHASES}" /opt/matrix/results \
+  > /var/log/matrix-shard.log 2>&1 || status "run-shard exited $?"
+aws s3 cp --quiet /var/log/matrix-shard.log "$${S3}/shard-$${SHARD}/matrix-shard.log" || true
+status "DONE, halting (the instance terminates on halt)"
+shutdown -h now
