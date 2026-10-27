@@ -496,3 +496,50 @@ func TestWorker_NSource_SyncFlushFailure_SiblingOrderedAckFailsClosed(t *testing
 	is.True(err != nil)                                      // refused: fails closed
 	is.Equal(src2.ackedPositions(), []opencdc.Position(nil)) // s2a was dropped, nothing may be acked past it
 }
+
+// TestDestinationTask_FlushFailure_NoIdleWindowBeforeFlushError: when a flush
+// fails, releasing its slot in outstanding and recording the flush error must be
+// one step. Otherwise a sibling's ordered ack that lands between them sees the
+// task idle with no error and acks inline past the batch the failed flush took.
+func TestDestinationTask_FlushFailure_NoIdleWindowBeforeFlushError(t *testing.T) {
+	for name, pipelined := range map[string]bool{"synchronous": false, "pipelined": true} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+			task := NewBatchingDestinationTask("d", failingWriteDestination{newFakeDestination("d")}, log.Test(t), NoOpConnectorMetrics{}, 2, 0)
+			if pipelined {
+				task.SetPipelined()
+			}
+			is.NoErr(task.Open(ctx))
+			recs := randomRecords(2)
+
+			var ran atomic.Bool
+			var siblingErr atomic.Value
+			var once sync.Once
+			task.testAfterFlushRelease = func() {
+				once.Do(func() {
+					// A sibling worker's whole-batch filter, at the first instant it
+					// can observe the task idle.
+					err := task.deferOrdered(ctx, func(context.Context) error {
+						ran.Store(true)
+						return nil
+					})
+					if err != nil {
+						siblingErr.Store(err)
+					}
+				})
+			}
+
+			is.True(isBuffered(task.doBuffered(ctx, NewBatch(recs[:1]), newRecordingAckNacker(&eventLog{}))))
+			_ = task.doBuffered(ctx, NewBatch(recs[1:]), newRecordingAckNacker(&eventLog{})) // the flush fails
+			if pipelined {
+				waitForCondition(t, time.Second, func() bool { return task.flushError() != nil })
+				time.Sleep(20 * time.Millisecond)
+			}
+
+			is.True(!ran.Load())              // the sibling's ack must not run inline past the dropped batch
+			is.True(siblingErr.Load() != nil) // it fails closed instead
+			_ = task.Close(ctx)
+		})
+	}
+}
