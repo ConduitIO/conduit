@@ -52,17 +52,40 @@ const maxInFlightFlushes = 2
 // record (Invariant 1).
 var errBuffered = cerrors.New("(internal) records buffered, awaiting flush")
 
+// deferredAckError marks an error from a queued source ack/nack (see
+// deferOrdered), e.g. a processor nack the DLQ refused. Close returns it, unlike
+// other flush errors it only logs, because it is a pipeline failure the worker
+// would have returned immediately before the ack was queued.
+type deferredAckError struct{ err error }
+
+func (e *deferredAckError) Error() string { return "deferred source ack failed: " + e.err.Error() }
+func (e *deferredAckError) Unwrap() error { return e.err }
+
+// isDeferredAckError reports whether err comes from a queued source ack/nack.
+func isDeferredAckError(err error) bool {
+	var d *deferredAckError
+	return cerrors.As(err, &d)
+}
+
 // pendingBatch is one source batch whose records are buffered, awaiting flush.
 // It carries the source *Batch (to mark per-record nacks and to ack/nack) and
 // the ackNacker that would have acked it had it been written immediately.
 //
-// A pendingBatch with a non-nil done channel carries no records: it is a drain
-// barrier (see Drain) that the flusher closes once every earlier pendingBatch
-// has been written and acked.
+// A pendingBatch with a non-nil action carries no records: it is an ordered
+// source ack/nack (see deferOrdered) that must run only after every earlier
+// pendingBatch has been written and acked.
 type pendingBatch struct {
 	batch *Batch
 	acker ackNacker
-	done  chan struct{}
+	// action, when set, replaces the batch/acker pair: it is the source
+	// ack/nack of records that bypassed the destination (filtered or nacked
+	// upstream), queued so it is released in source order behind the records
+	// buffered ahead of it.
+	action func(context.Context) error
+	// done, when set, marks a drain barrier (see Drain): it carries no records
+	// and no action (batch is nil). The flusher closes it once every earlier
+	// entry has been written and acked.
+	done chan struct{}
 }
 
 // flushSpan is one pending batch's contiguous range in the concatenated record
@@ -117,10 +140,26 @@ func (t *DestinationTask) doBuffered(ctx context.Context, batch *Batch, acker ac
 
 	records := batch.ActiveRecords()
 	if len(records) == 0 {
-		// Nothing to write (all records filtered upstream). A filtered record
-		// is already handled, so it can be acknowledged immediately: no
-		// destination write is owed for it.
-		return acker.Ack(ctx, batch)
+		// Nothing to write (all records filtered upstream): no destination
+		// write is owed for it. It may only be acknowledged once every earlier
+		// batch is acknowledged, though: Source.Ack persists the LAST position
+		// it is given, so acking this batch ahead of records still buffered or
+		// in flight would persist a position past records that are not durable
+		// (Invariant 1/2/3). deferOrdered acks immediately when nothing is
+		// ahead of it, and queues the ack behind the earlier batches otherwise.
+		return t.deferOrdered(ctx, func(ctx context.Context) error {
+			return acker.Ack(ctx, batch)
+		})
+	}
+
+	if t.flushCh != nil {
+		// Invariant 1: "take pending + hand it to the flusher" is one unit with
+		// respect to deferOrdered (another source's worker, outside any shared
+		// lock). Without it that worker could queue its source ack on flushCh
+		// between our take and our send, and the flusher would release it ahead
+		// of the batch we took.
+		t.enqueueMu.Lock()
+		defer t.enqueueMu.Unlock()
 	}
 
 	t.mu.Lock()
@@ -129,7 +168,7 @@ func (t *DestinationTask) doBuffered(ctx context.Context, batch *Batch, acker ac
 		return cerrors.Errorf("destination %s is closed", t.id)
 	}
 	now := time.Now()
-	if len(t.pending) == 0 && t.batchDelay > 0 {
+	if t.bufferedCount == 0 && t.batchDelay > 0 {
 		// First record of a fresh buffer: arm the flush deadline. It is checked
 		// synchronously here on every arrival (not on a ticker); a trailing
 		// partial batch is flushed on Close.
@@ -148,18 +187,92 @@ func (t *DestinationTask) doBuffered(ctx context.Context, batch *Batch, acker ac
 		t.pending = nil
 		t.bufferedCount = 0
 		t.flushDeadline = time.Time{}
+		// Counted on the synchronous path too: another source's filter or nack
+		// runs outside the shared lock and must see this write as ahead of it.
+		// Released by runFlusher (pipelined) or below (synchronous) once the
+		// flush is fully acked.
+		t.outstanding++
 	}
 	t.mu.Unlock()
 
 	if !shouldFlush {
 		return errBuffered
 	}
+	if t.testAfterTake != nil {
+		t.testAfterTake()
+	}
 	if t.flushCh == nil {
 		// Pipelining not running (fan-out, or Open not called): flush
 		// synchronously on the worker, the pre-pipelining behavior.
-		return t.flushPending(ctx, toFlush)
+		err := t.flushPending(ctx, toFlush)
+		t.mu.Lock()
+		t.outstanding--
+		t.mu.Unlock()
+		return err
 	}
 	return t.enqueueFlush(ctx, toFlush)
+}
+
+// deferOrdered runs ack (a source ack or nack for records that bypass this
+// destination: all filtered, or nacked by a processor) in source order relative
+// to the batches already handed to this task.
+//
+// Invariant 1/2/3 (enforcement site): connector.Source.Ack persists the last
+// position it is given and has no monotonic guard, so an ack issued while an
+// earlier batch is buffered or in flight would persist a position past records
+// that are not yet durable, and a crash then skips them. If nothing is buffered,
+// queued or in flight the ack runs inline; otherwise it is appended to the
+// pending buffer, behind the earlier batches, and runs on the flusher (or on the
+// synchronous flush) strictly after they have been written and acked.
+//
+// An action-only buffer (nothing active ahead of it) is handed to the flusher
+// at once so the position is not held back until the next record arrives.
+func (t *DestinationTask) deferOrdered(ctx context.Context, ack func(context.Context) error) error {
+	if err := t.flushError(); err != nil {
+		return err
+	}
+	if t.flushCh != nil {
+		t.enqueueMu.Lock() // see doBuffered
+		defer t.enqueueMu.Unlock()
+	}
+
+	t.mu.Lock()
+	if t.closed {
+		// Close runs after every worker has exited; nothing can be ahead.
+		t.mu.Unlock()
+		return ack(ctx)
+	}
+	// guard: funnel-ordered-source-ack tests=^(TestWorker_FilteredBatch_AckOrderedBehindInflightFlush|TestWorker_ProcessorNack_AckOrderedBehindBufferedRecords)$
+	if len(t.pending) > 0 || t.outstanding > 0 {
+		t.pending = append(t.pending, pendingBatch{action: ack})
+		var toFlush []pendingBatch
+		// Hand the buffer to the flusher now when no record is waiting in it,
+		// when the queue (actions count: each pins a *Batch and the source
+		// position) holds a full batch worth of entries, or when the flush
+		// deadline has passed. Only the pipelined path can: the synchronous
+		// path flushes on the worker under the shared lock, which this caller
+		// does not hold, so there the ack waits for the next record or Close.
+		if t.flushCh != nil &&
+			(t.bufferedCount == 0 ||
+				len(t.pending) >= t.effectiveBatchSize() ||
+				(t.batchDelay > 0 && !t.flushDeadline.IsZero() && time.Now().After(t.flushDeadline))) {
+			toFlush = t.pending
+			t.pending = nil
+			t.bufferedCount = 0
+			t.flushDeadline = time.Time{}
+			t.outstanding++
+		}
+		t.mu.Unlock()
+		if toFlush == nil {
+			return nil
+		}
+		if err := t.enqueueFlush(ctx, toFlush); !isBuffered(err) {
+			return err
+		}
+		return nil
+	}
+	t.mu.Unlock()
+	return ack(ctx)
 }
 
 // flush writes all buffered records (taken from t.pending) in one Write. It is
@@ -171,8 +284,13 @@ func (t *DestinationTask) flush(ctx context.Context) error {
 	t.pending = nil
 	t.bufferedCount = 0
 	t.flushDeadline = time.Time{}
+	t.outstanding++
 	t.mu.Unlock()
-	return t.flushPending(ctx, pending)
+	err := t.flushPending(ctx, pending)
+	t.mu.Lock()
+	t.outstanding--
+	t.mu.Unlock()
+	return err
 }
 
 // flushPending writes all buffered records in one Write, drains their acks,
@@ -193,8 +311,8 @@ func (t *DestinationTask) flushPending(ctx context.Context, pending []pendingBat
 	var records []opencdc.Record
 	var positions []opencdc.Position
 	for _, p := range pending {
-		if p.done != nil {
-			continue // drain barrier, no records
+		if p.action != nil || p.done != nil {
+			continue // ordered source ack or drain barrier: no records
 		}
 		active := p.batch.ActiveRecords()
 		if len(active) == 0 {
@@ -235,9 +353,6 @@ func (t *DestinationTask) flushPending(ctx context.Context, pending []pendingBat
 	// Ack/nack every pending batch in source order, including filtered-only
 	// batches (their records were filtered, not written).
 	for _, p := range pending {
-		if p.done != nil {
-			continue // drain barrier, closed by the flusher after this returns
-		}
 		if err := t.ackPending(ctx, p); err != nil {
 			return err
 		}
@@ -265,6 +380,15 @@ func (t *DestinationTask) markSpans(spans []flushSpan, acks []connector.Destinat
 // destination task: an untainted batch acks wholesale, a tainted batch splits
 // by flag and nacks the failed records.
 func (t *DestinationTask) ackPending(ctx context.Context, p pendingBatch) error {
+	if p.done != nil {
+		return nil // drain barrier, closed by the flusher after flushPending returns
+	}
+	if p.action != nil {
+		if err := p.action(ctx); err != nil {
+			return &deferredAckError{err: err}
+		}
+		return nil
+	}
 	b := p.batch
 	if !b.tainted {
 		return p.acker.Ack(ctx, b)
@@ -335,6 +459,9 @@ func (t *DestinationTask) runFlusher(ctx context.Context) {
 				return // channel closed by Close after the trailing flush
 			}
 			err := t.flushPending(ctx, pending)
+			t.mu.Lock()
+			t.outstanding--
+			t.mu.Unlock()
 			if err != nil {
 				t.setFlushErr(err)
 				return
@@ -349,8 +476,9 @@ func (t *DestinationTask) runFlusher(ctx context.Context) {
 }
 
 // Drain writes everything this task has buffered and waits until the
-// destination has acked it and the source acks have been issued. It returns the
-// flusher's error if a flush failed (the records then replay on restart).
+// destination has acked it and the source acks have been issued. It returns an
+// error if a flush failed or ctx ended first (the records then replay on
+// restart, never a loss: see below).
 //
 // Invariant 1/7 (enforcement site): Worker.Stop calls it BEFORE it tears the
 // source down. Close drains the same buffers, but only after every worker has
@@ -358,10 +486,16 @@ func (t *DestinationTask) runFlusher(ctx context.Context) {
 // plugin.ErrPluginNotRunning and the records, though durably written, replay on
 // restart as duplicates (#3231). Draining first lets those acks land.
 //
-// On the synchronous path (no flusher) Drain flushes on the calling goroutine;
-// the caller must hold whatever serialises entry to the destination (see
-// Worker.drainDestinations). Safe to call repeatedly and concurrently with
-// doBuffered; a task already closed is a no-op.
+// Invariant 3 (enforcement site): the buffer is shared by every worker of a
+// shared destination, so Drain must never drop what it takes. If the batches
+// cannot be handed to the flusher (ctx ended, flusher dead) they are put back at
+// the front of the buffer, and the failure is recorded as the flush error so
+// siblings fail closed instead of acking a later batch past the gap.
+//
+// The pipelined path is safe against concurrent doBuffered/deferOrdered
+// (enqueueMu orders it behind a hand-off in progress). The synchronous path
+// flushes on the calling goroutine: the caller must hold whatever serialises
+// entry to the destination (see drainNode).
 func (t *DestinationTask) Drain(ctx context.Context) error {
 	if !t.batchingEnabled() {
 		return nil
@@ -370,26 +504,38 @@ func (t *DestinationTask) Drain(ctx context.Context) error {
 		return t.flush(ctx)
 	}
 
+	// enqueueMu covers the take and the hand-off only; the wait below must not
+	// hold it, or a deferOrdered queued behind the barrier would deadlock.
+	t.enqueueMu.Lock()
+
 	done := make(chan struct{})
 	t.mu.Lock()
 	if t.closed {
 		t.mu.Unlock()
+		t.enqueueMu.Unlock()
 		return nil
 	}
-	toFlush := make([]pendingBatch, 0, len(t.pending)+1)
-	toFlush = append(toFlush, t.pending...)
+	taken := t.pending
+	toFlush := make([]pendingBatch, 0, len(taken)+1)
+	toFlush = append(toFlush, taken...)
 	toFlush = append(toFlush, pendingBatch{done: done})
 	t.pending = nil
 	t.bufferedCount = 0
 	t.flushDeadline = time.Time{}
+	t.outstanding++ // the barrier flush is ahead of any deferOrdered that follows
 	t.mu.Unlock()
 
 	select {
 	case t.flushCh <- toFlush:
+		t.enqueueMu.Unlock()
 	case <-t.flusherDone:
-		return t.drainStopped(len(toFlush) - 1)
+		err := t.drainNotSent(taken, t.drainStopped(len(taken)))
+		t.enqueueMu.Unlock()
+		return err
 	case <-ctx.Done():
-		return ctx.Err()
+		err := t.drainNotSent(taken, ctx.Err())
+		t.enqueueMu.Unlock()
+		return err
 	}
 	select {
 	case <-done:
@@ -400,10 +546,36 @@ func (t *DestinationTask) Drain(ctx context.Context) error {
 			return nil
 		default:
 		}
-		return t.drainStopped(len(toFlush) - 1)
+		return t.drainStopped(len(taken))
 	case <-ctx.Done():
+		// Already handed to the flusher, which keeps going; nothing is lost.
 		return ctx.Err()
 	}
+}
+
+// drainNotSent undoes a Drain whose take never reached the flusher: the batches
+// go back at the front of the buffer, in order, and err is recorded so the
+// shared destination fails closed.
+func (t *DestinationTask) drainNotSent(taken []pendingBatch, err error) error {
+	t.mu.Lock()
+	t.outstanding--
+	restored := make([]pendingBatch, 0, len(taken)+len(t.pending))
+	restored = append(restored, taken...)
+	restored = append(restored, t.pending...)
+	t.pending = restored
+	t.bufferedCount = 0
+	for _, p := range restored {
+		if p.batch != nil {
+			t.bufferedCount += len(p.batch.ActiveRecords())
+		}
+	}
+	if t.batchDelay > 0 && t.bufferedCount > 0 {
+		t.flushDeadline = time.Now() // overdue: the next arrival flushes
+	}
+	t.mu.Unlock()
+	werr := cerrors.Errorf("drain of destination %s did not reach the flusher: %w", t.id, err)
+	t.setFlushErr(werr)
+	return werr
 }
 
 // drainStopped is the error for a Drain that found the flusher already dead.
@@ -432,6 +604,9 @@ func (t *DestinationTask) stopFlusher(ctx context.Context) error {
 	t.mu.Unlock()
 
 	if len(trailing) > 0 {
+		t.mu.Lock()
+		t.outstanding++
+		t.mu.Unlock()
 		select {
 		case t.flushCh <- trailing:
 		case <-t.flusherDone:

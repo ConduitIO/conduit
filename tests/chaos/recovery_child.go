@@ -336,6 +336,7 @@ func parseLCChildEnv() lcChildEnv {
 
 	cfg.graceful = os.Getenv(envLCGraceful) == envValueTrue
 	parseLCEngineEnv(&cfg)
+	lcSettleHeartbeat.Store(cfg.graceful && cfg.destBatchSize > 0)
 
 	if cfg.dbDir == "" || cfg.upstreamDir == "" || cfg.mainDir == "" || cfg.dlqDir == "" {
 		fmt.Fprintf(os.Stderr, "%s: %s, %s, %s and %s are required\n", markerFatal, envLCDBDir, envLCUpstream, envLCMainDir, envLCDLQDir)
@@ -597,13 +598,6 @@ func (p *recoverySourcePlugin) Run(ctx context.Context, stream pconnector.Source
 // further records ever produced by this process. That is a hard ceiling on
 // how far this process can get, which is what lets a parent test SIGKILL it
 // mid-run without racing it - see lcChildConfig.holdAt.
-// lcProduced is the highest position this process's source plugin has sent.
-// The graceful child uses it, when destination batching is on, to know the
-// source has produced everything before it stops: a trailing partial batch has
-// no flush timer, so it is flushed and acked by Worker.Stop's drain (#3231), and
-// the source cannot be waited on to ack through total beforehand.
-var lcProduced atomic.Uint64
-
 func (p *recoverySourcePlugin) produceLoop(inmemStream *builtin.InMemorySourceRunStream, server pconnector.SourceRunStreamServer, start uint64) {
 	pos := start
 	for {
@@ -622,10 +616,14 @@ func (p *recoverySourcePlugin) produceLoop(inmemStream *builtin.InMemorySourceRu
 		p.mu.Lock()
 		p.lastSent = rec.Position
 		p.mu.Unlock()
-		lcProduced.Store(pos)
 		printProgress("READ", pos)
 
 		if p.total > 0 && pos >= p.total {
+			if lcSettleHeartbeat.Load() {
+				if err := server.Send(pconnector.SourceRunResponse{}); err == nil {
+					lcSettled.Store(true)
+				}
+			}
 			return
 		}
 		// The production ceiling. Checked after the send (so holdAt is the
@@ -1126,16 +1124,31 @@ func waitForLCTotalAcked(instance *connector.Instance, total uint64, timeout tim
 	os.Exit(exitOpenOtherError)
 }
 
-// waitForLCProduced blocks until the source plugin has sent position total.
-func waitForLCProduced(total uint64, timeout time.Duration) {
+// lcSettleHeartbeat makes the source plugin follow its last record with an empty
+// response and flag lcSettled once the engine has taken it. The graceful child
+// sets it when destination batching is on: the trailing partial batch is acked
+// by Worker.Stop's drain (#3231), so the child cannot wait for the ack before
+// stopping, but it must not stop while the worker still holds an unprocessed
+// read (Stop discards a batch read after it armed, and those records would
+// replay). The response is delivered over an unbuffered stream and a receive is
+// only posted by a Read call, which the worker makes only after the previous
+// pass is complete; so once the empty response is taken, the last record has
+// been processed.
+var lcSettleHeartbeat atomic.Bool
+
+// lcSettled is set once the heartbeat above has been taken by the engine.
+var lcSettled atomic.Bool
+
+// waitForLCSettled blocks until lcSettled, or exits the process on timeout.
+func waitForLCSettled(timeout time.Duration) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if lcProduced.Load() >= total {
+		if lcSettled.Load() {
 			return
 		}
 		time.Sleep(time.Millisecond)
 	}
-	fmt.Fprintf(os.Stderr, "%s: timed out waiting for source to produce position %d\n", markerFatal, total)
+	fmt.Fprintf(os.Stderr, "%s: timed out waiting for the engine to take the last read\n", markerFatal)
 	os.Exit(exitOpenOtherError)
 }
 
@@ -1238,10 +1251,9 @@ func runChildLifecycle() {
 	// was durably persisted by the killed process and runs to cfg.total.
 	if cfg.destBatchSize > 0 {
 		// Batched: the trailing partial batch is acked by Stop's drain, so wait
-		// for production (then a short settle for the worker to read it) rather
-		// than for the ack. waitForUpstreamCommitted below is the real check.
-		waitForLCProduced(cfg.total, 30*time.Second)
-		time.Sleep(300 * time.Millisecond)
+		// for the engine to have taken the last read (lcSettleHeartbeat), not
+		// for the ack. waitForUpstreamCommitted below is the real check.
+		waitForLCSettled(30 * time.Second)
 	} else {
 		waitForLCTotalAcked(built.sourceInstance, cfg.total, 30*time.Second)
 	}

@@ -39,7 +39,7 @@ import (
 //     ledger covers every position 1..total at least once — in-flight batches
 //     are replayed, never lost.
 //
-// The restart runs without destination batching; see pipelinedFlusherRestart.
+// The restart keeps destination batching on; see pipelinedFlusherRestart.
 func TestSIGKILL_PipelinedFlusher_CrashMidWindow(t *testing.T) {
 	is := is.New(t)
 	dir := t.TempDir()

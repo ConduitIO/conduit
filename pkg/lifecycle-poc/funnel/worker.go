@@ -271,29 +271,45 @@ func (w *Worker) drainDestinationsBeforeTeardown(ctx context.Context) {
 	}
 }
 
-// drainNode drains the batching destinations at and below n. A synchronous
-// (non-pipelined) drain writes on the calling goroutine, so it takes the
-// outermost shared-boundary mutex on the way down, the same lock doTask holds
-// around a pass through a shared destination; a pipelined drain goes through
-// the flusher goroutine, which already serialises the destination.
-func drainNode(ctx context.Context, n *TaskNode, shared *sync.Mutex) error {
+// drainNode drains the batching destinations at and below n.
+//
+// Both modes take the outermost shared-boundary mutex on the way down, the
+// same lock doTask holds around a pass through a shared destination. For the
+// synchronous path that serialises the flush with a sibling's Write/Ack on the
+// one destination stream. For the pipelined path the flusher is the only writer
+// so it is not needed for the stream, but it orders the drain behind any
+// sibling pass that is mid hand-off. The flusher never takes the mutex, so
+// neither can deadlock.
+//
+// A drain that fails on a shared destination poisons it, exactly as a failed
+// doTask pass does (see doTask): the failure may have left the shared ack
+// stream desynchronized or a sibling's batches undelivered, and a sibling must
+// not go on to ack past them.
+func drainNode(ctx context.Context, n *TaskNode, shared *TaskNode) error {
 	if n.sharedBoundary && shared == nil {
-		shared = n.sharedMu
+		shared = n
 	}
 	var errs []error
 	if dt, ok := n.Task.(*DestinationTask); ok && dt.batchingEnabled() {
-		if shared != nil && dt.flushCh == nil {
-			shared.Lock()
-			errs = append(errs, dt.Drain(ctx))
-			shared.Unlock()
-		} else {
-			errs = append(errs, dt.Drain(ctx))
+		err := drainTask(ctx, dt, shared)
+		if err != nil && shared != nil {
+			shared.poisoned.Store(true)
 		}
+		errs = append(errs, err)
 	}
 	for _, next := range n.Next {
 		errs = append(errs, drainNode(ctx, next, shared))
 	}
 	return cerrors.Join(errs...)
+}
+
+func drainTask(ctx context.Context, dt *DestinationTask, shared *TaskNode) error {
+	if shared == nil {
+		return dt.Drain(ctx)
+	}
+	shared.sharedMu.Lock()
+	defer shared.sharedMu.Unlock()
+	return dt.Drain(ctx)
 }
 
 // Stopping reports whether this worker has armed its stop — i.e. w.stop was set
@@ -681,7 +697,15 @@ func (w *Worker) doTaskAttempt(
 			// as long as any sibling worker is still running. See
 			// docs/design-documents/20260801-archv2-multiconnector-nsource.md.
 			w.stop.Store(true)
-			w.drainDestinationsBeforeTeardown(ctx)
+			// Invariant 1/7 (#3231): same drain as Stop, under the processing
+			// lock so it cannot run concurrently with a Stop doing the same on
+			// a synchronous destination (this branch is reached without the
+			// lock: the read that returned io.EOF is not protected by it).
+			// guard: funnel-eof-drains-before-teardown tests=^TestWorker_SourceEOF_DrainsDestinationBeforeTeardown$
+			if release, lerr := w.acquireProcessingLock(ctx); lerr == nil {
+				w.drainDestinationsBeforeTeardown(ctx)
+				release()
+			}
 			if tdErr := w.tearDownSource(ctx); tdErr != nil {
 				return cerrors.Errorf("source finished but failed to tear down: %w", tdErr)
 			}
@@ -726,7 +750,9 @@ func (w *Worker) doTaskAttempt(
 		if !taskNode.HasNext() || !b.HasActiveRecords() {
 			// Either this is the last task (the batch has made it end-to-end),
 			// or the batch has only filtered records. Let's ack!
-			return acker.Ack(ctx, b)
+			return w.ackInOrder(ctx, taskNode, func(ctx context.Context) error {
+				return acker.Ack(ctx, b)
+			})
 		}
 		// There is at least one task after this one, let's continue.
 		return w.doNextTask(ctx, taskNode, b, acker)
@@ -775,7 +801,9 @@ func (w *Worker) doTaskAttempt(
 				// or the batch has only filtered records. Let's ack!
 				// We need to ack all the records in the batch, not only active
 				// ones, filtered ones should also be acked.
-				err := acker.Ack(ctx, subBatch)
+				err := w.ackInOrder(ctx, taskNode, func(ctx context.Context) error {
+					return acker.Ack(ctx, subBatch)
+				})
 				if err != nil {
 					return err
 				}
@@ -787,7 +815,9 @@ func (w *Worker) doTaskAttempt(
 				return err
 			}
 		case RecordFlagNack:
-			err := acker.Nack(ctx, subBatch, t.ID())
+			err := w.ackInOrder(ctx, taskNode, func(ctx context.Context) error {
+				return acker.Nack(ctx, subBatch, t.ID())
+			})
 			if err != nil {
 				return err
 			}
@@ -1036,6 +1066,46 @@ func branchMutatesRecords(n *TaskNode) bool {
 		}
 	}
 	return false
+}
+
+// ackInOrder runs ack, a source ack or nack for records that stop at taskNode
+// without reaching the destinations below it (filtered, or nacked to the DLQ),
+// in source order relative to the batches those destinations have buffered.
+//
+// Invariant 1/2/3 (enforcement site): with destination batching, earlier
+// batches sit in a destination's buffer or flusher queue while later batches
+// are still being processed. Acking a bypassing batch right away would make
+// connector.Source.Ack persist a position past records that are not yet
+// durable. Each batching destination below taskNode (all of them, at a
+// fan-out) gets to queue the ack behind its earlier batches; see
+// DestinationTask.deferOrdered. With no batching destination below, ack runs
+// inline.
+func (w *Worker) ackInOrder(ctx context.Context, taskNode *TaskNode, ack func(context.Context) error) error {
+	return ackBehind(ctx, batchingDestinations(taskNode), ack)
+}
+
+// ackBehind queues ack behind the earlier batches of each destination in dts,
+// in turn: the ack of the last link runs only after every destination has
+// released everything that was ahead of it.
+func ackBehind(ctx context.Context, dts []*DestinationTask, ack func(context.Context) error) error {
+	if len(dts) == 0 {
+		return ack(ctx)
+	}
+	return dts[0].deferOrdered(ctx, func(ctx context.Context) error {
+		return ackBehind(ctx, dts[1:], ack)
+	})
+}
+
+// batchingDestinations returns the batching destination tasks strictly below n.
+func batchingDestinations(n *TaskNode) []*DestinationTask {
+	var out []*DestinationTask
+	for _, next := range n.Next {
+		if dt, ok := next.Task.(*DestinationTask); ok && dt.batchingEnabled() {
+			out = append(out, dt)
+		}
+		out = append(out, batchingDestinations(next)...)
+	}
+	return out
 }
 
 func (w *Worker) Ack(ctx context.Context, batch *Batch) error {
