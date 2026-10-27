@@ -26,6 +26,7 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin"
 )
 
 type DestinationTask struct {
@@ -73,6 +74,16 @@ type DestinationTask struct {
 	// doBuffered refuses to buffer after it, so no batch can be appended behind
 	// the drain.
 	closed bool
+
+	// enqueueMu makes "take pending + send on flushCh" atomic with respect to
+	// deferOrdered on the pipelined path. Lock order: enqueueMu, then mu. The
+	// flusher never takes it.
+	enqueueMu sync.Mutex
+
+	// testAfterTake, if set, is called by doBuffered after it took the pending
+	// buffer to flush and before it hands it to the flusher. Tests use it to
+	// hold that window open; nil in production.
+	testAfterTake func()
 }
 
 type Destination interface {
@@ -181,14 +192,24 @@ func (t *DestinationTask) Close(ctx context.Context) error {
 	// On the pipelined path this also drains the flusher goroutine: the
 	// trailing partial batch is enqueued, the channel is closed, and Close
 	// waits for the flusher to finish every in-flight flush before teardown.
+	var flushErr error
 	if t.pipelined && t.flusherDone != nil {
-		if err := t.stopFlusher(ctx); err != nil {
-			t.logger.Err(ctx, err).Msg("failed to flush buffered records before destination teardown (records replay on restart)")
-		}
-	} else if err := t.flush(ctx); err != nil {
-		t.logger.Err(ctx, err).Msg("failed to flush buffered records before destination teardown (records replay on restart)")
+		flushErr = t.stopFlusher(ctx)
+	} else {
+		flushErr = t.flush(ctx)
 	}
-	return t.destination.Teardown(ctx)
+	var deferredErr error
+	if flushErr != nil {
+		t.logger.Err(ctx, flushErr).Msg("failed to flush buffered records before destination teardown (records replay on restart)")
+		// A queued source nack that failed (DLQ disabled or over threshold) is a
+		// pipeline failure, not a replayable ack: report it so a stop is not
+		// mistaken for a clean one. A source already torn down is the expected
+		// replay case.
+		if isDeferredAckError(flushErr) && !cerrors.Is(flushErr, plugin.ErrPluginNotRunning) {
+			deferredErr = flushErr
+		}
+	}
+	return cerrors.Join(deferredErr, t.destination.Teardown(ctx))
 }
 
 func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
