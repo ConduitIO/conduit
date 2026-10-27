@@ -19,8 +19,9 @@ This doc defines two things:
    waits until every branch's submission completes before it reads again. Workers overlap one another on the
    destination. A single worker's batches never overlap each other.
 
-**Tier 1** (data path). Pipeline config, serialized state and protocol messages do not change. One protocol
-_guarantee_ is written down in a separate PR (see "The ack-order contract").
+**Tier 1** (data path). Pipeline config and serialized state do not change. A separate protocol PR documents an
+ack-order guarantee and makes one additive proto change: an optional `orderedAcks` field on the destination open
+response, shipped as a minor bump after the versioning discussion (see "The ack-order contract" and open question 1).
 
 ### Ownership across this doc and #3291
 
@@ -235,9 +236,9 @@ with several writes in flight. Decision:
 
 1. **It becomes a documented protocol guarantee.** A separate `conduit-connector-protocol` PR states it in the
    `DestinationRunResponse` comments and the README: acks are sent in the order records were received, across all
-   `Write`s on the stream, with exactly one ack per record. No message changes. **This is a protocol change in the
-   sense of CLAUDE.md** and needs the explicit versioning discussion before it merges. The proposal is to treat it as
-   a clarification, with a minor version bump.
+   `Write`s on the stream, with exactly one ack per record. The same PR carries the additive `orderedAcks` field from
+   item 3; no existing field changes. **This is a protocol change in the sense of CLAUDE.md** and needs the explicit
+   versioning discussion before it merges (open question 1). The proposal is a minor version bump.
 2. **The acceptance suite asserts it.** `conduit-connector-sdk`'s DST-01 and DST-02 (`acceptance_v2_destination.go`)
    send writes without waiting for acks. They get an order assertion: with unique positions, the sequence of acked
    positions must equal the sequence sent. Today `requireAllAcked` checks only set membership, so a reorder passes.
@@ -396,8 +397,8 @@ No number from this doc goes into release notes. The implementation PR must show
 
 ## Upgrade and rollback
 
-Config, positions, state and protocol messages are unchanged. The protocol PR adds documentation and one optional
-field. Upgrade and downgrade need no migration, and records that were not acked replay under either version.
+Config, positions and state are unchanged. The protocol PR is additive: documentation plus one optional
+`orderedAcks` field (minor bump), which old plugins and old engines ignore. Upgrade and downgrade need no migration, and records that were not acked replay under either version.
 Rollback is a revert. Arch-v2 is `preview` in v0.21.
 
 ## Observability
