@@ -575,6 +575,7 @@ func (t *DestinationTask) Drain(ctx context.Context) error {
 // go back at the front of the buffer, in order, and err is recorded so the
 // shared destination fails closed.
 func (t *DestinationTask) drainNotSent(taken []pendingBatch, err error) error {
+	werr := cerrors.Errorf("drain of destination %s did not reach the flusher: %w", t.id, err)
 	t.mu.Lock()
 	t.outstanding--
 	restored := make([]pendingBatch, 0, len(taken)+len(t.pending))
@@ -590,12 +591,15 @@ func (t *DestinationTask) drainNotSent(taken []pendingBatch, err error) error {
 	if t.batchDelay > 0 && t.bufferedCount > 0 {
 		t.flushDeadline = time.Now() // overdue: the next arrival flushes
 	}
+	// Invariant 3 (enforcement site): fail closed, in the same critical section
+	// that releases the slot. Another worker's ordered ack (deferOrdered) and
+	// doBuffered consult the flush error; recorded afterwards, a sibling could
+	// see an idle task with no error and ack past a batch this drain was meant
+	// to deliver.
+	if t.flushErr == nil {
+		t.flushErr = werr
+	}
 	t.mu.Unlock()
-	werr := cerrors.Errorf("drain of destination %s did not reach the flusher: %w", t.id, err)
-	// Invariant 3 (enforcement site): fail closed. Another worker's ordered ack
-	// (deferOrdered) and doBuffered consult the flush error; without it a sibling
-	// could ack a later batch past a batch this drain was meant to deliver.
-	t.setFlushErr(werr)
 	return werr
 }
 

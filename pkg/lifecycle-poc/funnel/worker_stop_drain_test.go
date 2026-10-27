@@ -18,10 +18,12 @@ import (
 	"context"
 	"io"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -446,4 +448,71 @@ func TestWorker_Stop_PipelinedDrainCtxExpiry_SiblingOrderedAckFailsClosed(t *tes
 		}
 	}
 	_ = dt.Close(ctx)
+}
+
+// failFirstWriteDestination fails its first Write, then behaves.
+type failFirstWriteDestination struct {
+	*fakeDestination
+	failed bool
+}
+
+func (d *failFirstWriteDestination) Write(ctx context.Context, recs []opencdc.Record) error {
+	if !d.failed {
+		d.failed = true
+		return cerrors.New("destination unavailable")
+	}
+	return d.fakeDestination.Write(ctx, recs)
+}
+
+// TestWorker_Stop_DrainFailure_PoisonedBeforeSharedLockIsReleased: the drain must
+// poison the shared node (and fail the destination) while it still holds
+// sharedMu. Poisoning after the unlock leaves a window in which a sibling takes
+// the lock, sees an unpoisoned node and writes/acks a later batch past the
+// batch the failed drain dropped.
+func TestWorker_Stop_DrainFailure_PoisonedBeforeSharedLockIsReleased(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Test(t)
+
+	srcA := &teardownSource{fakeSource: newFakeSource("a", nil)}
+	srcB := &teardownSource{fakeSource: newFakeSource("b", nil)}
+	dest := &failFirstWriteDestination{fakeDestination: newFakeDestination("dest")}
+	dt := NewBatchingDestinationTask("dest", dest, logger, NoOpConnectorMetrics{}, 10, 0)
+	is.NoErr(dt.Open(ctx))
+	destNode := &TaskNode{Task: dt}
+	destNode.MarkSharedBoundary()
+	nA := &TaskNode{Task: NewSourceTask("a", srcA, logger, NoOpConnectorMetrics{}), Next: []*TaskNode{destNode}}
+	nB := &TaskNode{Task: NewSourceTask("b", srcB, logger, NoOpConnectorMetrics{}), Next: []*TaskNode{destNode}}
+	wA, err := NewWorker(nA, NewDLQ("dlqa", newFakeDestination("dlqa"), logger, NoOpConnectorMetrics{}, 10, 10), logger, noop.Timer{})
+	is.NoErr(err)
+	wB, err := NewWorker(nB, NewDLQ("dlqb", newFakeDestination("dlqb"), logger, NoOpConnectorMetrics{}, 10, 10), logger, noop.Timer{})
+	is.NoErr(err)
+
+	recs := randomRecords(2)
+	is.NoErr(wB.doTask(ctx, destNode, NewBatch(recs[:1]), newRunAckNacker(wB))) // B's record 0, buffered
+
+	var once sync.Once
+	var poisonedAtUnlock atomic.Bool
+	destNode.testAfterDrain = func() {
+		once.Do(func() {
+			// The instant the failed drain released the lock, the node must
+			// already be poisoned: a sibling that takes the lock now only checks
+			// that flag on entry.
+			poisonedAtUnlock.Store(destNode.poisoned.Load())
+			// A sibling takes the lock the instant the failed drain released it.
+			_ = wB.doTask(ctx, destNode, NewBatch(recs[1:]), newRunAckNacker(wB))
+		})
+	}
+	_ = wA.Stop(ctx) // the drain's Write fails once; record 0 is dropped
+	_ = dt.Close(ctx)
+
+	is.True(poisonedAtUnlock.Load())
+	// Record 0 was never written, so nothing at or past it may have been acked.
+	acked, _ := srcB.snapshot()
+	written := map[string]bool{}
+	for _, p := range dest.receivedPositions() {
+		written[string(p)] = true
+	}
+	is.True(!written[string(recs[0].Position)])
+	is.Equal(len(acked), 0)
 }

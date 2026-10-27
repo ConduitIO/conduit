@@ -292,13 +292,8 @@ func drainNode(ctx context.Context, n *TaskNode, shared *TaskNode) error {
 	var errs []error
 	if dt, ok := n.Task.(*DestinationTask); ok && dt.batchingEnabled() {
 		err := drainTask(ctx, dt, shared)
-		if err != nil && shared != nil {
-			shared.poisoned.Store(true)
-			// The poison flag is only read on entry to the shared node; a
-			// sibling's ordered ack (ackInOrder) never passes that check. Fail
-			// the batching destinations too so deferOrdered refuses.
-			// guard: funnel-drain-failure-fails-closed tests=^TestWorker_Stop_SyncDrainFailure_SiblingOrderedAckFailsClosed$
-			poisonBatchingDestinations(shared, err)
+		if shared != nil && shared.testAfterDrain != nil {
+			shared.testAfterDrain()
 		}
 		errs = append(errs, err)
 	}
@@ -308,13 +303,27 @@ func drainNode(ctx context.Context, n *TaskNode, shared *TaskNode) error {
 	return cerrors.Join(errs...)
 }
 
+// drainTask drains dt, holding the shared lock (if any) for the whole drain AND
+// for the poisoning that follows a failure, exactly as doTask poisons before it
+// releases sharedMu. Poisoning after the unlock would leave a window in which a
+// sibling takes the lock, sees an unpoisoned node and writes or acks a later
+// batch past the batch the failed drain dropped.
 func drainTask(ctx context.Context, dt *DestinationTask, shared *TaskNode) error {
 	if shared == nil {
 		return dt.Drain(ctx)
 	}
 	shared.sharedMu.Lock()
 	defer shared.sharedMu.Unlock()
-	return dt.Drain(ctx)
+	err := dt.Drain(ctx)
+	if err != nil {
+		shared.poisoned.Store(true)
+		// The poison flag is only read on entry to the shared node; a sibling's
+		// ordered ack (ackInOrder) never passes that check. Fail the batching
+		// destinations too so deferOrdered refuses.
+		// guard: funnel-drain-failure-fails-closed tests=^TestWorker_Stop_SyncDrainFailure_SiblingOrderedAckFailsClosed$
+		poisonBatchingDestinations(shared, err)
+	}
+	return err
 }
 
 // Stopping reports whether this worker has armed its stop — i.e. w.stop was set
@@ -1294,6 +1303,10 @@ type TaskNode struct {
 	// sharedMu is non-nil if and only if sharedBoundary is true. See
 	// MarkSharedBoundary and the lock acquisition in doTask.
 	sharedMu *sync.Mutex
+	// testAfterDrain, if set on a shared boundary node, is called by drainNode
+	// right after a drain released sharedMu. Tests use it to interleave a sibling
+	// at that instant; nil in production.
+	testAfterDrain func()
 	// poisoned is only meaningful if sharedBoundary is true. H2 (adversarial
 	// review of #2734): set, under sharedMu, by doTask when a pass through
 	// this shared subtree returns an error - which may have left the shared
