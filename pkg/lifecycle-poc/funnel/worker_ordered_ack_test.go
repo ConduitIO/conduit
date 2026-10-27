@@ -613,3 +613,43 @@ func TestDestinationTask_DoBuffered_FlushFailsBetweenErrCheckAndBuffering(t *tes
 	task.mu.Unlock()
 	_ = task.Close(ctx)
 }
+
+// blockThenFailDestination blocks Write until released, then fails it.
+type blockThenFailDestination struct {
+	*fakeDestination
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (d *blockThenFailDestination) Write(context.Context, []opencdc.Record) error {
+	close(d.entered)
+	<-d.release
+	return cerrors.New("destination unavailable")
+}
+
+// TestDestinationTask_Sync_QueuedAckNotRunAfterFlushFailure: a source ack queued
+// behind a synchronous flush that then fails must not run later (Close flushes
+// whatever is still pending): the batch it was queued behind was dropped.
+func TestDestinationTask_Sync_QueuedAckNotRunAfterFlushFailure(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	dest := &blockThenFailDestination{fakeDestination: newFakeDestination("d"), entered: make(chan struct{}), release: make(chan struct{})}
+	task := NewBatchingDestinationTask("d", dest, log.Test(t), NoOpConnectorMetrics{}, 2, 0)
+	recs := randomRecords(2)
+
+	is.True(isBuffered(task.doBuffered(ctx, NewBatch(recs[:1]), newRecordingAckNacker(&eventLog{}))))
+	flushed := make(chan error, 1)
+	go func() { flushed <- task.doBuffered(ctx, NewBatch(recs[1:]), newRecordingAckNacker(&eventLog{})) }()
+	<-dest.entered // the flush is in flight
+
+	var ran atomic.Bool
+	is.NoErr(task.deferOrdered(ctx, func(context.Context) error {
+		ran.Store(true)
+		return nil
+	})) // queued behind the in-flight flush
+	close(dest.release)
+	is.True(<-flushed != nil) // the flush fails
+
+	_ = task.Close(ctx)  // flushes what is left
+	is.True(!ran.Load()) // the queued ack must not have run
+}

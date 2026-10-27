@@ -302,6 +302,14 @@ func (t *DestinationTask) deferOrdered(ctx context.Context, ack func(context.Con
 // Close; see flushPending for the write/ack work itself.
 func (t *DestinationTask) flush(ctx context.Context) error {
 	t.mu.Lock()
+	// Invariant 3: after a failed flush what is still pending (records and source
+	// acks queued behind the batch that failed) must not run: those acks would
+	// move the source past the batch the failed flush dropped. It stays
+	// unacknowledged and replays on restart.
+	if err := t.flushErr; err != nil {
+		t.mu.Unlock()
+		return err
+	}
 	pending := t.pending
 	t.pending = nil
 	t.bufferedCount = 0
