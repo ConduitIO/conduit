@@ -38,6 +38,19 @@ ALPINE_IMG=$(python3 -c "import sys; sys.path.insert(0,'$HERE'); import cells; p
 
 with_tty() { script -q -e -c "$(printf '%q ' "$@")" /dev/null; }
 
+# After EVERY run: a progress line in the shard log and the run directory in
+# S3, so a stuck run or an instance lost to its cap loses one run, not a cell.
+publish_run() { # label rc t0
+  local label=$1 rc=$2 t0=$3 rd="$DIR/$1" first=no
+  grep -q '"first_record_ms"\|FIRST_MS' "$rd/run.json" 2>/dev/null && first=yes
+  [ -s "$rd/samples.jsonl" ] && grep -q '"count": *[1-9]' "$rd/samples.jsonl" 2>/dev/null && first=yes
+  echo "$(date -u +%FT%TZ) run $CELL/$label exit $rc $(( ($(date +%s%3N) - t0) / 1000 ))s record=$first" >> "$OUT/shard.log"
+  if [ -n "${MATRIX_S3:-}" ]; then
+    aws s3 cp --quiet "$OUT/shard.log" "$MATRIX_S3/shard-${MATRIX_SHARD:-0}/shard.log" || true
+    aws s3 sync --quiet --exclude 'prof/*.pprof' "$rd" "$MATRIX_S3/shard-${MATRIX_SHARD:-0}/$(basename "$DIR")/$label" || true
+  fi
+}
+
 # Fresh state per run. Postgres always (its own volume, on EBS). The broker
 # volume only at the cell's first run when the cell drains a backlog (the topic
 # is filled once per cell; every run reads it with its own consumer group).
@@ -129,8 +142,9 @@ run_benchi() { # label arm diag
   start_res "$rd"
   [ "$diag" = 1 ] && start_diag "$rd" "$arm"
   local t0; t0=$(date +%s%3N)
-  # Bounded: 20 minutes past the planned run before it is killed.
-  local cap=$(( $(meta run_seconds) + 1200 + 3600 * $( [ "$MODE" = snapshot ] || [ "$MODE" = correct ] && echo 1 || echo 0) ))
+  # Bounded: 20 minutes past the planned run (10 in smoke) before it is killed.
+  local slack=1200; [ "${MATRIX_SMOKE:-0}" = 1 ] && slack=600
+  local cap=$(( $(meta run_seconds) + slack + 3600 * $( [ "$MODE" = snapshot ] || [ "$MODE" = correct ] && echo 1 || echo 0) ))
   (cd "$rd/cfg" && with_tty timeout "$cap" "$BENCHI" -config bench.yml -tool "$arm" -out "$rd/benchi" </dev/null >/dev/null 2>&1)
   local rc=$?
   [ "$diag" = 1 ] && stop_diag
@@ -138,6 +152,7 @@ run_benchi() { # label arm diag
   cat /proc/loadavg > "$rd/load-after.txt"
   python3 "$HERE/runinfo.py" "$rd" "$arm" "$label" "$rc" "$t0" > "$rd/run.json"
   [ "$rc" = 0 ] || echo "run $label exited $rc" >&2
+  publish_run "$label" "$rc" "$t0"
 }
 
 # Recovery runs: benchi cannot kill and restart a tool mid-test, so this mode
@@ -190,6 +205,7 @@ run_recover() { # label arm
   (cd "$cfg" && docker compose -p "$P-sut" -f tools/tool.yml down -v; docker compose -p "$P" -f infra.yml down -v) >> "$rd/compose.log" 2>&1
   docker network rm benchi >/dev/null 2>&1 || true
   python3 "$HERE/runinfo.py" "$rd" "$arm" "$label" 0 "$t0" > "$rd/run.json"
+  publish_run "$label" 0 "$t0"
 }
 
 {

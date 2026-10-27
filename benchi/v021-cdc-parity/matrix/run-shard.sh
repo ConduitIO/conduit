@@ -13,6 +13,7 @@
 # After each cell the results are synced to $MATRIX_S3.
 set -uo pipefail
 K=${1:?K}; I=${2:?I}; PLAN=${3:?plan}; OUT=${4:?out}
+export MATRIX_SHARD=$I
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../../.." && pwd)
 mkdir -p "$OUT"
