@@ -1,4 +1,4 @@
-# Fixes v0.21.0 must carry. Format: module | commit | note
+# Fixes every v0.21.x release must carry. Format: module | commit | note
 #   module  = "conduit" for this repository, or a Go module path resolved in go.mod
 #   commit  = SHA of at least 7 hex digits; must be an ancestor of the module's
 #             pinned version (or of HEAD for "conduit")
