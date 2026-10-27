@@ -60,11 +60,12 @@ func (d *dropAckDestination) Ack(context.Context) ([]connector.DestinationAck, e
 // destination drops one ack. validateAcks cannot tell the two records apart by
 // position, so the ack that does arrive is accepted for the first record, but
 // the flush still owes an ack for the second: it waits for it and fails when the
-// stream ends. Neither source may be acked. This pins that the one-write-in-
-// flight design (a single flusher) turns a dropped ack into a stall or error,
-// never into an ack for an unwritten record; the design that puts several
-// Writes in flight on one stream (#3292) removes that property and needs a
-// per-write ack count.
+// stream ends. Neither source may be acked. This pins that a flush with one
+// Write in flight turns a dropped ack into a stall or error, never into an ack
+// for an unwritten record. It drives the synchronous flushPending, the same
+// code the pipelined flusher goroutine runs (one flusher, one Write in flight);
+// it does not start that goroutine. A design that puts several Writes in flight
+// on one stream (#3292) removes that property and needs a per-write ack count.
 func TestFlushPending_CollidingPositionsAcrossSources_DroppedAckAcksNothing(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
