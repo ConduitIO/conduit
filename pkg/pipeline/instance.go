@@ -125,20 +125,16 @@ func (d DLQ) LogsWithoutPayload() bool {
 	return !strings.EqualFold(strings.TrimSpace(d.Settings["payload"]), "true")
 }
 
-// isBuiltinLog reports whether plugin names the built-in log connector at any
-// version: "builtin:log", "builtin:log@v0.8.0", "builtin:log@latest", and a
-// bare "log" or "log@..." (type "any", which resolves to the built-in connector
-// unless a standalone plugin of that name is installed; treating it as the
-// built-in fails closed). A standalone plugin named log is a different
-// connector and is not matched.
+// isBuiltinLog reports whether plugin names the log connector at any version
+// and of any plugin type: "builtin:log", "builtin:log@v0.8.0", a bare "log"
+// (type "any", which resolves to the built-in connector unless a standalone
+// plugin of that name is installed), and "standalone:log", which is the same
+// connector installed as a standalone plugin and also logs only hashes by
+// default. Matching every type fails closed: a different plugin that happens
+// to be named log is refused too, and the operator can set payload:true or
+// use a DLQ that stores the record.
 func isBuiltinLog(name string) bool {
-	fn := plugin.FullName(name)
-	switch fn.PluginType() {
-	case plugin.PluginTypeBuiltin, plugin.PluginTypeAny:
-		return fn.PluginName() == "log"
-	default:
-		return false
-	}
+	return plugin.FullName(name).PluginName() == "log"
 }
 
 // RoutesNacks reports whether a nacked record is written to the DLQ at all.
