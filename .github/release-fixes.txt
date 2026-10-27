@@ -43,3 +43,14 @@ conduit | 213daec5 | bump the Go toolchain to 1.26.10 for GO-2026-6809
 # Postgres — slot-gap fail-loud. go.mod bumped to conduit-connector-postgres
 # v0.14.6; the fix commit is an ancestor of that tag:
 github.com/conduitio/conduit-connector-postgres | df7230f | fail loudly when the replication slot no longer covers the saved position
+
+# v0.20.7 — regressions in v0.20.6 (#3287). The commons and SDK bumps restore
+# fixes v0.20.5 had; the DLQ and template fixes are backports of #3285.
+conduit | 98c95b5f | bump conduit-commons to v0.8.3
+conduit | 98c95b5f | bump conduit-connector-sdk to v0.16.2
+conduit | 98c95b5f | start pipelines that use the default DLQ again
+conduit | 98c95b5f | apply that refusal to every spelling of the log connector
+conduit | 98c95b5f | match goccy/go-json v0.11 byte output
+conduit | 98c95b5f | log full records in the generator-log template
+github.com/conduitio/conduit-connector-sdk | 19a5a4a | copy the batch before the batch middleware reads ahead
+github.com/conduitio/conduit-connector-generator | 76a663a | copy the file payload per record
