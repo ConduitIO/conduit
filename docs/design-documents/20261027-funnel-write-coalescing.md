@@ -65,9 +65,8 @@ a hard gate and not a preference.
 Reading the opt-in batching path for this design turned up defects that pipelining by default would
 spread to every pipeline. They are fixed on `main` as separate PRs, and every one of them is a merge
 condition for this design's implementation PR. This design names them and does not redesign them.
-PR numbers marked TBD are filled in as the fix PRs open.
 
-- **#3231** (fix PR: TBD). A partial batch has no flush timer. On graceful stop, `Worker.Stop` tears down the source
+- **#3231** (fix: #3295). A partial batch has no flush timer. On graceful stop, `Worker.Stop` tears down the source
   before `DestinationTask.Close` drains the flusher, so the trailing source acks fail with
   `plugin.ErrPluginNotRunning` and the records replay. `tests/chaos/pipelined_flusher_sigkill_test.go`
   works around it: `pipelinedFlusherRestart` turns batching off for the restart.
@@ -79,11 +78,11 @@ PR numbers marked TBD are filled in as the fix PRs open.
   That violates invariants 1, 2 and 3. Until #3294 merges, opt-in batching is exposed, and that
   includes batched fan-out (NxM with `sdk.batch.*`), which buffers synchronously but still has the
   bypass.
-- **H2, unsynchronized `splitRun` voting** (fix PR: TBD). A split run's members can be voted by the flusher (members
+- **H2, unsynchronized `splitRun` voting** (#3294). A split run's members can be voted by the flusher (members
   written) and by the worker (members filtered or nacked) at once. `splitRun`'s fields are not
   synchronized, so a lost or a double release is possible.
 - **Accumulator byte cap.** The accumulator cuts on record count only. For a standalone destination,
-  3000 records can exceed the plugin's 4 MiB receive limit. This ships as its own `fix:` PR (TBD) with a
+  3000 records can exceed the plugin's 4 MiB receive limit. This ships as its own `fix:` PR (#3296) with a
   regression test that fails on `main` (requirement R9 below).
 
 ## Constraints
@@ -156,7 +155,7 @@ pre-registered in benchi arm 2.
 
 ### Ownership per shape
 
-After #3292 and this doc have both landed. #3292 at `848122e7` carries the same table.
+After #3292 and this doc have both landed. #3292 is signed off at `d95843d2`, which carries the same table.
 
 | Shape | Stream owner | Worker waits for its write? | Coalescing | Owning doc |
 | --- | --- | --- | --- | --- |
@@ -170,8 +169,8 @@ The predicate is simple: one destination means read-ahead mode; two or more mean
 **Landing order.** The order is: the prerequisite fixes on `main`; then #3292's
 component and concurrent mode, which build the writer, the AckReader, the completion hook and R1 to
 R3; then this doc's take policy and read-ahead mode. This matches #3292's open question 2. #3292 at
-`848122e7` narrows concurrent mode to two or more sources, two or more bare destinations and no
-batching. It moves its former "phase 2" and its former R4 to this doc. #3292 is approved at that head.
+`d95843d2` narrows concurrent mode to two or more sources, two or more bare destinations and no
+batching. It moves its former "phase 2" and its former R4 to this doc.
 
 **Who completes, in read-ahead mode.** #3292's rule is that the AckReader never touches the worker's
 batch, and that workers ack their own source. Read-ahead mode reverses that rule, for this mode only.
@@ -260,8 +259,17 @@ the source's `sdk.batch.size` as the fixes.
 ### Credit and replay window
 
 The queue credit counts records and bytes that have been submitted but not completed: queued plus in
-flight. An empty queue always admits one submission. Enqueue unblocks on completion, writer exit,
-close or cancel.
+flight. A pass enqueues its whole staged list in one step, so credit is checked per list, not per
+entry. When the queue is empty, it admits a whole staged list even if the list is over the credit;
+otherwise one large read could never be enqueued. A list that does not fit waits as a unit. It is
+never split, because splitting it would let a barrier be completed ahead of an entry staged before it.
+Enqueue unblocks on completion, writer exit, close or cancel.
+
+With the single-source guard, an unverified Nx1 destination keeps one accumulator buffer per source.
+The credit counts every one of those buffers, as well as the queue and the `Write` in flight. In that
+case the credit is (N + 2) × S, not 2 × S. Otherwise N partly filled buffers could hold all of it
+while none of them is full, and nothing could flush. The replay window below counts the same way:
+for N sources it includes N buffers of up to S each, not one.
 
 A source ack does not make a position durable on its own. `Source.Ack` hands the position to the
 connector persister, which flushes after `DefaultPersisterDelayThreshold` (1 s) or
@@ -277,8 +285,8 @@ Read-ahead adds the queue credit on top of that window: records submitted but no
 | Destination settings | Record cap C | Credit | Added replay (queued plus in flight) | SIGKILL replay window, total |
 | --- | --- | --- | --- | --- |
 | none (default) | 512 | 2 × C | 1024, plus one source read | persister window (10 000 records at most) + 1024 + one read |
-| `sdk.batch.size: S` | S | 2 × S, as today | up to 4 × S, as #3210 documents | persister window + 4 × S |
-| `sdk.batch.delay` only | 3000 | 6000 | up to 12 000, as today | persister window + 12 000 |
+| `sdk.batch.size: S` | S | 2 × S, as today | up to 4 × S, as #3210 documents; on unverified Nx1, (N + 3) × S | persister window + the added replay |
+| `sdk.batch.delay` only | 3000 | 6000 | up to 12 000, as today; on unverified Nx1, (N + 3) × 3000 | persister window + the added replay |
 
 For a default pipeline, the change goes from "up to 10 000 records" to "up to about 11 000". That sits
 inside a window that is already there, and adds about 10%. Duplicates only, never loss. The release
@@ -300,9 +308,14 @@ first task's shortcut, a processor's nack, and the tainted loop's sub-batches. T
 destination task's `doBuffered` appends its data entry to the same list. In read-ahead mode it
 receives the list, not a queue. The tainted loop visits sub-batches in index order, so list order is
 read order. When the pass returns, the worker enqueues the whole list in one critical section on the
-destination's queue mutex. With `sdk.batch.*`, the accumulator absorbs the data entries and passes the
-barriers through in order. A barrier is never reordered ahead of a data entry that was staged before
-it.
+destination's queue mutex. With `sdk.batch.*`, the accumulator absorbs the data entries. A barrier
+is never completed ahead of a data entry staged before it from the same source. The rule is enforced
+per buffer: a barrier that arrives while its source's buffer holds data goes into that buffer, behind
+the data, and leaves with that buffer's flush. Only a barrier whose source buffer is empty passes
+straight to the queue. With one buffer per source (unverified Nx1), a barrier waits only for its own
+source's buffer, never for another source's. R11 includes a test where source A's barrier arrives
+while A's buffer and B's buffer both hold data: A's barrier must complete after A's flush and must
+not wait for B's.
 
 The handle is the worker's, not a processor's. For M = 1, `buildRunnablePipeline` gives each worker a
 pointer to the single destination task, and on Nx1 every worker gets the same pointer. Processors
@@ -321,6 +334,16 @@ after every earlier submission. The completion goroutine is the only goroutine t
 source's ack, `Worker.Nack` or `DLQ.Nack` for that destination. `TestDestinationTask_DoBuffered_AllFilteredAcksImmediately`
 asserts the old bypass, and is replaced.
 
+**DLQ writes block the AckReader.** A barrier or `ackPending` sub-batch that nacks runs `DLQ.Nack` on
+the AckReader, synchronously. While a DLQ write is in progress, the AckReader reads no destination acks
+and completes nothing. The writer keeps sending until the in-flight limit is reached, and then credit
+fills and the source stops reading. That is deliberate: the DLQ write is part of releasing that
+position, so a later position cannot be released before it. The cost is that a slow DLQ throttles the
+whole pipeline, which is what happens today with the synchronous path. A DLQ that fails makes the
+release fail. The error is sticky, as in the completion model. `conduit_funnel_destination_enqueue_blocked_seconds_total`
+shows the stall, and the runbook entry says to check DLQ latency when it rises without the destination
+slowing down.
+
 This depends on the H1 fix on `main` for opt-in batching, which may take a different route. Whatever
 that fix chooses, R11 is the invariant both have to pass.
 
@@ -338,7 +361,7 @@ its runs, and `total` is final. After the enqueue, only the AckReader touches th
 `splitRun` values. That is a happens-before through the queue mutex, which is a single handoff, not
 shared access.
 
-The H2 fix on `main` (synchronizing `splitRun`, fix PR TBD) stays required for read-ahead mode too, as
+The H2 fix on `main` (synchronizing `splitRun`, #3294) stays required for read-ahead mode too, as
 defence in depth. It is not the mechanism read-ahead relies on. R12 has two parts:
 
 - **The race.** A processor that calls `SplitRecord` on sub-batch B while a destination with instant
@@ -387,7 +410,7 @@ exactly once" checkable in tests.
 
 ## Requirements and tests
 
-R1, R3 and R4 extend #3292's R1, R2 and R3 (its numbering at `848122e7`) to coalesced groups and
+R1, R3 and R4 extend #3292's R1, R2 and R3 (its numbering at `d95843d2`) to coalesced groups and
 barriers. R2 is #3292's former R4. Each test is written to fail without
 its fix.
 
@@ -444,7 +467,7 @@ read each other's state. Behaviour changes, and the release notes say so. One `W
 several reads and sources. The SIGKILL replay window of a default pipeline grows by up to 1024 records, on top of the
 persister's existing 1 s or 10 000 record window.
 Source acks for filtered and processor-nacked records can lag behind later reads. Rollback is a revert.
-The per-pipeline escape hatch is open question 1.
+The per-pipeline escape hatch is an explicit `sdk.batch.size: 1` on the destination (see Decisions).
 
 ## Observability
 
@@ -485,32 +508,39 @@ pre-registered and is valid only when the floor is under 5%.
    regression above the floor.
 6. **Standalone destination:** 2 KiB raw records and numeric-heavy structured records. This measures
    the estimator's cost at 1x1, batch 1, and proves the byte cap holds.
-7. **`make bench-engine`:** add `BenchmarkDestinationTask_Coalesced` so the per-PR gate covers the
+7. **Credit 1x against 2x.** 1x1 and Nx1, source batch 1, default destination. If 1x credit is within
+   the A/A floor of 2x on both shapes, the default becomes 1x, which halves the added replay to 512.
+8. **`make bench-engine`:** add `BenchmarkDestinationTask_Coalesced` so the per-PR gate covers the
    path.
 
-## Open questions for DeVaris
+## Decisions
 
-1. **Escape hatch.** Options: revert only; an explicit destination `sdk.batch.size: 1` meaning
-   stop-and-wait, which needs `SDKBatchSettings` to tell unset apart from 1; or a temporary flag. I
-   lean to the explicit `sdk.batch.size: 1`.
-2. **Added replay.** The credit adds up to 1024 records to the persister's existing window of up to
-   10 000 records. I propose keeping the 2x credit. Do you want 1x instead (up to 512 added), at some
-   cost to coalescing?
-3. **Nx1 ownership.** Do you agree with "one destination means read-ahead mode", with #3292 narrowed to
-   M of 2 or more?
+DeVaris decided the open questions on 2026-10-27.
+
+1. **Escape hatch.** An explicit `sdk.batch.size: 1` on a destination means stop-and-wait, as before:
+   no read-ahead and no coalescing. `config.SDKBatchSettings` is changed to tell unset apart from an
+   explicit 1, which it cannot do today (`size > 1 || delay > 0`). Without the setting, read-ahead and
+   coalescing are on. No new config key and no flag.
+2. **Credit.** 2x the record cap, so up to about 1024 records of added replay for a default pipeline.
+   The default switches to 1x if pre-registered benchi arm 7 shows 1x matches 2x throughput.
+3. **Ownership.** One destination means this doc's read-ahead mode. Two or more destinations means
+   #3292's concurrent mode, under the conditions #3292 sets. This is the table in "Ownership per
+   shape".
+
+No open questions remain.
 
 ## Related
 
 - `docs/design-documents/20261027-funnel-shared-destination-concurrency.md` (#3292, checked at
-  `848122e7`): the writer, the AckReader, the completion hook, its R1 to R3, the verified-destination gate
+  `d95843d2`): the writer, the AckReader, the completion hook, its R1 to R3, the verified-destination gate
   and the single-source guard, and concurrent mode for NxM. A prerequisite.
 - `docs/design-documents/20261027-default-source-batching.md`: the hard gate.
 - `docs/design-documents/20261017-funnel-destination-batching.md` and
   `docs/design-documents/20261019-funnel-read-ahead-pipelining.md`: the accumulator, the fan-back, and
   the flusher this folds in.
 - #3231: partial batch, and stop before drain.
-- #3294 (H1 fix). The H2, byte-cap and #3231 fix PRs are TBD. All are prerequisites; see "Existing
-  defects this depends on".
+- Prerequisite fixes on `main`: #3294 (H1), #3294 (H2), #3296 (accumulator byte cap), #3295
+  (#3231). See "Existing defects this depends on".
 - #3293 (default source batching, which also changes the persister to count positions).
 - #2978: the prototype and its review findings.
 - Roadmap: v0.21 engine, "Adaptive batching by default" and "Destination ack reader". v0.22, "Default
