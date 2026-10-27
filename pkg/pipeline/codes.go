@@ -81,9 +81,12 @@ var (
 	// CodePipelineDLQNotRecoverable is raised when a pipeline's dead-letter
 	// queue cannot preserve the record content, so a record routed to it would
 	// be unrecoverable (invariant 3: at-least-once, no silent drop). Today that
-	// is the built-in log connector without payload:true, which is also the
-	// default DLQ; by default it logs only hashes, so a nacked record's key and
-	// payload are lost. The operator must configure a destination that stores
-	// the record, or set payload:true on builtin:log explicitly.
+	// is the built-in log connector without payload:true when nacked records
+	// are routed to it (window-nack-threshold above 0, or window-size 0); it
+	// logs only hashes, so a nacked record's key and payload are lost. The
+	// default DLQ (window-size 1, threshold 0) routes no records and is not
+	// refused. The operator must configure a destination that stores the
+	// record, set payload:true on builtin:log explicitly, or set the nack
+	// threshold to 0 so a nack stops the pipeline instead.
 	CodePipelineDLQNotRecoverable = conduiterr.Register("pipeline.dlq_not_recoverable", codes.FailedPrecondition)
 )

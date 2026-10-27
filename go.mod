@@ -10,15 +10,15 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.6
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.0
 	github.com/cohere-ai/cohere-go/v2 v2.14.1
-	github.com/conduitio/conduit-commons v0.8.0
+	github.com/conduitio/conduit-commons v0.8.3
 	github.com/conduitio/conduit-connector-file v0.10.11
-	github.com/conduitio/conduit-connector-generator v0.10.4
+	github.com/conduitio/conduit-connector-generator v0.10.9
 	github.com/conduitio/conduit-connector-kafka v0.12.6
 	github.com/conduitio/conduit-connector-log v0.7.7
 	github.com/conduitio/conduit-connector-postgres v0.14.6
 	github.com/conduitio/conduit-connector-protocol v0.10.0
 	github.com/conduitio/conduit-connector-s3 v0.9.5
-	github.com/conduitio/conduit-connector-sdk v0.15.0
+	github.com/conduitio/conduit-connector-sdk v0.16.2
 	github.com/conduitio/conduit-processor-sdk v0.6.0
 	github.com/conduitio/conduit-schema-registry v0.2.7
 	github.com/conduitio/ecdysis v0.6.0
@@ -74,6 +74,7 @@ require (
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
+	pgregory.net/rapid v1.3.0
 )
 
 require (
