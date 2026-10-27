@@ -316,11 +316,12 @@ func drainTask(ctx context.Context, dt *DestinationTask, shared *TaskNode) error
 	defer shared.sharedMu.Unlock()
 	err := dt.Drain(ctx)
 	if err != nil {
+		// Invariant 3 (enforcement site): poison before sharedMu is released.
+		// guard: funnel-drain-failure-fails-closed tests=^TestWorker_Stop_DrainFailure_PoisonedBeforeSharedLockIsReleased$
 		shared.poisoned.Store(true)
 		// The poison flag is only read on entry to the shared node; a sibling's
 		// ordered ack (ackInOrder) never passes that check. Fail the batching
 		// destinations too so deferOrdered refuses.
-		// guard: funnel-drain-failure-fails-closed tests=^TestWorker_Stop_SyncDrainFailure_SiblingOrderedAckFailsClosed$
 		poisonBatchingDestinations(shared, err)
 	}
 	return err
