@@ -200,7 +200,7 @@ one `Write`. The notes, §4: +66% at 1x1 default (54.5k → 90.8k), +412% per si
   - Under A, a user who sets only `sdk.batch.delay: 0` would inherit size 100 with no deadline, a
     stall the upgrade itself creates. The SDK keeps that user on today's passthrough (size treated
     as 0) and logs a WARN with code `sdk.batch.unbounded_wait`.
-  - Exception, decided during implementation (conduit-connector-sdk#433): when the connector's spec
+  - Exception, decided during implementation (`conduit-connector-sdk#433`): when the connector's spec
     ships a non-zero delay default (for example MySQL's 10000 / 1s) and the user sets
     `sdk.batch.delay: 0`, with or without a size, today's behavior is wait-until-full at the spec
     size. The SDK keeps that behavior and logs `sdk.batch.unbounded_wait`; it does not drop to
