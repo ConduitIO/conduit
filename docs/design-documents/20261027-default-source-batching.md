@@ -1,22 +1,33 @@
-# Default source batching (`sdk.batch.size=100`, `sdk.batch.delay=10ms`)
+# Default source batching
 
 ## Summary
 
-Change the Go connector SDK's source batching defaults from `sdk.batch.size=0`, `sdk.batch.delay=0`
-(one record per read) to `sdk.batch.size=100`, `sdk.batch.delay=10ms`, so a source that does not
-configure batching hands the engine up to 100 records per read instead of one. The default lives in
-`conduit-connector-sdk` (`SourceWithBatch` struct tags, emitted into each connector's generated
-`connector.yaml`) and reaches users only when a connector is re-released against the new SDK. The
-engine does not inject anything. Destination batching defaults do not change.
+Make source batching the default in the Go connector SDK. Today a source that leaves `sdk.batch.*`
+unset reads one record at a time. The SDK would instead hand the engine up to 100 records per read.
+There are two candidate semantics:
+
+- **Adaptive drain (proposed):** `sdk.batch.size=100`, `sdk.batch.delay=0`. The collector blocks for
+  the first record, takes whatever else the SDK's read-ahead has already queued (up to 100), and
+  returns. There is no timer. Batches grow when the engine is the bottleneck and shrink to one record
+  when the source is sparse. This needs an SDK change: `delay=0` with `size>0` currently means "wait
+  until the batch is full, with no deadline".
+- **Fixed window (fallback):** `sdk.batch.size=100`, `sdk.batch.delay=10ms`, with today's SDK
+  semantics. This is the only variant measured so far.
+
+The default lives in `conduit-connector-sdk` (the `SourceWithBatch` struct tags, emitted into each
+connector's generated `connector.yaml`). It reaches users only when a connector is re-released
+against the new SDK. The engine injects nothing, and destination batching defaults do not change.
 
 Arch-v2 is stop-and-wait: read, write, wait for the destination ack, ack the source, read again. At
-one record per read, each record pays that whole round trip. On the archv2-gate harness, enabling
-source batching at 100/10ms took arch-v2 1x1 generator→file from 52.6k to 214.9k rec/s (+308.7%,
-resolved against a ±2.5% A/A floor). That number is a design input, not a performance claim; the
-benchi plan below must confirm it at shipped defaults, on real connectors, before anyone quotes it.
+one record per read, each record pays that whole round trip. On the archv2-gate harness, a fixed
+100/10ms source batch took arch-v2 1x1 generator→file from 52.6k to 214.9k rec/s (+308.7%, resolved
+against a ±2.5% A/A floor). That is a design input, not a performance claim. The benchi plan below
+must confirm a gain at shipped defaults, on real connectors and on both engines, before anyone
+quotes a number. It must also decide between the two variants.
 
-This is Tier 1: it changes the default ack and position granularity, the crash-replay window and the
-graceful-stop drain for every pipeline whose source does not set `sdk.batch.*`.
+This is Tier 1. It changes the default ack and position granularity, the crash-replay window, the
+graceful-stop drain, and the size of each destination `Write` for every pipeline whose source does
+not set `sdk.batch.*`.
 
 Roadmap: v0.21 Engine, "Adaptive batching by default. No throughput claim without a committed benchi
 run"; and the v0.22 engine flip, which is gated on arch-v2 being "parity-or-faster at shipped
@@ -26,8 +37,8 @@ defaults".
 
 ### What a default pipeline does today
 
-With `sdk.batch.size` and `sdk.batch.delay` at 0, `SourceWithBatch.Open` (SDK v0.17.2) does not
-start a collector; `ReadN` forwards to the connector, and the SDK's run loop calls `ReadN(ctx, 1)`
+With `sdk.batch.size` and `sdk.batch.delay` at 0, `SourceWithBatch.Open` (SDK v0.17.2) starts no
+collector; `ReadN` forwards to the connector, and the SDK's run loop calls `ReadN(ctx, 1)`
 (`source.go`, `runRead`). Connectors that do not implement `ReadN` (kafka, file, s3, generator) fall
 back to `Read` and send exactly one record per stream message. Arch-v2 then runs one funnel pass per
 record: `Source.Read` → processors → `Destination.Write` of one record → wait for its ack →
@@ -41,20 +52,19 @@ is a goroutine wakeup; batching amortizes all of them.
 
 ### Postgres is the exception
 
-`conduit-connector-postgres` v0.17.1 (#3213) and later substitute an internal CDC batch of 1000 when
-`sdk.batch.size` is 0 (`source/logrepl/combined.go`, `effectiveCDCBatchSize`). Its `NextN` returns
-the whole handler batch even when asked for one record, so at shipped defaults Postgres CDC already
-reaches the engine in batches of up to 1000, flushed by the handler at 1000 records or by a 1s
-ticker. Two consequences matter here:
+Postgres v0.17.1 (#3213) introduced an internal CDC batch of 1000 when `sdk.batch.size` is 0
+(`source/logrepl/combined.go`, `effectiveCDCBatchSize`). Everything below was read in v0.18.0, the
+version Conduit's `go.mod` pins. `CDCIterator.NextN` returns the first handler batch unclamped, even
+when asked for one record. So at shipped defaults, Postgres CDC already reaches the engine in batches
+of up to 1000, flushed by the handler at 1000 records or by a 1s ticker. Two consequences:
 
-- An SDK default of 100 would _lower_ Postgres CDC from 1000 to 100 records per read, because
-  `effectiveCDCBatchSize(100)` is 100.
+- A non-zero SDK size would _lower_ Postgres CDC granularity: `effectiveCDCBatchSize(100)` is 100.
 - The snapshot fetch size is `sdk.batch.size` too (`combined.go`: `FetchSize: c.conf.BatchSize`,
   with 0 meaning 50000 in `snapshot/fetch_worker.go`). The documented `snapshot.fetchSize` parameter
-  (default 50000) is parsed but never read. An SDK default of 100 would make every snapshot `FETCH
-  100` instead of `FETCH 50000`.
+  (default 50000) is parsed but never read. A non-zero SDK default would make every snapshot `FETCH
+  100`.
 
-So Postgres must pin its own defaults before it adopts the new SDK (see Decision).
+So Postgres must pin today's settings before it adopts the new SDK (see Decision).
 
 ### Evidence
 
@@ -65,9 +75,9 @@ So Postgres must pin its own defaults before it adopts the new SDK (see Decision
 | The notes, §5 sweep, main a23efb64, c7i.4xlarge, 3 interleaved rounds | 1x1 generator→file, source batch 1 / 10 / 100 / 1000 / 2048 | 54k / 137–150k / 221–235k / 227–256k / 225–247k rec/s | none (spread ≤3.5%, not A/A) |
 
 The curve plateaus at about 100: 100 records gets ~91% of the gain of 1000. Past 100, the
-connectors' per-record SDK work dominates. Neither run is committed to the repo, the gate image has
-no source-revision label (binary sha256 `d5a91df6…`), and both use the two cheapest connectors there
-are. Real sources (Kafka, S3) will gain less. We need committed results before claiming anything.
+connectors' per-record SDK work dominates. Neither run is committed. The gate image has no
+source-revision label (binary sha256 `d5a91df6…`). Both runs use the two cheapest connectors there
+are, and neither measures v1 with batching or the adaptive variant. Real sources will gain less.
 
 ## Constraints
 
@@ -75,366 +85,399 @@ are. Real sources (Kafka, S3) will gain less. We need committed results before c
    process, before the engine sees a record. The engine's ack path is unchanged: a batch is acked
    only after every destination confirmed it, and `Source.Ack` defers the plugin ack until the
    persister flushed the position (`pkg/connector/source.go`).
-2. **Invariant 2: positions monotonic and crash-safe.** No position format changes. A batch carries
-   its records' positions in source order and the persisted state is the last acked one.
-3. **Invariant 3: at-least-once.** Records the SDK has read but not sent (read-ahead, a partly
-   collected batch) are never acked, so a stop or crash replays them from the last persisted
-   position. The cost is a larger replay window, which must be bounded and documented.
-4. **Invariant 4: per-partition order.** The SDK collector appends in read order and sends one
-   ordered slice. Nothing reorders.
-5. **Invariant 7: graceful stop.** `Stop` must stay bounded: the SDK cancels the read context at once
-   and discards what it has not sent, and the engine drains at most what is in flight.
+2. **Invariant 2: positions monotonic and crash-safe.** No position format changes.
+3. **Invariant 3: at-least-once, including error paths.** Records the SDK read but did not send
+   (read-ahead, a partly collected batch) are never acked, so they replay from the last persisted
+   position. The replay window must be bounded and stated, and an error must not discard good
+   records that today would have been delivered.
+4. **Invariant 4: per-partition order.** The collector appends in read order and sends one ordered
+   slice.
+5. **Invariant 7: graceful stop.** `Stop` stays bounded. The SDK cancels the read context at once and
+   discards what it has not sent, and the engine drains what is in flight.
 6. **The engine cannot set the default for standalone connectors.** Older SDKs reject unknown
-   parameters, and a connector's spec is its contract. A default the spec does not show is a
-   default nobody can see in `conduit connectors describe`, the docs or the UI.
-7. **Bounded memory and latency.** Both must have a hard bound stated per connector.
-8. **No protocol change.** `conduit-connector-protocol` is untouched.
+   parameters, and a connector's spec is its contract.
+7. **Bounded memory and latency**, stated per connector, including read-ahead.
+8. **No protocol change.**
 
 ## How a source default reaches a pipeline
 
 1. `SourceWithBatch` declares `BatchSize *int` with `default:"0"` and `BatchDelay *time.Duration`
    with `default:"0"` (`source_middleware.go`).
 2. `conn-sdk-cli specgen` writes those defaults into the connector's `connector.yaml`. A connector
-   that sets an initial value in `NewSource()` (for example
-   `SourceWithBatch{BatchSize: lang.Ptr(1000)}`) overrides the tag default there (`overwriteDefaults`
-   in `specgen/specgen.go`). Postgres already does this for schema extraction.
-3. At runtime the SDK applies defaults from the **embedded spec**, not from the struct tags:
+   that sets a non-nil initial value in `NewSource()` overrides the tag default there
+   (`overwriteDefaults` checks `!value.IsZero()` on the pointer, so a pointer to 0 counts).
+3. At runtime the SDK applies defaults from the **embedded spec**, not the struct tags:
    `NewSourcePlugin(..., spec.SourceParams)` → `Util.ParseConfig` → `ApplyDefaults(params)`. The
    built-in registry does the same (`pkg/plugin/connector/builtin/registry.go`).
 
-So bumping the SDK in Conduit's `go.mod` alone changes nothing for built-ins: their embedded
-`connector.yaml` still says 0. A connector picks up the new default when it bumps the SDK and
-regenerates its spec, which each connector's `validate-generated-files` CI forces in the same PR. A
-standalone connector built with an older SDK keeps its old default forever.
+So bumping the SDK in Conduit's `go.mod` alone changes nothing for built-ins. A connector picks up
+the new default when it bumps the SDK and regenerates its spec, which `validate-generated-files`
+forces in the same PR. A standalone connector built with an older SDK keeps its old default.
 
 ## Alternatives considered
 
-### A. Change the SDK's `SourceWithBatch` defaults (chosen)
+### A. SDK default, fixed window (100/10ms)
 
-Change the two struct tags in `conduit-connector-sdk`, release a minor version, and re-release the
-connectors.
+Change the two tags to 100 and 10ms, with today's collector semantics.
 
-- **Pros:** the default is in the spec, so docs, `describe`, the UI and `llms.txt` all show the real
-  value. It works for every Go connector that embeds `DefaultSourceMiddleware`, built-in or
-  standalone. Connectors with different needs pin their own value through the existing
-  initial-config mechanism. No engine or protocol change. Rollout is per connector release, so each
-  connector's switch is a separate, revertible PR.
-- **Cons:** it reaches users only through connector re-releases. It applies to both engines, v1
-  included, since the SDK cannot know which engine runs it. Third-party connectors inherit it on
-  their next SDK bump, possibly without reading the changelog.
+- **Pros:** measured (+308.7% on 1x1 generator→file). The default is in the spec, so docs, `describe`,
+  the UI and `llms.txt` show the real value. Connectors pin their own values through the existing
+  initial-config mechanism.
+- **Cons:** a sparse source (under `S` records per `D`, here 10k rec/s) pays up to 10ms per batch,
+  and it is a fixed constant rather than the "adaptive" batching the roadmap names. It also keeps
+  `delay=0` with `size>0` meaning "wait until full, no deadline". That is the stall-prone
+  combination, and a user who sets only `sdk.batch.delay: 0` would get it (see Failure modes).
 
-### B. Engine injects `sdk.batch.*` for built-in sources
+### B. SDK default, adaptive drain (proposed)
 
-When a built-in source's settings omit `sdk.batch.size` and `sdk.batch.delay`, the arch-v2 service
-adds 100/10ms before configuring the plugin.
+Defaults `size=100`, `delay=0`. `delay=0` with `size>0` changes meaning: block for the first record,
+then take whatever is already queued without blocking, up to `size`, and return. A non-zero delay
+keeps today's fixed-window meaning for users who set it.
 
-- **Pros:** no SDK or connector release; can be limited to arch-v2; ships in one Conduit PR.
-- **Cons:** the effective default contradicts the connector's published spec (it says 0, the engine
-  runs 100), so the same connector behaves differently built-in and standalone. Standalone
-  connectors cannot be covered at all, because older SDKs reject unknown parameters. It also gives
-  the engine knowledge of one connector family's middleware, which is a privileged integration in
-  all but name. Rejected: a default users cannot see is a support problem and an agent-legibility
-  problem.
+The SDK already reads ahead: the `Read` fallback goroutine fills `readCh` (capacity `size`), and
+`runReadN` keeps one `ReadN` result in `readNCh`, while the engine is busy with the previous batch.
+In a stop-and-wait engine this is self-tuning. When the engine is the bottleneck, the queue is full
+when the engine comes back, so it gets full batches. When the source is the bottleneck, it gets what
+arrived and nothing waits for a timer. A sparse source gets one-record batches with no added
+latency.
 
-### C. Engine-side coalescing with no added latency
+- **Pros:** no added collection latency and no constant to tune. It also removes the stall case, as
+  delay 0 no longer waits for a full batch, and it matches the roadmap item.
+- **Cons:** unmeasured. Batch size depends on relative stage speeds, so behavior is harder to predict
+  in a benchmark. Redefining `delay=0` changes behavior for users who set `sdk.batch.size` without a
+  delay today: they get smaller batches under light load instead of a possibly unbounded wait.
+- **Decision rule:** proposed, provided the benchmark shows it within the A/A floor of A at
+  saturation. If it falls short, ship A.
 
-The `protorc` prototype: the destination writer takes whatever is already queued, writes it in one
-`Write`, and waits for nothing. The notes, §4: +66% at 1x1 default (54.5k → 90.8k), +412% per sink
-at 4x4, no added latency when the destination keeps up.
+### C. Engine injects `sdk.batch.*` for built-in sources
 
-- **Pros:** zero added latency; works for every connector in every SDK and language.
-- **Cons:** at 1x1 it reaches 90.8k, well short of the ~215k that source batching reaches. It depends
-  on the async-ack machinery from #2978, which carries four close and failure bugs (the notes, §6)
-  and needs a byte cap for standalone gRPC before it can land on main. It is a much larger data-path
-  change. Not rejected, just not a substitute: it is complementary and belongs to the staged-engine
-  work (`20261009-staged-batch-engine.md`).
+- **Pros:** no SDK or connector release; can be limited to arch-v2.
+- **Cons:** the effective default contradicts the published spec, so the same connector behaves
+  differently built-in and standalone. Standalone connectors cannot be covered, because older SDKs
+  reject unknown parameters. The engine gains knowledge of one connector family's middleware.
+  Rejected.
 
-### D. Per-connector defaults only, SDK unchanged
+### D. Engine-side coalescing with no added latency
 
-Each connector we own pins 100/10ms in `NewSource()`.
+The `protorc` prototype: the destination writer takes whatever is already queued and writes it in
+one `Write`. The notes, §4: +66% at 1x1 default (54.5k → 90.8k), +412% per sink at 4x4.
 
-- **Pros:** no SDK default change; third-party connectors are unaffected until they choose.
-- **Cons:** the one-record default remains a trap for every other Go connector and for anyone who
-  scaffolds a new one. Each connector carries its own copy of the same number. Rejected as the
-  primary mechanism; we still use it where a connector needs a different value (Postgres, S3).
+- **Pros:** zero added latency; works for every SDK and language.
+- **Cons:** at 1x1 it reaches 90.8k against ~215k for source batching. It depends on #2978's
+  async-ack machinery (four close and failure bugs, the notes §6) and is a far larger data-path
+  change. Complementary, not a substitute; it belongs to `20261009-staged-batch-engine.md`. B is
+  the same idea applied at the source, where the read-ahead queue already exists.
 
-### E. A larger default (1000)
+### E. Per-connector defaults only, SDK unchanged
 
-- **Pros:** slightly more throughput (227–256k vs 221–235k in the uncontrolled sweep).
-- **Cons:** 10x the memory, replay window and drain work for under 10% more throughput. Rejected.
+- **Pros:** third-party connectors are unaffected.
+- **Cons:** the one-record trap remains for every other Go connector and every new scaffold.
+  Rejected as the mechanism. We still use it where a connector needs a different value.
+
+### F. A larger default (1000)
+
+- **Pros:** at most ~10% more throughput in the uncontrolled sweep.
+- **Cons:** 10x the memory, replay and drain work. Rejected.
 
 ## Decision
 
 ### SDK (`conduit-connector-sdk` v0.18.0)
 
-- `SourceWithBatch`: `default:"100"` for `sdk.batch.size`, `default:"10ms"` for `sdk.batch.delay`.
-  Destination tags stay at 0; arch-v2 handles destination batching in the funnel and strips these
-  settings from destinations (`pkg/connector/destination.go`).
-- **Bound the batch at `sdk.batch.size`.** Today `collectWithReadN` appends a whole `ReadN` result,
-  so one batch can reach `2×size−1` records. With the limit as a default rather than an opt-in, it
-  should mean what it says: the collector keeps the excess for the next batch.
-- **Split the stream message by bytes.** For standalone connectors, `runRead` sends a whole batch in
-  one `SourceRunResponse`. From code reading, the engine's gRPC client sets no
-  `MaxCallRecvMsgSize`, so gRPC's 4 MiB default applies to that direction. Today only a single record
-  over 4 MiB fails; at 100 records per message, any batch averaging over ~40 KiB per record would
-  fail. `runRead` splits a batch into several messages under a byte budget, in order. The order
-  holds and `lastPosition` is still the last record sent. This needs a test that confirms the limit
-  before and after the change, with no new parameter (see Open questions).
-- **Log the effective batching at `Open`** (one INFO line: size, delay, `ReadN` or `Read` path). The
-  existing "size set but delay not" warnings stay.
-- Opt-out is `sdk.batch.size: 0` **and** `sdk.batch.delay: 0`, which restores today's code path
-  exactly. Setting only one of them to 0 keeps batching on: size 0 with delay 10ms is delay-only
-  batching with no record cap. The docs must say this plainly.
+- **Defaults.** `SourceWithBatch` tags become `size=100`, `delay=0`, with the adaptive drain
+  semantics (B). If the benchmark rules B out, the tags become 100 and 10ms with today's semantics
+  (A), and the `Configure` rules below still apply. Destination tags stay at 0.
+- **Normalize or reject inconsistent combinations at `Configure`.** Each rule gets a stable error
+  code, the config path, and a fix, so nothing depends on a release note:
+  - `size=0`, `delay>0` (delay-only). Today `runReadN` calls `ReadN(ctx, 0)`. Postgres's `NextN`
+    errors on that ("n must be greater than 0"), and a connector that accepts 0 hits the collector's
+    `len(resp) >= 0` early return, so it does not batch at all. Only `Read` connectors get real
+    delay-only batching. Normalize: use the SDK's destination-side cap
+    (`defaultMaxBatchSize = 1000`, #428) as `n` and as the record bound, and log a WARN with code
+    `sdk.batch.size_defaulted`.
+  - Under A only: `size>0`, `delay=0` means waiting for a full batch with no deadline. That covers a
+    user who sets only `sdk.batch.delay: 0` and inherits size 100. Reject with code
+    `sdk.batch.unbounded_wait`. Under B this combination is the adaptive drain and is valid.
+- **Bound the batch at `size` with a carry-over buffer.** `collectWithReadN` currently appends whole
+  `ReadN` results. Worse, its `len(batch)==0 && len(resp) >= size` early return passes a connector
+  that ignores `n` through unclamped; Postgres's first blocking batch can be 1000 whatever `n` is.
+  The collector returns at most `size` records and keeps the excess in a carry slice, which the next
+  collect consumes first. On `Stop` or an error, the carry is dropped unsent and unacked, and it
+  replays from the persisted position.
+- **Flush then fail.** On a `Read`/`ReadN` error mid-collection, both collectors currently return
+  `nil, err` and drop the records already collected (`collectWithRead`, `collectWithReadN`). A poison
+  record would then discard up to `size−1` good records that today are delivered before the error.
+  The collector returns the collected records and stashes the error for the next call. At-least-once
+  holds either way; this keeps the delivered set the same as at batch 1.
+- **Log the effective batching at `Open`**: one INFO line with size, delay, mode (adaptive or
+  window), and the `ReadN` or `Read` path.
+- **Opt-out:** `sdk.batch.size: 0` together with `sdk.batch.delay: 0` restores today's passthrough
+  path exactly.
 
 ### Engine (Conduit)
 
-- **Persister threshold counts positions, not `Ack` calls.** `DefaultPersisterBundleCountThreshold`
-  (10000) counts `Persist` calls, and arch-v2 makes one per batch. At 100 records per batch, the
-  count-based flush effectively stops firing and the 1s delay threshold takes over, which raises the
-  crash-replay window from ~10k records to up to one second of throughput (see Costs). Counting
-  `len(p)` in `Persister.Persist` keeps today's record-count bound. v1 acks one position per call,
-  so it is unaffected.
-- **Metrics** (see Observability).
-- No other engine change. The engine already accepts multi-record reads on both engines.
+- **Persister threshold counts positions, with `>=`.** `Persist` triggers on
+  `p.bundleCount == p.bundleCountThreshold` (`persister.go:190`) and counts calls; arch-v2 makes one
+  call per batch. Counting `len(p)` alone would make the counter step past 10000 with unaligned
+  batches (100, 37, a Postgres 1000) and never equal it, so the flush would quietly fall back to the
+  1s timer. The change: `bundleCount += len(positions)`, trigger on `>=`, and keep the reset in
+  `triggerFlush`. This needs a test with unaligned batch sizes (for example 37, 100, 1000, repeated)
+  that asserts a flush once the threshold is crossed. That test fails both before the change and
+  with `==`. v1 acks one position per call and is unaffected.
+- **Destination message size (prerequisite, separate PR).** See Failure modes. The byte cap on
+  destination `Write` is being added in a separate fix PR, as a byte cap in the funnel accumulator.
+  This design depends on that cap also covering the non-buffered `DestinationTask.Do` path: at
+  defaults the source batch goes straight to `Write`, so an oversized batch must be split across
+  several `Write` calls. The default must not ship before that.
+- **Metrics** (see Observability). No other engine change; both engines accept multi-record reads.
 
 ### Connectors
 
-Every built-in source re-releases on SDK v0.18.0 with a regenerated `connector.yaml`. Then Conduit
+Every built-in source re-releases on SDK v0.18.0 with a regenerated `connector.yaml`. Conduit then
 bumps each one in its own PR, and that PR is the switch for that connector.
 
 | Connector | Source read path | Decision |
 | --- | --- | --- |
-| postgres | `ReadN` (CDC handler batches, snapshot `FETCH`) | Pin `sdk.batch.size: 0` and `sdk.batch.delay: 0` in `NewSource()` (non-nil pointer initial values, which specgen writes into `connector.yaml`). That keeps today's path exactly: CDC at its internal 1000 with the 1s handler flush, snapshot `FETCH 50000`. Separately, wire `snapshot.fetchSize` into the snapshot iterator (a dead parameter today) with a regression test. Pinning 1000/10ms instead would add up to 10ms to partial handler batches with no measured gain. |
-| kafka | `Read` (franz-go fetches, FIFO `batchAcker`) | Inherit 100/10ms. |
-| file | `Read` (line follower) | Inherit 100/10ms. |
-| generator | `Read` (optional rate limiter) | Inherit 100/10ms. |
-| s3 | `Read` (one record per object, whole object in memory via `io.ReadAll`) | Do not inherit until there is a byte bound. Pin both to 0, today's behavior (see Open questions). |
-| log | destination only | Nothing to do beyond the SDK bump. |
+| postgres | `ReadN` (CDC handler batches, snapshot `FETCH`) | Pin `sdk.batch.size: 0` and `sdk.batch.delay: 0` with non-nil pointers in `NewSource()`. That keeps today's path exactly: CDC at its internal 1000 with a 1s handler flush, snapshot `FETCH 50000`. A test asserts the regenerated `connector.yaml` shows `default: "0"` for both, so the pin cannot silently regress to 100. Separately, wire `snapshot.fetchSize` into the snapshot iterator with a regression test. |
+| kafka | `Read` (franz-go fetches, FIFO `batchAcker`) | Inherit. |
+| file | `Read` (line follower) | Inherit. |
+| generator | `Read` (optional rate limiter) | Inherit. |
+| s3 | `Read` (one record per object, held whole via `io.ReadAll`) | Pin 0/0 (today's behavior) until there is a byte bound on source batches. |
+| log | destination only | SDK bump only. |
 
 ## Costs and bounds
 
-All bounds are per source. `S` is `sdk.batch.size` (100) and `D` is `sdk.batch.delay` (10ms).
+All bounds are per source. `S` is `sdk.batch.size` (100), `D` is `sdk.batch.delay` (0 under B, 10ms
+under A), and `R` is the largest `ReadN` return of a connector that ignores `n` (`R ≤ S` for `Read`
+connectors).
 
 ### Latency
 
-The collector starts its timer at the first record of a batch and returns at `S` records or after
-`D`, whichever comes first. A source producing fewer than `S` records per `D` (under 10k rec/s)
-adds up to `D` (10ms) to the first record of each batch, and less to later records. A dense source
-fills the batch first and adds nothing measurable. Postgres CDC is unchanged because it pins today's
-settings; its handler already holds sparse changes for up to 1s, a pre-existing floor this design
-does not touch.
+- **B:** no collection wait. A record waits only behind records already queued ahead of it. That is
+  bounded by the read-ahead (`S` in `readCh` or one `ReadN` result) plus one batch in the engine,
+  about `2S` records at the pipeline's throughput: ~1ms at 200k rec/s, and nothing for a sparse
+  source.
+- **A:** the same queueing, plus up to `D` for the first record of a batch when the source produces
+  fewer than `S` records per `D`.
+- **Postgres** is unchanged because it pins today's settings. Its 1s handler flush is a pre-existing
+  floor.
 
-`conduit_pipeline_execution_duration_seconds` starts when the engine receives a record, so it will
-**not** show this delay. See Observability.
+**Dashboards shift on upgrade.** `conduit_pipeline_execution_duration_seconds` already measures from
+the record's `opencdc.readAt`, in both engines (`funnel/worker.go` `updateTimer`;
+`lifecycle/stream/source.go`). The SDK stamps `readAt` when the connector builds the record, so the
+metric includes collector wait and read-ahead queueing. After the upgrade, latency panels and alerts
+will move: for dense sources by the queueing term (records now wait behind up to ~`2S` others,
+instead of one), and under A also by up to `D` for sparse sources. The release notes must say this
+and give the expected magnitude per variant.
 
 ### Memory
 
-For a `Read` connector the SDK holds up to `S` records in `readCh`, up to `S` in the batch being
-collected, and one in the connector's `Read`. For a `ReadN` connector it holds one finished batch in
-`readNCh` and the batch being collected. With the cap fix above, that is at most about `2S+1`
-records buffered in the connector process, plus the batch the engine is processing. Arch-v2 without
-destination batching has one batch in flight, so the total is about `3S` records. At 64-byte
-payloads, about 2 KB per record with positions and metadata, that is about 600 KB per source.
-Records with large payloads scale linearly. That is why S3, where a record is a whole object, does
-not inherit the default.
+The SDK holds the read-ahead (up to `S` records in `readCh`, or one `ReadN` result of up to `R`), the
+batch being collected (at most `S` with the cap), the carry (up to `R−1`), and one record in the
+connector's `Read`. At defaults, arch-v2 also holds one batch in flight. That totals about `3S` for
+`Read` connectors and about `2S + 2R` for `ReadN` connectors that overshoot. At 64-byte payloads,
+about 2 KB per record with positions and metadata, `3S` is about 600 KB.
+
+With destination batching on, the funnel adds up to `(maxInFlightFlushes + 2) × effectiveBatchSize`
+records, which is 4 × 3000 = 12,000 at its defaults (`destination_batch.go`), whatever `S` is. Large
+payloads scale linearly, which is why S3 pins 0/0.
 
 ### Crash replay (duplicates)
 
-At-least-once replays everything after the last durably persisted position. Today the persister
-flushes after 1s or 10000 `Persist` calls. At batch 1 and 54k rec/s, that means a flush every
-~185ms and up to ~10k replayed records. At batch 100 and ~215k rec/s, 10000 calls is 1M records, so
-the 1s timer decides and up to ~215k records replay. **With the persister counting positions**
-(Decision), the bound is again ~10k records, plus one in-flight batch (`S`) and anything the funnel
-destination buffers when destination batching is on. Records the SDK read ahead but never sent are
-re-read, not duplicated: they never reached a destination.
+A crash replays everything after the last durably persisted position. Today the persister flushes
+after 1s or 10000 `Persist` calls. At batch 1 and 54k rec/s, that is a flush every ~185ms, with up
+to ~10k records replayed. At batch 100 and ~215k rec/s without the persister change, the 1s timer
+decides and up to ~215k records replay. With positions counted and `>=`, the bound is:
+
+- 10,000 positions (the threshold), plus
+- one in-flight batch (`S`), plus
+- whatever the funnel destination holds when destination batching is on (up to 12,000).
+
+Read-ahead, carry and partly collected records are re-read, not duplicated: they never reached a
+destination.
 
 ### Graceful stop
 
-`Stop` cancels the SDK's read context at once. The collector returns `ctx.Err()`, and read-ahead and
-partly collected records are dropped unsent and unacked, so they replay on restart. `LastPosition`
-is the last position actually sent, which the engine already waits for. The engine then drains what
-is in flight: one batch for arch-v2 stop-and-wait. Drain time grows from one record's `Write` and
-ack to one batch's. For a destination that writes records one at a time with real latency (the
-matrix's `W-pg-http-slowsink`, 5ms per request), that is about 500ms. The bounded-stop work (#2990)
-must budget for it.
+`Stop` cancels the SDK's read context at once. Read-ahead, carry and partly collected records are
+dropped unsent and unacked, and they replay. `LastPosition` is the last position actually sent,
+which the engine already waits for. The engine drains what is in flight:
+
+- At defaults, one batch: one `Write` and its ack instead of one record's. For a destination that
+  handles records one at a time with real latency (the matrix's `W-pg-http-slowsink`, a 5ms sink
+  delay), up to ~500ms.
+- With destination batching on, the funnel flushes its buffer (up to 12,000 records) before
+  teardown, as it does today.
+
+The bounded-stop work (#2990) must budget for both cases.
 
 ### Ack and position granularity
 
 Arch-v2 calls `Source.Ack` once per batch with all positions. The state position becomes the last
 one, `Persist` is called once, and the plugin receives one `AckPositions` message. The SDK then calls
 the connector's `Ack` once per position, in order (`runAck`), so connectors see the same per-record
-acks as today:
-
-- **postgres:** acks per position, advancing `confirmed_flush_lsn`. A batch can split a transaction.
-  That is already true at today's 1000, and exact resume uses the position's change key.
-- **kafka:** `batchAcker` commits in FIFO order. Read-ahead adds up to ~`2S` consumed-but-unacked
-  records, so a consumer-group rebalance can redeliver up to that many more to the new owner
-  (at-least-once).
-- **file, s3, generator:** `Ack` is a no-op; the engine's persisted position is the resume point.
-
-A nack inside a batch (a processor or destination error routed to the DLQ) goes through the existing
-arch-v2 sub-batch and `multiAckNacker` path. That path exists and has tests
-(`worker_nack_position_test.go`, `multi_ack_nacker_test.go`, `worker_ack_order_test.go`), but after
-this change it is the path every default pipeline takes, not an opt-in one. v1 acks each record
-separately (`pkg/lifecycle/stream/source_acker.go`), so its ack and persist pattern does not change.
+acks as today. Postgres and S3 are pinned. Kafka's `batchAcker` commits in FIFO order on its own
+`commit.offsets.*` settings. Read-ahead adds up to ~`2S` consumed-but-unacked records, which a
+consumer-group rebalance could redeliver to the new owner. That last point is by reasoning, not
+traced. File and generator `Ack` are no-ops. A nack inside a batch goes through the existing arch-v2
+sub-batch path (`worker_nack_position_test.go`, `multi_ack_nacker_test.go`,
+`worker_ack_order_test.go`), which becomes the default path. v1 acks each record separately
+(`pkg/lifecycle/stream/source_acker.go`).
 
 ## Failure modes
 
-- **SIGKILL while the SDK is collecting a batch.** Nothing in the batch was sent, so nothing was
-  acked. Restart resumes from the last persisted position. No loss. New chaos scenario required.
-- **SIGKILL after the destination wrote a batch but before the position persisted.** The batch
-  replays, along with everything else since the last flush. The bound is ~10k records with the
-  persister fix and up to 1s of throughput without it. New chaos scenario required, asserting the
-  bound and not only absence of loss.
-- **SIGTERM with a partial batch.** Dropped unsent, then replayed on restart. The engine drains one
-  in-flight batch. The existing `sigterm_test.go` and drain tests must run with a batched source.
-- **Standalone source batch over the gRPC message limit.** Without the byte split, `Send` fails and
-  the source errors on every restart, a stall that cannot clear by itself. The SDK byte split
-  prevents it. A test with records just under and over 4 MiB per batch pins it. A runbook entry
-  covers the symptom.
-- **Large records exhaust memory.** Bounded at about `3S` records per source. S3 does not inherit
-  the default. Large-payload matrix cells (`b16384`) measure RSS.
-- **Postgres adopts the SDK without pinning.** Its CDC batch drops to 100 and its snapshot to `FETCH
-  100`. A Postgres unit test asserts the effective CDC batch size and snapshot fetch size at shipped
-  defaults, and the `F-*-snapshot` cells would show the regression.
-- **A connector bumps the SDK but not its spec.** The embedded spec still says 0 and nothing changes.
-  That is safe, and `validate-generated-files` catches it.
-- **A user set only one of the two settings.** Today, `sdk.batch.size: 1000` alone waits until the
-  batch is full, with no deadline. After this change the 10ms delay default applies, which is a
-  fix. Today, `sdk.batch.delay: 1s` alone means no record cap. After this change the cap is 100.
-  The release notes must call this out.
-- **A user explicitly set `sdk.batch.size: 0` to get one record per read.** They now get delay-only
-  batching. The release notes and docs must give the full opt-out (both 0).
+- **Standalone destination receives a batch over 4 MiB.** The engine's gRPC client is not the limit:
+  go-plugin v1.8.0 sets `MaxCallRecvMsgSize(math.MaxInt32)` (`grpc_client.go:40`), so a standalone
+  _source_ batch is received whatever its size. The limit is the plugin's gRPC server receive size,
+  `connectors.max-receive-record-size` (default 4 MiB, SDK `serve.go`), which applies to
+  engine→plugin messages. `pkg/connector/destination.go` sends one `DestinationRunRequest` per
+  `Write`. At defaults, arch-v2 passes the source batch straight to `Write`, so a destination that
+  received one record per message today would receive 100. Any batch averaging over ~40 KiB per
+  record exceeds 4 MiB, fails on every retry, and cannot clear by itself. v1 writes one record per
+  call and is not exposed. Mitigation: the byte cap in the separate fix PR, covering the
+  non-buffered path (a prerequisite, above). Test: a standalone destination with records just under
+  and just over the cap per batch.
+- **SIGKILL while collecting.** Nothing collected was sent or acked, so restart resumes from the last
+  persisted position. New chaos scenario.
+- **SIGKILL after a batch was written but before its position persisted.** The batch replays within
+  the bound above. New chaos scenario asserting the bound, not only absence of loss.
+- **Persister counter steps past the threshold.** Prevented by `>=`, and the unaligned-batch test
+  pins it.
+- **Read error mid-batch.** Flush-then-fail delivers the good records first. An SDK test injects an
+  error after `k < S` records and asserts that those `k` are delivered, followed by the error.
+- **SIGTERM with a partial batch.** Dropped unsent, then replayed. The existing `sigterm_test.go` and
+  drain tests must run with a batched source.
+- **Single-setting configurations.** Normalized or rejected at `Configure` (Decision). Without that:
+  `delay: 0` alone under A stalls a sparse source with records unacked, and `size: 0` alone on a
+  `ReadN` connector errors (Postgres) or silently does not batch.
+- **Postgres adopts the SDK without pinning.** CDC batches drop to 100 and snapshots to `FETCH 100`.
+  The `connector.yaml` golden check and a unit test on the effective sizes catch it.
+- **Memory with large records.** Bounded as above. S3 pins 0/0. The `b16384` cells measure RSS.
 
 ## Upgrade, rollback and versioning
 
-- **SDK:** v0.17.x → v0.18.0, a minor bump for a behavior change in a default. The changelog states
-  the new values, the opt-out, and the one-setting cases above.
-- **Connectors:** each built-in connector gets a minor release on SDK v0.18.0. Conduit bumps each one
-  in a separate PR, which is that connector's switch.
-- **Standalone connectors built with older SDKs:** unaffected; their embedded spec keeps 0.
-  Standalone connectors adopt it on their own next SDK bump.
-- **Other SDKs:** the Python SDK mirrors the Go defaults (`_batch.py`, 0 and 0). Matching it is an
-  open question, under the parity policy (`20261008-sdk-parity-and-open-plugin-protocol.md`).
-- **Stored config:** unchanged. Pipelines store only the settings the user set; defaults apply at
-  `Configure`. An existing pipeline without `sdk.batch.*` switches when Conduit upgrades to a
-  release with the re-released connector.
-- **Serialized state:** no position, state or checkpoint format changes, so upgrade and downgrade
-  read the same positions. An upgrade test (run N at batch 1, stop mid-stream, upgrade, resume at
-  batch 100, verify no loss and duplicates within the bound) is still required. The upgrade gate is
-  not live yet ("by Phase 2"), so the test is part of this work, not a gate check.
-- **Rollback:** per pipeline, set both settings to 0. Per release, revert the connector bump PR in
-  Conduit. No migration either way.
+- **SDK:** v0.17.x → v0.18.0, a minor bump for a default and a semantics change (`delay=0` under B).
+  The changelog states the new defaults, the opt-out, the `Configure` rules and their codes.
+- **Connectors:** each built-in source gets a minor release on SDK v0.18.0. Conduit bumps each in a
+  separate PR, which is that connector's switch.
+- **Standalone connectors built with older SDKs:** unaffected. They adopt on their own SDK bump.
+- **Other SDKs:** the Python SDK mirrors the Go defaults (`_batch.py`, 0 and 0). Whether to match is
+  an open question, under `20261008-sdk-parity-and-open-plugin-protocol.md`.
+- **Stored config:** unchanged. Defaults apply at `Configure`, so an existing pipeline without
+  `sdk.batch.*` switches when Conduit upgrades to a release with the re-released connector.
+- **Serialized state:** no format changes. An upgrade test is still required: run N at batch 1, stop
+  mid-stream, upgrade, resume batched, and verify no loss and replay within the bound. The upgrade
+  gate is not live ("by Phase 2"), so this test is part of the work, not a gate check.
+- **Rollback:** per pipeline, set both to 0. Per release, revert the connector bump. No migration.
 
 ## Observability
 
-- **New:** `conduit_source_read_batch_size` (histogram, labels: pipeline, plugin, component ID),
-  recorded by the engine per `Source.Read`. It shows whether batching is on and what size batches
-  actually arrive. It is engine-side, so it works for any connector and SDK.
-- **New:** `conduit_source_batch_assembly_seconds` (histogram, same labels): at receipt, now minus
-  the earliest `opencdc.readAt` in the batch. The SDK stamps `readAt` when the connector builds the
-  record, before collection, so this is the latency that batching adds. Existing pipeline latency
-  metrics cannot see it.
-- **Existing:** `conduit_connector_execution_duration_seconds` for the source times the engine's
-  `Read`, which should include the collector wait; the assembly metric is the direct measure. The
-  SDK `Open` log line above shows the effective settings.
-- **Runbook:** `docs/operations/source-batching.md`: symptom → diagnosis → remediation for higher
-  sparse-source latency (assembly metric, then lower `sdk.batch.delay` or opt out), memory growth
-  with large records, and the standalone gRPC limit.
+- **Existing:** `conduit_pipeline_execution_duration_seconds` is end-to-end from `readAt` and will
+  shift as described under Latency.
+- **New:** `conduit_source_read_batch_size` (histogram; labels pipeline, plugin, component ID),
+  recorded by the engine per `Source.Read`.
+- **New:** `conduit_source_batch_read_span_seconds`: latest minus earliest `readAt` within a batch.
+  This is how long the batch took to read. Under A it approximates the collection window, bounded by
+  `D` plus read time. It does not include waiting after the last read.
+- **New:** `conduit_source_batch_handoff_seconds`: engine receipt minus the latest `readAt` in the
+  batch. It covers the wait after the batch's last record was read: queueing behind a busy engine
+  (backpressure) plus, under A, any remaining timer.
+- **What these cannot isolate:** neither metric separates "batching cost" from "engine slow". The
+  SDK does not export the collector's own timer across the plugin boundary. The benchmark's latency
+  criterion therefore compares end-to-end p99 between arms at the same offered load, set below
+  capacity, where no backpressure queue forms.
+- **Runbook** (`docs/operations/source-batching.md`): symptom → diagnosis → remediation for higher
+  latency after upgrade, memory growth with large records, the destination message-size error, and
+  the `Configure` codes.
 
 ## Test plan
 
-- **SDK:** unit tests for the new defaults, the size cap (a `ReadN` result larger than the remaining
-  room is carried over, in order), the byte split (order, `lastPosition`, a single record over the
-  budget is still sent alone), and the opt-out path being byte-for-byte today's passthrough.
-- **Postgres:** effective CDC batch size and snapshot fetch size at shipped defaults;
-  `snapshot.fetchSize` honored (fails before the fix).
-- **Conduit chaos (`tests/chaos`, required check):** batched-source variants of the SIGKILL recovery,
-  SIGTERM drain and N-source scenarios on arch-v2 and on v1, since v1 is still the default engine
-  until the v0.22 flip. Each kill test asserts no loss, ordering, and duplicates within the computed
-  bound.
-- **Persister:** a unit test that 10000 positions in 100 calls trigger the count flush (fails before
-  the fix).
+- **SDK:** new defaults. Adaptive drain: a full queue yields `S`, an empty queue yields 1, and
+  nothing waits on a timer. The size cap with carry, including a connector that ignores `n`.
+  Flush-then-fail. The `Configure` rules and their codes. Opt-out is byte-for-byte today's
+  passthrough.
+- **Postgres:** the `connector.yaml` golden shows 0/0; effective CDC and snapshot sizes at shipped
+  defaults; `snapshot.fetchSize` is honored (fails before the fix).
+- **Persister:** unaligned batch sizes trigger the count flush (fails with `==`).
+- **Chaos (`tests/chaos`, required):** batched-source variants of the SIGKILL recovery, SIGTERM drain
+  and N-source scenarios, on arch-v2 and v1. Each kill test asserts no loss, ordering, and replay
+  within the bound.
+- **Destination size:** the standalone destination test from Failure modes (owned by the byte-cap
+  fix PR; this design depends on it).
 - **Upgrade:** the resume test above.
-- **Acceptance:** run each connector's acceptance suite at shipped defaults, so SRC-02 (1, 100 and
-  `MaxBatchSize` records written and read back) goes through the batched read path.
+- **Acceptance:** run each connector's suite at shipped defaults, so SRC-02 goes through the batched
+  path.
 
 ## Benchmark plan
 
-No performance number goes into release notes, docs or the README until this plan's results are
-committed in `benchi/` with configs and environment. Report medians with variance and the A/A floor,
-on quiesced AWS hosts.
+No performance number goes into release notes, docs or the README until these results are committed
+in `benchi/` with configs and environment. Report medians with variance and the A/A floor, on
+quiesced AWS hosts.
 
-1. **archv2-gate harness** (`benchi/archv2-gate`, PR #3067, not on main yet). Arms `v1`, `v2`,
-   `v1-srcbatch`, `v2-srcbatch` at 1x1, 2x2 and 4x4, plus a **shipped-default** arm built with the
-   re-released generator and no `sdk.batch.*` in the pipeline file. That arm must land within the
-   A/A floor of the explicit `1x1-srcbatch100` arm, or the default is not reaching the engine. On
-   1x1, sweep size {10, 100, 1000} at 10ms and delay {1ms, 5ms, 10ms} at 100. Fix the missing
-   source-revision label on the image first.
+1. **archv2-gate harness** (`benchi/archv2-gate`, PR #3067, not on main yet).
+   - Arms: `v1`, `v2`, `v1-fixed`, `v2-fixed` (100/10ms), `v1-adaptive`, `v2-adaptive` (100/0 on the
+     new SDK), and a **shipped-default** arm per engine. The shipped-default arm is built with the
+     re-released generator and has no `sdk.batch.*` in the pipeline file, which proves the default
+     reaches the engine.
+   - Shapes: 1x1, 2x2 and 4x4.
+   - Sweeps on 1x1: size {10, 100, 1000} for each variant, and delay {1ms, 5ms, 10ms} for A.
+   - First, fix the missing source-revision label on the image.
 2. **Competitor matrix** (`benchi/v021-cdc-parity` and the matrix plan, whose cell definitions are
-   not committed yet; commit them with the results). The `conduit-s` (shipped-default) arm is the
-   one under test:
+   not committed yet; commit them with the results). Run the `conduit-s` (shipped-default) arm and
+   the `conduit-classic-s` (v1) arm in every cell listed:
    - Sources that change: `B-kafka-file-p1-b64`, `B-kafka-pg-p1-b64`, `B-kafka-s3-p1-b64`,
-     `C-file-kafka-b64`, and their `p4`/`p16` holdouts.
-   - Postgres as control (pinned to today's settings, so it should land within the floor):
-     `A2-pg-file-p1-b64`, `A2-pg-kafka-p1-b64`, `A2-pg-pg-p1-b64`.
-   - Snapshot regression check: `F-pg-kafka-snapshot`, `F-pg-pg-snapshot`.
-   - Latency: `W-pg-kafka-idle` and the `A1-*-ramp` cells, end-to-end p50/p99, plus a sparse
-     kafka→file run (under 1k rec/s), where the 10ms cost actually shows.
-   - Large records and memory: the `b16384` holdouts, recording RSS.
-   - Recovery and correctness: `G-pg-kafka-kill9`, `G-pg-pg-kill9`, and every `H-*-verify` cell with
-     a kafka or file source, checking replayed records against the computed bound.
-   - A standalone-kafka arm on one B cell to exercise the gRPC byte split.
-3. **Pass criteria:** the B and C cells improve beyond the A/A floor at shipped defaults. No cell
-   regresses by more than its floor. Added p99 latency on sparse cells is at most `D`. Kill9 replay
-   counts are within the bound. The snapshot cells do not move.
+     `C-file-kafka-b64`, with the `p4`/`p16` holdouts.
+   - Postgres as control (pinned, so expected within the floor): `A2-pg-file-p1-b64`,
+     `A2-pg-kafka-p1-b64`, `A2-pg-pg-p1-b64`.
+   - Snapshot: `F-pg-kafka-snapshot`, `F-pg-pg-snapshot`.
+   - Latency: `W-pg-kafka-idle`, the `A1-*-ramp` cells, and a sparse kafka→file run (under 1k rec/s)
+     at fixed offered load.
+   - Large records: the `b16384` holdouts, with RSS. Add a standalone-destination arm on one of them
+     to exercise the destination byte cap.
+   - Recovery: `G-pg-kafka-kill9`, `G-pg-pg-kill9`, and the `H-*-verify` cells with kafka or file
+     sources, comparing replay counts against the bound.
+3. **Pass criteria:**
+   - The B and C cells improve beyond the A/A floor at shipped defaults on arch-v2.
+   - No cell regresses beyond its floor on either engine.
+   - Choosing B requires it to land within the floor of A at saturation.
+   - Sparse-cell end-to-end p99 at fixed offered load: within the floor of today's default for B, and
+     at most today's plus `D` for A.
+   - Kill9 replay counts stay within the bound, and the snapshot cells do not move.
 
-`make bench-engine` (the CI regression gate) uses fake connectors that bypass SDK specs, so this
-change does not move it. Its `1x1-srcbatch100` shape keeps tracking the engine's batched path.
+`make bench-engine` uses fake connectors that bypass SDK specs, so this change does not move it.
 
 ## Docs
 
 These ship in the same PRs as the code:
 
-- The SDK `SourceWithBatch` godoc and the SDK README.
+- The SDK `SourceWithBatch` godoc and README.
 - The regenerated connector references.
-- The batching page in the `conduit.io` docs source: defaults, opt-out, the one-setting cases and
-  the per-connector table.
-- `llms.txt`: one entry on the source batching default and the opt-out.
-- The runbook above.
-- Changelog entries in the SDK, in each connector, and in Conduit's release notes for the release
-  that bumps the connectors.
+- The batching page in the `conduit.io` docs source: defaults, adaptive drain, the opt-out, the
+  `Configure` codes, the per-connector table, and the dashboard shift.
+- An `llms.txt` entry.
+- The runbook.
+- Changelog entries in the SDK, in each connector, and in Conduit's release notes.
 
 ## Open questions for DeVaris
 
-1. **Values.** Is 100/10ms right, or should the delay be lower (1–5ms) to keep sparse sources
-   closer to today's latency? The delay sweep in step 1 should decide. This design defaults to
-   10ms until the sweep says otherwise.
-2. **Postgres.** Pin 0/0 to keep today's CDC and snapshot behavior exactly (proposed), pin
-   1000/10ms, or inherit 100/10ms and measure? The `snapshot.fetchSize` wiring fix is wanted either
-   way, and is required before Postgres ever inherits a non-zero size.
-3. **S3.** Pin 0/0 until there is a byte bound (proposed), or add a byte bound now? A new
-   `sdk.batch.bytes` parameter would be a public contract on every connector.
-4. **Persister.** Count positions instead of `Ack` calls in this change (proposed), or accept a 1s
-   replay window at high throughput?
-5. **Release vehicle and v1.** Under Alternative A, v1 users get the default as soon as the
-   connectors are bumped. Ship it in a v0.21.x patch (v1 chaos coverage becomes a prerequisite), or
-   hold it for v0.22 with the engine flip?
-6. **Python and other SDKs.** Match the default in the Python SDK in the same release cycle, or treat
-   it as a separate decision?
-7. **Standalone byte split.** Split inside the SDK with no new parameter (proposed), or raise the
-   engine's gRPC receive limit as well? The second is a Conduit-side change that old SDKs would
-   benefit from too.
+1. **Variant.** Adaptive drain (B, proposed, unmeasured) or fixed 100/10ms (A, measured)? The
+   proposal is to decide by the benchmark rule above. Redefining `delay=0` is the cost of B.
+2. **Postgres.** Pin 0/0 (proposed), or inherit and measure? The `snapshot.fetchSize` fix is wanted
+   either way.
+3. **S3.** Pin 0/0 until there is a source-side byte bound (proposed), or add one now? A new
+   `sdk.batch.bytes` parameter would be a public contract.
+4. **Release vehicle and v1.** v1 is the default engine and gets the change too. Ship in v0.21.x
+   with the v1 arms and v1 chaos coverage as prerequisites, or hold for v0.22 with the flip?
+5. **Python SDK.** Match the default in the same cycle?
+6. **Destination message size.** Is the funnel byte cap (separate PR) enough, or should the default
+   `connectors.max-receive-record-size` also rise? A higher default helps standalone destinations
+   built with old SDKs only if the engine passes the setting to them, which it does through
+   `EnvConduitConnectorMaxReceiveRecordSize`.
 
 ## Related
 
-- `docs/design-documents/20261017-funnel-destination-batching.md`: destination batching in the funnel;
-  destination defaults stay as they are.
+- `docs/design-documents/20261017-funnel-destination-batching.md`
 - `docs/design-documents/20261019-funnel-read-ahead-pipelining.md`
-- `docs/design-documents/20261009-staged-batch-engine.md`: the staged engine and the coalescing
-  alternative (C).
-- `docs/design-documents/20260723-source-ack-persist-ordering-fix.md`: why `Source.Ack` defers the
-  plugin ack until the persist lands.
-- `benchi/METHODOLOGY.md`; archv2-gate harness (#2956, #3067).
+- `docs/design-documents/20261009-staged-batch-engine.md` (alternative D)
+- `docs/design-documents/20260723-source-ack-persist-ordering-fix.md`
+- `benchi/METHODOLOGY.md`; archv2-gate harness (#2956, #3067)
 - Conduit #3213 (Postgres CDC default batch 1000); `conduit-connector-sdk` #428 (destination
-  delay-only batching).
+  delay-only batching cap)
