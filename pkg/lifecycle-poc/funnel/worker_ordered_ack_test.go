@@ -206,3 +206,77 @@ func (c *countingAckNacker) Ack(context.Context, *Batch) error {
 	return nil
 }
 func (c *countingAckNacker) Nack(context.Context, *Batch, string) error { return nil }
+
+// TestSplitRun_SplitRecordRacesWithVote: Batch.SplitRecord grows run.total on
+// the worker goroutine while the flusher side credits a sibling member
+// (terminalCount) and reads total in complete(). Run under -race; the run must
+// still be released exactly once, after every member including the new pieces
+// is terminal.
+func TestSplitRun_SplitRecordRacesWithVote(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	batch := NewBatch([]opencdc.Record{{Position: opencdc.Position("orig")}})
+	batch.SplitRecord(0, []opencdc.Record{{}, {}, {}, {}})
+	subs := []*Batch{batch.sub(0, 1), batch.sub(1, 2), batch.sub(2, 3), batch.sub(3, 4)}
+
+	var acks atomic.Int32
+	voter := newRunAckNacker(&countingAckNacker{acks: &acks})
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	wg.Add(2)
+	go func() { // flusher side
+		defer wg.Done()
+		<-start
+		is.NoErr(voter.Ack(ctx, subs[0]))
+	}()
+	go func() { // worker side: a later processor splits a sibling further
+		defer wg.Done()
+		<-start
+		subs[1].SplitRecord(0, []opencdc.Record{{}, {}})
+	}()
+	close(start)
+	wg.Wait()
+
+	is.Equal(acks.Load(), int32(0)) // siblings still outstanding
+	is.NoErr(voter.Ack(ctx, subs[1]))
+	is.NoErr(voter.Ack(ctx, subs[2]))
+	is.NoErr(voter.Ack(ctx, subs[3]))
+	is.Equal(acks.Load(), int32(1))
+}
+
+// TestWorker_FanOutBatching_FilteredBatchAckOrdered covers batched fan-out
+// (M batching destinations, synchronous flush): a batch filtered before the
+// fan-out must not ack the source ahead of an earlier batch buffered in BOTH
+// destinations.
+func TestWorker_FanOutBatching_FilteredBatchAckOrdered(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Test(t)
+	recs := randomRecords(2)
+
+	src := newFakeSource("src", nil)
+	destA, destB := newFakeDestination("A"), newFakeDestination("B")
+	dtA := NewBatchingDestinationTask("A", destA, logger, NoOpConnectorMetrics{}, 3, 0)
+	dtB := NewBatchingDestinationTask("B", destB, logger, NoOpConnectorMetrics{}, 3, 0)
+	proc := funcTask{id: "proc", do: func(b *Batch) error {
+		if string(b.records[0].Position) == string(recs[1].Position) {
+			b.Filter(0)
+		}
+		return nil
+	}}
+	procNode := &TaskNode{Task: proc, Next: []*TaskNode{{Task: dtA}, {Task: dtB}}}
+	srcNode := &TaskNode{Task: NewSourceTask("src", src, logger, NoOpConnectorMetrics{}), Next: []*TaskNode{procNode}}
+	dlq := NewDLQ("dlq", newFakeDestination("dlq"), logger, NoOpConnectorMetrics{}, 10, 10)
+	w, err := NewWorker(srcNode, dlq, logger, noop.Timer{})
+	is.NoErr(err)
+
+	is.NoErr(w.doTask(ctx, procNode, NewBatch(recs[:1]), newRunAckNacker(w))) // buffered in A and B
+	is.NoErr(w.doTask(ctx, procNode, NewBatch(recs[1:]), newRunAckNacker(w))) // filtered
+	is.Equal(src.ackedPositions(), []opencdc.Position(nil))
+
+	is.NoErr(dtA.Close(ctx))
+	is.NoErr(dtB.Close(ctx))
+	is.Equal(src.ackedPositions(), posOf(recs...))
+}
