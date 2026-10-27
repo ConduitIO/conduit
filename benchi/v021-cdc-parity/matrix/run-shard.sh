@@ -31,7 +31,10 @@ log "SUT_CPUSET=$SUT_CPUSET INFRA_CPUSET=$INFRA_CPUSET"
 # precondition is checked against that declared hash).
 H=$(python3 "$HERE/cells.py" hash)
 [ "$H" = "$(cat "$HERE/HARNESS_HASH" 2>/dev/null)" ] && [ "$H" = "${MATRIX_HARNESS_HASH:-}" ] || {
-  log "harness hash $H differs from the launched kit ($(cat "$HERE/HARNESS_HASH" 2>/dev/null)) or the declared one (${MATRIX_HARNESS_HASH:-unset})"; exit 1; }
+  log "harness hash $H differs from the launched kit ($(cat "$HERE/HARNESS_HASH" 2>/dev/null)) or the declared one (${MATRIX_HARNESS_HASH:-unset})"
+  python3 "$HERE/cells.py" hash --list > "$OUT/harness-files.txt" 2>&1
+  [ -n "${MATRIX_S3:-}" ] && aws s3 cp --quiet "$OUT/harness-files.txt" "$MATRIX_S3/shard-$I/harness-files.txt"
+  exit 1; }
 
 export LOADER_BIN="$HERE/../loader/loader"
 [ -x "$LOADER_BIN" ] || { log "loader binary missing ($LOADER_BIN)"; exit 1; }

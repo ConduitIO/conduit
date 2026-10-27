@@ -1435,11 +1435,7 @@ def estimate(price: float, plan: str) -> str:
 HASHED = (".py", ".sh", ".tf", ".tftpl", ".Dockerfile", ".go", ".mod", ".sum")
 
 
-def harness_hash() -> str:
-    """SHA-256 over the code the results depend on: matrix/ (not its .md
-    files) and loader/. Recorded in every run's environment and cell.json;
-    analyze.py refuses results whose hash differs from its own tree's."""
-    h = hashlib.sha256()
+def harness_files() -> list:
     roots = [HERE, os.path.join(HERE, "..", "loader")]
     files = []
     for r in roots:
@@ -1449,8 +1445,16 @@ def harness_hash() -> str:
             for f in fs:
                 if f.endswith(HASHED) and not f.startswith("test_"):
                     files.append(os.path.normpath(os.path.join(d, f)))
+    return sorted(files)
+
+
+def harness_hash() -> str:
+    """SHA-256 over the code the results depend on: matrix/ (not its .md
+    files) and loader/. Recorded in every run's environment and cell.json;
+    analyze.py refuses results whose hash differs from its own tree's."""
+    h = hashlib.sha256()
     base = os.path.normpath(os.path.join(HERE, ".."))
-    for p in sorted(files):
+    for p in harness_files():
         h.update(os.path.relpath(p, base).encode() + b"\0")
         with open(p, "rb") as fh:
             h.update(fh.read())
@@ -1516,6 +1520,11 @@ def main(argv: list) -> int:
             print(f"{cid} {rep}")
         return 0
     if cmd == "hash":
+        if "--list" in argv:
+            base = os.path.normpath(os.path.join(HERE, ".."))
+            for p in harness_files():
+                with open(p, "rb") as fh:
+                    print(hashlib.sha256(fh.read()).hexdigest()[:12], os.path.relpath(p, base))
         print(harness_hash())
         return 0
     if cmd == "primary":
