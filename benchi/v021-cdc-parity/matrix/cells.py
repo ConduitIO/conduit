@@ -1300,7 +1300,7 @@ def hooks(c: Cell, arm: str = "") -> dict:
     specs = ",".join(sink_specs(c, arm=arm))
     tbl = dest_tables(c)
     steps["pre-test"].append({"name": "first-record", "container": "cdcparity-counter",
-                              "run": f"{L} first -sinks '{specs}' -tables {tbl} -timeout 15m"})
+                              "run": f"{L} first -sinks '{specs}' -tables {tbl} -timeout {'5m' if SMOKE else '15m'}"})
     if c.mode == "snapshot":
         steps["pre-test"].append({"name": "snapshot-landed", "container": "cdcparity-counter",
                                   "run": f"{L} first -sinks '{specs}' -tables {tbl} -until {SNAP_ROWS} -timeout {SNAP_TIMEOUT}s"})

@@ -130,6 +130,22 @@ start_res() {
 stop_res() {
   kill "${RES_PID:-}" "${IOSTAT_PID:-}" 2>/dev/null; wait "${RES_PID:-}" "${IOSTAT_PID:-}" 2>/dev/null; RES_PID=""; IOSTAT_PID=""
 }
+# Live view of a run (every 60 s): each cdcparity container's state and log
+# tail, and the run directory synced to S3, so a run that hangs is visible
+# while it hangs.
+start_watch() { # run_dir label
+  ( while true; do
+      sleep 60
+      mkdir -p "$1/live"
+      docker ps -a --filter name=cdcparity --format '{{.Names}} {{.Status}}' > "$1/live/ps.txt" 2>&1
+      for c in $(docker ps -a --filter name=cdcparity --format '{{.Names}}'); do
+        docker logs --tail 300 "$c" > "$1/live/$c.log" 2>&1
+      done
+      [ -n "${MATRIX_S3:-}" ] && aws s3 sync --quiet --exclude 'prof/*' "$1" "$MATRIX_S3/shard-${MATRIX_SHARD:-0}/$(basename "$DIR")/$2" 2>/dev/null
+    done ) &
+  WATCH_PID=$!
+}
+stop_watch() { kill "${WATCH_PID:-}" 2>/dev/null; wait "${WATCH_PID:-}" 2>/dev/null; WATCH_PID=""; }
 start_diag() { python3 "$HERE/diag.py" "$1" "$2" "$META" & DIAG_PID=$!; }
 stop_diag() { kill "${DIAG_PID:-}" 2>/dev/null; wait "${DIAG_PID:-}" 2>/dev/null; DIAG_PID=""; }
 
@@ -141,12 +157,17 @@ run_benchi() { # label arm diag
   cat /proc/loadavg > "$rd/load-before.txt"
   start_res "$rd"
   [ "$diag" = 1 ] && start_diag "$rd" "$arm"
+  start_watch "$rd" "$label"
   local t0; t0=$(date +%s%3N)
   # Bounded: 20 minutes past the planned run (10 in smoke) before it is killed.
   local slack=1200; [ "${MATRIX_SMOKE:-0}" = 1 ] && slack=600
   local cap=$(( $(meta run_seconds) + slack + 3600 * $( [ "$MODE" = snapshot ] || [ "$MODE" = correct ] && echo 1 || echo 0) ))
-  (cd "$rd/cfg" && with_tty timeout "$cap" "$BENCHI" -config bench.yml -tool "$arm" -out "$rd/benchi" </dev/null >/dev/null 2>&1)
+  # -k: if benchi does not exit within 60 s of SIGTERM (a hung cleanup), KILL it.
+  (cd "$rd/cfg" && with_tty timeout -k 60 "$cap" "$BENCHI" -config bench.yml -tool "$arm" -out "$rd/benchi" </dev/null >/dev/null 2>&1)
   local rc=$?
+  stop_watch
+  # Whatever benchi left behind (a killed cleanup) must not leak into the next run.
+  docker ps -aq --filter network=benchi | xargs -r docker rm -f >/dev/null 2>&1 || true
   [ "$diag" = 1 ] && stop_diag
   stop_res
   cat /proc/loadavg > "$rd/load-after.txt"
