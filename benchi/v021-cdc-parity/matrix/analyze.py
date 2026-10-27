@@ -32,6 +32,8 @@ LOADER_OK = 0.97
 SATURATED_LAG_GROWTH = 0.01
 STATIONARY_HALVES = 0.05  # first vs second half of a window within 5%
 SUT_BUSY_CORES = 3.6      # of 4: SUT CPU-bound
+DISK_BUSY = 0.90          # a data volume busy >= 90% of the window: disk-bound
+DEST_BUSY_CORES = 6.0     # Postgres using >= 6 of the 12 infrastructure cores: destination-bound (pilot revises)
 SHORT_WINDOW_S = 120      # a drain whose backlog ran out still counts with >= 120 s of window
 
 
@@ -209,6 +211,18 @@ def resources(rd, t0, t1, broker_needed):
     if broker_needed and "cdcparity-kafka" in out:
         fp = {k: fp[k] + out["cdcparity-kafka"][k] for k in fp}
     out["footprint"] = fp  # SUT, plus the broker when the arm cannot run without one
+    dw = [r for r in rows if t0 <= r["ts_ms"] <= t1 and r.get("disks")]
+    if len(dw) >= 2:
+        el_ms = dw[-1]["ts_ms"] - dw[0]["ts_ms"]
+        out["disks"] = {}
+        for role, d1 in dw[-1]["disks"].items():
+            d0 = dw[0]["disks"].get(role)
+            if not d0 or el_ms <= 0:
+                continue
+            ops = (d1["reads"] - d0["reads"]) + (d1["writes"] - d0["writes"])
+            out["disks"][role] = {"util": (d1["io_ticks_ms"] - d0["io_ticks_ms"]) / el_ms,
+                                  "await_ms": ((d1["read_ms"] - d0["read_ms"]) + (d1["write_ms"] - d0["write_ms"])) / ops if ops else 0.0,
+                                  "write_mb_s": (d1["sectors_w"] - d0["sectors_w"]) * 512 / 2**20 / (el_ms / 1000)}
     win = [r for r in rows if t0 <= r["ts_ms"] <= t1 and r.get("host")]
     if len(win) >= 2:
         s0, s1 = win[0]["host"].get("steal_ticks", {}), win[-1]["host"].get("steal_ticks", {})
@@ -224,6 +238,12 @@ def classify(res, saturated, loader_bound):
     cores = sut.get("cores") or 0
     if cores >= SUT_BUSY_CORES or (sut.get("throttled_s") or 0) > 1:
         return f"SUT CPU-bound ({cores:.1f} cores)"
+    hot = sorted(((v["util"], k) for k, v in ((res or {}).get("disks") or {}).items() if v.get("util", 0) >= DISK_BUSY), reverse=True)
+    if hot:
+        return f"disk-bound ({hot[0][1]} {hot[0][0]:.0%} busy; SUT {cores:.1f} cores)"
+    dest = ((res or {}).get("cdcparity-postgres") or {}).get("cores") or 0
+    if saturated and dest >= DEST_BUSY_CORES:
+        return f"destination-bound (postgres {dest:.1f} cores; SUT {cores:.1f} cores)"
     busy = sorted(((v.get("cores") or 0, k) for k, v in (res or {}).items() if k in INFRA), reverse=True)
     top = f"{busy[0][1].replace('cdcparity-', '')} {busy[0][0]:.1f} cores" if busy else "no destination data"
     if saturated:

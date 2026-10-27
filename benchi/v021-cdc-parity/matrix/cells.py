@@ -315,6 +315,15 @@ def build_cells() -> list:
                       ("conduit-avro-s", "connect-avro-s", "dbzserver-avro-s"), transform=True, rounds=1))
     cells.append(Cell("H-pg-fanout-file-s3-verify", "H", "pg", ("file", "s3"), "correct",
                       ("conduit-s", "connect-s@f10k"), rounds=1))
+    # Multi-table correctness through the shipped one-connector path (table
+    # templates, topics.regex + RegexRouter, per-table subjects, tombstones
+    # attributed by topic): review R2-M2.
+    cells.append(Cell("H-pg-pg-p4-verify", "H", "pg", ("pg",), "correct",
+                      ("conduit-s", "connect-avro-s", "dbzserver-avro-s", "conduit-t", "connect-avro-t", "dbzserver-avro-t"),
+                      par=4, rounds=1))
+    cells.append(Cell("H-pg-kafka-p4-verify", "H", "pg", ("kafka",), "correct",
+                      ("conduit-avro-s", "connect-avro-s", "dbzserver-avro-s", "conduit-avro-t", "connect-avro-t", "dbzserver-avro-t"),
+                      par=4, rounds=1))
     cells.append(Cell("H-pg-kafka-wide-txn1-verify", "H", "pg", ("kafka",), "correct",
                       ("conduit-avro-s", "connect-avro-s", "dbzserver-avro-s"), rounds=1, shape="wide", txn=1))
     # W: workload hold-out (mandatory before any public claim), pg -> kafka and pg -> pg.
@@ -338,6 +347,12 @@ def build_cells() -> list:
                        "conduit-avro-s@i30", "connect-avro-s@i30", "dbzserver-avro-s@i30"),
                       rounds=PILOT_ROUNDS, plan="pilot",
                       note="@i30: sampler every 30 s instead of 5 s; rates must agree within the floor"))
+    cells.append(Cell("P-pg-pg-p1-b64", "P", "pg", ("pg",), "capacity",
+                      ("conduit-s", "connect-avro-s", "dbzserver-avro-s", "conduit-s@noseq", "connect-avro-s@noseq",
+                       "dbzserver-avro-s@noseq"),
+                      rounds=PILOT_ROUNDS, plan="pilot",
+                      note="@noseq: destination tables without the generated seq column and index, counted from "
+                           "pg_stat_user_tables: the seq column's cost, and whether the destination saturates"))
     cells.append(Cell("P-kafka-pg-p1-b64", "P", "kafka", ("pg",), "drain", ("conduit-s", "connect-s"),
                       rounds=2, backlog_bytes=12 * 2**30, plan="pilot", note="measures fill time and drain rates"))
     return cells
@@ -346,7 +361,7 @@ def build_cells() -> list:
 def smoke_cells(cs: list) -> list:
     keep = {c.id for c in cs if c.family in ("H", "G")} | {
         "A2-pg-kafka-p1-b64", "A2-pg-pg-p1-b64", "A2-pg-s3-p1-b64", "A2-pg-file-p1-b64", "A2-pg-http-p1-b64",
-        "A2-pg-kafka-p4-b64", "A1-pg-kafka-ramp", "B-kafka-pg-p1-b64", "B-kafka-s3-p1-b64", "B-kafka-file-p1-b64",
+        "A2-pg-kafka-p4-b64", "A2-pg-pg-p4-b64", "A1-pg-kafka-ramp", "B-kafka-pg-p1-b64", "B-kafka-s3-p1-b64", "B-kafka-file-p1-b64",
         "C-file-kafka-b64", "D-pg-kafka-transform", "E-pg-fanout-file-s3", "F-pg-kafka-snapshot", "F-pg-pg-snapshot",
         "W-pg-kafka-txn1", "W-pg-kafka-wide", "W-pg-kafka-alter", "W-pg-kafka-idle", "P-pg-kafka-p1-b64"}
     out = []
@@ -355,6 +370,18 @@ def smoke_cells(cs: list) -> list:
             out.append(replace(c, rounds=1, instances=1, diag=c.id == "A2-pg-kafka-p1-b64", plan="smoke",
                                backlog_bytes=min(c.backlog_bytes, 256 * 2**20) if c.backlog_bytes else 0))
     return out
+
+
+# The shakedown (review round 2): four cells, smoke-length, on one instance,
+# to flush wiring bugs before the gated smoke. Never results, never a gate.
+SHAKEDOWN_CELLS = ["A2-pg-kafka-p1-b64", "A2-pg-pg-p4-b64", "B-kafka-pg-p1-b64", "G-pg-kafka-kill9"]
+
+
+def shakedown_cells(cs: list) -> list:
+    # A/A twins are byte-identical to their arm (own slots only): not needed
+    # to test wiring, and dropping them keeps the shakedown under its $5 cap.
+    return [replace(c, plan="shakedown", arms=tuple(a for a in c.arms if not parse_arm(a)[2]))
+            for c in smoke_cells(cs) if c.id in SHAKEDOWN_CELLS]
 
 
 CELLS = smoke_cells(build_cells()) if SMOKE else build_cells()
@@ -378,6 +405,8 @@ PRIMARY = [
 def plan_cells(plan: str) -> list:
     if plan == "smoke":
         return smoke_cells(build_cells())
+    if plan == "shakedown":
+        return shakedown_cells(build_cells())
     order = ["pilot", "flagship", "core", "holdout"]
     if plan == "all":
         return [c for c in build_cells() if c.plan in order]
@@ -501,14 +530,16 @@ def topic_pattern(c: Cell) -> str:
     return r"^cdcparity\.public\.bench_source_[0-9]+$" if c.source == "pg" else r"^cdcparity\.out$"
 
 
-def sink_specs(c: Cell, purpose: str = "count") -> list:
+def sink_specs(c: Cell, purpose: str = "count", arm: str = "") -> list:
     out = []
+    noseq = parse_arm(arm)[3] == "noseq" if arm else False
     for d in c.dests:
         if d == "file":
             out.append("file:/sink/out_*.txt")
         elif d == "pg":
             snap = c.mode in ("snapshot", "recover-snapshot")
-            out.append(("pgins:" if snap and purpose == "count" else "pg:") + "bench_dest_%d")
+            kind = "pgins:" if snap and purpose == "count" else ("pgops:" if noseq and purpose == "count" else "pg:")
+            out.append(kind + "bench_dest_%d")
         elif d == "s3":
             out.append("s3:bench")
         elif d == "kafka":
@@ -600,7 +631,7 @@ def loader_command(c: Cell) -> list:
             "-payload", str(c.payload), "-done-file", "/sink/.fill_done"]
 
 
-def infra_compose(c: Cell) -> dict:
+def infra_compose(c: Cell, arm: str = "") -> dict:
     s = {}
     if needs_pg(c):
         s["postgres"] = svc(
@@ -668,7 +699,7 @@ def infra_compose(c: Cell) -> dict:
     s["loader"] = svc(image=IMG["alpine"], container_name="cdcparity-loader", command=loader_command(c),
                       volumes=["${LOADER_BIN}:/loader/loader:ro", "cdcparity-sink:/sink"], depends_on=deps)
     sample = ["/loader/loader", "sample", "-out", "/out/samples.jsonl", "-interval", "${SAMPLE_INTERVAL:-5s}",
-              "-sinks", ",".join(sink_specs(c)), "-tables", str(dest_tables(c))]
+              "-sinks", ",".join(sink_specs(c, arm=arm)), "-tables", str(dest_tables(c))]
     if c.source != "pg" or c.mode in ("snapshot", "recover-snapshot"):
         sample += ["-progress", ""]
     else:
@@ -687,7 +718,8 @@ def infra_compose(c: Cell) -> dict:
     return {"services": s, "volumes": vols, "networks": {"benchi": {"external": True}}}
 
 
-def init_sql(c: Cell) -> str:
+def init_sql(c: Cell, arm: str = "") -> str:
+    noseq = parse_arm(arm)[3] == "noseq" if arm else False
     wide = WIDE_DDL if c.shape == "wide" else ""
     cols = "id bigint PRIMARY KEY, payload text NOT NULL" + (", " + wide if wide else "")
     lines = ["-- GENERATED by matrix/cells.py.",
@@ -701,6 +733,9 @@ def init_sql(c: Cell) -> str:
                   "CREATE FUNCTION bench_landed() RETURNS trigger LANGUAGE plpgsql AS $$",
                   "BEGIN NEW.landed_at := clock_timestamp(); RETURN NEW; END $$;"]
         for i in range(dest_tables(c)):
+            if noseq:
+                lines.append(f"CREATE TABLE bench_dest_{i} ({cols}, landed_at timestamptz);")
+                continue
             lines.append(f"CREATE TABLE bench_dest_{i} ({cols}, landed_at timestamptz, "
                          f"seq bigint GENERATED ALWAYS AS ((substring(payload from '^S[0-9]+[.]([0-9]+)[|]'))::bigint) STORED);")
             lines.append(f"CREATE INDEX bench_dest_{i}_seq ON bench_dest_{i} (seq);")
@@ -765,10 +800,20 @@ def conduit_pipelines(c: Cell, arm: str) -> list:
             procs.append({"id": "rename", "plugin": "field.rename", "condition": '{{ ne .Operation "delete" }}',
                           "settings": {"mapping": ".Payload.After.payload:body"}})
         if side == "conduit-avro":
-            # Avro value through the registry; deletes carry no after image.
-            procs.append({"id": "avro", "plugin": "avro.encode", "condition": '{{ ne .Operation "delete" }}',
-                          "settings": {"field": ".Payload.After", "schema.strategy": "autoRegister",
-                                       "schema.autoRegister.subject": "cdcparity-value"}})
+            # EQUAL AVRO CONTENT (PLAN.md section 2): the row plus Debezium's
+            # __op field (c, u, d, r), as ExtractNewRecordState with
+            # add.fields=op writes it; deletes become an empty value, as the
+            # Debezium arms' tombstones. One subject per table
+            # ("<topic>-value"), like the Apicurio converter's default
+            # TopicIdStrategy: the subject is a static setting, so a
+            # multi-table pipeline gets one conditional encoder per table.
+            procs.append({"id": "op", "plugin": "field.set", "condition": '{{ ne .Operation "delete" }}',
+                          "settings": {"field": ".Payload.After.__op", "value": OP_TEMPLATE}})
+            for t in (tbls if c.source == "pg" and tbls else ["bench_source_0"]):
+                cond = '{{ and (ne .Operation "delete") (eq (index .Metadata "opencdc.collection") "%s") }}' % t
+                procs.append({"id": f"avro-{t}", "plugin": "avro.encode", "condition": cond,
+                              "settings": {"field": ".Payload.After", "schema.strategy": "autoRegister",
+                                           "schema.autoRegister.subject": f"cdcparity.public.{t}-value"}})
         for d in c.dests:
             conns.append(conduit_dest(c, d, i, tier, side, single=len(groups) == 1))
         p = {"id": f"p{i}", "status": "running", "connectors": conns}
@@ -776,6 +821,11 @@ def conduit_pipelines(c: Cell, arm: str) -> list:
             p["processors"] = procs
         pipes.append(p)
     return pipes
+
+
+# OpenCDC operation -> Debezium's op code.
+OP_TEMPLATE = ('{{ if eq .Operation "create" }}c{{ else if eq .Operation "update" }}u'
+               '{{ else if eq .Operation "delete" }}d{{ else }}r{{ end }}')
 
 
 def conduit_dest(c: Cell, d: str, i: int, tier: str, side: str, single: bool) -> dict:
@@ -907,13 +957,18 @@ def debezium_source(c: Cell, tier: str, slot: str, tables: list, arm: str = "") 
     return s
 
 
-def unwrap_rename(c: Cell, pg_dest: bool) -> dict:
+def unwrap_rename(c: Cell, pg_dest: bool, avro_kafka: bool = False) -> dict:
+    """pg_dest: the JDBC sinks need the flattened row. avro_kafka: the
+    EQUAL-CONTENT Avro definition (PLAN.md section 2): the flattened row plus
+    __op, deletes as tombstones, the same content Conduit's Avro arm writes."""
     t = {}
     names = []
-    if pg_dest or c.transform:
+    if pg_dest or c.transform or avro_kafka:
         names.append("unwrap")
         t.update({"transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
                   "transforms.unwrap.delete.tombstone.handling.mode": "tombstone"})
+        if avro_kafka:
+            t["transforms.unwrap.add.fields"] = "op"
     if c.transform:
         names.append("rename")
         t.update({"transforms.rename.type": "org.apache.kafka.connect.transforms.ReplaceField$Value",
@@ -980,7 +1035,7 @@ def connect_connectors(c: Cell, arm: str) -> list:
         for i, tbls in enumerate(groups):
             src = debezium_source(c, tier, slots[i], tbls, arm)
             src.update(converters(arm, "pg" if "pg" in c.dests else "kafka", "source"))
-            src.update(unwrap_rename(c, "pg" in c.dests))
+            src.update(unwrap_rename(c, "pg" in c.dests, avro_kafka=serialization(arm) == "avro" and "kafka" in c.dests))
             out.append({"name": f"src-{i}-@RUN@", "config": src})
             topics = (f"cdcparity.public.{tbls[0]}" if len(tbls) == 1 else None)
             for d in c.dests:
@@ -1128,12 +1183,18 @@ def dbzserver_props(c: Cell, arm: str, tables=None, slot=None, offsets="data/off
                       "debezium.sink.jdbc.use.reduction.buffer": "true"})
     elif d == "http":
         p.update({"debezium.sink.type": "http", "debezium.sink.http.url": RECEIVER + "/"})
-    if c.transform:
-        p.update({"debezium.transforms": "unwrap,rename",
+    if d == "kafka" and (avro or c.transform):
+        # Equal-content Avro (flattened row + __op, deletes as tombstones), and
+        # the transform cell's flatten + rename.
+        names = ["unwrap"] + (["rename"] if c.transform else [])
+        p.update({"debezium.transforms": ",".join(names),
                   "debezium.transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
-                  "debezium.transforms.unwrap.delete.tombstone.handling.mode": "tombstone",
-                  "debezium.transforms.rename.type": "org.apache.kafka.connect.transforms.ReplaceField$Value",
-                  "debezium.transforms.rename.renames": "payload:body"})
+                  "debezium.transforms.unwrap.delete.tombstone.handling.mode": "tombstone"})
+        if avro:
+            p["debezium.transforms.unwrap.add.fields"] = "op"
+        if c.transform:
+            p.update({"debezium.transforms.rename.type": "org.apache.kafka.connect.transforms.ReplaceField$Value",
+                      "debezium.transforms.rename.renames": "payload:body"})
     return "".join(f"{k}={v}\n" for k, v in p.items())
 
 
@@ -1223,7 +1284,7 @@ def collectors(c: Cell) -> list:
     return out
 
 
-def hooks(c: Cell) -> dict:
+def hooks(c: Cell, arm: str = "") -> dict:
     steps = {"post-infrastructure": [], "pre-tool": [], "post-tool": [], "pre-test": [], "post-test": []}
     L = "/loader/loader"
     if "s3" in c.dests:
@@ -1236,7 +1297,7 @@ def hooks(c: Cell) -> dict:
     if connect_arms:
         steps["post-tool"].append({"name": "register-connect", "container": "cdcparity-counter", "tools": connect_arms,
                                    "run": REGISTER_SH})
-    specs = ",".join(sink_specs(c))
+    specs = ",".join(sink_specs(c, arm=arm))
     tbl = dest_tables(c)
     steps["pre-test"].append({"name": "first-record", "container": "cdcparity-counter",
                               "run": f"{L} first -sinks '{specs}' -tables {tbl} -timeout 15m"})
@@ -1260,7 +1321,7 @@ def bench_yml(c: Cell, arm: str) -> dict:
         "infrastructure": {"infra": {"compose": "./infra.yml"}},
         "tools": {arm: {"compose": "./tool.yml"}},
         "metrics": {"docker": {"collector": "docker", "settings": {"containers": [SUT]}}},
-        "tests": [{"name": c.id, "duration": f"{run_seconds(c)}s", "steps": hooks(c)}],
+        "tests": [{"name": c.id, "duration": f"{run_seconds(c)}s", "steps": hooks(c, arm)}],
     }
 
 
@@ -1270,8 +1331,8 @@ def gen_arm(c: Cell, arm: str, out: str) -> None:
     it per run and replaces @RUN@ with the run id."""
     side = arm_side(arm)
     dump(os.path.join(out, "bench.yml"), bench_yml(c, arm))
-    dump(os.path.join(out, "infra.yml"), infra_compose(c))
-    write(os.path.join(out, "init.sql"), init_sql(c))
+    dump(os.path.join(out, "infra.yml"), infra_compose(c, arm))
+    write(os.path.join(out, "init.sql"), init_sql(c, arm))
     if side.startswith("conduit"):
         svc_ = conduit_service(c, arm)
         dump(os.path.join(out, "pipelines", "pipelines.yml"), {"version": "2.2", "pipelines": conduit_pipelines(c, arm)})

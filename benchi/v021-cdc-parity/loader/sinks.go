@@ -31,6 +31,9 @@ import (
 //	                            one index probe per table instead of a scan
 //	pgins:bench_dest_%d         inserts applied (pg_stat_user_tables), for the
 //	                            snapshot cells, where every event is an insert
+//	pgops:bench_dest_%d         inserts + updates + deletes applied
+//	                            (pg_stat_user_tables): the @noseq control arms,
+//	                            whose tables have no seq column
 //	kafka:^cdcparitykafka\..*   records across the matching topics (end offsets)
 //	s3:bench                    lines across every object in the bucket; NOT read
 //	                            while a run is measured (see collect s3-index)
@@ -55,7 +58,7 @@ func parseSinks(s string) ([]sinkSpec, error) {
 			return nil, fmt.Errorf("sink %q: want kind:arg", part)
 		}
 		switch k {
-		case "file", "pg", "pgins", "kafka", "s3", "http":
+		case "file", "pg", "pgins", "pgops", "kafka", "s3", "http":
 		default:
 			return nil, fmt.Errorf("sink %q: unknown kind %q", part, k)
 		}
@@ -196,6 +199,13 @@ func pgPosition(ctx context.Context, conn *pgx.Conn, tables []string) (int64, er
 func pgInserts(ctx context.Context, conn *pgx.Conn, tables []string) (int64, error) {
 	var sum int64
 	err := conn.QueryRow(ctx, "SELECT COALESCE(sum(n_tup_ins),0)::bigint FROM pg_stat_user_tables WHERE relname = ANY($1)", tables).Scan(&sum)
+	return sum, err
+}
+
+// pgOps is the row writes applied to the tables (inserts, updates, deletes).
+func pgOps(ctx context.Context, conn *pgx.Conn, tables []string) (int64, error) {
+	var sum int64
+	err := conn.QueryRow(ctx, "SELECT COALESCE(sum(n_tup_ins+n_tup_upd+n_tup_del),0)::bigint FROM pg_stat_user_tables WHERE relname = ANY($1)", tables).Scan(&sum)
 	return sum, err
 }
 

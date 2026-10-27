@@ -47,10 +47,10 @@ reset_state() {
   docker network rm benchi >/dev/null 2>&1 || true
   local keep_broker keep_input vols
   keep_broker=$(meta keep_broker_volume); keep_input=$(meta keep_input_file)
-  vols="cdcparity-pg cdcparity-minio"
-  if [ "$keep_broker" != 1 ] || [ "$FIRST_RUN" = 1 ]; then vols="$vols cdcparity-kafka"; fi
-  for v in $vols; do docker volume rm -f "$v" >/dev/null 2>&1 || true; docker volume create "$v" >/dev/null; done
-  docker volume create cdcparity-kafka >/dev/null 2>&1 || true
+  vols="pg minio"
+  if [ "$keep_broker" != 1 ] || [ "$FIRST_RUN" = 1 ]; then vols="$vols kafka"; fi
+  for v in $vols; do mkvol "$v"; done
+  docker volume inspect cdcparity-kafka >/dev/null 2>&1 || mkvol kafka
   if [ "$keep_input" = 1 ] && [ "$FIRST_RUN" != 1 ]; then
     docker run --rm -v cdcparity-sink:/sink "$ALPINE_IMG" sh -c 'find /sink -mindepth 1 ! -name "in_*.txt" ! -name .fill_done -delete; chmod 777 /sink'
   else
@@ -61,6 +61,20 @@ reset_state() {
   FIRST_RUN=0
   sync
   echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+}
+
+# A service's Docker volume, bind-mounted from its own EBS volume
+# (/data/<role>, mounted by the user data; review R2-B2), emptied first. Off
+# AWS (no /data/<role>) it falls back to a plain named volume.
+mkvol() { # role
+  local role=$1 name="cdcparity-$1"
+  docker volume rm -f "$name" >/dev/null 2>&1 || true
+  if mountpoint -q "/data/$role"; then
+    rm -rf "/data/$role/vol" && mkdir -p "/data/$role/vol" && chmod 777 "/data/$role/vol"
+    docker volume create --driver local --opt type=none --opt o=bind --opt device="/data/$role/vol" "$name" >/dev/null
+  else
+    docker volume create "$name" >/dev/null
+  fi
 }
 
 # The per-run copy of the arm's generated directory, with @RUN@ (consumer
@@ -93,8 +107,16 @@ export_env() { # run_dir arm diag
   fi
 }
 
-start_res() { python3 "$HERE/res_sampler.py" "$1/res.jsonl" & RES_PID=$!; }
-stop_res() { kill "${RES_PID:-}" 2>/dev/null; wait "${RES_PID:-}" 2>/dev/null; RES_PID=""; }
+# Resources: cgroups and per-device disk counters (res_sampler.py), and
+# iostat's extended per-device view (await, utilization) for every run.
+start_res() {
+  python3 "$HERE/res_sampler.py" "$1/res.jsonl" & RES_PID=$!
+  cp /etc/matrix-disks.json "$1/disks.json" 2>/dev/null || true
+  if command -v iostat >/dev/null; then iostat -dxmt 5 > "$1/iostat.txt" 2>/dev/null & IOSTAT_PID=$!; fi
+}
+stop_res() {
+  kill "${RES_PID:-}" "${IOSTAT_PID:-}" 2>/dev/null; wait "${RES_PID:-}" "${IOSTAT_PID:-}" 2>/dev/null; RES_PID=""; IOSTAT_PID=""
+}
 start_diag() { python3 "$HERE/diag.py" "$1" "$2" "$META" & DIAG_PID=$!; }
 stop_diag() { kill "${DIAG_PID:-}" 2>/dev/null; wait "${DIAG_PID:-}" 2>/dev/null; DIAG_PID=""; }
 

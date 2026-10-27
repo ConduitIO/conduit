@@ -102,12 +102,44 @@ resource "aws_instance" "bench" {
     http_tokens = "required"
   }
 
+  # Docker root (images, containers, the sink volume, logs).
   root_block_device {
     volume_type           = "gp3"
-    volume_size           = var.disk_gb
+    volume_size           = 120
     iops                  = 6000
-    throughput            = 500 # the drain cells keep 6-10 GB backlogs on the broker's disk
+    throughput            = 500
     delete_on_termination = true
+    tags                  = { "conduit-bench" = var.run_id, "role" = "root" }
+  }
+
+  # One provisioned volume per IO-heavy service, so one arm's broker or
+  # object-store traffic cannot slow another component's fsyncs (review
+  # R2-B2). Distinct sizes identify them in user data (NVMe names are not
+  # stable). Each: gp3, 6000 IOPS, 500 MB/s.
+  dynamic "ebs_block_device" {
+    for_each = { "/dev/sdf" = ["pg", 250], "/dev/sdg" = ["kafka", 260], "/dev/sdh" = ["minio", 140] }
+    content {
+      device_name           = ebs_block_device.key
+      volume_type           = "gp3"
+      volume_size           = ebs_block_device.value[1]
+      iops                  = 6000
+      throughput            = 500
+      delete_on_termination = true
+      tags                  = { "conduit-bench" = var.run_id, "role" = ebs_block_device.value[0] }
+    }
+  }
+
+  lifecycle {
+    # The smoke gate, enforced here too (not only in launch.sh): every plan
+    # after smoke needs a passing smoke gate for the SAME harness hash, and
+    # the instance itself checks that the kit it runs has that hash.
+    precondition {
+      condition = contains(["smoke", "shakedown"], var.plan) || (
+        var.gate_file != "" && try(jsondecode(file(var.gate_file)).pass, false) &&
+        try(jsondecode(file(var.gate_file)).harness_hash, "") == var.harness_hash
+      )
+      error_message = "plan ${var.plan} needs gate_file: the gate.json of a PASSING smoke run with harness_hash ${var.harness_hash}"
+    }
   }
 
   user_data = templatefile("${path.module}/user-data.sh.tftpl", {
@@ -118,6 +150,7 @@ resource "aws_instance" "bench" {
     conduit_sha    = var.conduit_sha
     max_minutes    = var.max_minutes
     docker_version = var.docker_version
+    harness_hash   = var.harness_hash
   })
 
   tags = { Name = "conduit-matrix-${var.run_id}-${count.index}" }

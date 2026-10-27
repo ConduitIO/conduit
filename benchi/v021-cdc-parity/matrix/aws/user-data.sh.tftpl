@@ -34,6 +34,27 @@ tar -xzf /tmp/kit.tgz -C conduit/benchi || fail "kit extract"
 KIT=conduit/benchi/v021-cdc-parity/matrix
 status "kit $(cat $KIT/KIT_COMMIT) harness $(cat $KIT/HARNESS_HASH)"
 
+# Mount the per-service data volumes, identified by size (main.tf), and
+# record which device is which for the per-device IO stats.
+apt-get install -y --no-install-recommends xfsprogs nvme-cli >/dev/null
+declare -A SIZE=([pg]=250 [kafka]=260 [minio]=140)
+echo "{" > /etc/matrix-disks.json
+for role in pg kafka minio; do
+  want=$(( $${SIZE[$role]} * 1024 * 1024 * 1024 ))
+  dev=""
+  for i in $(seq 1 60); do
+    dev=$(lsblk -dbno NAME,SIZE,TYPE | awk -v w="$want" '$2==w && $3=="disk"{print $1; exit}')
+    [ -n "$dev" ] && break; sleep 2
+  done
+  [ -n "$dev" ] || fail "no $role volume of $${SIZE[$role]} GiB"
+  mkfs.xfs -q -f "/dev/$dev"
+  mkdir -p "/data/$role" && mount -o noatime "/dev/$dev" "/data/$role" && chmod 777 "/data/$role"
+  echo "  \"$role\": \"$dev\"," >> /etc/matrix-disks.json
+done
+echo "  \"root\": \"$(lsblk -no PKNAME "$(findmnt -no SOURCE /)")\"" >> /etc/matrix-disks.json
+echo "}" >> /etc/matrix-disks.json
+status "volumes: $(tr -d '\n ' < /etc/matrix-disks.json)"
+
 # Pin dockerd and containerd (and so the image builds, docker exec and the
 # bridge's userspace work) to the INFRA cores BEFORE Docker starts (review M2).
 eval "$(python3 $KIT/cpusets.py)"
@@ -62,7 +83,8 @@ sysctl -w kernel.perf_event_paranoid=1 >/dev/null || true
 sysctl -w kernel.kptr_restrict=0 >/dev/null || true
 
 export MATRIX_S3="$${S3}"
-[ "$${PLAN}" = smoke ] && export MATRIX_SMOKE=1
+export MATRIX_HARNESS_HASH="${harness_hash}"
+case "$${PLAN}" in smoke|shakedown) export MATRIX_SMOKE=1 ;; esac
 cd conduit
 status "matrix start"
 bash benchi/v021-cdc-parity/matrix/run-shard.sh "$${SHARDS}" "$${SHARD}" "$${PLAN}" /opt/matrix/results \

@@ -212,9 +212,14 @@ func (v *eventVerifier) line(source, line string) {
 		v.deliver(m.Table, i, line)
 		return
 	}
-	// No marker: a delete, identified by table and id.
+	// No marker: a delete, identified by table and id. The table comes from
+	// the record (a Debezium envelope names it), else from where the record
+	// was read: the topic (cdcparity.public.bench_source_N/partition, which is
+	// all a flattened delete's tombstone has), else the file name.
 	t := -1
 	if mm := reTable.FindStringSubmatch(line); mm != nil {
+		t, _ = strconv.Atoi(mm[1])
+	} else if mm := reTable.FindStringSubmatch(source); mm != nil {
 		t, _ = strconv.Atoi(mm[1])
 	} else if mm := reFile.FindStringSubmatch(source); mm != nil {
 		t, _ = strconv.Atoi(mm[1])

@@ -27,7 +27,11 @@ if [ -z "${MATRIX_PINNED:-}" ]; then
 fi
 log "shard $I of $K, plan $PLAN, conduit $(git -C "$ROOT" rev-parse HEAD), harness $(python3 "$HERE/cells.py" hash)"
 log "SUT_CPUSET=$SUT_CPUSET INFRA_CPUSET=$INFRA_CPUSET"
-[ "$(python3 "$HERE/cells.py" hash)" = "$(cat "$HERE/HARNESS_HASH" 2>/dev/null)" ] || { log "harness hash differs from the launched kit"; exit 1; }
+# The kit must be exactly what terraform was told it is (the smoke gate's
+# precondition is checked against that declared hash).
+H=$(python3 "$HERE/cells.py" hash)
+[ "$H" = "$(cat "$HERE/HARNESS_HASH" 2>/dev/null)" ] && [ "$H" = "${MATRIX_HARNESS_HASH:-}" ] || {
+  log "harness hash $H differs from the launched kit ($(cat "$HERE/HARNESS_HASH" 2>/dev/null)) or the declared one (${MATRIX_HARNESS_HASH:-unset})"; exit 1; }
 
 export LOADER_BIN="$HERE/../loader/loader"
 [ -x "$LOADER_BIN" ] || { log "loader binary missing ($LOADER_BIN)"; exit 1; }
@@ -49,7 +53,12 @@ fi
 
 log "building images"
 docker build -q -t matrix-conduit:bench -f "$ROOT/Dockerfile" "$ROOT" >/dev/null || { log "conduit image build failed"; exit 1; }
-docker build -q -t matrix-conduit:bench-diag -f "$HERE/images/conduit-diag.Dockerfile" "$ROOT" >/dev/null || { log "conduit-diag image build failed"; exit 1; }
+# The diag build is the measured build plus one build tag: the SAME Dockerfile
+# (same base image, Go version, make target and flags), with the pprof file
+# added and -tags benchdiag on the same go build (review R2-M3).
+python3 "$HERE/images/diag-dockerfile.py" "$ROOT/Dockerfile" "$ROOT/Makefile" > "$ROOT/.matrix-diag.Dockerfile" || { log "diag Dockerfile"; exit 1; }
+docker build -q -t matrix-conduit:bench-diag -f "$ROOT/.matrix-diag.Dockerfile" "$ROOT" >/dev/null || { log "conduit-diag image build failed"; exit 1; }
+rm -f "$ROOT/.matrix-diag.Dockerfile"
 docker build -q -t matrix-conduit:bench-http -f "$HERE/images/conduit-http.Dockerfile" "$HERE/images" >/dev/null || log "conduit-http image build failed (HTTP cells will fail)"
 docker build -q -t matrix-connect:3.7.0 -f "$HERE/images/connect.Dockerfile" "$HERE/images" >/dev/null || { log "connect image build failed"; exit 1; }
 for img in $(python3 -c "import sys; sys.path.insert(0,'$HERE'); import cells; print(' '.join(v for v in cells.IMG.values() if '@sha256:' in v))"); do

@@ -87,15 +87,18 @@ func runSample(args []string) error {
 		case "file":
 			fc := newFileCounter(s.Arg)
 			fn = func(context.Context) (int64, error) { return fc.count() }
-		case "pg", "pgins":
+		case "pg", "pgins", "pgops":
 			tbls := pgTables(s.Arg, *tables)
 			fn = func(ctx context.Context) (int64, error) {
 				c, err := pgConn(ctx)
 				if err != nil {
 					return 0, err
 				}
-				if s.Kind == "pgins" {
+				switch s.Kind {
+				case "pgins":
 					return pgInserts(ctx, c, tbls)
+				case "pgops":
+					return pgOps(ctx, c, tbls)
 				}
 				return pgPosition(ctx, c, tbls)
 			}
@@ -147,7 +150,7 @@ func runSample(args []string) error {
 			res := map[string]any{"t_ms": mid(t0), "read_ms": time.Since(t0).Milliseconds()}
 			if err != nil {
 				res["err"] = err.Error()
-				if r.spec.Kind == "pg" || r.spec.Kind == "pgins" {
+				if r.spec.Kind == "pg" || r.spec.Kind == "pgins" || r.spec.Kind == "pgops" {
 					if pg != nil {
 						pg.Close(ctx)
 					}

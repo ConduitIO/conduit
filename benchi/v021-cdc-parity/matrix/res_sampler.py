@@ -136,6 +136,33 @@ def host_row(sut_cpus):
     return {"steal_ticks": steal, "sut_mhz": mhz}
 
 
+def disks():
+    """role -> device, from the user data's /etc/matrix-disks.json."""
+    try:
+        with open("/etc/matrix-disks.json") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def diskstats(devs):
+    """Cumulative /proc/diskstats counters per device: ops, ms spent, io_ticks
+    (ms the device was busy). Utilization and await over any window are
+    differences of two rows (analyze.py)."""
+    want = set(devs.values())
+    out = {}
+    try:
+        with open("/proc/diskstats") as f:
+            for line in f:
+                p = line.split()
+                if len(p) >= 14 and p[2] in want:
+                    out[p[2]] = {"reads": int(p[3]), "read_ms": int(p[6]), "writes": int(p[7]), "write_ms": int(p[10]),
+                                 "io_ticks_ms": int(p[12]), "sectors_w": int(p[9])}
+    except OSError:
+        pass
+    return out
+
+
 def pin_rps(mask_hex):
     if not mask_hex:
         return
@@ -152,6 +179,7 @@ def main():
     sut_cpus = set(cpus(os.environ.get("SUT_CPUSET", "")))
     infra = cpus(os.environ.get("INFRA_CPUSET", ""))
     mask = "%x" % sum(1 << c for c in infra) if infra else ""
+    devs = disks()
     ids = {}
     last_net = 0.0
     with open(out, "a") as f:
@@ -179,6 +207,7 @@ def main():
                     "io_wbytes": wb,
                 }
             row["host"] = host_row(sut_cpus)
+            row["disks"] = {role: d for role, dev in devs.items() for d in [diskstats(devs).get(dev)] if d}
             pin_rps(mask)
             if now - last_net >= 15:
                 row["net"] = netio()

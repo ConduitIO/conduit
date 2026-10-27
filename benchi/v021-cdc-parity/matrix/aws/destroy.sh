@@ -7,4 +7,4 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 cd "$HERE"
 terraform workspace select "${1:?run id}" >/dev/null
 terraform destroy -input=false -auto-approve -var "run_id=$1" -var "conduit_sha=0000000000000000000000000000000000000000" \
-  -var "max_minutes=1" -var "plan=smoke" -var "kit_tarball=/dev/null"
+  -var "max_minutes=1" -var "plan=smoke" -var "kit_tarball=/dev/null" -var "harness_hash=x"

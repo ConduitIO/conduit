@@ -16,12 +16,17 @@ variable "instance_type" {
   type        = string
   default     = "c6i.4xlarge"
 }
-variable "disk_gb" {
-  type    = number
-  default = 200
+variable "harness_hash" {
+  description = "cells.py hash of the kit being launched; the instance refuses a kit with another hash."
+  type        = string
+}
+variable "gate_file" {
+  description = "Path to the gate.json of a passing smoke run (required for every plan after smoke)."
+  type        = string
+  default     = ""
 }
 variable "plan" {
-  description = "Pre-registered plan to run: smoke, pilot, flagship, core or holdout (PLAN.md section 12)."
+  description = "Pre-registered plan to run: shakedown, smoke, pilot, flagship, core or holdout (PLAN.md section 12)."
   type        = string
 }
 variable "docker_version" {

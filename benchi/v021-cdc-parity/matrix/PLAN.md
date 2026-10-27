@@ -1,7 +1,7 @@
 # Parity matrix: pre-registration
 
-**Status: pre-registered, no data. Amended once, before any data, after an
-independent adversarial review (section 15).** Every cell below will be
+**Status: pre-registered, no data. Amended twice, before any data, after two
+rounds of independent adversarial review (section 15). Tag: matrix-plan-v3.** Every cell below will be
 reported, including cells Conduit loses. A cell dropped, added or re-run after
 data exists is recorded in the change log, with the reason, before its
 results are used. The plan's commit is tagged; every run records the harness
@@ -59,6 +59,23 @@ nothing (no broker), so `conduit` is compared with the Avro arms. Key
 encoding into Kafka is schemaless JSON on every side (value Avro); into
 Postgres the Debezium sides use an Avro key (the JDBC sinks need the key
 schema).
+
+**Equal Avro content (every Avro arm into Kafka: P1, P2, P7, P8, A1, A2, D,
+F, G, H, W).** Every side writes the same record: the flattened row plus the
+operation code `__op` (c, u, d, r), and a delete as a tombstone (empty
+value) keyed by the row's id. Debezium (both runtimes): `ExtractNewRecordState`
+with `add.fields=op` and `delete.tombstone.handling.mode=tombstone`, the
+common flattened-Avro setup. Conduit: `field.set .Payload.After.__op` from
+the operation, then `avro.encode` of `.Payload.After`; deletes are written
+as an empty value (Kafka has no Conduit-side tombstone; the record count and
+key are the same). One registry subject per table on every side:
+`cdcparity.public.bench_source_N-value` (the Apicurio converter's default
+TopicIdStrategy; Conduit's subject is a static setting, so a multi-table
+pipeline runs one conditional encoder per table). Conduit's `autoRegister`
+strategy is documented as "for development purposes" (it infers a schema per
+record); its cost is part of the measurement, which is conservative against
+Conduit. The full-envelope comparison (Debezium envelope vs OpenCDC record)
+remains, as the exploratory JSON columns. Test: `test_avro_arms_carry_equal_content`.
 
 **Destinations without an equivalent are left out:**
 
@@ -148,6 +165,14 @@ two sinks are independent consumers; no speed ratio is headlined from it.
   which Go reads for GOMAXPROCS (not because of the cgroup quota); the JVMs
   read the same mask. Neither is overridden.
 - Instance: c6i.4xlarge (16 vCPUs: 4 for the SUT, 12 for everything else).
+- **Disks** (review R2-B2): Postgres data and WAL, the Kafka log and MinIO each
+  have their own EBS gp3 volume (6000 IOPS, 500 MB/s each, XFS, noatime),
+  bind-mounted into their containers; Docker's root (images, containers, the
+  sink volume, logs) is the root volume. So one arm's broker or object-store
+  traffic cannot slow another component's fsyncs. Every run records per-device
+  utilization, await and write MB/s (`/proc/diskstats` deltas and
+  `iostat -dxm`), and the bottleneck label reads "disk-bound (<volume>)" when a
+  volume is busy for 90% of the window.
 
 ## 6. Workload
 
@@ -254,6 +279,8 @@ used: with more arms than rounds it does not give every arm every position.
 | H-file-kafka-verify | core | correct | file -> kafka | 1 partitions, 64 B | conduit-s, conduit-t, connect-s, connect-t | 1 | 1 | - |  |
 | H-pg-kafka-transform-verify | core | correct | pg -> kafka (transform) | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s | 1 | 1 | - |  |
 | H-pg-fanout-file-s3-verify | core | correct | pg -> file+s3 | 1 tables, 64 B | conduit-s, connect-s@f10k | 1 | 1 | - |  |
+| H-pg-pg-p4-verify | core | correct | pg -> pg | 4 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t | 1 | 1 | - |  |
+| H-pg-kafka-p4-verify | core | correct | pg -> kafka | 4 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t | 1 | 1 | - |  |
 | H-pg-kafka-wide-txn1-verify | core | correct | pg -> kafka | 1 tables, 64 B, wide, txn 1 | conduit-avro-s, connect-avro-s, dbzserver-avro-s | 1 | 1 | - |  |
 | W-pg-kafka-txn1 | holdout | capacity | pg -> kafka | 4 tables, 64 B, txn 1 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
 | W-pg-kafka-txn10 | holdout | capacity | pg -> kafka | 4 tables, 64 B, txn 10 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
@@ -275,9 +302,10 @@ used: with more arms than rounds it does not give every arm every position.
 | W-pg-kafka-idle | holdout | idle | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
 | W-pg-http-slowsink | holdout | capacity | pg -> http | 1 tables, 64 B, sink delay 5 ms | conduit-s, dbzserver-s, dbzserver-native-s, conduit-s-aa | 5 | 1 | - | plugin |
 | P-pg-kafka-p1-b64 | pilot | capacity | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-s@i30, connect-avro-s@i30, dbzserver-avro-s@i30 | 3 | 1 | - |  |
+| P-pg-pg-p1-b64 | pilot | capacity | pg -> pg | 1 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-s@noseq, connect-avro-s@noseq, dbzserver-avro-s@noseq | 3 | 1 | - |  |
 | P-kafka-pg-p1-b64 | pilot | drain | kafka -> pg | 1 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s | 2 | 1 | - |  |
 
-### Smoke plan (short variants of the cells above, one round)
+### Smoke plan (short variants, one round)
 
 | cell | plan | mode | source -> dest | shape / workload | arms | rounds | instances | diag | label |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -285,6 +313,7 @@ used: with more arms than rounds it does not give every arm every position.
 | A2-pg-kafka-p1-b64 | smoke | capacity | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, connect-avro-s-aa, dbzserver-avro-s-aa, conduit-classic-s | 1 | 1 | yes | primary |
 | A2-pg-kafka-p4-b64 | smoke | capacity | pg -> kafka | 4 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, dbzserver-avro-xn-s | 1 | 1 | - |  |
 | A2-pg-pg-p1-b64 | smoke | capacity | pg -> pg | 1 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa, connect-avro-s-aa, dbzserver-avro-s-aa | 1 | 1 | - | primary |
+| A2-pg-pg-p4-b64 | smoke | capacity | pg -> pg | 4 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa, dbzserver-avro-xn-s | 1 | 1 | - |  |
 | A2-pg-s3-p1-b64 | smoke | capacity | pg -> s3 | 1 tables, 64 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 1 | 1 | - |  |
 | A2-pg-file-p1-b64 | smoke | capacity | pg -> file | 1 tables, 64 B | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 1 | 1 | - | reference |
 | A2-pg-http-p1-b64 | smoke | capacity | pg -> http | 1 tables, 64 B | conduit-s, dbzserver-s, conduit-t, dbzserver-t, dbzserver-native-s, conduit-s-aa | 1 | 1 | - | plugin |
@@ -310,12 +339,23 @@ used: with more arms than rounds it does not give every arm every position.
 | H-file-kafka-verify | smoke | correct | file -> kafka | 1 partitions, 64 B | conduit-s, conduit-t, connect-s, connect-t | 1 | 1 | - |  |
 | H-pg-kafka-transform-verify | smoke | correct | pg -> kafka (transform) | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s | 1 | 1 | - |  |
 | H-pg-fanout-file-s3-verify | smoke | correct | pg -> file+s3 | 1 tables, 64 B | conduit-s, connect-s@f10k | 1 | 1 | - |  |
+| H-pg-pg-p4-verify | smoke | correct | pg -> pg | 4 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t | 1 | 1 | - |  |
+| H-pg-kafka-p4-verify | smoke | correct | pg -> kafka | 4 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t | 1 | 1 | - |  |
 | H-pg-kafka-wide-txn1-verify | smoke | correct | pg -> kafka | 1 tables, 64 B, wide, txn 1 | conduit-avro-s, connect-avro-s, dbzserver-avro-s | 1 | 1 | - |  |
 | W-pg-kafka-txn1 | smoke | capacity | pg -> kafka | 4 tables, 64 B, txn 1 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 1 | 1 | - |  |
 | W-pg-kafka-wide | smoke | capacity | pg -> kafka | 1 tables, 64 B, wide | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 1 | 1 | - |  |
 | W-pg-kafka-alter | smoke | capacity | pg -> kafka | 1 tables, 64 B, ALTER at 60s | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 1 | 1 | - |  |
 | W-pg-kafka-idle | smoke | idle | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 1 | 1 | - |  |
 | P-pg-kafka-p1-b64 | smoke | capacity | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-s@i30, connect-avro-s@i30, dbzserver-avro-s@i30 | 1 | 1 | - |  |
+
+### Shakedown (wiring only)
+
+| cell | plan | mode | source -> dest | shape / workload | arms | rounds | instances | diag | label |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| A2-pg-kafka-p1-b64 | shakedown | capacity | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-classic-s | 1 | 1 | yes | primary |
+| A2-pg-pg-p4-b64 | shakedown | capacity | pg -> pg | 4 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, dbzserver-avro-xn-s | 1 | 1 | - |  |
+| B-kafka-pg-p1-b64 | shakedown | drain | kafka -> pg | 1 partitions, 64 B, backlog 0 GiB (522,247 records) | conduit-s, connect-s, conduit-t, connect-t | 1 | 1 | - | primary |
+| G-pg-kafka-kill9 | shakedown | recover | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, connect-avro-e, dbzserver-avro-e | 1 | 1 | - |  |
 
 ## 8. Load modes
 
@@ -432,8 +472,13 @@ the counter is not free and the change log records what replaces it.
 Every base capacity and drain cell has one extra, unmeasured diag run per arm.
 Measured runs take no profile and no scrape on any side.
 
-- Conduit (a `-diag` build of the same commit: pprof served on the bench
-  network, mutex sampling 1/10, block 100 us, never the measured binary): a
+- Conduit (a `-diag` build of the same commit, never the measured binary,
+  built from the SAME repository Dockerfile, base image, Go version, make
+  target, ldflags and -trimpath, adding only the pprof file and
+  `-tags benchdiag` (`images/diag-dockerfile.py`, which fails if the build
+  line changes); pprof served on the bench network, mutex sampling 1/10,
+  block 100 us; profiles from it are indicative of the measured binary, the
+  same code differing only by the sampling it enables): a
   60 s CPU profile from the window's start, mutex and block profiles at the
   window's edges (their difference is the window), a 10 s execution trace
   and a goroutine dump mid-window (off-CPU), the engine's metrics polled every
@@ -457,20 +502,28 @@ estimates until the pilot):
 
 | step | plan | what | runs | instance-h | cost | wall time |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | smoke | every H and G cell, plus one cell per family and side, 1 round, short | 235 | 32 | $27 | 16 h on 2, 8 h on 4 |
+| 0 | shakedown | 4 cells (A2-pg-kafka, A2-pg-pg multi-table, B-kafka-pg, G-pg-kafka-kill9), smoke length, A/A twins dropped, 1 instance, $5 cap: wiring only, never results or a gate | 38 | 4 | < $5 | 4 h |
+| 1 | smoke | every H and G cell, plus one cell per family and side, 1 round, short | 257 | 35 | $30 per pass; budget $60-90 (2-3 passes expected: every fix changes the hash) | 18 h on 2 |
 | 2 | pilot | 1 instance: per-arm noise, loader ceiling, WAL growth, fill and drain rates, counting-overhead control | 30 | 6 | $5 | 6 h |
 | 3 | flagship | A1-pg-kafka-ramp, A2-pg-kafka (3 instances), A2-pg-pg (2), B-kafka-pg, B-kafka-s3, F-pg-kafka, G-pg-kafka | 664 | 141 | $120 | 71 h on 2, 39 h on 4 |
 | 4 | core | the rest of the base cells | 548 | 127 | $108 | 64 h on 2, 32 h on 4 |
 | 5 | holdout | shapes and workload variants: mandatory before any public claim | 1,908 | 369 | $313 | 187 h on 2, 94 h on 4 |
 
-Gates, in code: `aws/launch.sh` refuses any plan after smoke without the
-`gate.json` of a PASSING smoke run for the same harness hash (every H and G
+Gates, in code: `aws/launch.sh` AND the Terraform configuration itself (a
+`precondition` on the instances) refuse any plan after smoke without the
+`gate.json` of a PASSING smoke run for the same harness hash, and each
+instance refuses a kit whose hash is not the declared one (every H and G
 run verified clean, every run exited 0 and delivered a record, every arm ran;
 this is where the Connect file-sink format, the Debezium Server JDBC sink,
 the Avro paths and the reWriteBatchedInserts fallback are proven). In
 judgment, recorded in the change log: the flagship starts only after the
 pilot's numbers revise the backlog sizes, the loader ceiling and the minimum
-floor if they need it. The 32-vCPU quota allows 2 x c6i.4xlarge at a time.
+floor if they need it, and the pilot's `P-pg-pg-p1-b64` shows the destination
+is not saturated (Postgres CPU and the pg volume, from the bottleneck label)
+for the primary Postgres-destination arms, with and without the `seq` column
+(`@noseq` arms count from `pg_stat_user_tables` instead): if it is, the
+primary pg-to-pg label reads "destination-bound" and the change log says what
+replaces the column. The 32-vCPU quota allows 2 x c6i.4xlarge at a time.
 
 ## 13. Known asymmetries (by design, printed with the results)
 
@@ -478,10 +531,10 @@ floor if they need it. The 32-vCPU quota allows 2 x c6i.4xlarge at a time.
   Conduit and Debezium Server do not. Architecture, measured; the footprint
   column carries the broker, and "includes a durable log" is printed next to
   every Connect number for those destinations.
-- Record bytes differ: OpenCDC JSON vs the Debezium envelope; on Avro, Conduit
-  encodes the row (`.Payload.After`) and Debezium the envelope (before, after,
-  source, op). Bytes per record and producer batch statistics are reported for
-  every arm.
+- Record bytes differ on the exploratory JSON arms (OpenCDC record vs the
+  Debezium envelope). On the primary Avro arms the content is equal (section
+  2); the encodings still differ in schema ids and field order. Bytes per
+  record and producer batch statistics are reported for every arm.
 - The Kafka-source cells are Connect's home turf and use Connect-format
   envelopes as input; Conduit needs `unwrap.kafkaconnect` for Postgres.
 - Conduit's Kafka source has no fetch-size knob; the tuned Connect consumer
@@ -507,6 +560,14 @@ floor if they need it. The 32-vCPU quota allows 2 x c6i.4xlarge at a time.
   Postgres latency comes from the last write of each row (a sample biased
   against frequently updated rows) and only in ramp cells.
 - **Postgres final-state check**: a lost INTERMEDIATE update is invisible to it.
+- **The `seq` column** is a frontier, not an event count: trailing deletes do
+  not advance it, and the tuned Debezium JDBC reduction buffer skips
+  intermediate updates yet reaches the same frontier. It adds a generated
+  column and an index write to every destination write on every side; the
+  pilot measures that cost (`@noseq`).
+- **Gates are local files and Terraform preconditions**: someone with the
+  repository can bypass them; they stop accidents, not intent. Pilot to
+  flagship is a recorded judgment, not a machine gate.
 - **One broker, one Postgres, one instance per run**: no replication, no
   network between components. No TLS. No multi-node Connect. No Conduit
   multi-instance. No Protobuf.
@@ -525,6 +586,7 @@ floor if they need it. The 32-vCPU quota allows 2 x c6i.4xlarge at a time.
 | --- | --- | --- | --- |
 | 2026-10-27 | plan written (commit c49b1986) | | no |
 | 2026-10-27 | amended after the adversarial methodology review (`bench-methodology-review.md`); every item and its resolution below | review | no |
+| 2026-10-27 | amended after review round 2 (conditional no-go); tag matrix-plan-v3; items below | review | no |
 
 ### Review items and resolutions
 
@@ -566,3 +628,15 @@ verify summary line carries duplicates per million; the Postgres final-state
 limit stated; bounded log driver on every container; the loader's SHA-256, the
 kit commit, the harness hash and the analysis version are recorded in
 `environment.txt` and `analysis.json`.
+
+### Review round 2 items and resolutions
+
+| item | resolution |
+| --- | --- |
+| R2-B1 Avro arms do not carry the same content | Fixed: one equal-content definition for every Avro arm into Kafka, the flattened row plus `__op`, deletes as tombstones (section 2); Debezium arms run ExtractNewRecordState with `add.fields=op`, Conduit sets `__op` and encodes the row; one subject per table on every side. The full-envelope comparison stays exploratory (JSON arms). `test_avro_arms_carry_equal_content` |
+| R2-B2 one shared gp3 root volume | Fixed: separate provisioned gp3 volumes for Postgres (data + WAL), the Kafka log and MinIO, Docker root on the root volume; per-device utilization, await and MB/s per run (`/proc/diskstats`, `iostat -dxm`); "disk-bound" in the bottleneck label (section 5) |
+| R2-M1 the `seq` column's per-write cost | Pilot cell `P-pg-pg-p1-b64` runs the primary pg-to-pg arms with and without it (`@noseq`, counted from `pg_stat_user_tables`); the bottleneck label reads "destination-bound" when Postgres is saturated; the frontier semantics are stated (section 14) |
+| R2-M2 multi-table paths untested by smoke; tombstones attributed by key only | Fixed: smoke adds A2-pg-pg-p4-b64, H-pg-pg-p4-verify and H-pg-kafka-p4-verify; verify attributes a tombstone's table from its topic (`TestVerifyMultiTableTombstonesUseTheTopic`) |
+| R2-M3 the diag binary is built differently | Fixed: generated from the repository Dockerfile with only the pprof file and `-tags benchdiag` added to the same `make build` (`images/diag-dockerfile.py`); profiles labelled indicative |
+| R2-M4 gate bypass, smoke cost, registry unproven | The gate is also a Terraform precondition, and each instance checks its kit's hash against the declared one; the smoke budget is $60-90 for the expected 2-3 passes, preceded by a < $5 shakedown; the registry is named by the bottleneck label when it is the busiest infrastructure container; Conduit uses one subject per table like the Apicurio converter |
+| minors | Diag runs expose the API and Jolokia on 0.0.0.0 inside an egress-only security group (stated); the empty `CONDUIT_API_TOKEN_FILE` in measured runs is checked by the shakedown |

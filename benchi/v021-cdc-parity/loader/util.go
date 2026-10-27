@@ -116,15 +116,18 @@ func runFirst(args []string) error {
 		case "file":
 			fc := newFileCounter(s.Arg)
 			counters = append(counters, fc.count)
-		case "pg", "pgins":
+		case "pg", "pgins", "pgops":
 			counters = append(counters, func() (int64, error) {
 				c, err := pgx.Connect(ctx, e.pgURL)
 				if err != nil {
 					return 0, err
 				}
 				defer c.Close(ctx)
-				if s.Kind == "pgins" {
+				switch s.Kind {
+				case "pgins":
 					return pgInserts(ctx, c, pgTables(s.Arg, e.tables))
+				case "pgops":
+					return pgOps(ctx, c, pgTables(s.Arg, e.tables))
 				}
 				return pgPosition(ctx, c, pgTables(s.Arg, e.tables))
 			})

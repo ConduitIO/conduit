@@ -14,8 +14,9 @@
 
 //go:build benchdiag
 
-// Diagnosis build of Conduit for the parity matrix (images/conduit-diag.Dockerfile
-// copies this file into cmd/conduit and builds with -tags benchdiag). It is
+// Diagnosis build of Conduit for the parity matrix (images/diag-dockerfile.py
+// generates its Dockerfile from the repository's: this file is copied into
+// cmd/conduit and the same make build runs with -tags benchdiag). It is
 // NEVER the measured binary: it only runs in unmeasured diag runs. It serves
 // net/http/pprof so profiles can be taken for the measurement window alone
 // (CPU, mutex, block, execution trace, goroutines), instead of the whole

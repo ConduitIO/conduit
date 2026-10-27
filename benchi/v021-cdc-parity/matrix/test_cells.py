@@ -307,6 +307,50 @@ class Generated(unittest.TestCase):
                 self.assertIn(x, c.arms, (cid, x))
             self.assertGreaterEqual(c.rounds, 5)
 
+    def test_avro_arms_carry_equal_content(self):
+        """Review R2-B1: every Avro arm into Kafka writes the flattened row plus
+        __op, deletes as tombstones (Debezium: ExtractNewRecordState with
+        add.fields=op; Conduit: field.set __op + avro.encode of the row), one
+        registry subject per table on every side."""
+        for c in self.cells():
+            if "kafka" not in c.dests or c.source != "pg":
+                continue
+            for a in c.arms:
+                if cells.serialization(a) != "avro":
+                    continue
+                s, side = self.cfg(c, a), cells.arm_side(a)
+                if side == "conduit-avro":
+                    p = load(os.path.join(self.arm_dir(c, a), "pipelines", "pipelines.yml"))["pipelines"]
+                    for pipe in p:
+                        procs = pipe["processors"]
+                        self.assertTrue(any(x["plugin"] == "field.set" and x["settings"]["field"] == ".Payload.After.__op" for x in procs), (c.id, a))
+                        subj = [x["settings"]["schema.autoRegister.subject"] for x in procs if x["plugin"] == "avro.encode"]
+                        tables = pipe["connectors"][0]["settings"]["tables"].split(",")
+                        self.assertEqual(sorted(subj), sorted(f"cdcparity.public.{t}-value" for t in tables), (c.id, a))
+                else:
+                    self.assertIn("ExtractNewRecordState", s, (c.id, a))
+                    self.assertRegex(s, r"unwrap\.add\.fields\W+op", (c.id, a))
+                    self.assertRegex(s, r"delete\.tombstone\.handling\.mode\W+tombstone", (c.id, a))
+
+    def test_noseq_arms_drop_the_seq_column_and_count_from_stats(self):
+        c = cells.BY_ID["P-pg-pg-p1-b64"]
+        for a in c.arms:
+            sql = open(os.path.join(self.arm_dir(c, a), "init.sql")).read()
+            infra = load(os.path.join(self.arm_dir(c, a), "infra.yml"))["services"]
+            sinks = infra["sampler"]["command"][infra["sampler"]["command"].index("-sinks") + 1]
+            if cells.parse_arm(a)[3] == "noseq":
+                self.assertNotIn("seq bigint", sql)
+                self.assertTrue(sinks.startswith("pgops:"), sinks)
+            else:
+                self.assertIn("seq bigint", sql)
+                self.assertTrue(sinks.startswith("pg:"), sinks)
+
+    def test_smoke_and_shakedown_cover_the_multi_table_paths(self):
+        smoke = {c.id for c in cells.smoke_cells(cells.build_cells())}
+        for cid in ("A2-pg-pg-p4-b64", "A2-pg-kafka-p4-b64", "H-pg-pg-p4-verify", "H-pg-kafka-p4-verify"):
+            self.assertIn(cid, smoke)
+        self.assertEqual(sorted(c.id for c in cells.plan_cells("shakedown")), sorted(cells.SHAKEDOWN_CELLS))
+
     def test_kafka_broker_uses_append_time(self):
         for c in self.cells():
             infra = load(os.path.join(self.arm_dir(c, c.arms[0]), "infra.yml"))["services"]

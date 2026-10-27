@@ -240,3 +240,24 @@ func TestVerifyKafkaKeyAttributesTombstonesAndBlanksFail(t *testing.T) {
 		t.Fatal("a blank record passed")
 	}
 }
+
+// A flattened delete's tombstone carries only its key; with several tables
+// the table must come from the topic it was read from (review R2-M2).
+func TestVerifyMultiTableTombstonesUseTheTopic(t *testing.T) {
+	ex := replay(genConfig{Tables: 4, Window: 3, Batch: 4, InsertFrac: 0.5, UpdateFrac: 0.2, Seed: 5}, 400)
+	v := newEventVerifier(ex, 64, true, false)
+	for tb, ops := range ex.ops {
+		src := fmt.Sprintf("cdcparity.public.bench_source_%d/0", tb)
+		for _, o := range ops {
+			key := fmt.Sprintf(`{"id":%d}`, o.ID)
+			if o.Kind == opDelete {
+				v.line(src, key+"\t")
+			} else {
+				v.line(src, key+"\t"+`{"id":`+fmt.Sprint(o.ID)+`,"payload":"`+encodePayload(o, 64, time.Now(), testRnd)+`","__op":"c"}`)
+			}
+		}
+	}
+	if rep := v.report(); rep["ok"] != true {
+		t.Fatalf("multi-table tombstones not attributed: %v", rep["summary"])
+	}
+}
