@@ -1134,6 +1134,12 @@ func waitForLCTotalAcked(instance *connector.Instance, total uint64, timeout tim
 // only posted by a Read call, which the worker makes only after the previous
 // pass is complete; so once the empty response is taken, the last record has
 // been processed.
+//
+// This relies on funnel.SourceTask.Do making exactly one source Read per pass and
+// on Source.Read starting a receive only when called (a receive carries over only
+// from a cancelled Read). If either changes, the heartbeat stops proving the
+// previous pass finished; TestSIGKILL_PipelinedFlusher_RestartFromUnalignedPosition
+// would then fail, never pass wrongly (committed < total).
 var lcSettleHeartbeat atomic.Bool
 
 // lcSettled is set once the heartbeat above has been taken by the engine.

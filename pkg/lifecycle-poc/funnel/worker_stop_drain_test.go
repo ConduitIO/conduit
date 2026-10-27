@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
-	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -286,13 +285,6 @@ func TestDestinationTask_Drain_WaitsForSiblingHandoff(t *testing.T) {
 	is.NoErr(task.Close(ctx))
 }
 
-// failingWriteDestination fails every Write.
-type failingWriteDestination struct{ *fakeDestination }
-
-func (failingWriteDestination) Write(context.Context, []opencdc.Record) error {
-	return cerrors.New("destination unavailable")
-}
-
 // TestWorker_Stop_SyncDrainFailure_PoisonsSharedDestination: on a shared
 // synchronous destination a failed drain may have dropped a sibling's batches or
 // left the ack stream desynchronised; the sibling must fail closed, not carry on.
@@ -359,4 +351,99 @@ func TestDestinationTask_DeferOrdered_DuringDrain(t *testing.T) {
 	waitForCondition(t, time.Second, func() bool { return len(alog.snapshot()) == 2 })
 	is.Equal(alog.snapshot(), []string{"acker.ack", "action"})
 	is.NoErr(task.Close(ctx))
+}
+
+// TestWorker_Stop_SyncDrainFailure_SiblingOrderedAckFailsClosed: after a failed
+// synchronous drain on a shared destination (B's record dropped, node poisoned) a
+// sibling's whole-batch filter must not be acked past the dropped record.
+func TestWorker_Stop_SyncDrainFailure_SiblingOrderedAckFailsClosed(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Test(t)
+	srcA := &teardownSource{fakeSource: newFakeSource("a", nil)}
+	srcB := &teardownSource{fakeSource: newFakeSource("b", nil)}
+	dt := NewBatchingDestinationTask("dest", failingWriteDestination{newFakeDestination("dest")}, logger, NoOpConnectorMetrics{}, 10, 0)
+	is.NoErr(dt.Open(ctx))
+	destNode := &TaskNode{Task: dt}
+	destNode.MarkSharedBoundary()
+	nA := &TaskNode{Task: NewSourceTask("a", srcA, logger, NoOpConnectorMetrics{}), Next: []*TaskNode{destNode}}
+	nB := &TaskNode{Task: NewSourceTask("b", srcB, logger, NoOpConnectorMetrics{}), Next: []*TaskNode{destNode}}
+	wA, err := NewWorker(nA, NewDLQ("dlqa", newFakeDestination("dlqa"), logger, NoOpConnectorMetrics{}, 10, 10), logger, noop.Timer{})
+	is.NoErr(err)
+	wB, err := NewWorker(nB, NewDLQ("dlqb", newFakeDestination("dlqb"), logger, NoOpConnectorMetrics{}, 10, 10), logger, noop.Timer{})
+	is.NoErr(err)
+
+	recs := randomRecords(2)
+	is.NoErr(wB.doTask(ctx, destNode, NewBatch(recs[:1]), newRunAckNacker(wB))) // B's record 0, buffered
+
+	_ = wA.Stop(ctx) // the sync drain fails; B's record 0 is dropped; the node is poisoned
+	is.True(destNode.poisoned.Load())
+
+	// B's next batch is fully filtered by its source-side processor, i.e. above
+	// the shared boundary where the poison flag is never consulted.
+	err = wB.ackInOrder(ctx, nB, func(ctx context.Context) error {
+		return newRunAckNacker(wB).Ack(ctx, NewBatch(recs[1:2]))
+	})
+	is.True(err != nil)
+	acked, _ := srcB.snapshot()
+	is.Equal(len(acked), 0) // record 0 was never written: nothing may be acked past it
+}
+
+// TestWorker_Stop_PipelinedDrainCtxExpiry_SiblingOrderedAckFailsClosed is the
+// ordered-ack variant of the ctx-expiry test: after A's drain could not reach the
+// flusher, B's fully filtered next batch must not be acked past B's buffered
+// batch. It guards the drain failure handling (restore plus fail-closed flush
+// error); the node poison alone does not stop an ordered ack.
+func TestWorker_Stop_PipelinedDrainCtxExpiry_SiblingOrderedAckFailsClosed(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Test(t)
+
+	srcA := &teardownSource{fakeSource: newFakeSource("a", nil)}
+	srcB := &teardownSource{fakeSource: newFakeSource("b", nil)}
+	dest := newFakeDestination("dest")
+	dt := NewBatchingDestinationTask("dest", dest, logger, NoOpConnectorMetrics{}, 2, 0)
+	dt.SetPipelined()
+	is.NoErr(dt.Open(ctx))
+	destNode := &TaskNode{Task: dt}
+	destNode.MarkSharedBoundary()
+	nA := &TaskNode{Task: NewSourceTask("a", srcA, logger, NoOpConnectorMetrics{}), Next: []*TaskNode{destNode}}
+	nB := &TaskNode{Task: NewSourceTask("b", srcB, logger, NoOpConnectorMetrics{}), Next: []*TaskNode{destNode}}
+	wA, err := NewWorker(nA, NewDLQ("dlqa", newFakeDestination("dlqa"), logger, NoOpConnectorMetrics{}, 10, 10), logger, noop.Timer{})
+	is.NoErr(err)
+	wB, err := NewWorker(nB, NewDLQ("dlqb", newFakeDestination("dlqb"), logger, NoOpConnectorMetrics{}, 10, 10), logger, noop.Timer{})
+	is.NoErr(err)
+
+	b := recsWithPrefix("b", 9)
+	blocked, release := dest.blockWrites(b[0].Position)
+	var once sync.Once
+	unblock := func() { once.Do(release) }
+	defer unblock()
+	is.NoErr(wB.doTask(ctx, destNode, NewBatch(b[0:2]), newRunAckNacker(wB)))
+	<-blocked
+	is.NoErr(wB.doTask(ctx, destNode, NewBatch(b[2:4]), newRunAckNacker(wB)))
+	is.NoErr(wB.doTask(ctx, destNode, NewBatch(b[4:6]), newRunAckNacker(wB)))
+	is.NoErr(wB.doTask(ctx, destNode, NewBatch(b[6:7]), newRunAckNacker(wB))) // B's partial b6
+
+	sctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	_ = wA.Stop(sctx) // the drain cannot reach the flusher
+	cancel()
+	unblock()
+
+	_ = wB.ackInOrder(ctx, nB, func(ctx context.Context) error {
+		return newRunAckNacker(wB).Ack(ctx, NewBatch(b[7:8]))
+	})
+	time.Sleep(200 * time.Millisecond)
+
+	written := map[string]bool{}
+	for _, p := range dest.receivedPositions() {
+		written[string(p)] = true
+	}
+	acked, _ := srcB.snapshot()
+	for _, p := range acked {
+		if string(p) == "b7" {
+			is.True(written["b6"]) // acking b7 requires b6 delivered
+		}
+	}
+	_ = dt.Close(ctx)
 }

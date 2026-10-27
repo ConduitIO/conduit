@@ -10,6 +10,7 @@ connector-restore-no-overwrite
 connector-restore-no-store-write-in-txn
 connector-source-delete-hook-marks-instance
 funnel-ack-rejects-empty-position
+funnel-drain-failure-fails-closed
 funnel-eof-drains-before-teardown
 funnel-fanout-whole-runs-only
 funnel-multiack-ack-after-terminal-noop

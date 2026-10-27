@@ -294,6 +294,11 @@ func drainNode(ctx context.Context, n *TaskNode, shared *TaskNode) error {
 		err := drainTask(ctx, dt, shared)
 		if err != nil && shared != nil {
 			shared.poisoned.Store(true)
+			// The poison flag is only read on entry to the shared node; a
+			// sibling's ordered ack (ackInOrder) never passes that check. Fail
+			// the batching destinations too so deferOrdered refuses.
+			// guard: funnel-drain-failure-fails-closed tests=^TestWorker_Stop_SyncDrainFailure_SiblingOrderedAckFailsClosed$
+			poisonBatchingDestinations(shared, err)
 		}
 		errs = append(errs, err)
 	}
