@@ -398,8 +398,8 @@ No number from this doc goes into release notes. The implementation PR must show
 ## Upgrade and rollback
 
 Config, positions and state are unchanged. The protocol PR is additive: documentation plus one optional
-`orderedAcks` field (minor bump), which old plugins and old engines ignore. Upgrade and downgrade need no migration, and records that were not acked replay under either version.
-Rollback is a revert. Arch-v2 is `preview` in v0.21.
+`orderedAcks` field (minor bump), which old plugins and old engines ignore. Upgrade and downgrade need no
+migration, and records that were not acked replay under either version. Rollback is a revert. Arch-v2 is `preview` in v0.21.
 
 ## Observability
 
