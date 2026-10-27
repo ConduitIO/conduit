@@ -17,20 +17,23 @@ package stream
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/lifecycle-poc/funnel"
 	"github.com/gammazero/deque"
 )
 
-// DestinationAckerNode is responsible for handling acknowledgments received
-// from the destination and forwarding them to the correct message.
 // maxConsecutiveEmptyAcks bounds how many ack responses in a row may carry no
 // ack. The protocol allows an empty response, so this is engine policy.
 const maxConsecutiveEmptyAcks = 1000
 
+// DestinationAckerNode is responsible for handling acknowledgments received
+// from the destination and forwarding them to the correct message.
 type DestinationAckerNode struct {
 	Name        string
 	Destination Destination
@@ -165,7 +168,11 @@ func (n *DestinationAckerNode) worker(
 				}
 				if len(acks) == 0 {
 					if empty++; empty >= maxConsecutiveEmptyAcks {
-						handleError(msg, cerrors.Errorf("destination sent %d consecutive ack responses with no acks", empty))
+						ce := conduiterr.New(funnel.CodeDestinationEmptyAckFlood, fmt.Sprintf(
+							"destination sent %d consecutive ack responses with no acks", empty))
+						ce.Suggestion = "the destination connector is answering writes with empty ack responses; " +
+							"check its logs and version. The message was not acked and is redelivered on restart"
+						handleError(msg, ce)
 						return
 					}
 				}

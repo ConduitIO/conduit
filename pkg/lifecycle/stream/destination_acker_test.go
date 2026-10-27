@@ -25,7 +25,9 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/lifecycle-poc/funnel"
 	"github.com/conduitio/conduit/pkg/lifecycle/stream/mock"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
@@ -575,6 +577,8 @@ func TestDestinationAckerNode_EmptyAckFlood(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("acker kept polling an endless run of empty ack responses")
 	case err := <-runErr:
-		is.True(err != nil)
+		ce, ok := conduiterr.Get(err)
+		is.True(ok)
+		is.Equal(ce.Code.Reason(), funnel.CodeDestinationEmptyAckFlood.Reason())
 	}
 }
