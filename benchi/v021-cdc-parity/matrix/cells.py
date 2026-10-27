@@ -686,7 +686,8 @@ def infra_compose(c: Cell, arm: str = "") -> dict:
         s["registry"] = svc(
             image=IMG["registry"], container_name="cdcparity-registry",
             environment={"QUARKUS_HTTP_PORT": "8080", "APICURIO_CCOMPAT_LEGACY_ID_MODE_ENABLED": "true"},
-            healthcheck={"test": ["CMD-SHELL", "curl -fs http://localhost:8080/health/ready >/dev/null || exit 1"],
+            # Apicurio 3.x serves health on its management interface (:9000).
+            healthcheck={"test": ["CMD-SHELL", "curl -fs http://localhost:9000/q/health/ready >/dev/null || exit 1"],
                          "interval": "2s", "timeout": "5s", "retries": 120})
     if "s3" in c.dests:
         s["minio"] = svc(
