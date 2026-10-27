@@ -685,7 +685,9 @@ func (w *Worker) doTaskAttempt(
 		if !taskNode.HasNext() || !b.HasActiveRecords() {
 			// Either this is the last task (the batch has made it end-to-end),
 			// or the batch has only filtered records. Let's ack!
-			return acker.Ack(ctx, b)
+			return w.ackInOrder(ctx, taskNode, func(ctx context.Context) error {
+				return acker.Ack(ctx, b)
+			})
 		}
 		// There is at least one task after this one, let's continue.
 		return w.doNextTask(ctx, taskNode, b, acker)
@@ -734,7 +736,9 @@ func (w *Worker) doTaskAttempt(
 				// or the batch has only filtered records. Let's ack!
 				// We need to ack all the records in the batch, not only active
 				// ones, filtered ones should also be acked.
-				err := acker.Ack(ctx, subBatch)
+				err := w.ackInOrder(ctx, taskNode, func(ctx context.Context) error {
+					return acker.Ack(ctx, subBatch)
+				})
 				if err != nil {
 					return err
 				}
@@ -746,7 +750,9 @@ func (w *Worker) doTaskAttempt(
 				return err
 			}
 		case RecordFlagNack:
-			err := acker.Nack(ctx, subBatch, t.ID())
+			err := w.ackInOrder(ctx, taskNode, func(ctx context.Context) error {
+				return acker.Nack(ctx, subBatch, t.ID())
+			})
 			if err != nil {
 				return err
 			}
@@ -995,6 +1001,46 @@ func branchMutatesRecords(n *TaskNode) bool {
 		}
 	}
 	return false
+}
+
+// ackInOrder runs ack, a source ack or nack for records that stop at taskNode
+// without reaching the destinations below it (filtered, or nacked to the DLQ),
+// in source order relative to the batches those destinations have buffered.
+//
+// Invariant 1/2/3 (enforcement site): with destination batching, earlier
+// batches sit in a destination's buffer or flusher queue while later batches
+// are still being processed. Acking a bypassing batch right away would make
+// connector.Source.Ack persist a position past records that are not yet
+// durable. Each batching destination below taskNode (all of them, at a
+// fan-out) gets to queue the ack behind its earlier batches; see
+// DestinationTask.deferOrdered. With no batching destination below, ack runs
+// inline.
+func (w *Worker) ackInOrder(ctx context.Context, taskNode *TaskNode, ack func(context.Context) error) error {
+	return ackBehind(ctx, batchingDestinations(taskNode), ack)
+}
+
+// ackBehind queues ack behind the earlier batches of each destination in dts,
+// in turn: the ack of the last link runs only after every destination has
+// released everything that was ahead of it.
+func ackBehind(ctx context.Context, dts []*DestinationTask, ack func(context.Context) error) error {
+	if len(dts) == 0 {
+		return ack(ctx)
+	}
+	return dts[0].deferOrdered(ctx, func(ctx context.Context) error {
+		return ackBehind(ctx, dts[1:], ack)
+	})
+}
+
+// batchingDestinations returns the batching destination tasks strictly below n.
+func batchingDestinations(n *TaskNode) []*DestinationTask {
+	var out []*DestinationTask
+	for _, next := range n.Next {
+		if dt, ok := next.Task.(*DestinationTask); ok && dt.batchingEnabled() {
+			out = append(out, dt)
+		}
+		out = append(out, batchingDestinations(next)...)
+	}
+	return out
 }
 
 func (w *Worker) Ack(ctx context.Context, batch *Batch) error {

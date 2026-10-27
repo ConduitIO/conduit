@@ -45,6 +45,10 @@ type DestinationTask struct {
 	pending       []pendingBatch // buffered source batches awaiting flush
 	bufferedCount int            // number of active records currently buffered
 	flushDeadline time.Time      // zero when nothing is buffered
+	// outstanding counts flushes handed to the flusher and not yet fully acked
+	// (queued or in flight); guarded by mu. Together with pending it tells
+	// deferOrdered whether any earlier batch is still ahead of a source ack.
+	outstanding int
 
 	// Pipelining state (see destination_batch.go). Zero values mean the
 	// flusher goroutine is not running (pipelining disabled, batching
