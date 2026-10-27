@@ -503,6 +503,16 @@ func (t *DestinationTask) runFlusher(ctx context.Context) {
 			if !ok {
 				return // channel closed by Close after the trailing flush
 			}
+			// Invariant 3: the flush error can be set by paths other than this
+			// goroutine's own failure (doTask poisoning the shared node, a failed
+			// drain restoring batches to the front of pending). Once it is set,
+			// do not write or ack what is still queued: acking it could move the
+			// source past batches that were left unacknowledged. It replays.
+			// Checked under mu (flushError), where the flush error is recorded.
+			if t.flushError() != nil {
+				t.finishFlush(nil) // release the slot only
+				return
+			}
 			err := t.flushPending(ctx, pending)
 			t.finishFlush(err)
 			if err != nil {
@@ -521,7 +531,9 @@ func (t *DestinationTask) stopFlusher(ctx context.Context) error {
 	t.mu.Lock()
 	t.closed = true
 	var trailing []pendingBatch
-	if len(t.pending) > 0 {
+	// Invariant 3: after a flush error the trailing batch is not sent (same rule
+	// as runFlusher); it stays unacknowledged and replays.
+	if len(t.pending) > 0 && t.flushErr == nil {
 		trailing = t.pending
 		t.pending = nil
 		t.bufferedCount = 0
