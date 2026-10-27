@@ -17,10 +17,12 @@ package funnel
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
 )
@@ -91,4 +93,122 @@ func TestDestinationTask_Do_ShortAckSetIsAnError(t *testing.T) {
 
 	err := task.Do(ctx, NewBatch(recs))
 	is.True(err != nil)
+}
+
+// floodDestination answers every Ack with an empty response, forever.
+type floodDestination struct {
+	*fakeDestination
+	calls int
+}
+
+func (d *floodDestination) Write(context.Context, []opencdc.Record) error { return nil }
+func (d *floodDestination) Ack(context.Context) ([]connector.DestinationAck, error) {
+	d.calls++
+	return nil, nil
+}
+
+// TestDestinationTask_Do_EmptyAckFlood_FailsWithCode: the protocol allows empty
+// ack responses but not an endless run of them; Do must give up with a coded
+// error (engine policy, maxConsecutiveEmptyAcks) and ack nothing.
+func TestDestinationTask_Do_EmptyAckFlood_FailsWithCode(t *testing.T) {
+	is := is.New(t)
+	dest := &floodDestination{fakeDestination: newFakeDestination("d")}
+	task := NewDestinationTask("d", dest, log.Test(t), NoOpConnectorMetrics{})
+
+	err := task.Do(context.Background(), NewBatch(randomRecords(2)))
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code.Reason(), CodeDestinationEmptyAckFlood.Reason())
+	is.Equal(dest.calls, maxConsecutiveEmptyAcks)
+}
+
+// TestDestinationTask_FlushPending_EmptyAckFlood_FailsWithCode: same bound on the
+// batching path, and no source ack is issued.
+func TestDestinationTask_FlushPending_EmptyAckFlood_FailsWithCode(t *testing.T) {
+	is := is.New(t)
+	dest := &floodDestination{fakeDestination: newFakeDestination("d")}
+	task := NewBatchingDestinationTask("d", dest, log.Test(t), NoOpConnectorMetrics{}, 2, 0)
+	alog := &eventLog{}
+	recs := randomRecords(2)
+
+	is.True(isBuffered(task.doBuffered(context.Background(), NewBatch(recs[:1]), newRecordingAckNacker(alog))))
+	err := task.doBuffered(context.Background(), NewBatch(recs[1:]), newRecordingAckNacker(alog))
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code.Reason(), CodeDestinationEmptyAckFlood.Reason())
+	is.Equal(len(alog.snapshot()), 0)
+}
+
+// TestDestinationTask_Do_EmptyResponsesBelowBoundAreTolerated: empty responses
+// below the bound do not fail the write, and they reset on a response with acks.
+func TestDestinationTask_Do_EmptyResponsesBelowBoundAreTolerated(t *testing.T) {
+	is := is.New(t)
+	recs := randomRecords(2)
+	var responses [][]connector.DestinationAck
+	for i := 0; i < maxConsecutiveEmptyAcks-1; i++ {
+		responses = append(responses, nil)
+	}
+	responses = append(responses, []connector.DestinationAck{{Position: recs[0].Position}})
+	for i := 0; i < maxConsecutiveEmptyAcks-1; i++ {
+		responses = append(responses, nil)
+	}
+	responses = append(responses, []connector.DestinationAck{{Position: recs[1].Position}})
+	dest := &scriptedAckDestination{fakeDestination: newFakeDestination("d"), responses: responses}
+	task := NewDestinationTask("d", dest, log.Test(t), NoOpConnectorMetrics{})
+
+	is.NoErr(task.Do(context.Background(), NewBatch(recs)))
+}
+
+// TestDestinationTask_Do_OverLongAckSetAcrossResponsesFails: an ack set that
+// overflows only on a later response is rejected by the positions[ackCount:]
+// slicing, not ignored.
+func TestDestinationTask_Do_OverLongAckSetAcrossResponsesFails(t *testing.T) {
+	is := is.New(t)
+	recs := randomRecords(2)
+	extra := connector.DestinationAck{Position: opencdc.Position("extra")}
+	dest := &scriptedAckDestination{
+		fakeDestination: newFakeDestination("d"),
+		responses: [][]connector.DestinationAck{
+			{{Position: recs[0].Position}},
+			{{Position: recs[1].Position}, extra},
+		},
+	}
+	task := NewDestinationTask("d", dest, log.Test(t), NoOpConnectorMetrics{})
+	is.True(task.Do(context.Background(), NewBatch(recs)) != nil)
+}
+
+// ctxAckDestination blocks in Ack until its own context (standing in for the
+// stream/Open context a real connector.Destination honours) ends.
+type ctxAckDestination struct {
+	*fakeDestination
+	streamCtx context.Context
+}
+
+func (d *ctxAckDestination) Write(context.Context, []opencdc.Record) error { return nil }
+func (d *ctxAckDestination) Ack(ctx context.Context) ([]connector.DestinationAck, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-d.streamCtx.Done():
+		return nil, d.streamCtx.Err()
+	}
+}
+
+// TestDestinationTask_Do_ReturnsWhenCancelledWhileWaitingForAcks: a destination
+// that never acks must not hold Do once the context ends, and nothing is acked.
+func TestDestinationTask_Do_ReturnsWhenCancelledWhileWaitingForAcks(t *testing.T) {
+	is := is.New(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	dest := &ctxAckDestination{fakeDestination: newFakeDestination("d"), streamCtx: context.Background()}
+	task := NewDestinationTask("d", dest, log.Test(t), NoOpConnectorMetrics{})
+
+	done := make(chan error, 1)
+	go func() { done <- task.Do(ctx, NewBatch(randomRecords(2))) }()
+	cancel()
+	select {
+	case err := <-done:
+		is.True(err != nil)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Do did not return after its context was cancelled")
+	}
 }
