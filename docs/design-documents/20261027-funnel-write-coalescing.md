@@ -141,9 +141,11 @@ Give every destination a default `sdk.batch.delay`.
 
 ### D. Several `Write`s in flight in read-ahead mode
 
-The AckReader from #3292 makes this a parameter, not a new component. Phase 1 starts at one coalesced
-`Write` in flight per destination. That is today's flusher, and the simplest ordering argument. The
-rule for raising it is pre-registered in benchi arm 2.
+The AckReader from #3292 makes this a parameter, not a new component. An unverified destination (see
+the single-source guard) is held at one `Write` in flight, permanently; that is #3292's rule, not a
+phase. A verified destination starts at one coalesced `Write` in flight in read-ahead mode. That is
+today's flusher, and the simplest ordering argument. The rule for raising the verified limit is
+pre-registered in benchi arm 2.
 
 ### E. A second coalescing site: #3201's flusher, or #3292's inbox carry slot
 
@@ -165,12 +167,11 @@ After #3292 and this doc have both landed. #3292 at `848122e7` carries the same 
 | NxM with batching, or with processor roots | synchronous, under `sharedMu` (unchanged) | yes | no | neither; needs the #2978 ledger |
 
 The predicate is simple: one destination means read-ahead mode; two or more means #3292's rules.
-**Landing order and merge conditions.** The order is: the prerequisite fixes on `main`; then #3292's
+**Landing order.** The order is: the prerequisite fixes on `main`; then #3292's
 component and concurrent mode, which build the writer, the AckReader, the completion hook and R1 to
 R3; then this doc's take policy and read-ahead mode. This matches #3292's open question 2. #3292 at
 `848122e7` narrows concurrent mode to two or more sources, two or more bare destinations and no
-batching. It moves its former "phase 2" and its R4 to this doc. That head, or a later one that keeps
-the same table, is a merge condition for this doc.
+batching. It moves its former "phase 2" and its former R4 to this doc. #3292 is approved at that head.
 
 **Who completes, in read-ahead mode.** #3292's rule is that the AckReader never touches the worker's
 batch, and that workers ack their own source. Read-ahead mode reverses that rule, for this mode only.
@@ -220,7 +221,8 @@ out of scope for both docs.
   longest prefix that stays under both caps. A head submission that is over a cap on its own goes
   alone, and is subject to the oversize error below.
 - **No waiting.** The writer blocks only while the queue is empty, or while the in-flight limit is
-  reached (1 in phase 1).
+  reached. That limit is always 1 for an unverified destination, and 1 for a verified destination
+  unless benchi arm 2 raises it.
 
 ### Size estimator (from wire size)
 
@@ -385,12 +387,13 @@ exactly once" checkable in tests.
 
 ## Requirements and tests
 
-R1 to R4 extend #3292's R1 to R3, and its former R4, to coalesced groups and barriers. Each test is written to fail without
+R1, R3 and R4 extend #3292's R1, R2 and R3 (its numbering at `848122e7`) to coalesced groups and
+barriers. R2 is #3292's former R4. Each test is written to fail without
 its fix.
 
 | # | Requirement | Test |
 | --- | --- | --- |
-| R1 | Group completion: a failure or cancel completes every submission in the taken group and in the queue exactly once, with k computed per the model | `TestWriter_WriteErrorCompletesGroup`, `TestWriter_CancelCompletesQueue`; outstanding counters reach zero |
+| R1 | Group completion (#3292 R1): a failure or cancel completes every submission in the taken group and in the queue exactly once, with k computed per the model | `TestWriter_WriteErrorCompletesGroup`, `TestWriter_CancelCompletesQueue`; outstanding counters reach zero |
 | R2 | Cap look-ahead (#3292's former R4): never take past either cap, never lose or reorder at the cut | `TestTakePolicy_RecordCap`, `TestTakePolicy_ByteCap`, and a rapid property: the `Write`s concatenated equal the submissions in order, each `Write` is under the caps unless it holds a single submission, and each submission completes once |
 | R3 | Enqueue versus close (#3292 R2) | `TestDestinationTask_EnqueueRacesClose`, `-race -count=500` |
 | R4 | A sent `Write` completes only through its real acks or a stream end (#3292 R3) | `TestDestinationTask_CloseWaitsForSentWriteAcks` |
@@ -474,7 +477,8 @@ pre-registered and is valid only when the floor is under 5%.
    shape by more than twice the floor, and regresses neither by more than the floor.
 2. **In-flight writes.** 1x1 generator to file, source batch 1, this design against the prototype's
    coalescing arm. If the median is under 79k records/s (two-thirds of the prototype's +36k gain over
-   54.5k), raise phase 1's in-flight limit to a records window, as in Alternative D, and re-run.
+   54.5k), raise the verified destinations' in-flight limit to a records window, as in Alternative D,
+   and re-run. Unverified destinations stay at 1.
 3. **Source batch 1, 10, 100** at 1x1: no regression above the floor at 100.
 4. **Nx1** (`benchi/archv2-nxm` with M = 1): 4 sources into 1 destination.
 5. **Latency:** a paced generator at 100 and 1000 records/s, p50 and p99 from read to ack. No p99
@@ -498,7 +502,7 @@ pre-registered and is valid only when the floor is under 5%.
 ## Related
 
 - `docs/design-documents/20261027-funnel-shared-destination-concurrency.md` (#3292, checked at
-  `848122e7`): the writer, the AckReader, the completion hook, R1 to R3, the verified-destination gate
+  `848122e7`): the writer, the AckReader, the completion hook, its R1 to R3, the verified-destination gate
   and the single-source guard, and concurrent mode for NxM. A prerequisite.
 - `docs/design-documents/20261027-default-source-batching.md`: the hard gate.
 - `docs/design-documents/20261017-funnel-destination-batching.md` and
