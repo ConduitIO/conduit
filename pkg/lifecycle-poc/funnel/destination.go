@@ -88,6 +88,12 @@ type DestinationTask struct {
 	// slot in outstanding, i.e. at the point a sibling can first see the task
 	// idle. Tests use it to interleave a sibling's ordered ack; nil in production.
 	testAfterFlushRelease func()
+	// testAfterDeferErrCheck, if set, is called by deferOrdered right after its
+	// early flush-error check, before it takes any lock. Tests use it to land a
+	// flush failure in the window between the check and the decision.
+	testAfterDeferErrCheck func()
+	// testAfterBufferErrCheck is the same window in doBuffered.
+	testAfterBufferErrCheck func()
 }
 
 type Destination interface {
