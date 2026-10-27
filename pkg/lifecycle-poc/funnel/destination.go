@@ -19,14 +19,33 @@ package funnel
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 )
+
+// maxConsecutiveEmptyAcks bounds how many ack responses in a row may carry no
+// ack while records are still unacked. The connector protocol allows an empty
+// response, so this is engine policy, not protocol enforcement: it keeps a
+// misbehaving destination from holding the writer in a receive loop forever.
+const maxConsecutiveEmptyAcks = 1000
+
+// errEmptyAckFlood is the coded error for maxConsecutiveEmptyAcks.
+func (t *DestinationTask) errEmptyAckFlood(unacked int) error {
+	ce := conduiterr.New(CodeDestinationEmptyAckFlood, fmt.Sprintf(
+		"destination %s sent %d consecutive ack responses with no acks while %d records were still unacked",
+		t.id, maxConsecutiveEmptyAcks, unacked,
+	))
+	ce.Suggestion = "the destination connector is answering writes with empty ack responses; check its logs " +
+		"and version. No records were acked upstream and they are redelivered on restart"
+	return ce
+}
 
 type DestinationTask struct {
 	id          string
@@ -248,13 +267,30 @@ func (t *DestinationTask) writeChunk(
 		return cerrors.Errorf("failed to write %d records to destination: %w", len(positions), err)
 	}
 
+	// Invariant 1 (enforcement site): count acked RECORDS, never responses. The
+	// protocol allows a response with no acks (the Go SDK never sends one), so
+	// bounding this loop by len(positions) responses could leave it with records
+	// unacked and return nil, and the worker would then ack them upstream. Keep
+	// reading until every record has its ack; a stream that ends first surfaces
+	// as an Ack error, and an over-long response is rejected by validateAcks.
 	ackCount := 0
-	for range len(positions) {
+	empty := 0
+	for ackCount < len(positions) {
 		acks, err := t.destination.Ack(ctx)
 		if err != nil {
 			t.metrics.ObserveError()
 			return cerrors.Errorf("failed to receive acks for %d records from destination: %w", len(positions), err)
 		}
+		// Engine policy (the protocol allows empty responses): bound the run of
+		// consecutive empty responses. The count resets on any response with acks.
+		if len(acks) == 0 {
+			if empty++; empty >= maxConsecutiveEmptyAcks {
+				t.metrics.ObserveError()
+				return t.errEmptyAckFlood(len(positions) - ackCount)
+			}
+			continue
+		}
+		empty = 0
 
 		if err := t.validateAcks(acks, positions[ackCount:]); err != nil {
 			t.metrics.ObserveError()
@@ -264,9 +300,6 @@ func (t *DestinationTask) writeChunk(
 		t.markBatchRecords(batch, base+ackCount, acks)
 
 		ackCount += len(acks)
-		if ackCount >= len(positions) {
-			break
-		}
 	}
 
 	return nil

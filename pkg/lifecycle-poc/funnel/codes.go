@@ -147,4 +147,17 @@ var (
 	// recovery/degrade classification, so no special-casing is needed beyond
 	// returning this error from doTask.
 	CodeSharedDestinationPoisoned = conduiterr.Register("pipeline.shared_destination_poisoned", codes.Aborted)
+
+	// CodeDestinationEmptyAckFlood is returned when a destination sends more than
+	// maxConsecutiveEmptyAcks consecutive ack responses that each carry no ack
+	// while the engine is waiting for acks.
+	//
+	// The connector protocol does not require a response to carry at least one
+	// ack, so an empty response is legal and the engine tolerates a bounded run
+	// of them. The bound is engine policy, not protocol enforcement: without it a
+	// destination that keeps answering with empty responses would keep the
+	// writer spinning on its receive loop forever. Nothing is acked upstream
+	// before this error is returned, so every unacked record is redelivered on
+	// restart (invariant 3).
+	CodeDestinationEmptyAckFlood = conduiterr.Register("pipeline.destination_empty_ack_flood", codes.Aborted)
 )

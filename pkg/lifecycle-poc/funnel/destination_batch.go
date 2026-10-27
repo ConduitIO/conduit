@@ -225,12 +225,22 @@ func (t *DestinationTask) flushPending(ctx context.Context, pending []pendingBat
 				return cerrors.Errorf("failed to write %d records to destination: %w", end-from, err)
 			}
 
+			empty := 0
 			for ackCount < end {
 				acks, err := t.destination.Ack(ctx)
 				if err != nil {
 					t.metrics.ObserveError()
 					return cerrors.Errorf("failed to receive acks for %d records from destination: %w", end-ackCount, err)
 				}
+				// Engine policy, see maxConsecutiveEmptyAcks.
+				if len(acks) == 0 {
+					if empty++; empty >= maxConsecutiveEmptyAcks {
+						t.metrics.ObserveError()
+						return t.errEmptyAckFlood(end - ackCount)
+					}
+					continue
+				}
+				empty = 0
 				if err := t.validateAcks(acks, positions[ackCount:end]); err != nil {
 					t.metrics.ObserveError()
 					return cerrors.Errorf("failed to validate acks: %w", err)
