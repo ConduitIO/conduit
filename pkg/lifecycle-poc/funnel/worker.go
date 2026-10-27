@@ -526,6 +526,11 @@ func (w *Worker) doTask(
 		// above); the poison flag is what closes the window regardless of
 		// that race's outcome.
 		taskNode.poisoned.Store(true)
+		// The poison flag is only read on entry to the shared node. A sibling's
+		// ordered ack (ackInOrder) comes from its own processors, above the
+		// boundary, and never passes that check; failing the batching
+		// destinations below makes deferOrdered refuse too.
+		poisonBatchingDestinations(taskNode, err)
 	}
 
 	return err
@@ -1029,6 +1034,17 @@ func ackBehind(ctx context.Context, dts []*DestinationTask, ack func(context.Con
 	return dts[0].deferOrdered(ctx, func(ctx context.Context) error {
 		return ackBehind(ctx, dts[1:], ack)
 	})
+}
+
+// poisonBatchingDestinations records err as the flush error of every batching
+// destination at or below n, so they fail closed (see setFlushErr).
+func poisonBatchingDestinations(n *TaskNode, err error) {
+	if dt, ok := n.Task.(*DestinationTask); ok && dt.batchingEnabled() {
+		dt.setFlushErr(err)
+	}
+	for _, dt := range batchingDestinations(n) {
+		dt.setFlushErr(err)
+	}
 }
 
 // batchingDestinations returns the batching destination tasks strictly below n.
