@@ -63,24 +63,27 @@ a hard gate and not a preference.
 ### Existing defects this depends on
 
 Reading the opt-in batching path for this design turned up defects that pipelining by default would
-spread to every pipeline. They are fixed on `main` as separate PRs. This design names them as
-prerequisites and does not redesign them:
+spread to every pipeline. They are fixed on `main` as separate PRs, and every one of them is a merge
+condition for this design's implementation PR. This design names them and does not redesign them.
+PR numbers marked TBD are filled in as the fix PRs open.
 
-- **#3231.** A partial batch has no flush timer. On graceful stop, `Worker.Stop` tears down the source
+- **#3231** (fix PR: TBD). A partial batch has no flush timer. On graceful stop, `Worker.Stop` tears down the source
   before `DestinationTask.Close` drains the flusher, so the trailing source acks fail with
   `plugin.ErrPluginNotRunning` and the records replay. `tests/chaos/pipelined_flusher_sigkill_test.go`
   works around it: `pipelinedFlusherRestart` turns batching off for the restart.
-- **H1, out-of-order source acks.** An all-filtered batch (`doBuffered`, and the worker's
+- **H1, out-of-order source acks** (#3294). An all-filtered batch (`doBuffered`, and the worker's
   `!b.HasActiveRecords()` shortcut) and a processor-nacked sub-batch (`acker.Nack` to `Worker.Nack` to
   `Source.Ack(positions[:n])`) ack the source immediately, on the worker goroutine. Earlier records of
   the same read, or earlier reads, may still be buffered or in flight. `Source.Ack` persists the last
   position unconditionally, so a crash in that window resumes past records that were never written.
-  That violates invariants 1, 2 and 3.
-- **H2, unsynchronized `splitRun` voting.** A split run's members can be voted by the flusher (members
+  That violates invariants 1, 2 and 3. Until #3294 merges, opt-in batching is exposed, and that
+  includes batched fan-out (NxM with `sdk.batch.*`), which buffers synchronously but still has the
+  bypass.
+- **H2, unsynchronized `splitRun` voting** (fix PR: TBD). A split run's members can be voted by the flusher (members
   written) and by the worker (members filtered or nacked) at once. `splitRun`'s fields are not
   synchronized, so a lost or a double release is possible.
 - **Accumulator byte cap.** The accumulator cuts on record count only. For a standalone destination,
-  3000 records can exceed the plugin's 4 MiB receive limit. This ships as its own `fix:` PR with a
+  3000 records can exceed the plugin's 4 MiB receive limit. This ships as its own `fix:` PR (TBD) with a
   regression test that fails on `main` (requirement R9 below).
 
 ## Constraints
@@ -162,10 +165,22 @@ After #3292 and this doc have both landed:
 | NxM with batching, or with processor roots | synchronous, under `sharedMu` (unchanged) | yes | no | neither; needs the #2978 ledger |
 
 The predicate is simple: one destination means read-ahead mode; two or more means #3292's rules.
-Phase 1 of #3292 currently gates concurrent mode on `batchingEnabled() == false` and two or more
-workers, which includes Nx1. I am asking its author to narrow that gate to M of 2 or more, so Nx1 has
-one owner and never runs a mode that lives for only one release. If #3292 lands first with Nx1
-included, this doc's PR moves Nx1 to read-ahead mode and deletes the gate branch.
+**Landing order and merge conditions.** #3292 lands first: it builds the writer, the AckReader and
+their R1 to R3. This doc's implementation PR comes after it. #3292 at `da419ea9` gates concurrent
+mode on `batchingEnabled() == false` and two or more workers, which includes Nx1. Its author is
+revising the gate to two or more destinations. That revision is a merge condition for this doc, not a
+request. Until the revised head lands, the Nx1 row above does not hold, and this doc cites
+`da419ea9` as the head it was checked against.
+
+**Who completes, in read-ahead mode.** #3292's rule is that the AckReader never touches the worker's
+batch, and that workers ack their own source. Read-ahead mode reverses that rule, for this mode only.
+The AckReader is the single completion goroutine. When a write's acks are all in, it runs
+`markSpans` and then the group's entries in queue order. A data entry runs `ackPending`, which goes
+through `runAckNacker` to `Worker.Ack` or `Worker.Nack`, and so to `Source.Ack` and `DLQ.Nack`. A
+barrier entry runs the call it recorded. The writer hands a barrier that has nothing in flight ahead
+of it straight to the AckReader's FIFO, so there is never a second completer. #3292's concurrent mode
+keeps its rule unchanged. Ownership of a read's batch, its records and its split-run state passes to
+the AckReader completely at enqueue. The staging rule below is what makes "completely" true.
 
 Earlier drafts said fan-out coalescing would wait on an ordered cross-batch source-ack release from #3292.
 It does not provide one, and does not need one, because its workers wait for their own
@@ -177,13 +192,18 @@ out of scope for both docs.
 - **Submission.** One `doBuffered` call: its `*Batch`, its `ackNacker`, its records, and an estimated
   byte size. A submission is never split across `Write`s.
 - **Record cap.** An explicit `sdk.batch.size` is the cap. Without one, the cap is `512` records, the
-  prototype's measured setting, not 3000. That keeps the replay window small (see "Credit and replay
+  prototype's measured setting, not 3000. That keeps the added replay small (see "Credit and replay
   window"). Delay-only batching keeps its 3000 threshold for the accumulator, and coalescing is
   capped at 3000 too.
 - **Byte cap.** This applies to standalone destinations only, and to the accumulator as well (R9):
   `maxWriteBytes = connectors.max-receive-record-size × 7/8`, which is 3.5 MiB by default. It is
   derived from wire size; see the estimator. Builtin destinations have no message limit and are
-  capped by records only.
+  capped by records only. Nothing in `funnel` knows today whether a destination is standalone. The
+  connector plugin service already knows, because the dispenser comes from either `builtinReg` or
+  `standaloneReg` (`plugin/connector/service.go`). The implementation exposes that as a `Standalone()`
+  method on the dispensed connector. `buildDestinationTasks` then passes `maxWriteBytes` to
+  `NewBatchingDestinationTask`: the computed cap for a standalone destination, 0 (no byte cap) for a
+  builtin one. The task never inspects plugin names.
 - **Look-ahead.** The queue is a mutex-guarded slice. The writer peeks before it takes, and takes the
   longest prefix that stays under both caps. A head submission that is over a cap on its own goes
   alone, and is subject to the oversize error below.
@@ -229,21 +249,56 @@ The queue credit counts records and bytes that have been submitted but not compl
 flight. An empty queue always admits one submission. Enqueue unblocks on completion, writer exit,
 close or cancel.
 
-| Destination settings | Record cap C | Credit | Records unacked at most (the SIGKILL replay window) |
-| --- | --- | --- | --- |
-| none (default) | 512 | 2 × C | 1024, plus one source read in progress |
-| `sdk.batch.size: S` | S | 2 × S, as today | 4 × S, as #3210 documents today |
-| `sdk.batch.delay` only | 3000 | 6000 | 12 000, as today |
+A source ack does not make a position durable on its own. `Source.Ack` hands the position to the
+connector persister, which flushes after `DefaultPersisterDelayThreshold` (1 s) or
+`DefaultPersisterBundleCountThreshold` (10 000) acks, whichever comes first
+(`connector/persister.go`, wired in `conduit/runtime.go`). So a SIGKILL today already replays
+everything acked since the last flush: up to 1 s of data or 10 000 acks. At source batch 1 that is
+up to 10 000 records. The default-source-batching design (#3293) changes the persister to count
+positions instead of `Ack` calls, and to trigger on reaching the threshold (`>=`). After that change,
+the count bound is 10 000 positions whatever the source batch size.
 
-For a default pipeline, a SIGKILL today replays at most the one batch in flight, which is one record at
-source batch 1. After this change it replays up to about 1024 records, which is about 11 ms of data at
-90k records/s. Duplicates only, never loss. But that is a visible change for consumers that are not
-idempotent. It goes in the release notes and in `docs/operations/archv2-destination-batching.md`.
-Graceful stop does not grow: R6 drains to zero.
+Read-ahead adds the queue credit on top of that window: records submitted but not yet released.
+
+| Destination settings | Record cap C | Credit | Added replay (queued plus in flight) | SIGKILL replay window, total |
+| --- | --- | --- | --- | --- |
+| none (default) | 512 | 2 × C | 1024, plus one source read | persister window (10 000 records at most) + 1024 + one read |
+| `sdk.batch.size: S` | S | 2 × S, as today | up to 4 × S, as #3210 documents | persister window + 4 × S |
+| `sdk.batch.delay` only | 3000 | 6000 | up to 12 000, as today | persister window + 12 000 |
+
+For a default pipeline, the change goes from "up to 10 000 records" to "up to about 11 000". That sits
+inside a window that is already there, and adds about 10%. Duplicates only, never loss. The release
+note says: "arch-v2 single-destination pipelines now write while they read. After a crash, up to 1024
+more records than before can be redelivered, on top of the up to 1 s or 10 000 records the position
+persister already allows." The runbook entry in `docs/operations/archv2-destination-batching.md` gives
+the same formula. Graceful stop does not grow: R6 drains to zero, and the persister flushes on
+teardown.
 
 ### Every source ack goes through the queue (H1)
 
-In read-ahead mode the worker never calls the source's ack or nack itself. Every terminal outcome
+In read-ahead mode the worker never calls the source's ack or nack itself, and it does not enqueue
+anything while a pass is still running.
+
+**Staging.** For each pass of `Worker.Do`, which is one source read through every task, the worker
+keeps a staging list. The pass's top-level acker is a stager. Every `Ack` or `Nack` that any task in
+the pass would make is appended to the list as a barrier entry, instead of being run. That covers the
+first task's shortcut, a processor's nack, and the tainted loop's sub-batches. The read-ahead
+destination task's `doBuffered` appends its data entry to the same list. In read-ahead mode it
+receives the list, not a queue. The tainted loop visits sub-batches in index order, so list order is
+read order. When the pass returns, the worker enqueues the whole list in one critical section on the
+destination's queue mutex. With `sdk.batch.*`, the accumulator absorbs the data entries and passes the
+barriers through in order. A barrier is never reordered ahead of a data entry that was staged before
+it.
+
+The handle is the worker's, not a processor's. For M = 1, `buildRunnablePipeline` gives each worker a
+pointer to the single destination task, and on Nx1 every worker gets the same pointer. Processors
+never see the queue; they only call the acker they are already given.
+
+On a shared Nx1 queue, a barrier from source A that lands behind source B's in-flight write waits for
+that write. This head-of-line wait is bounded by one `Write` plus its acks. It costs latency, not
+correctness; per-source order is all that invariant 2 needs.
+
+Every terminal outcome
 reached before the destination becomes a **barrier submission**: a submission with no records, which
 carries the `*Batch` and acker call it would have made. That covers an all-filtered batch, the first
 task's no-active-records shortcut, and a processor-nacked sub-batch, whose DLQ write is deferred with
@@ -255,12 +310,29 @@ asserts the old bypass, and is replaced.
 This depends on the H1 fix on `main` for opt-in batching, which may take a different route. Whatever
 that fix chooses, R11 is the invariant both have to pass.
 
-### Split-run votes on one goroutine (H2)
+### Split-run state has one owner at a time (H2)
 
-With H1's routing, every vote for a source batch's split runs in read-ahead mode is cast on the
-completion goroutine, so the votes are serialized by construction. The H2 fix on `main` (synchronizing
-`splitRun`) remains the defence for the other modes. R12 is a `-race` test with a split run whose
-members diverge: some written, some filtered, some nacked.
+Moving votes to the completion goroutine is not enough on its own. `Batch.SplitRecord` grows
+`run.total` on the worker goroutine (`batch.go`). `splitRun.complete` reads `total` and
+`terminalCount` (`run_ledger.go`). If sub-batch A of a read were enqueued and voted while the worker was
+still splitting sub-batch B of the same run, for example on a retry or a downstream split, that would
+race on `total`.
+
+Staging closes it. Nothing from a pass is enqueued until the pass has returned. By then every
+processor and every retry recursion for that read has run, so no further `SplitRecord` can happen on
+its runs, and `total` is final. After the enqueue, only the AckReader touches the read's `Batch` and
+`splitRun` values. That is a happens-before through the queue mutex, which is a single handoff, not
+shared access.
+
+The H2 fix on `main` (synchronizing `splitRun`, fix PR TBD) stays required for read-ahead mode too, as
+defence in depth. It is not the mechanism read-ahead relies on. R12 has two parts:
+
+- **The race.** A processor that calls `SplitRecord` on sub-batch B while a destination with instant
+  acks would complete sub-batch A, run under `-race -count=200`. With staging it is race-free and
+  releases the run once. With staging disabled, behind a test-only switch, the race detector flags it,
+  which proves the test reaches the window.
+- **Divergent members.** A split run with some members written, some filtered and some nacked: one
+  release, with nack-wins.
 
 ### Completion model (total)
 
@@ -269,13 +341,18 @@ completion function per submission runs once, guarded by a `completed` flag and 
 outstanding counter:
 
 - **Released in full:** every sub-batch acked or nacked.
-- **Released prefix k:** sub-batches 1 to k released, then the release of sub-batch k+1 failed
-  (`Source.Ack` error, DLQ write failure, or nack window exceeded). Positions after sub-batch k replay.
-  The error is sticky and fails the run, so no later submission releases anything.
+- **Released prefix k:** the first k positions of the submission released, then a release failed
+  (`Source.Ack` error, DLQ write failure, or nack window exceeded). Positions after k replay. The
+  error is sticky and fails the run, so no later submission releases anything. k counts records, not
+  sub-batches. `Worker.Nack` acks `positions[:n]` for the n records the DLQ accepted, even when
+  `DLQ.Nack` returns an error for the rest, so a release can stop partway through a sub-batch. A
+  replay can therefore write a record to the DLQ a second time. That is accepted: the DLQ is
+  at-least-once, like the destination.
 - **Not released (k = 0):** a `Write` error, an `Ack` error or mismatch, a run-context cancel, or close
   with the submission still queued. Every position replays.
 
-Each submission ends in exactly one of these, defined by k, so the model is total. Persisted positions
+Each submission ends in exactly one of these, defined by k (0 to its record count), so the model is
+total. Persisted positions
 are then always a prefix of queue order per source (invariant 2), whatever state the run ends in. This
 is a flag and a counter, not a state machine. That is the least machinery that makes "completes
 exactly once" checkable in tests.
@@ -312,7 +389,7 @@ its fix.
 | R9 | Accumulator byte cap (its own `fix:` PR first) | `TestDoBuffered_CutsOnByteCap`, and a standalone test over 4 MiB that fails on `main` |
 | R10 | Existing suites pass in the new default | the `pkg/lifecycle-poc/funnel` and `tests/chaos` suites, unchanged |
 | R11 | Every source ack and nack goes through the queue in order (H1) | `TestReadAhead_FilteredBatchWaitsForEarlierWrite`, `TestReadAhead_ProcessorNackWaitsForEarlierRecords`, and a chaos test that SIGKILLs between a processor nack and the write of records ahead of it; asserts no persisted position passes an undelivered record |
-| R12 | Split-run votes are serialized (H2) | `TestReadAhead_SplitRunDivergentMembers_Race`, `-race -count=200` |
+| R12 | Split-run state has one owner at a time (H2): nothing from a pass is enqueued before the pass ends | `TestReadAhead_SplitRecordRacesCompletionVote` (`SplitRecord` on sub-batch B against an instant completion of sub-batch A, `-race -count=200`, flagged with staging switched off), and `TestReadAhead_SplitRunDivergentMembers` |
 | R13 | Total completion model | `TestAckPending_NackFailsMidSubmission`: sub-batch 1 acked, sub-batch 2's DLQ write fails; the persisted position is the end of sub-batch 1, the run fails, and restart replays from there |
 
 ### Chaos
@@ -322,7 +399,8 @@ default destination with a paced `Write`, so groups of two or more submissions a
 hook asserts that at least one group of two or more was in flight at the kill; otherwise the test
 proves nothing. It reuses `assertRecoveryInvariantsAtKill` (invariant 1) and
 `assertRecoveryInvariantsAfterRestart` (invariant 3), and also asserts that the duplicates delivered
-are no more than the replay-window bound in the table. There are variants with 4 sources into 1
+are no more than the persister window the child is configured with, plus the queue credit, plus one
+read. There are variants with 4 sources into 1
 destination, and with a filtering processor (for R11). All run in the required `tests/chaos (race, x3)`.
 
 ## Failure modes
@@ -347,7 +425,8 @@ destination, and with a filtering processor (for R11). All run in the required `
 
 No serialized format changes: positions, state, protocol and config schema are untouched, so N and N+1
 read each other's state. Behaviour changes, and the release notes say so. One `Write` can carry
-several reads and sources. The SIGKILL replay window of a default pipeline grows to about 1024 records.
+several reads and sources. The SIGKILL replay window of a default pipeline grows by up to 1024 records, on top of the
+persister's existing 1 s or 10 000 record window.
 Source acks for filtered and processor-nacked records can lag behind later reads. Rollback is a revert.
 The per-pipeline escape hatch is open question 1.
 
@@ -397,8 +476,9 @@ pre-registered and is valid only when the floor is under 5%.
 1. **Escape hatch.** Options: revert only; an explicit destination `sdk.batch.size: 1` meaning
    stop-and-wait, which needs `SDKBatchSettings` to tell unset apart from 1; or a temporary flag. I
    lean to the explicit `sdk.batch.size: 1`.
-2. **Replay window.** Is about 1024 records (512 plus a 2x credit) acceptable for default pipelines?
-   Or should the default credit be 1x, which gives about 512 at some cost to coalescing?
+2. **Added replay.** The credit adds up to 1024 records to the persister's existing window of up to
+   10 000 records. I propose keeping the 2x credit. Do you want 1x instead (up to 512 added), at some
+   cost to coalescing?
 3. **Nx1 ownership.** Do you agree with "one destination means read-ahead mode", with #3292 narrowed to
    M of 2 or more?
 
@@ -411,7 +491,9 @@ pre-registered and is valid only when the floor is under 5%.
   `docs/design-documents/20261019-funnel-read-ahead-pipelining.md`: the accumulator, the fan-back, and
   the flusher this folds in.
 - #3231: partial batch, and stop before drain.
-- The H1, H2 and byte-cap fixes on `main` (prerequisites; see "Existing defects this depends on").
+- #3294 (H1 fix). The H2, byte-cap and #3231 fix PRs are TBD. All are prerequisites; see "Existing
+  defects this depends on".
+- #3293 (default source batching, which also changes the persister to count positions).
 - #2978: the prototype and its review findings.
 - Roadmap: v0.21 engine, "Adaptive batching by default" and "Destination ack reader". v0.22, "Default
   engine flip".
