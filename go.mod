@@ -12,7 +12,7 @@ require (
 	github.com/cohere-ai/cohere-go/v2 v2.14.1
 	github.com/conduitio/conduit-commons v0.8.3
 	github.com/conduitio/conduit-connector-file v0.10.11
-	github.com/conduitio/conduit-connector-generator v0.10.4
+	github.com/conduitio/conduit-connector-generator v0.10.9
 	github.com/conduitio/conduit-connector-kafka v0.12.6
 	github.com/conduitio/conduit-connector-log v0.7.7
 	github.com/conduitio/conduit-connector-postgres v0.14.6

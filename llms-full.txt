@@ -128,7 +128,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-### generator (v0.10.4)
+### generator (v0.10.9)
 
 A plugin capable of generating dummy records (in different formats).
 
@@ -221,7 +221,7 @@ Author: Meroxa, Inc.
 | `format.type` | string |  | no | The format of the generated payload data (raw, structured, file). | inclusion(raw,structured,file) |
 | `operations` | string | create | yes | Comma separated list of record operations to generate. Allowed values are "create", "update", "delete", "snapshot". | required |
 | `rate` | float |  | no | The maximum rate in records per second, at which records are generated (0 means no rate limit). |  |
-| `readTime` | duration |  | no | The time it takes to 'read' a record. Deprecated: use `rate` instead. |  |
+| `readTime` | duration |  | no | The time it takes to 'read' a record.  Deprecated: use `rate` instead. |  |
 | `recordCount` | int |  | no | Number of records to be generated (0 means infinite). | greater-than(-1) |
 | `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is read from the source. |  |
 | `sdk.batch.size` | int | 0 | no | Maximum size of batch before it gets read from the source. | greater-than(-1) |
