@@ -653,3 +653,54 @@ func TestDestinationTask_Sync_QueuedAckNotRunAfterFlushFailure(t *testing.T) {
 	_ = task.Close(ctx)  // flushes what is left
 	is.True(!ran.Load()) // the queued ack must not have run
 }
+
+// TestDestinationTask_Flusher_DropsQueuedItemsOnceFlushErrorIsSet: the flush error
+// can be set by something other than the flusher's own failure (doTask poisoning
+// the shared node, a failed drain). Items already sitting in flushCh must then not
+// be written and acked: they are not behind the failure any more than the batches
+// the failure left unacknowledged, and acking them would move the source past
+// those. They replay.
+func TestDestinationTask_Flusher_DropsQueuedItemsOnceFlushErrorIsSet(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	dest := newFakeDestination("d")
+	task := newPipelinedTask(t, dest, 2, 0)
+	recs := randomRecords(4)
+	alog := &eventLog{}
+
+	blocked, release := dest.blockWrites(recs[0].Position)
+	var once sync.Once
+	unblock := func() { once.Do(release) }
+	defer unblock()
+
+	is.True(isBuffered(task.doBuffered(ctx, NewBatch(recs[:2]), newRecordingAckNacker(alog)))) // in flight, blocked in Write
+	<-blocked
+	is.True(isBuffered(task.doBuffered(ctx, NewBatch(recs[2:4]), newRecordingAckNacker(alog)))) // sits in flushCh
+
+	task.setFlushErr(cerrors.New("shared node poisoned by another path"))
+	unblock()
+	waitForCondition(t, time.Second, func() bool { return len(alog.snapshot()) >= 1 })
+	time.Sleep(50 * time.Millisecond)
+
+	is.Equal(alog.snapshot(), []string{"acker.ack"})                                           // only the in-flight batch
+	is.Equal(dest.receivedPositions(), []opencdc.Position{recs[0].Position, recs[1].Position}) // the queued one was not written
+	_ = task.Close(ctx)
+}
+
+// TestDestinationTask_StopFlusher_DoesNotSendTrailingAfterFlushError: same rule
+// for the trailing partial batch Close hands to the flusher.
+func TestDestinationTask_StopFlusher_DoesNotSendTrailingAfterFlushError(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	dest := newFakeDestination("d")
+	task := newPipelinedTask(t, dest, 10, 0)
+	recs := randomRecords(1)
+	alog := &eventLog{}
+
+	is.True(isBuffered(task.doBuffered(ctx, NewBatch(recs), newRecordingAckNacker(alog)))) // trailing partial
+	task.setFlushErr(cerrors.New("poisoned by another path"))
+	_ = task.Close(ctx)
+
+	is.Equal(len(alog.snapshot()), 0)
+	is.Equal(len(dest.receivedPositions()), 0)
+}
