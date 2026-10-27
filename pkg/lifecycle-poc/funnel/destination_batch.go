@@ -295,14 +295,7 @@ func (t *DestinationTask) syncFlush(ctx context.Context, pending []pendingBatch)
 	t.syncMu.Lock()
 	defer t.syncMu.Unlock()
 	err := t.flushPending(ctx, pending)
-	t.mu.Lock()
-	t.outstanding--
-	t.mu.Unlock()
-	if err != nil {
-		// Invariant 3: the flush may have taken a sibling's batches with it.
-		// Fail closed so deferOrdered and doBuffered refuse from here on.
-		t.setFlushErr(err)
-	}
+	t.finishFlush(err) // releases the slot and fails closed in one step
 	return err
 }
 
@@ -334,12 +327,7 @@ func (t *DestinationTask) releaseSync(ctx context.Context) error {
 		var err error
 		if toFlush != nil {
 			err = t.flushPending(ctx, toFlush)
-			t.mu.Lock()
-			t.outstanding--
-			t.mu.Unlock()
-			if err != nil {
-				t.setFlushErr(err)
-			}
+			t.finishFlush(err)
 		}
 		t.syncMu.Unlock()
 		if err != nil {
@@ -369,6 +357,26 @@ func (t *DestinationTask) flush(ctx context.Context) error {
 		return err
 	}
 	return t.releaseSync(ctx)
+}
+
+// finishFlush releases a flush's slot in outstanding and, if the flush failed,
+// records the flush error in the SAME critical section.
+//
+// Invariant 3 (enforcement site): deferOrdered treats "nothing pending and
+// outstanding == 0" as "nothing ahead of me" and acks inline. If the slot were
+// released first and the error recorded afterwards, a sibling arriving between
+// the two would see an idle task with no error and ack past the batch the failed
+// flush took.
+func (t *DestinationTask) finishFlush(err error) {
+	t.mu.Lock()
+	t.outstanding--
+	if err != nil && t.flushErr == nil {
+		t.flushErr = err
+	}
+	t.mu.Unlock()
+	if t.testAfterFlushRelease != nil {
+		t.testAfterFlushRelease()
+	}
 }
 
 // flushPending writes all buffered records in one Write, drains their acks,
@@ -534,11 +542,8 @@ func (t *DestinationTask) runFlusher(ctx context.Context) {
 				return // channel closed by Close after the trailing flush
 			}
 			err := t.flushPending(ctx, pending)
-			t.mu.Lock()
-			t.outstanding--
-			t.mu.Unlock()
+			t.finishFlush(err)
 			if err != nil {
-				t.setFlushErr(err)
 				return
 			}
 		}

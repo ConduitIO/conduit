@@ -86,6 +86,10 @@ type DestinationTask struct {
 	// buffer to flush and before it hands it to the flusher. Tests use it to
 	// hold that window open; nil in production.
 	testAfterTake func()
+	// testAfterFlushRelease, if set, is called right after a flush released its
+	// slot in outstanding, i.e. at the point a sibling can first see the task
+	// idle. Tests use it to interleave a sibling's ordered ack; nil in production.
+	testAfterFlushRelease func()
 }
 
 type Destination interface {
