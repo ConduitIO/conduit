@@ -390,7 +390,12 @@ def shakedown_cells(cs: list) -> list:
     return [replace(c, plan="shakedown", arms=SHAKEDOWN_ARMS[c.id]) for c in smoke_cells(cs) if c.id in SHAKEDOWN_CELLS]
 
 
-CELLS = smoke_cells(build_cells()) if SMOKE else build_cells()
+# The cells this process generates and runs: the plan's own variants
+# (MATRIX_PLAN, set by run-shard.sh), so a shakedown runs its own arm lists.
+if os.environ.get("MATRIX_PLAN") == "shakedown":
+    CELLS = shakedown_cells(build_cells())
+else:
+    CELLS = smoke_cells(build_cells()) if SMOKE else build_cells()
 BY_ID = {c.id: c for c in CELLS}
 
 # The pre-registered PRIMARY comparisons (PLAN.md section 9). Every other pair

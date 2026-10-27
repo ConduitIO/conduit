@@ -36,7 +36,9 @@ read -r -a ARMS <<<"$(meta arms)"
 SUT_NAME=cdcparity-sut
 ALPINE_IMG=$(python3 -c "import sys; sys.path.insert(0,'$HERE'); import cells; print(cells.IMG['alpine'])")
 
-with_tty() { script -q -e -c "$(printf '%q ' "$@")" /dev/null; }
+# benchi is a terminal UI: script(1) gives it a pty. The pty's output (the
+# UI and any error benchi prints before its log exists) is kept per run.
+with_tty() { local ts=$1; shift; script -q -e -c "$(printf '%q ' "$@")" "$ts"; }
 
 # After EVERY run: a progress line in the shard log and the run directory in
 # S3, so a stuck run or an instance lost to its cap loses one run, not a cell.
@@ -163,7 +165,7 @@ run_benchi() { # label arm diag
   local slack=1200; [ "${MATRIX_SMOKE:-0}" = 1 ] && slack=600
   local cap=$(( $(meta run_seconds) + slack + 3600 * $( [ "$MODE" = snapshot ] || [ "$MODE" = correct ] && echo 1 || echo 0) ))
   # -k: if benchi does not exit within 60 s of SIGTERM (a hung cleanup), KILL it.
-  (cd "$rd/cfg" && with_tty timeout -k 60 "$cap" "$BENCHI" -config bench.yml -tool "$arm" -out "$rd/benchi" </dev/null >/dev/null 2>&1)
+  (cd "$rd/cfg" && with_tty "$rd/benchi-tty.log" timeout -k 60 "$cap" "$BENCHI" -config bench.yml -tool "$arm" -out "$rd/benchi" </dev/null >"$rd/benchi-stdout.log" 2>&1)
   local rc=$?
   stop_watch
   # Whatever benchi left behind (a killed cleanup) must not leak into the next run.
