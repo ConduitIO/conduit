@@ -1443,7 +1443,8 @@ def harness_files() -> list:
             if "__pycache__" in d or ".terraform" in d or "terraform.tfstate" in d:
                 continue
             for f in fs:
-                if f.endswith(HASHED) and not f.startswith("test_"):
+                # ._* are macOS AppleDouble metadata files, never code.
+                if f.endswith(HASHED) and not f.startswith(("test_", "._")):
                     files.append(os.path.normpath(os.path.join(d, f)))
     return sorted(files)
 

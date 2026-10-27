@@ -41,7 +41,13 @@ git -C "$KIT" archive --prefix=v021-cdc-parity/ HEAD -- . | tar -x -C "$WORK"
 cp "$WORK/loader" "$WORK/v021-cdc-parity/loader/loader"
 git -C "$KIT" rev-parse HEAD > "$WORK/v021-cdc-parity/matrix/KIT_COMMIT"
 echo "$HASH" > "$WORK/v021-cdc-parity/matrix/HARNESS_HASH"
-tar -czf "$WORK/kit.tgz" -C "$WORK" v021-cdc-parity
+# No macOS metadata (AppleDouble ._* files, xattrs) in the tarball.
+if tar --version 2>/dev/null | grep -qi bsdtar; then
+  COPYFILE_DISABLE=1 tar --no-mac-metadata --no-xattrs -czf "$WORK/kit.tgz" -C "$WORK" v021-cdc-parity
+else
+  tar -czf "$WORK/kit.tgz" -C "$WORK" v021-cdc-parity
+fi
+tar -tzf "$WORK/kit.tgz" | grep -q '/\._' && { echo "kit tarball contains ._ files" >&2; exit 1; }
 MAXMIN=$(cd "$HERE/.." && MATRIX_SMOKE=$([ "$PLAN" = smoke ] || [ "$PLAN" = shakedown ] && echo 1 || echo 0) python3 -c "
 import cells
 print(int(max(l for l, _ in cells.shard($N, '$PLAN')) * 1.25 + cells.SETUP_MIN + 30))
