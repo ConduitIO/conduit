@@ -1,0 +1,69 @@
+ Container cdcparity-conduit-s3 Creating 
+ Container cdcparity-conduit-s3 Created 
+Attaching to cdcparity-conduit-s3
+ Container cdcparity-conduit-s3 Starting 
+ Container cdcparity-conduit-s3 Started 
+cdcparity-conduit-s3  |              ....            
+cdcparity-conduit-s3  |          .::::::::::.        
+cdcparity-conduit-s3  |        .:::::‘‘‘‘:::::.      
+cdcparity-conduit-s3  |       .::::        ::::.     
+cdcparity-conduit-s3  |  .::::::::          ::::::::.
+cdcparity-conduit-s3  |  `::::::::          ::::::::‘
+cdcparity-conduit-s3  |       `::::        ::::‘     
+cdcparity-conduit-s3  |        `:::::....:::::‘      
+cdcparity-conduit-s3  |          `::::::::::‘        Conduit v0.21.1-10-g5975af5f-dirty linux/amd64
+cdcparity-conduit-s3  |              ‘‘‘‘            
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mAll 0 tables opened in 0s[0m [36mcomponent=[0mbadger.DB
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mDiscard stats nextEmptySlot: 0[0m [36mcomponent=[0mbadger.DB
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mSet nextTxnTs to 0[0m [36mcomponent=[0mbadger.DB
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mloading processor plugins from directory /app/processors ...[0m [36mcomponent=[0mplugin.processor.standalone.Registry
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [33mWRN[0m [1mcould not read processor plugin directory[0m [36merror=[0m[31m[1m"open /app/processors: no such file or directory"[0m[0m [36mcomponent=[0mplugin.processor.standalone.Registry [36mstack=[0mnull
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mstandalone processor plugins initialized[0m [36mcomponent=[0mplugin.processor.standalone.Registry [36mcount=[0m0 [36mplugin_path=[0m/app/processors
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mbuiltin processor plugins initialized[0m [36mcomponent=[0mplugin.processor.builtin.Registry [36mcount=[0m26
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mambient credentials policy[0m [36mallow_endpoints_count=[0m0 [36mallow_proxy=[0mfalse [36mallow_resources_count=[0m0 [36mcomponent=[0mconnector.AmbientCredentials [36menabled=[0mfalse
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mprocessors initialized[0m [36mcomponent=[0mprocessor.Service [36mcount=[0m0
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mconnector utilities started[0m [36maddress=[0m127.0.0.1:36029
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mconnector utilities started on 127.0.0.1:36029[0m
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mbuiltin connector plugins initialized[0m [36mcomponent=[0mplugin.connector.builtin.Registry [36mcount=[0m6
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [33mWRN[0m [1mcould not read connector plugin directory[0m [36merror=[0m[31m[1m"open /app/connectors: no such file or directory"[0m[0m [36mcomponent=[0mplugin.connector.standalone.Registry [36mstack=[0mnull
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mstandalone connector plugins initialized[0m [36mcomponent=[0mplugin.connector.standalone.Registry [36mcount=[0m0 [36mplugin_path=[0m/app/connectors
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mconnectors initialized[0m [36mcomponent=[0mconnector.Service [36mcount=[0m0
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mpipelines initialized[0m [36mcomponent=[0mpipeline.Service [36mcount=[0m0
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mpipeline started[0m [36mcomponent=[0mlifecycle.Service [36mpipeline_id=[0mcdc-parity-s3-0
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mpipeline configs provisioned[0m [36mcomponent=[0mprovisioning.Service [36mcreated=[0m["cdc-parity-s3-0"] [36mdeleted=[0m[] [36mpipelines_path=[0m/app/pipelines
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mgrpc API started[0m [36maddress=[0m127.0.0.1:8084
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mdestination connector plugin successfully started[0m [36mcomponent=[0mconnector.Destination [36mconnector_id=[0mcdc-parity-s3-0-dlq
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mAPI token authentication is disabled: the loopback-only API accepts any local client; set api.token-file to require a token[0m
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mhttp API started[0m [36maddress=[0m127.0.0.1:8080
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mclick here to navigate to explore the HTTP API: http://localhost:8080/openapi[0m
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [33mWRN[0m [1mconnecting to a plaintext http endpoint: requests, including the SigV4 Authorization header that carries the access key ID, are sent unencrypted and can be read on the wire; use an https endpoint unless the store is on localhost[0m [36maws.endpoint=[0mhttp://cdcparity-minio:9000 [36mcomponent=[0mplugin [36mconnector_id=[0mcdc-parity-s3-0:cdc-parity-s3-0:s3-dest [36mplugin_name=[0mbuiltin:s3 [36mplugin_type=[0mdestination
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [33mWRN[0m [1maws.serverSideEncryption is not set and the bucket has no default encryption, so objects are stored unencrypted; set aws.serverSideEncryption (AES256, aws:kms or aws:kms:dsse) or configure default encryption on the bucket[0m [36mbucket=[0mbench [36mcode=[0ms3.destination.bucket_unencrypted [36mcomponent=[0mplugin [36mconnector_id=[0mcdc-parity-s3-0:cdc-parity-s3-0:s3-dest [36mplugin_name=[0mbuiltin:s3 [36mplugin_type=[0mdestination
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mdestination connector plugin successfully started[0m [36mcomponent=[0mconnector.Destination [36mconnector_id=[0mcdc-parity-s3-0:cdc-parity-s3-0:s3-dest
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [33mWRN[0m [1mevery role that can connect may call pg_logical_emit_message(boolean, text, text, boolean) and write logical decoding messages into the WAL. The connector's slot identity beacons are authenticated and cannot be forged that way, but as hardening run `REVOKE EXECUTE ON FUNCTION pg_logical_emit_message(boolean, text, text, boolean) FROM PUBLIC` and `GRANT EXECUTE ON FUNCTION pg_logical_emit_message(boolean, text, text, boolean) TO <connector role>`[0m [36mcode=[0mpostgres.source.slot_beacon_public [36mcomponent=[0mplugin [36mconnector_id=[0mcdc-parity-s3-0:cdc-parity-s3-0:pg-src [36mplugin_name=[0mbuiltin:postgres [36mplugin_type=[0msource
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mStarting logical replication at 0/1927600[0m [36mcomponent=[0mplugin [36mconnector_id=[0mcdc-parity-s3-0:cdc-parity-s3-0:pg-src [36mplugin_name=[0mbuiltin:postgres [36mplugin_type=[0msource [36mpublication=[0mconduit_pub_0 [36mslot=[0mconduit_slot_0
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1mLogical replication started[0m [36mcomponent=[0mplugin [36mconnector_id=[0mcdc-parity-s3-0:cdc-parity-s3-0:pg-src [36mplugin_name=[0mbuiltin:postgres [36mplugin_type=[0msource [36mpublication=[0mconduit_pub_0 [36mslot=[0mconduit_slot_0
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:38+00:00[0m [32mINF[0m [1msource connector plugin successfully started[0m [36mcomponent=[0mconnector.Source [36mconnector_id=[0mcdc-parity-s3-0:cdc-parity-s3-0:pg-src
+cdcparity-conduit-s3  | [90m2026-10-27T00:51:39+00:00[0m [33mWRN[0m [1mrecord payloads produced by this connector are not structured and won't be encoded"[0m [36mcomponent=[0mplugin [36mconnector_id=[0mcdc-parity-s3-0:cdc-parity-s3-0:pg-src [36mplugin_name=[0mbuiltin:postgres [36mplugin_type=[0msource
+cdcparity-conduit-s3  | [90m2026-10-27T00:53:12+00:00[0m [32mINF[0m [1mgracefully stopping pipeline[0m [36mcomponent=[0mlifecycle.Service [36mpipeline_id=[0mcdc-parity-s3-0 [36mpipeline_status=[0m1
+cdcparity-conduit-s3  | [90m2026-10-27T00:53:12+00:00[0m [31mERR[0m [1mstopping source connector[0m [36merror=[0m[31m[1m"graceful shutdown"[0m[0m [36mcomponent=[0mSourceNode [36mnode_id=[0mcdc-parity-s3-0:cdc-parity-s3-0:pg-src [36mpipeline_id=[0mcdc-parity-s3-0 [36mstack=[0m[{"file":"github.com/conduitio/conduit/pkg/pipeline/errors.go","func":"github.com/conduitio/conduit/pkg/pipeline.init","line":20}]
+cdcparity-conduit-s3  | [90m2026-10-27T00:53:12+00:00[0m [33mWRN[0m [1mconduit is stopping, stand by for shutdown ...[0m
+cdcparity-conduit-s3  | [90m2026-10-27T00:53:12+00:00[0m [32mINF[0m [1msource connector plugin successfully responded to stop signal[0m [36mcomponent=[0mconnector.Source [36mconnector_id=[0mcdc-parity-s3-0:cdc-parity-s3-0:pg-src [36mrecord_position_hash=[0m9f05c382a50e9b1d
+cdcparity-conduit-s3  | [90m2026-10-27T00:53:12+00:00[0m [31mERR[0m [1mstopping source node[0m [36merror=[0m[31m[1m"graceful shutdown"[0m[0m [36mcomponent=[0mSourceNode [36mnode_id=[0mcdc-parity-s3-0:cdc-parity-s3-0:pg-src [36mpipeline_id=[0mcdc-parity-s3-0 [36mrecord_position_hash=[0m9f05c382a50e9b1d [36mstack=[0m[{"file":"github.com/conduitio/conduit/pkg/pipeline/errors.go","func":"github.com/conduitio/conduit/pkg/pipeline.init","line":20}]
+cdcparity-conduit-s3  | [90m2026-10-27T00:53:12+00:00[0m [31mERR[0m [1mreplication exited with an error[0m [36merror=[0m[31m[1m"failed to receive message: timeout: context already done: context canceled"[0m[0m [36mcomponent=[0mplugin [36mconnector_id=[0mcdc-parity-s3-0:cdc-parity-s3-0:pg-src [36mplugin_name=[0mbuiltin:postgres [36mplugin_type=[0msource [36mstack=[0mnull
+cdcparity-conduit-s3  | [90m2026-10-27T00:53:12+00:00[0m [32mINF[0m [1msource connector plugin successfully torn down[0m [36mcomponent=[0mconnector.Source [36mconnector_id=[0mcdc-parity-s3-0:cdc-parity-s3-0:pg-src
+cdcparity-conduit-s3  | [90m2026-10-27T00:53:12+00:00[0m [32mINF[0m [1mdestination connector plugin successfully torn down[0m [36mcomponent=[0mconnector.Destination [36mconnector_id=[0mcdc-parity-s3-0-dlq
+cdcparity-conduit-s3  | [90m2026-10-27T00:53:12+00:00[0m [32mINF[0m [1mdestination connector plugin successfully torn down[0m [36mcomponent=[0mconnector.Destination [36mconnector_id=[0mcdc-parity-s3-0:cdc-parity-s3-0:s3-dest
+cdcparity-conduit-s3  | [90m2026-10-27T00:53:12+00:00[0m [32mINF[0m [1mpipeline stopped[0m [36mcomponent=[0mlifecycle.Service [36mpipeline_id=[0mcdc-parity-s3-0
+cdcparity-conduit-s3  | [90m2026-10-27T00:53:12+00:00[0m [32mINF[0m [1mLifetime L0 stalled for: 0s[0m [36mcomponent=[0mbadger.DB
+cdcparity-conduit-s3  | [90m2026-10-27T00:53:12+00:00[0m [32mINF[0m [1m
+cdcparity-conduit-s3  | Level 0 [ ]: NumTables: 01. Size: 117 KiB of 0 B. Score: 0.00->0.00 StaleData: 0 B Target FileSize: 64 MiB
+cdcparity-conduit-s3  | Level 1 [ ]: NumTables: 00. Size: 0 B of 10 MiB. Score: 0.00->0.00 StaleData: 0 B Target FileSize: 2.0 MiB
+cdcparity-conduit-s3  | Level 2 [ ]: NumTables: 00. Size: 0 B of 10 MiB. Score: 0.00->0.00 StaleData: 0 B Target FileSize: 2.0 MiB
+cdcparity-conduit-s3  | Level 3 [ ]: NumTables: 00. Size: 0 B of 10 MiB. Score: 0.00->0.00 StaleData: 0 B Target FileSize: 2.0 MiB
+cdcparity-conduit-s3  | Level 4 [ ]: NumTables: 00. Size: 0 B of 10 MiB. Score: 0.00->0.00 StaleData: 0 B Target FileSize: 2.0 MiB
+cdcparity-conduit-s3  | Level 5 [ ]: NumTables: 00. Size: 0 B of 10 MiB. Score: 0.00->0.00 StaleData: 0 B Target FileSize: 2.0 MiB
+cdcparity-conduit-s3  | Level 6 [B]: NumTables: 00. Size: 0 B of 10 MiB. Score: 0.00->0.00 StaleData: 0 B Target FileSize: 2.0 MiB
+cdcparity-conduit-s3  | Level Done[0m [36mcomponent=[0mbadger.DB
+[Kcdcparity-conduit-s3 exited with code 0

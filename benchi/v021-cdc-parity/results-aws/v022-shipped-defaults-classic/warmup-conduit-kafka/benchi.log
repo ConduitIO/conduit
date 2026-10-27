@@ -1,0 +1,1491 @@
+time=2026-10-27T00:13:35.742Z level=INFO msg="Results directory" path=/home/ubuntu/conduit/benchi/v021-cdc-parity/results/v022-shipped-defaults-classic/warmup-conduit-kafka
+time=2026-10-27T00:13:35.742Z level=INFO msg="Config file" path=/home/ubuntu/conduit/benchi/v021-cdc-parity/bench.yml
+time=2026-10-27T00:13:35.743Z level=INFO msg="Parsed config" path=/home/ubuntu/conduit/benchi/v021-cdc-parity/bench.yml
+time=2026-10-27T00:13:35.743Z level=INFO msg="Creating docker client"
+time=2026-10-27T00:13:35.743Z level=INFO msg="Creating docker network" network=benchi
+time=2026-10-27T00:13:35.744Z level=INFO msg="Docker network not found, creating it" network=benchi
+time=2026-10-27T00:13:36.768Z level=INFO msg="Network created" network-id=13a27c03eabf6acf6ec50c3dde465612b20b41f2485a98a43523b36721dca090
+time=2026-10-27T00:13:36.769Z level=INFO msg="Using network" network=benchi network-id=13a27c03eabf6acf6ec50c3dde465612b20b41f2485a98a43523b36721dca090
+time=2026-10-27T00:13:36.769Z level=DEBUG msg="Executing command" command="/usr/bin/docker compose -f ./infra/compose.yml config --format json"
+time=2026-10-27T00:13:36.828Z level=INFO msg="Skipping tool" test=cdc-parity tool=conduit
+time=2026-10-27T00:13:36.828Z level=INFO msg="Skipping tool" test=cdc-parity tool=conduit-aa
+time=2026-10-27T00:13:36.828Z level=DEBUG msg="Executing command" command="/usr/bin/docker compose -f ./tools/compose-conduit-kafka.yml config --format json"
+time=2026-10-27T00:13:36.882Z level=INFO msg="Skipping tool" test=cdc-parity tool=conduit-kafka-aa
+time=2026-10-27T00:13:36.882Z level=INFO msg="Skipping tool" test=cdc-parity tool=conduit-pg
+time=2026-10-27T00:13:36.882Z level=INFO msg="Skipping tool" test=cdc-parity tool=conduit-pg-aa
+time=2026-10-27T00:13:36.882Z level=INFO msg="Skipping tool" test=cdc-parity tool=conduit-s3
+time=2026-10-27T00:13:36.882Z level=INFO msg="Skipping tool" test=cdc-parity tool=conduit-s3-aa
+time=2026-10-27T00:13:36.882Z level=INFO msg="Skipping tool" test=cdc-parity tool=connect
+time=2026-10-27T00:13:36.882Z level=INFO msg="Skipping tool" test=cdc-parity tool=connect-kafka
+time=2026-10-27T00:13:36.882Z level=INFO msg="Skipping tool" test=cdc-parity tool=connect-pg
+time=2026-10-27T00:13:36.882Z level=INFO msg="Skipping tool" test=cdc-parity tool=connect-s3
+time=2026-10-27T00:13:36.882Z level=INFO msg="Skipping tool" test=cdc-parity tool=redpanda-connect
+time=2026-10-27T00:13:36.883Z level=INFO msg="Running step" test=cdc-parity tool=conduit-kafka step=pre-infrastructure
+time=2026-10-27T00:13:36.883Z level=INFO msg="Pulling docker images for infrastructure containers" test=cdc-parity tool=conduit-kafka step=pre-infrastructure containers="map[postgres:[cdcparity-counter cdcparity-loader cdcparity-minio cdcparity-postgres]]"
+time=2026-10-27T00:13:36.883Z level=DEBUG msg="Executing command" command="/usr/bin/docker compose -f ./infra/compose.yml pull"
+time=2026-10-27T00:13:37.383Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:37.383Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:37.383Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:37.383Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:37.383Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:37.383Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:37.383Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:37.383Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:37.383Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:37.384Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:37.384Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:37.384Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:37.680Z level=INFO msg="Pulling docker images for tool containers" test=cdc-parity tool=conduit-kafka step=pre-infrastructure containers="[cdcparity-conduit-kafka cdcparity-kafka]"
+time=2026-10-27T00:13:37.680Z level=DEBUG msg="Executing command" command="/usr/bin/docker compose -f ./tools/compose-conduit-kafka.yml pull"
+time=2026-10-27T00:13:37.884Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:37.884Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:37.884Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:37.884Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:37.884Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:37.884Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:37.885Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:37.885Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:37.885Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:37.885Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:37.885Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:37.885Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:38.385Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:38.386Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:38.386Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:38.386Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:38.386Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:38.386Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:38.386Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:38.386Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:38.386Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:38.386Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:38.386Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:38.386Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:38.416Z level=INFO msg="Pulling docker images for hooks" test=cdc-parity tool=conduit-kafka step=pre-infrastructure images=[alpine:latest]
+time=2026-10-27T00:13:38.855Z level=INFO msg="image pull response" test=cdc-parity tool=conduit-kafka step=pre-infrastructure status="Pulling from library/alpine" id=latest
+time=2026-10-27T00:13:38.887Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:38.887Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:38.887Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:38.887Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:38.887Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:38.887Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:38.887Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:38.887Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:38.887Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:38.888Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:38.888Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:38.888Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:38.991Z level=INFO msg="image pull response" test=cdc-parity tool=conduit-kafka step=pre-infrastructure status="Digest: sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a"
+time=2026-10-27T00:13:38.991Z level=INFO msg="image pull response" test=cdc-parity tool=conduit-kafka step=pre-infrastructure status="Status: Image is up to date for alpine:latest"
+time=2026-10-27T00:13:38.993Z level=DEBUG msg="Running hooks" test=cdc-parity tool=conduit-kafka step=pre-infrastructure count=0
+time=2026-10-27T00:13:38.993Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-kafka step=pre-infrastructure
+time=2026-10-27T00:13:38.993Z level=INFO msg="Running step" test=cdc-parity tool=conduit-kafka step=infrastructure
+time=2026-10-27T00:13:38.993Z level=INFO msg="Running infrastructure" test=cdc-parity tool=conduit-kafka step=infrastructure name=postgres log-path=/home/ubuntu/conduit/benchi/v021-cdc-parity/results/v022-shipped-defaults-classic/warmup-conduit-kafka/cdc-parity_conduit-kafka/infra_postgres.log
+time=2026-10-27T00:13:38.993Z level=INFO msg="Waiting for container status to be healthy" test=cdc-parity tool=conduit-kafka step=infrastructure container=cdcparity-counter status=N/A
+time=2026-10-27T00:13:38.993Z level=INFO msg="Waiting for container status to be healthy" test=cdc-parity tool=conduit-kafka step=infrastructure container=cdcparity-loader status=N/A
+time=2026-10-27T00:13:38.993Z level=DEBUG msg="Executing command" command="/usr/bin/docker compose -f ./infra/compose.yml up"
+time=2026-10-27T00:13:38.993Z level=INFO msg="Waiting for container status to be healthy" test=cdc-parity tool=conduit-kafka step=infrastructure container=cdcparity-minio status=N/A
+time=2026-10-27T00:13:38.993Z level=INFO msg="Waiting for container status to be healthy" test=cdc-parity tool=conduit-kafka step=infrastructure container=cdcparity-postgres status=N/A
+time=2026-10-27T00:13:39.388Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:39.388Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:39.389Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:39.389Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:39.389Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:39.390Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:39.390Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:39.464Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:39.890Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:39.891Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:39.891Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:39.891Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:39.995Z level=DEBUG msg="Inspected container" test=cdc-parity tool=conduit-kafka step=infrastructure container=cdcparity-postgres response="{ContainerJSONBase:0xc00051a160 Mounts:[{Type:bind Name: Source:/home/ubuntu/conduit/benchi/v021-cdc-parity/infra/init.sql Destination:/docker-entrypoint-initdb.d/init.sql Driver: Mode:ro RW:false Propagation:rprivate}] Config:0xc0007ae640 NetworkSettings:0xc0001b2700 ImageManifestDescriptor:0xc00073a140}" state="{Status:running Running:true Paused:false Restarting:false OOMKilled:false Dead:false Pid:138767 ExitCode:0 Error: StartedAt:2026-10-27T00:13:39.477521339Z FinishedAt:0001-01-01T00:00:00Z Health:0xc0000122d0}"
+time=2026-10-27T00:13:39.995Z level=INFO msg="Waiting for container status to be healthy" test=cdc-parity tool=conduit-kafka step=infrastructure container=cdcparity-postgres status=starting
+time=2026-10-27T00:13:39.995Z level=DEBUG msg="Inspected container" test=cdc-parity tool=conduit-kafka step=infrastructure container=cdcparity-minio response="{ContainerJSONBase:0xc00072a160 Mounts:[] Config:0xc0004883c0 NetworkSettings:0xc000904400 ImageManifestDescriptor:0xc0000f6410}" state="{Status:running Running:true Paused:false Restarting:false OOMKilled:false Dead:false Pid:138695 ExitCode:0 Error: StartedAt:2026-10-27T00:13:39.366292085Z FinishedAt:0001-01-01T00:00:00Z Health:0xc000134630}"
+time=2026-10-27T00:13:39.995Z level=INFO msg="Waiting for container status to be healthy" test=cdc-parity tool=conduit-kafka step=infrastructure container=cdcparity-minio status=starting
+time=2026-10-27T00:13:39.995Z level=DEBUG msg="Inspected container" test=cdc-parity tool=conduit-kafka step=infrastructure container=cdcparity-loader response="{ContainerJSONBase:0xc0005f02c0 Mounts:[{Type:bind Name: Source:/home/ubuntu/conduit/benchi/v021-cdc-parity/loader/loader Destination:/loader/loader Driver: Mode:ro RW:false Propagation:rprivate}] Config:0xc000762500 NetworkSettings:0xc0005ce500 ImageManifestDescriptor:0xc00015c0f0}" state="{Status:created Running:false Paused:false Restarting:false OOMKilled:false Dead:false Pid:0 ExitCode:0 Error: StartedAt:0001-01-01T00:00:00Z FinishedAt:0001-01-01T00:00:00Z Health:<nil>}"
+time=2026-10-27T00:13:39.995Z level=WARN msg="Container exited with code 0 (assuming it's an init container)" test=cdc-parity tool=conduit-kafka step=infrastructure container=/cdcparity-loader
+time=2026-10-27T00:13:39.995Z level=DEBUG msg="Inspected container" test=cdc-parity tool=conduit-kafka step=infrastructure container=cdcparity-counter response="{ContainerJSONBase:0xc0005f0840 Mounts:[{Type:volume Name:cdcparity-sink Source:/var/lib/docker/volumes/cdcparity-sink/_data Destination:/sink Driver:local Mode:rw RW:true Propagation:}] Config:0xc0007628c0 NetworkSettings:0xc0005ce700 ImageManifestDescriptor:0xc00015c140}" state="{Status:running Running:true Paused:false Restarting:false OOMKilled:false Dead:false Pid:138612 ExitCode:0 Error: StartedAt:2026-10-27T00:13:39.254886739Z FinishedAt:0001-01-01T00:00:00Z Health:<nil>}"
+time=2026-10-27T00:13:39.995Z level=INFO msg="Container is running (consider adding a health check!)" test=cdc-parity tool=conduit-kafka step=infrastructure container=/cdcparity-counter
+time=2026-10-27T00:13:40.078Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:40.079Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:40.079Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:40.079Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:40.392Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:40.392Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:40.392Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:40.393Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:40.580Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:40.581Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:40.582Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:40.582Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:40.893Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:40.894Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:40.894Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:40.894Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:40.997Z level=DEBUG msg="Inspected container" test=cdc-parity tool=conduit-kafka step=infrastructure container=cdcparity-minio response="{ContainerJSONBase:0xc0004a22c0 Mounts:[] Config:0xc00015ef00 NetworkSettings:0xc0004f2e00 ImageManifestDescriptor:0xc0004fc5a0}" state="{Status:running Running:true Paused:false Restarting:false OOMKilled:false Dead:false Pid:138695 ExitCode:0 Error: StartedAt:2026-10-27T00:13:39.366292085Z FinishedAt:0001-01-01T00:00:00Z Health:0xc00059f980}"
+time=2026-10-27T00:13:40.997Z level=DEBUG msg="Inspected container" test=cdc-parity tool=conduit-kafka step=infrastructure container=cdcparity-postgres response="{ContainerJSONBase:0xc00072a580 Mounts:[{Type:bind Name: Source:/home/ubuntu/conduit/benchi/v021-cdc-parity/infra/init.sql Destination:/docker-entrypoint-initdb.d/init.sql Driver: Mode:ro RW:false Propagation:rprivate}] Config:0xc0004888c0 NetworkSettings:0xc000904700 ImageManifestDescriptor:0xc0000f64b0}" state="{Status:running Running:true Paused:false Restarting:false OOMKilled:false Dead:false Pid:138767 ExitCode:0 Error: StartedAt:2026-10-27T00:13:39.477521339Z FinishedAt:0001-01-01T00:00:00Z Health:0xc000134ae0}"
+time=2026-10-27T00:13:40.997Z level=INFO msg="Container is healthy" test=cdc-parity tool=conduit-kafka step=infrastructure container=/cdcparity-minio
+time=2026-10-27T00:13:40.997Z level=INFO msg="Container is healthy" test=cdc-parity tool=conduit-kafka step=infrastructure container=/cdcparity-postgres
+time=2026-10-27T00:13:40.997Z level=INFO msg="Infrastructure started" test=cdc-parity tool=conduit-kafka step=infrastructure
+time=2026-10-27T00:13:40.997Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-kafka step=infrastructure
+time=2026-10-27T00:13:40.997Z level=INFO msg="Running step" test=cdc-parity tool=conduit-kafka step=post-infrastructure
+time=2026-10-27T00:13:40.997Z level=DEBUG msg="Running hooks" test=cdc-parity tool=conduit-kafka step=post-infrastructure count=2
+time=2026-10-27T00:13:40.997Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-kafka step=post-infrastructure hook=reset-sink tools="[conduit conduit-aa connect redpanda-connect]"
+time=2026-10-27T00:13:40.997Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-kafka step=post-infrastructure hook=reset-s3 tools="[conduit-s3 conduit-s3-aa connect-s3]"
+time=2026-10-27T00:13:40.997Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-kafka step=post-infrastructure
+time=2026-10-27T00:13:40.997Z level=INFO msg="Running step" test=cdc-parity tool=conduit-kafka step=pre-tool
+time=2026-10-27T00:13:40.997Z level=DEBUG msg="Running hooks" test=cdc-parity tool=conduit-kafka step=pre-tool count=0
+time=2026-10-27T00:13:40.997Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-kafka step=pre-tool
+time=2026-10-27T00:13:40.997Z level=INFO msg="Running step" test=cdc-parity tool=conduit-kafka step=tool
+time=2026-10-27T00:13:40.997Z level=INFO msg="Waiting for container status to be healthy" test=cdc-parity tool=conduit-kafka step=tool container=cdcparity-conduit-kafka status=N/A
+time=2026-10-27T00:13:40.997Z level=DEBUG msg="Executing command" command="/usr/bin/docker compose -f ./tools/compose-conduit-kafka.yml up"
+time=2026-10-27T00:13:40.997Z level=INFO msg="Waiting for container status to be healthy" test=cdc-parity tool=conduit-kafka step=tool container=cdcparity-kafka status=N/A
+time=2026-10-27T00:13:41.083Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:41.084Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:41.200Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:41.200Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:41.394Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:41.395Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:41.395Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:41.395Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:41.702Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:41.702Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:41.703Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:41.703Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:41.896Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:41.896Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:41.999Z level=DEBUG msg="Inspected container" test=cdc-parity tool=conduit-kafka step=tool container=cdcparity-conduit-kafka response="{ContainerJSONBase:0xc000594dc0 Mounts:[{Type:bind Name: Source:/tmp/cdcparity-prof Destination:/prof Driver: Mode:rw RW:true Propagation:rprivate} {Type:bind Name: Source:/home/ubuntu/conduit/benchi/v021-cdc-parity/pipelines/conduit-kafka.yml Destination:/app/pipelines/conduit-kafka.yml Driver: Mode:ro RW:false Propagation:rprivate}] Config:0xc0006de8c0 NetworkSettings:0xc0005cfc00 ImageManifestDescriptor:0xc00015cb90}" state="{Status:created Running:false Paused:false Restarting:false OOMKilled:false Dead:false Pid:0 ExitCode:0 Error: StartedAt:0001-01-01T00:00:00Z FinishedAt:0001-01-01T00:00:00Z Health:<nil>}"
+time=2026-10-27T00:13:41.999Z level=WARN msg="Container exited with code 0 (assuming it's an init container)" test=cdc-parity tool=conduit-kafka step=tool container=/cdcparity-conduit-kafka
+time=2026-10-27T00:13:42.000Z level=DEBUG msg="Inspected container" test=cdc-parity tool=conduit-kafka step=tool container=cdcparity-kafka response="{ContainerJSONBase:0xc000595080 Mounts:[{Type:volume Name:b0f3a636b25fcf88d03301dba1d860d89b59eaf256293c2c3c740ecb06c91198 Source:/var/lib/docker/volumes/b0f3a636b25fcf88d03301dba1d860d89b59eaf256293c2c3c740ecb06c91198/_data Destination:/etc/kafka/secrets Driver:local Mode: RW:true Propagation:} {Type:volume Name:2bf83c43243dcfadb8a85ced31bf4cdb1eb0f679afac7d31c303ccec3005223d Source:/var/lib/docker/volumes/2bf83c43243dcfadb8a85ced31bf4cdb1eb0f679afac7d31c303ccec3005223d/_data Destination:/mnt/shared/config Driver:local Mode: RW:true Propagation:} {Type:volume Name:a6a3a5d8b678f485f3c589f865c394c6825fa17c6bb8d30bb89957478975f9d8 Source:/var/lib/docker/volumes/a6a3a5d8b678f485f3c589f865c394c6825fa17c6bb8d30bb89957478975f9d8/_data Destination:/var/lib/kafka/data Driver:local Mode: RW:true Propagation:}] Config:0xc00015f900 NetworkSettings:0xc0005ce300 ImageManifestDescriptor:0xc00015c000}" state="{Status:running Running:true Paused:false Restarting:false OOMKilled:false Dead:false Pid:139318 ExitCode:0 Error: StartedAt:2026-10-27T00:13:41.695065705Z FinishedAt:0001-01-01T00:00:00Z Health:0xc000699950}"
+time=2026-10-27T00:13:42.000Z level=INFO msg="Waiting for container status to be healthy" test=cdc-parity tool=conduit-kafka step=tool container=cdcparity-kafka status=starting
+time=2026-10-27T00:13:42.205Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:42.205Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:42.206Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:42.207Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:42.397Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:42.398Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:42.708Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:42.708Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:42.709Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:42.709Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:42.899Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:42.900Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:43.001Z level=DEBUG msg="Inspected container" test=cdc-parity tool=conduit-kafka step=tool container=cdcparity-kafka response="{ContainerJSONBase:0xc00072ac60 Mounts:[{Type:volume Name:b0f3a636b25fcf88d03301dba1d860d89b59eaf256293c2c3c740ecb06c91198 Source:/var/lib/docker/volumes/b0f3a636b25fcf88d03301dba1d860d89b59eaf256293c2c3c740ecb06c91198/_data Destination:/etc/kafka/secrets Driver:local Mode: RW:true Propagation:} {Type:volume Name:2bf83c43243dcfadb8a85ced31bf4cdb1eb0f679afac7d31c303ccec3005223d Source:/var/lib/docker/volumes/2bf83c43243dcfadb8a85ced31bf4cdb1eb0f679afac7d31c303ccec3005223d/_data Destination:/mnt/shared/config Driver:local Mode: RW:true Propagation:} {Type:volume Name:a6a3a5d8b678f485f3c589f865c394c6825fa17c6bb8d30bb89957478975f9d8 Source:/var/lib/docker/volumes/a6a3a5d8b678f485f3c589f865c394c6825fa17c6bb8d30bb89957478975f9d8/_data Destination:/var/lib/kafka/data Driver:local Mode: RW:true Propagation:}] Config:0xc000872780 NetworkSettings:0xc000904000 ImageManifestDescriptor:0xc00015caa0}" state="{Status:running Running:true Paused:false Restarting:false OOMKilled:false Dead:false Pid:139318 ExitCode:0 Error: StartedAt:2026-10-27T00:13:41.695065705Z FinishedAt:0001-01-01T00:00:00Z Health:0xc00059eb70}"
+time=2026-10-27T00:13:43.001Z level=INFO msg="Waiting for container status to be healthy" test=cdc-parity tool=conduit-kafka step=tool container=cdcparity-kafka status=starting
+time=2026-10-27T00:13:43.210Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:43.211Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:43.211Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:43.212Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:43.401Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:43.402Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:43.713Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:43.713Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:43.714Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:43.714Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:43.904Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:43.905Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:44.003Z level=DEBUG msg="Inspected container" test=cdc-parity tool=conduit-kafka step=tool container=cdcparity-kafka response="{ContainerJSONBase:0xc0007abce0 Mounts:[{Type:volume Name:b0f3a636b25fcf88d03301dba1d860d89b59eaf256293c2c3c740ecb06c91198 Source:/var/lib/docker/volumes/b0f3a636b25fcf88d03301dba1d860d89b59eaf256293c2c3c740ecb06c91198/_data Destination:/etc/kafka/secrets Driver:local Mode: RW:true Propagation:} {Type:volume Name:2bf83c43243dcfadb8a85ced31bf4cdb1eb0f679afac7d31c303ccec3005223d Source:/var/lib/docker/volumes/2bf83c43243dcfadb8a85ced31bf4cdb1eb0f679afac7d31c303ccec3005223d/_data Destination:/mnt/shared/config Driver:local Mode: RW:true Propagation:} {Type:volume Name:a6a3a5d8b678f485f3c589f865c394c6825fa17c6bb8d30bb89957478975f9d8 Source:/var/lib/docker/volumes/a6a3a5d8b678f485f3c589f865c394c6825fa17c6bb8d30bb89957478975f9d8/_data Destination:/var/lib/kafka/data Driver:local Mode: RW:true Propagation:}] Config:0xc00015fe00 NetworkSettings:0xc0001b3b00 ImageManifestDescriptor:0xc00073afa0}" state="{Status:running Running:true Paused:false Restarting:false OOMKilled:false Dead:false Pid:139318 ExitCode:0 Error: StartedAt:2026-10-27T00:13:41.695065705Z FinishedAt:0001-01-01T00:00:00Z Health:0xc000723da0}"
+time=2026-10-27T00:13:44.003Z level=INFO msg="Waiting for container status to be healthy" test=cdc-parity tool=conduit-kafka step=tool container=cdcparity-kafka status=starting
+time=2026-10-27T00:13:44.215Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:44.216Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:44.217Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:44.217Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:44.406Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:44.406Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:44.718Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:44.719Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:44.719Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:44.720Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:44.907Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:44.908Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:45.005Z level=DEBUG msg="Inspected container" test=cdc-parity tool=conduit-kafka step=tool container=cdcparity-kafka response="{ContainerJSONBase:0xc0007e2160 Mounts:[{Type:volume Name:b0f3a636b25fcf88d03301dba1d860d89b59eaf256293c2c3c740ecb06c91198 Source:/var/lib/docker/volumes/b0f3a636b25fcf88d03301dba1d860d89b59eaf256293c2c3c740ecb06c91198/_data Destination:/etc/kafka/secrets Driver:local Mode: RW:true Propagation:} {Type:volume Name:2bf83c43243dcfadb8a85ced31bf4cdb1eb0f679afac7d31c303ccec3005223d Source:/var/lib/docker/volumes/2bf83c43243dcfadb8a85ced31bf4cdb1eb0f679afac7d31c303ccec3005223d/_data Destination:/mnt/shared/config Driver:local Mode: RW:true Propagation:} {Type:volume Name:a6a3a5d8b678f485f3c589f865c394c6825fa17c6bb8d30bb89957478975f9d8 Source:/var/lib/docker/volumes/a6a3a5d8b678f485f3c589f865c394c6825fa17c6bb8d30bb89957478975f9d8/_data Destination:/var/lib/kafka/data Driver:local Mode: RW:true Propagation:}] Config:0xc0001b0280 NetworkSettings:0xc00052c200 ImageManifestDescriptor:0xc00015c000}" state="{Status:running Running:true Paused:false Restarting:false OOMKilled:false Dead:false Pid:139318 ExitCode:0 Error: StartedAt:2026-10-27T00:13:41.695065705Z FinishedAt:0001-01-01T00:00:00Z Health:0xc0000121b0}"
+time=2026-10-27T00:13:45.005Z level=INFO msg="Waiting for container status to be healthy" test=cdc-parity tool=conduit-kafka step=tool container=cdcparity-kafka status=starting
+time=2026-10-27T00:13:45.221Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:45.222Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:45.222Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:45.223Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:45.410Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:45.411Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:45.724Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:45.724Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:45.725Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:45.725Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:45.911Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:45.912Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:46.007Z level=DEBUG msg="Inspected container" test=cdc-parity tool=conduit-kafka step=tool container=cdcparity-kafka response="{ContainerJSONBase:0xc00051b760 Mounts:[{Type:volume Name:b0f3a636b25fcf88d03301dba1d860d89b59eaf256293c2c3c740ecb06c91198 Source:/var/lib/docker/volumes/b0f3a636b25fcf88d03301dba1d860d89b59eaf256293c2c3c740ecb06c91198/_data Destination:/etc/kafka/secrets Driver:local Mode: RW:true Propagation:} {Type:volume Name:2bf83c43243dcfadb8a85ced31bf4cdb1eb0f679afac7d31c303ccec3005223d Source:/var/lib/docker/volumes/2bf83c43243dcfadb8a85ced31bf4cdb1eb0f679afac7d31c303ccec3005223d/_data Destination:/mnt/shared/config Driver:local Mode: RW:true Propagation:} {Type:volume Name:a6a3a5d8b678f485f3c589f865c394c6825fa17c6bb8d30bb89957478975f9d8 Source:/var/lib/docker/volumes/a6a3a5d8b678f485f3c589f865c394c6825fa17c6bb8d30bb89957478975f9d8/_data Destination:/var/lib/kafka/data Driver:local Mode: RW:true Propagation:}] Config:0xc0007afb80 NetworkSettings:0xc000821400 ImageManifestDescriptor:0xc00073a6e0}" state="{Status:running Running:true Paused:false Restarting:false OOMKilled:false Dead:false Pid:139318 ExitCode:0 Error: StartedAt:2026-10-27T00:13:41.695065705Z FinishedAt:0001-01-01T00:00:00Z Health:0xc0003f7a70}"
+time=2026-10-27T00:13:46.007Z level=INFO msg="Container is healthy" test=cdc-parity tool=conduit-kafka step=tool container=/cdcparity-kafka
+time=2026-10-27T00:13:46.007Z level=INFO msg="Tools started" test=cdc-parity tool=conduit-kafka step=tool
+time=2026-10-27T00:13:46.007Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-kafka step=tool
+time=2026-10-27T00:13:46.007Z level=INFO msg="Running step" test=cdc-parity tool=conduit-kafka step=post-tool
+time=2026-10-27T00:13:46.007Z level=DEBUG msg="Running hooks" test=cdc-parity tool=conduit-kafka step=post-tool count=4
+time=2026-10-27T00:13:46.007Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-kafka step=post-tool hook=register-connect-connectors tools=[connect]
+time=2026-10-27T00:13:46.007Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-kafka step=post-tool hook=register-connect-pg-connectors tools=[connect-pg]
+time=2026-10-27T00:13:46.007Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-kafka step=post-tool hook=register-connect-s3-connectors tools=[connect-s3]
+time=2026-10-27T00:13:46.007Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-kafka step=post-tool hook=register-connect-kafka-connectors tools=[connect-kafka]
+time=2026-10-27T00:13:46.007Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-kafka step=post-tool
+time=2026-10-27T00:13:46.007Z level=INFO msg="Running step" test=cdc-parity tool=conduit-kafka step=pre-test
+time=2026-10-27T00:13:46.007Z level=DEBUG msg="Running hooks" test=cdc-parity tool=conduit-kafka step=pre-test count=5
+time=2026-10-27T00:13:46.007Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-kafka step=pre-test hook=wait-and-count-before tools="[conduit conduit-aa connect redpanda-connect]"
+time=2026-10-27T00:13:46.007Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-kafka step=pre-test hook=wait-and-count-before-pg tools="[conduit-pg conduit-pg-aa connect-pg]"
+time=2026-10-27T00:13:46.007Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-kafka step=pre-test hook=wait-and-count-before-s3 tools="[conduit-s3 conduit-s3-aa connect-s3]"
+time=2026-10-27T00:13:46.007Z level=INFO msg="Running command in existing container" container=cdcparity-kafka command="count() {\n  /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 --topic 'cdcparitykafka.public.bench_source_.*' 2>/dev/null | awk -F: '{s += $NF} END {print s+0}'\n}\nn=0\nwhile [ \"$n\" -lt 180 ]; do\n  if [ \"$(count)\" -gt 0 ]; then break; fi\n  n=$((n+1))\n  sleep 1\ndone\nsleep 15\necho \"ROWS_BEFORE=$(count)\"\n"
+time=2026-10-27T00:13:46.007Z level=DEBUG msg="Executing command" test=cdc-parity tool=conduit-kafka step=pre-test hook=wait-and-count-before-kafka command="/usr/bin/docker exec --interactive cdcparity-kafka sh -c count() {\n  /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 --topic 'cdcparitykafka.public.bench_source_.*' 2>/dev/null | awk -F: '{s += $NF} END {print s+0}'\n}\nn=0\nwhile [ \"$n\" -lt 180 ]; do\n  if [ \"$(count)\" -gt 0 ]; then break; fi\n  n=$((n+1))\n  sleep 1\ndone\nsleep 15\necho \"ROWS_BEFORE=$(count)\"\n"
+time=2026-10-27T00:13:46.226Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:46.227Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:46.227Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:46.228Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:46.413Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:46.414Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:46.730Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:46.731Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:46.731Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:46.732Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:46.916Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:46.917Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:47.234Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:47.234Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:47.235Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:47.236Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:47.418Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:47.420Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:47.737Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:47.738Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:47.739Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:47.739Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:47.922Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:47.923Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:48.242Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:48.243Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:48.244Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:48.245Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:48.424Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:48.425Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:48.746Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:48.747Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:48.747Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:48.748Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:48.927Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:48.928Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:49.249Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:49.250Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:49.251Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:49.251Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:49.429Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:49.429Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:49.752Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:49.753Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:49.753Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:49.754Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:49.931Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:49.932Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:50.254Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:50.255Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:50.256Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:50.257Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:50.433Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:50.434Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:50.757Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:50.758Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:50.759Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:50.760Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:50.935Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:50.936Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:51.260Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:51.261Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:51.262Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:51.263Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:51.437Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:51.438Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:51.764Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:51.765Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:51.766Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:51.766Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:51.939Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:51.941Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:52.268Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:52.269Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:52.269Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:52.270Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:52.443Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:52.444Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:52.771Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:52.772Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:52.772Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:52.773Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:52.945Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:52.946Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:53.274Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:53.275Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:53.276Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:53.276Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:53.447Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:53.448Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:53.777Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:53.778Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:53.778Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:53.779Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:53.949Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:53.950Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:54.280Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:54.281Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:54.282Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:54.282Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:54.451Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:54.452Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:54.784Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:54.785Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:54.785Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:54.786Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:54.954Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:54.954Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:55.287Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:55.288Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:55.289Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:55.289Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:55.456Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:55.456Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:55.791Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:55.792Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:55.792Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:55.793Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:55.958Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:55.959Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:56.294Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:56.294Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:56.295Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:56.295Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:56.460Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:56.461Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:56.796Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:56.797Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:56.797Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:56.798Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:56.962Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:56.963Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:57.299Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:57.301Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:57.302Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:57.302Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:57.464Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:57.465Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:57.804Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:57.804Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:57.805Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:57.805Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:57.966Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:57.967Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:58.307Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:58.308Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:58.308Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:58.309Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:58.468Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:58.468Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:58.810Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:58.811Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:58.812Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:58.812Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:58.970Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:58.970Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:59.314Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:59.315Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:59.315Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:59.316Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:59.472Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:59.473Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:13:59.816Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:13:59.817Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:13:59.818Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:13:59.819Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:13:59.974Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:13:59.974Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:00.320Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:00.321Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:00.321Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:00.322Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:00.476Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:00.476Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:00.823Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:00.824Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:00.824Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:00.825Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:00.978Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:00.979Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:01.326Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:01.326Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:01.327Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:01.327Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:01.480Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:01.481Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:01.829Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:01.829Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:01.830Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:01.831Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:01.983Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:01.983Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:02.332Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:02.332Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:02.333Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:02.333Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:02.485Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:02.487Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:02.834Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:02.835Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:02.836Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:02.836Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:02.989Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:02.991Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:03.338Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:03.338Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:03.339Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:03.340Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:03.492Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:03.493Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:03.842Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:03.843Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:03.843Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:03.844Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:03.995Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:03.996Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:04.345Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:04.346Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:04.346Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:04.347Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:04.497Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:04.498Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:04.535Z level=INFO msg="ROWS_BEFORE=74110" test=cdc-parity tool=conduit-kafka step=pre-test hook=wait-and-count-before-kafka container=cdcparity-kafka stream=stdout
+time=2026-10-27T00:14:04.538Z level=INFO msg="Running command in existing container" container=cdcparity-counter command="PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tA -F ' ' -c \"SELECT 'TS_BEFORE_MS=' || (extract(epoch from clock_timestamp())*1000)::bigint, 'SRC_EVENTS_BEFORE=' || COALESCE(sum(n_tup_ins+n_tup_upd+n_tup_del),0)::bigint, 'SRC_NET_BEFORE=' || COALESCE(sum(n_tup_ins-n_tup_del),0)::bigint FROM pg_stat_user_tables WHERE relname LIKE 'bench_source_%'\"\n"
+time=2026-10-27T00:14:04.538Z level=DEBUG msg="Executing command" test=cdc-parity tool=conduit-kafka step=pre-test hook=mark-before command="/usr/bin/docker exec --interactive cdcparity-counter sh -c PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tA -F ' ' -c \"SELECT 'TS_BEFORE_MS=' || (extract(epoch from clock_timestamp())*1000)::bigint, 'SRC_EVENTS_BEFORE=' || COALESCE(sum(n_tup_ins+n_tup_upd+n_tup_del),0)::bigint, 'SRC_NET_BEFORE=' || COALESCE(sum(n_tup_ins-n_tup_del),0)::bigint FROM pg_stat_user_tables WHERE relname LIKE 'bench_source_%'\"\n"
+time=2026-10-27T00:14:04.604Z level=INFO msg="TS_BEFORE_MS=1793060044604 SRC_EVENTS_BEFORE=369000 SRC_NET_BEFORE=225096" test=cdc-parity tool=conduit-kafka step=pre-test hook=mark-before container=cdcparity-counter stream=stdout
+time=2026-10-27T00:14:04.607Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-kafka step=pre-test
+time=2026-10-27T00:14:04.607Z level=INFO msg="Running step" test=cdc-parity tool=conduit-kafka step=test
+time=2026-10-27T00:14:04.607Z level=INFO msg="Running collector" test=cdc-parity tool=conduit-kafka step=test name=docker type=docker
+time=2026-10-27T00:14:04.608Z level=DEBUG msg="Collecting stats" test=cdc-parity tool=conduit-kafka collector=docker type=docker collector=docker type=docker container=cdcparity-loader
+time=2026-10-27T00:14:04.608Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-kafka step=test time-left=1m0s
+time=2026-10-27T00:14:04.608Z level=DEBUG msg="Collecting stats" test=cdc-parity tool=conduit-kafka collector=docker type=docker collector=docker type=docker container=cdcparity-postgres
+time=2026-10-27T00:14:04.848Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:04.849Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:04.850Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:04.850Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:04.999Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:05.000Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:05.351Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:05.352Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:05.353Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:05.353Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:05.501Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:05.502Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:05.855Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:05.856Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:05.856Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:05.857Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:06.003Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:06.003Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:06.358Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:06.358Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:06.359Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:06.360Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:06.504Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:06.505Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:06.861Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:06.861Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:06.862Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:06.863Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:07.007Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:07.008Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:07.364Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:07.365Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:07.365Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:07.366Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:07.509Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:07.510Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:07.867Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:07.867Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:07.868Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:07.869Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:08.011Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:08.011Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:08.369Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:08.370Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:08.371Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:08.371Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:08.512Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:08.513Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:08.872Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:08.873Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:08.874Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:08.875Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:09.014Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:09.015Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:09.377Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:09.377Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:09.378Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:09.379Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:09.516Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:09.517Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:09.608Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-kafka step=test time-left=55s
+time=2026-10-27T00:14:09.879Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:09.880Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:09.881Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:09.881Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:10.018Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:10.019Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:10.382Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:10.383Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:10.384Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:10.384Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:10.520Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:10.521Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:10.886Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:10.886Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:10.887Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:10.888Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:11.023Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:11.024Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:11.389Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:11.390Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:11.390Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:11.391Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:11.525Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:11.526Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:11.892Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:11.893Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:11.893Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:11.894Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:12.027Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:12.028Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:12.395Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:12.396Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:12.397Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:12.398Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:12.529Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:12.530Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:12.899Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:12.900Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:12.900Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:12.901Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:13.032Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:13.032Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:13.402Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:13.403Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:13.403Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:13.404Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:13.534Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:13.534Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:13.905Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:13.905Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:13.906Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:13.907Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:14.036Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:14.036Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:14.408Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:14.409Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:14.409Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:14.410Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:14.538Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:14.539Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:14.608Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-kafka step=test time-left=50s
+time=2026-10-27T00:14:14.911Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:14.912Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:14.912Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:14.913Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:15.039Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:15.040Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:15.414Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:15.415Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:15.415Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:15.416Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:15.541Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:15.542Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:15.917Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:15.917Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:15.918Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:15.918Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:16.044Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:16.045Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:16.420Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:16.420Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:16.421Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:16.422Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:16.546Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:16.547Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:16.922Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:16.923Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:16.924Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:16.924Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:17.048Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:17.049Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:17.426Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:17.427Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:17.427Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:17.428Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:17.549Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:17.550Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:17.929Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:17.930Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:17.930Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:17.931Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:18.051Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:18.052Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:18.432Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:18.433Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:18.434Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:18.434Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:18.553Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:18.553Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:18.935Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:18.936Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:18.936Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:18.937Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:19.054Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:19.055Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:19.438Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:19.438Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:19.439Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:19.440Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:19.556Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:19.557Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:19.608Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-kafka step=test time-left=45s
+time=2026-10-27T00:14:19.940Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:19.941Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:19.942Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:19.943Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:20.058Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:20.059Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:20.444Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:20.445Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:20.445Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:20.446Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:20.561Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:20.562Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:20.947Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:20.948Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:20.949Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:20.950Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:21.062Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:21.063Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:21.451Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:21.452Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:21.453Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:21.453Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:21.565Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:21.566Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:21.954Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:21.955Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:21.956Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:21.957Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:22.067Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:22.068Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:22.458Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:22.458Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:22.459Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:22.459Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:22.569Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:22.570Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:22.960Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:22.961Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:22.961Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:22.962Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:23.070Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:23.071Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:23.463Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:23.464Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:23.465Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:23.465Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:23.573Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:23.574Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:23.967Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:23.968Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:23.968Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:23.969Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:24.074Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:24.075Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:24.470Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:24.471Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:24.472Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:24.472Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:24.577Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:24.578Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:24.608Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-kafka step=test time-left=40s
+time=2026-10-27T00:14:24.973Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:24.974Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:24.974Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:24.975Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:25.079Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:25.080Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:25.476Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:25.477Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:25.478Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:25.478Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:25.581Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:25.582Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:25.979Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:25.980Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:25.980Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:25.981Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:26.082Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:26.083Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:26.482Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:26.483Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:26.483Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:26.484Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:26.584Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:26.585Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:26.985Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:26.986Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:26.986Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:26.987Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:27.086Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:27.087Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:27.488Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:27.488Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:27.489Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:27.490Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:27.588Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:27.589Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:27.991Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:27.991Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:27.992Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:27.993Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:28.090Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:28.091Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:28.494Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:28.495Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:28.496Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:28.496Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:28.592Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:28.593Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:28.997Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:28.998Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:28.999Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:28.999Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:29.094Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:29.095Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:29.501Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:29.502Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:29.502Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:29.503Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:29.596Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:29.597Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:29.609Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-kafka step=test time-left=35s
+time=2026-10-27T00:14:30.005Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:30.005Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:30.006Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:30.007Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:30.098Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:30.099Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:30.508Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:30.509Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:30.510Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:30.510Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:30.600Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:30.600Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:31.012Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:31.013Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:31.013Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:31.014Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:31.101Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:31.102Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:31.515Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:31.516Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:31.517Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:31.517Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:31.603Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:31.604Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:32.018Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:32.019Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:32.020Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:32.021Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:32.106Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:32.107Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:32.522Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:32.522Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:32.523Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:32.523Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:32.608Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:32.608Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:33.024Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:33.025Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:33.025Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:33.026Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:33.110Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:33.111Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:33.527Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:33.527Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:33.528Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:33.528Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:33.612Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:33.612Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:34.029Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:34.030Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:34.030Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:34.031Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:34.114Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:34.115Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:34.532Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:34.533Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:34.533Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:34.534Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:34.608Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-kafka step=test time-left=30s
+time=2026-10-27T00:14:34.616Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:34.617Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:35.035Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:35.036Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:35.037Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:35.037Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:35.119Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:35.119Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:35.539Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:35.540Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:35.540Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:35.541Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:35.620Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:35.621Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:36.042Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:36.043Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:36.044Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:36.044Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:36.123Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:36.124Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:36.546Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:36.547Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:36.547Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:36.548Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:36.625Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:36.626Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:37.049Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:37.050Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:37.050Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:37.051Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:37.127Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:37.128Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:37.552Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:37.552Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:37.553Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:37.554Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:37.629Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:37.629Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:38.055Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:38.056Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:38.056Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:38.057Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:38.131Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:38.132Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:38.558Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:38.559Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:38.559Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:38.560Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:38.633Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:38.634Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:39.061Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:39.062Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:39.063Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:39.063Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:39.135Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:39.136Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:39.564Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:39.565Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:39.566Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:39.566Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:39.608Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-kafka step=test time-left=25s
+time=2026-10-27T00:14:39.637Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:39.638Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:40.067Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:40.068Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:40.069Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:40.070Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:40.140Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:40.141Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:40.571Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:40.571Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:40.572Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:40.573Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:40.642Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:40.643Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:41.074Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:41.074Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:41.075Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:41.076Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:41.144Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:41.144Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:41.577Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:41.578Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:41.578Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:41.579Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:41.645Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:41.646Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:42.080Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:42.081Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:42.082Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:42.082Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:42.147Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:42.148Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:42.583Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:42.584Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:42.585Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:42.586Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:42.649Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:42.650Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:43.087Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:43.088Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:43.089Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:43.089Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:43.151Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:43.152Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:43.591Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:43.592Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:43.593Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:43.593Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:43.654Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:43.654Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:44.095Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:44.096Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:44.096Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:44.097Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:44.155Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:44.156Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:44.598Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:44.599Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:44.599Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:44.600Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:44.608Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-kafka step=test time-left=20s
+time=2026-10-27T00:14:44.657Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:44.658Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:45.102Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:45.102Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:45.103Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:45.103Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:45.160Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:45.160Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:45.604Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:45.605Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:45.606Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:45.606Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:45.662Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:45.662Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:46.107Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:46.108Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:46.108Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:46.109Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:46.163Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:46.164Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:46.610Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:46.610Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:46.611Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:46.612Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:46.666Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:46.667Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:47.113Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:47.114Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:47.115Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:47.116Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:47.169Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:47.169Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:47.617Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:47.618Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:47.618Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:47.619Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:47.671Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:47.672Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:48.119Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:48.120Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:48.121Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:48.121Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:48.173Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:48.174Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:48.622Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:48.623Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:48.623Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:48.624Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:48.675Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:48.676Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:49.125Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:49.126Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:49.126Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:49.127Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:49.177Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:49.178Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:49.608Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-kafka step=test time-left=15s
+time=2026-10-27T00:14:49.628Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:49.629Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:49.630Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:49.630Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:49.678Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:49.679Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:50.132Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:50.133Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:50.133Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:50.134Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:50.180Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:50.181Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:50.635Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:50.636Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:50.636Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:50.637Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:50.682Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:50.683Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:51.138Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:51.139Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:51.139Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:51.140Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:51.185Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:51.185Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:51.641Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:51.641Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:51.642Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:51.642Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:51.686Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:51.687Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:52.143Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:52.144Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:52.145Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:52.145Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:52.188Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:52.189Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:52.647Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:52.647Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:52.648Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:52.649Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:52.689Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:52.690Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:53.149Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:53.150Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:53.150Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:53.151Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:53.191Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:53.191Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:53.652Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:53.652Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:53.653Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:53.654Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:53.692Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:53.693Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:54.154Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:54.155Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:54.156Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:54.157Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:54.195Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:54.195Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:54.608Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-kafka step=test time-left=10s
+time=2026-10-27T00:14:54.658Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:54.658Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:54.659Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:54.660Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:54.696Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:54.697Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:55.160Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:55.161Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:55.161Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:55.162Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:55.198Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:55.199Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:55.663Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:55.664Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:55.664Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:55.665Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:55.701Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:55.701Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:56.166Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:56.167Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:56.167Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:56.168Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:56.203Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:56.203Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:56.669Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:56.670Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:56.670Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:56.671Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:56.704Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:56.705Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:57.172Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:57.173Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:57.173Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:57.174Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:57.207Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:57.207Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:57.675Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:57.676Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:57.676Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:57.677Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:57.709Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:57.710Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:58.178Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:58.179Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:58.179Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:58.180Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:58.211Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:58.212Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:58.681Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:58.682Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:58.682Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:58.683Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:58.714Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:58.714Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:59.184Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:59.185Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:59.186Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:59.186Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:59.215Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:59.216Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:14:59.608Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-kafka step=test time-left=5s
+time=2026-10-27T00:14:59.687Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:14:59.688Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:14:59.688Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:14:59.689Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:14:59.717Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:14:59.717Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:00.190Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:00.191Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:00.192Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:00.192Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:00.219Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:00.219Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:00.693Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:00.694Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:00.695Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:00.696Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:00.720Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:00.721Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:01.197Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:01.198Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:01.199Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:01.199Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:01.222Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:01.223Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:01.701Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:01.702Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:01.702Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:01.703Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:01.724Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:01.725Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:02.204Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:02.205Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:02.206Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:02.206Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:02.226Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:02.227Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:02.708Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:02.709Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:02.709Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:02.710Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:02.729Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:02.729Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:03.211Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:03.212Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:03.213Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:03.213Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:03.230Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:03.231Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:03.714Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:03.715Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:03.716Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:03.716Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:03.732Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:03.732Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:04.217Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:04.218Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:04.218Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:04.219Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:04.233Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:04.234Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:04.608Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-kafka step=test time-left=0s
+time=2026-10-27T00:15:04.719Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:04.720Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:04.721Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:04.721Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:04.735Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:04.735Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:05.108Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-kafka step=test
+time=2026-10-27T00:15:05.108Z level=INFO msg="Running step" test=cdc-parity tool=conduit-kafka step=post-test
+time=2026-10-27T00:15:05.108Z level=INFO msg="Exporting metrics" test=cdc-parity tool=conduit-kafka step=post-test collector=docker path=/home/ubuntu/conduit/benchi/v021-cdc-parity/results/v022-shipped-defaults-classic/warmup-conduit-kafka/cdc-parity_conduit-kafka/docker.csv
+time=2026-10-27T00:15:05.109Z level=DEBUG msg="Running hooks" test=cdc-parity tool=conduit-kafka step=post-test count=5
+time=2026-10-27T00:15:05.109Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-kafka step=post-test hook=count-after tools="[conduit conduit-aa connect redpanda-connect]"
+time=2026-10-27T00:15:05.109Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-kafka step=post-test hook=count-after-pg tools="[conduit-pg conduit-pg-aa connect-pg]"
+time=2026-10-27T00:15:05.109Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-kafka step=post-test hook=count-after-s3 tools="[conduit-s3 conduit-s3-aa connect-s3]"
+time=2026-10-27T00:15:05.109Z level=INFO msg="Running command in existing container" container=cdcparity-kafka command="echo \"ROWS_AFTER=$(/opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 --topic 'cdcparitykafka.public.bench_source_.*' 2>/dev/null | awk -F: '{s += $NF} END {print s+0}')\"\n"
+time=2026-10-27T00:15:05.109Z level=DEBUG msg="Executing command" test=cdc-parity tool=conduit-kafka step=post-test hook=count-after-kafka command="/usr/bin/docker exec --interactive cdcparity-kafka sh -c echo \"ROWS_AFTER=$(/opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 --topic 'cdcparitykafka.public.bench_source_.*' 2>/dev/null | awk -F: '{s += $NF} END {print s+0}')\"\n"
+time=2026-10-27T00:15:05.223Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:05.224Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:05.224Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:05.225Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:05.237Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:05.238Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:05.726Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:05.727Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:05.728Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:05.728Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:05.739Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:05.740Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:06.229Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:06.230Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:06.231Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:06.231Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:06.241Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:06.242Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:06.732Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:06.733Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:06.734Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:06.734Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:06.743Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:06.743Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:06.956Z level=INFO msg="ROWS_AFTER=405143" test=cdc-parity tool=conduit-kafka step=post-test hook=count-after-kafka container=cdcparity-kafka stream=stdout
+time=2026-10-27T00:15:06.958Z level=INFO msg="Running command in existing container" container=cdcparity-counter command="PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tA -F ' ' -c \"SELECT 'TS_AFTER_MS=' || (extract(epoch from clock_timestamp())*1000)::bigint, 'SRC_EVENTS_AFTER=' || COALESCE(sum(n_tup_ins+n_tup_upd+n_tup_del),0)::bigint, 'SRC_NET_AFTER=' || COALESCE(sum(n_tup_ins-n_tup_del),0)::bigint FROM pg_stat_user_tables WHERE relname LIKE 'bench_source_%'\"\n"
+time=2026-10-27T00:15:06.958Z level=DEBUG msg="Executing command" test=cdc-parity tool=conduit-kafka step=post-test hook=mark-after command="/usr/bin/docker exec --interactive cdcparity-counter sh -c PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tA -F ' ' -c \"SELECT 'TS_AFTER_MS=' || (extract(epoch from clock_timestamp())*1000)::bigint, 'SRC_EVENTS_AFTER=' || COALESCE(sum(n_tup_ins+n_tup_upd+n_tup_del),0)::bigint, 'SRC_NET_AFTER=' || COALESCE(sum(n_tup_ins-n_tup_del),0)::bigint FROM pg_stat_user_tables WHERE relname LIKE 'bench_source_%'\"\n"
+time=2026-10-27T00:15:07.027Z level=INFO msg="TS_AFTER_MS=1793060107027 SRC_EVENTS_AFTER=1589000 SRC_NET_AFTER=955973" test=cdc-parity tool=conduit-kafka step=post-test hook=mark-after container=cdcparity-counter stream=stdout
+time=2026-10-27T00:15:07.030Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-kafka step=post-test
+time=2026-10-27T00:15:07.030Z level=INFO msg="Running step" test=cdc-parity tool=conduit-kafka step=pre-cleanup
+time=2026-10-27T00:15:07.030Z level=DEBUG msg="Running hooks" test=cdc-parity tool=conduit-kafka step=pre-cleanup count=0
+time=2026-10-27T00:15:07.030Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-kafka step=pre-cleanup
+time=2026-10-27T00:15:07.031Z level=INFO msg="Running step" test=cdc-parity tool=conduit-kafka step=cleanup
+time=2026-10-27T00:15:07.031Z level=INFO msg="Stopping containers" test=cdc-parity tool=conduit-kafka step=tool
+time=2026-10-27T00:15:07.031Z level=DEBUG msg="Executing command" command="/usr/bin/docker compose -f ./tools/compose-conduit-kafka.yml down"
+time=2026-10-27T00:15:07.235Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:07.236Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:07.237Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:07.237Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:07.245Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:07.245Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:07.738Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:07.739Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:07.740Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:07.740Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:07.747Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:07.747Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:07.747Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:08.241Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:08.242Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:08.242Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:08.243Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:08.249Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:08.249Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:08.249Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:08.249Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:08.251Z level=INFO msg="Stopping containers" test=cdc-parity tool=conduit-kafka step=infrastructure
+time=2026-10-27T00:15:08.251Z level=DEBUG msg="Executing command" command="/usr/bin/docker compose -f ./infra/compose.yml down"
+time=2026-10-27T00:15:08.744Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:08.744Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:08.745Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:08.745Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:08.745Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:08.745Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:08.745Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:08.749Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:08.749Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:08.749Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:08.750Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:09.245Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:09.246Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:09.246Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:09.246Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:09.247Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:09.247Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:09.247Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:09.250Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:09.250Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:09.250Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:09.250Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:09.747Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:09.747Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:09.748Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:09.748Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:09.748Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:09.748Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:09.748Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:09.751Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:09.751Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:09.751Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:09.751Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:10.248Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:10.249Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:10.249Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:10.249Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:10.249Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:10.249Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:10.250Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:10.252Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:10.252Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:10.252Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:10.252Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:10.751Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:10.751Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:10.751Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:10.751Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:10.752Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:10.752Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:10.752Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:10.753Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:10.753Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:10.753Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:10.753Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:11.252Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:11.253Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:11.253Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:11.253Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:11.253Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:11.253Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:11.253Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:11.253Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:11.253Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:11.254Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:11.254Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:11.754Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:11.754Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:11.755Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:11.755Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:11.755Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:11.755Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:11.755Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:11.755Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:11.755Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:11.756Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:11.756Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:12.255Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:12.256Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:12.256Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:12.256Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:12.256Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:12.257Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:12.257Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:12.257Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:12.257Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:12.257Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:12.257Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:12.756Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:12.757Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:12.757Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:12.757Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:12.758Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:12.759Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:12.759Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:12.759Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:12.759Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:12.759Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:12.759Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:13.258Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:13.258Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:13.258Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:13.258Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:13.260Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:13.260Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:13.260Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:13.260Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:13.260Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:13.260Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:13.260Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:13.759Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:13.759Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:13.759Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:13.760Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:13.761Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:13.761Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:13.761Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:13.761Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:13.761Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:13.761Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:13.762Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:14.260Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:14.261Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:14.261Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:14.261Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:14.262Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:14.263Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:14.263Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:14.263Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:14.263Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:14.263Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:14.263Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:14.762Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:14.762Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:14.762Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:14.762Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:14.764Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:14.764Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:14.764Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:14.764Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:14.764Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:14.764Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:14.764Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:15.263Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:15.264Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:15.264Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:15.264Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:15.265Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:15.265Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:15.266Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:15.266Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:15.266Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:15.266Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:15.266Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:15.765Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:15.765Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:15.765Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:15.765Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:15.766Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:15.767Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:15.767Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:15.767Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:15.767Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:15.767Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:15.767Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:16.266Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:16.266Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:16.266Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:16.267Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:16.268Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:16.268Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:16.268Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:16.268Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:16.268Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:16.268Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:16.268Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:16.767Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:16.767Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:16.767Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:16.768Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:16.769Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:16.769Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:16.769Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:16.769Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:16.769Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:16.769Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:16.770Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:17.268Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:17.269Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:17.269Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:17.269Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:17.270Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:17.270Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:17.271Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:17.271Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:17.271Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:17.271Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:17.271Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:17.770Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:17.770Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:17.770Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:17.770Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:17.771Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:17.772Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:17.772Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:17.772Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:17.772Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:17.772Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:17.772Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:18.271Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:18.271Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-kafka
+time=2026-10-27T00:15:18.271Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:18.271Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-kafka
+time=2026-10-27T00:15:18.273Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:15:18.273Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:18.273Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:15:18.273Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:18.273Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:15:18.273Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:18.273Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:15:18.512Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-kafka step=cleanup
+time=2026-10-27T00:15:18.512Z level=INFO msg="Running step" test=cdc-parity tool=conduit-kafka step=post-cleanup
+time=2026-10-27T00:15:18.512Z level=DEBUG msg="Running hooks" test=cdc-parity tool=conduit-kafka step=post-cleanup count=0
+time=2026-10-27T00:15:18.512Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-kafka step=post-cleanup
+time=2026-10-27T00:15:18.512Z level=INFO msg="Exporting aggregated metrics" path=/home/ubuntu/conduit/benchi/v021-cdc-parity/results/v022-shipped-defaults-classic/warmup-conduit-kafka/aggregated-results.csv
+time=2026-10-27T00:15:18.512Z level=INFO msg="Removing docker network" network=benchi
+time=2026-10-27T00:15:18.512Z level=INFO msg="Removing network" network=benchi
+time=2026-10-27T00:15:18.576Z level=INFO msg="Network removed" network=benchi

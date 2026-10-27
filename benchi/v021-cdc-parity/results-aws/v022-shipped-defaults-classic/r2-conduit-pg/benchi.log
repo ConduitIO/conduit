@@ -1,0 +1,1154 @@
+time=2026-10-27T00:46:13.510Z level=INFO msg="Results directory" path=/home/ubuntu/conduit/benchi/v021-cdc-parity/results/v022-shipped-defaults-classic/r2-conduit-pg
+time=2026-10-27T00:46:13.510Z level=INFO msg="Config file" path=/home/ubuntu/conduit/benchi/v021-cdc-parity/bench.yml
+time=2026-10-27T00:46:13.511Z level=INFO msg="Parsed config" path=/home/ubuntu/conduit/benchi/v021-cdc-parity/bench.yml
+time=2026-10-27T00:46:13.511Z level=INFO msg="Creating docker client"
+time=2026-10-27T00:46:13.512Z level=INFO msg="Creating docker network" network=benchi
+time=2026-10-27T00:46:13.513Z level=INFO msg="Docker network not found, creating it" network=benchi
+time=2026-10-27T00:46:14.537Z level=INFO msg="Network created" network-id=acc4e851da1a0d318e8e9fe95114bac2bf1261142ab90497e88e3e0cba3999f6
+time=2026-10-27T00:46:14.538Z level=INFO msg="Using network" network=benchi network-id=acc4e851da1a0d318e8e9fe95114bac2bf1261142ab90497e88e3e0cba3999f6
+time=2026-10-27T00:46:14.538Z level=DEBUG msg="Executing command" command="/usr/bin/docker compose -f ./infra/compose.yml config --format json"
+time=2026-10-27T00:46:14.597Z level=INFO msg="Skipping tool" test=cdc-parity tool=conduit
+time=2026-10-27T00:46:14.597Z level=INFO msg="Skipping tool" test=cdc-parity tool=conduit-aa
+time=2026-10-27T00:46:14.597Z level=INFO msg="Skipping tool" test=cdc-parity tool=conduit-kafka
+time=2026-10-27T00:46:14.597Z level=INFO msg="Skipping tool" test=cdc-parity tool=conduit-kafka-aa
+time=2026-10-27T00:46:14.597Z level=DEBUG msg="Executing command" command="/usr/bin/docker compose -f ./tools/compose-conduit-pg.yml config --format json"
+time=2026-10-27T00:46:14.651Z level=INFO msg="Skipping tool" test=cdc-parity tool=conduit-pg-aa
+time=2026-10-27T00:46:14.651Z level=INFO msg="Skipping tool" test=cdc-parity tool=conduit-s3
+time=2026-10-27T00:46:14.651Z level=INFO msg="Skipping tool" test=cdc-parity tool=conduit-s3-aa
+time=2026-10-27T00:46:14.651Z level=INFO msg="Skipping tool" test=cdc-parity tool=connect
+time=2026-10-27T00:46:14.651Z level=INFO msg="Skipping tool" test=cdc-parity tool=connect-kafka
+time=2026-10-27T00:46:14.651Z level=INFO msg="Skipping tool" test=cdc-parity tool=connect-pg
+time=2026-10-27T00:46:14.651Z level=INFO msg="Skipping tool" test=cdc-parity tool=connect-s3
+time=2026-10-27T00:46:14.651Z level=INFO msg="Skipping tool" test=cdc-parity tool=redpanda-connect
+time=2026-10-27T00:46:14.651Z level=INFO msg="Running step" test=cdc-parity tool=conduit-pg step=pre-infrastructure
+time=2026-10-27T00:46:14.652Z level=INFO msg="Pulling docker images for infrastructure containers" test=cdc-parity tool=conduit-pg step=pre-infrastructure containers="map[postgres:[cdcparity-counter cdcparity-loader cdcparity-minio cdcparity-postgres]]"
+time=2026-10-27T00:46:14.652Z level=DEBUG msg="Executing command" command="/usr/bin/docker compose -f ./infra/compose.yml pull"
+time=2026-10-27T00:46:15.152Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:15.152Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:15.152Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:15.152Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:15.152Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:15.152Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:15.152Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:15.152Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:15.152Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:15.153Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:15.429Z level=INFO msg="Pulling docker images for tool containers" test=cdc-parity tool=conduit-pg step=pre-infrastructure containers=[cdcparity-conduit-pg]
+time=2026-10-27T00:46:15.429Z level=DEBUG msg="Executing command" command="/usr/bin/docker compose -f ./tools/compose-conduit-pg.yml pull"
+time=2026-10-27T00:46:15.501Z level=INFO msg="Pulling docker images for hooks" test=cdc-parity tool=conduit-pg step=pre-infrastructure images=[alpine:latest]
+time=2026-10-27T00:46:15.653Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:15.653Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:15.653Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:15.653Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:15.653Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:15.654Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:15.654Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:15.654Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:15.654Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:15.654Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:15.932Z level=INFO msg="image pull response" test=cdc-parity tool=conduit-pg step=pre-infrastructure status="Pulling from library/alpine" id=latest
+time=2026-10-27T00:46:16.070Z level=INFO msg="image pull response" test=cdc-parity tool=conduit-pg step=pre-infrastructure status="Digest: sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a"
+time=2026-10-27T00:46:16.070Z level=INFO msg="image pull response" test=cdc-parity tool=conduit-pg step=pre-infrastructure status="Status: Image is up to date for alpine:latest"
+time=2026-10-27T00:46:16.072Z level=DEBUG msg="Running hooks" test=cdc-parity tool=conduit-pg step=pre-infrastructure count=0
+time=2026-10-27T00:46:16.072Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-pg step=pre-infrastructure
+time=2026-10-27T00:46:16.072Z level=INFO msg="Running step" test=cdc-parity tool=conduit-pg step=infrastructure
+time=2026-10-27T00:46:16.072Z level=INFO msg="Running infrastructure" test=cdc-parity tool=conduit-pg step=infrastructure name=postgres log-path=/home/ubuntu/conduit/benchi/v021-cdc-parity/results/v022-shipped-defaults-classic/r2-conduit-pg/cdc-parity_conduit-pg/infra_postgres.log
+time=2026-10-27T00:46:16.072Z level=INFO msg="Waiting for container status to be healthy" test=cdc-parity tool=conduit-pg step=infrastructure container=cdcparity-counter status=N/A
+time=2026-10-27T00:46:16.072Z level=INFO msg="Waiting for container status to be healthy" test=cdc-parity tool=conduit-pg step=infrastructure container=cdcparity-loader status=N/A
+time=2026-10-27T00:46:16.072Z level=INFO msg="Waiting for container status to be healthy" test=cdc-parity tool=conduit-pg step=infrastructure container=cdcparity-minio status=N/A
+time=2026-10-27T00:46:16.072Z level=INFO msg="Waiting for container status to be healthy" test=cdc-parity tool=conduit-pg step=infrastructure container=cdcparity-postgres status=N/A
+time=2026-10-27T00:46:16.072Z level=DEBUG msg="Executing command" command="/usr/bin/docker compose -f ./infra/compose.yml up"
+time=2026-10-27T00:46:16.154Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:16.154Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:16.154Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:16.154Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:16.155Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:16.155Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:16.155Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:16.155Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:16.155Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:16.155Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:16.655Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:16.655Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:16.655Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:16.656Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:16.657Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:16.673Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:17.074Z level=DEBUG msg="Inspected container" test=cdc-parity tool=conduit-pg step=infrastructure container=cdcparity-postgres response="{ContainerJSONBase:0xc0005aef20 Mounts:[{Type:bind Name: Source:/home/ubuntu/conduit/benchi/v021-cdc-parity/infra/init.sql Destination:/docker-entrypoint-initdb.d/init.sql Driver: Mode:ro RW:false Propagation:rprivate}] Config:0xc0005c0a00 NetworkSettings:0xc00067e200 ImageManifestDescriptor:0xc0005c2410}" state="{Status:running Running:true Paused:false Restarting:false OOMKilled:false Dead:false Pid:287834 ExitCode:0 Error: StartedAt:2026-10-27T00:46:16.460078535Z FinishedAt:0001-01-01T00:00:00Z Health:0xc0004968a0}"
+time=2026-10-27T00:46:17.074Z level=DEBUG msg="Inspected container" test=cdc-parity tool=conduit-pg step=infrastructure container=cdcparity-counter response="{ContainerJSONBase:0xc000807080 Mounts:[{Type:volume Name:cdcparity-sink Source:/var/lib/docker/volumes/cdcparity-sink/_data Destination:/sink Driver:local Mode:rw RW:true Propagation:}] Config:0xc000874140 NetworkSettings:0xc00086a600 ImageManifestDescriptor:0xc0008304b0}" state="{Status:running Running:true Paused:false Restarting:false OOMKilled:false Dead:false Pid:287753 ExitCode:0 Error: StartedAt:2026-10-27T00:46:16.350513568Z FinishedAt:0001-01-01T00:00:00Z Health:<nil>}"
+time=2026-10-27T00:46:17.074Z level=INFO msg="Container is running (consider adding a health check!)" test=cdc-parity tool=conduit-pg step=infrastructure container=/cdcparity-counter
+time=2026-10-27T00:46:17.074Z level=INFO msg="Waiting for container status to be healthy" test=cdc-parity tool=conduit-pg step=infrastructure container=cdcparity-postgres status=starting
+time=2026-10-27T00:46:17.074Z level=DEBUG msg="Inspected container" test=cdc-parity tool=conduit-pg step=infrastructure container=cdcparity-loader response="{ContainerJSONBase:0xc000712840 Mounts:[{Type:bind Name: Source:/home/ubuntu/conduit/benchi/v021-cdc-parity/loader/loader Destination:/loader/loader Driver: Mode:ro RW:false Propagation:rprivate}] Config:0xc0000ddb80 NetworkSettings:0xc0006a8700 ImageManifestDescriptor:0xc00018cc80}" state="{Status:created Running:false Paused:false Restarting:false OOMKilled:false Dead:false Pid:0 ExitCode:0 Error: StartedAt:0001-01-01T00:00:00Z FinishedAt:0001-01-01T00:00:00Z Health:<nil>}"
+time=2026-10-27T00:46:17.074Z level=WARN msg="Container exited with code 0 (assuming it's an init container)" test=cdc-parity tool=conduit-pg step=infrastructure container=/cdcparity-loader
+time=2026-10-27T00:46:17.074Z level=DEBUG msg="Inspected container" test=cdc-parity tool=conduit-pg step=infrastructure container=cdcparity-minio response="{ContainerJSONBase:0xc00079c2c0 Mounts:[] Config:0xc0006dbcc0 NetworkSettings:0xc0001c8800 ImageManifestDescriptor:0xc00079a3c0}" state="{Status:running Running:true Paused:false Restarting:false OOMKilled:false Dead:false Pid:287941 ExitCode:0 Error: StartedAt:2026-10-27T00:46:16.574576522Z FinishedAt:0001-01-01T00:00:00Z Health:0xc0005a5980}"
+time=2026-10-27T00:46:17.074Z level=INFO msg="Waiting for container status to be healthy" test=cdc-parity tool=conduit-pg step=infrastructure container=cdcparity-minio status=starting
+time=2026-10-27T00:46:17.156Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:17.156Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:17.175Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:17.175Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:17.176Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:17.176Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:17.657Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:17.657Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:17.677Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:17.678Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:17.678Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:17.679Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:18.075Z level=DEBUG msg="Inspected container" test=cdc-parity tool=conduit-pg step=infrastructure container=cdcparity-minio response="{ContainerJSONBase:0xc0007122c0 Mounts:[] Config:0xc0001c6280 NetworkSettings:0xc0004ca200 ImageManifestDescriptor:0xc00018c410}" state="{Status:running Running:true Paused:false Restarting:false OOMKilled:false Dead:false Pid:287941 ExitCode:0 Error: StartedAt:2026-10-27T00:46:16.574576522Z FinishedAt:0001-01-01T00:00:00Z Health:0xc0004961e0}"
+time=2026-10-27T00:46:18.075Z level=INFO msg="Container is healthy" test=cdc-parity tool=conduit-pg step=infrastructure container=/cdcparity-minio
+time=2026-10-27T00:46:18.075Z level=DEBUG msg="Inspected container" test=cdc-parity tool=conduit-pg step=infrastructure container=cdcparity-postgres response="{ContainerJSONBase:0xc00069adc0 Mounts:[{Type:bind Name: Source:/home/ubuntu/conduit/benchi/v021-cdc-parity/infra/init.sql Destination:/docker-entrypoint-initdb.d/init.sql Driver: Mode:ro RW:false Propagation:rprivate}] Config:0xc000765040 NetworkSettings:0xc0006a9200 ImageManifestDescriptor:0xc0005c2500}" state="{Status:running Running:true Paused:false Restarting:false OOMKilled:false Dead:false Pid:287834 ExitCode:0 Error: StartedAt:2026-10-27T00:46:16.460078535Z FinishedAt:0001-01-01T00:00:00Z Health:0xc00076ccf0}"
+time=2026-10-27T00:46:18.075Z level=INFO msg="Container is healthy" test=cdc-parity tool=conduit-pg step=infrastructure container=/cdcparity-postgres
+time=2026-10-27T00:46:18.076Z level=INFO msg="Infrastructure started" test=cdc-parity tool=conduit-pg step=infrastructure
+time=2026-10-27T00:46:18.076Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-pg step=infrastructure
+time=2026-10-27T00:46:18.076Z level=INFO msg="Running step" test=cdc-parity tool=conduit-pg step=post-infrastructure
+time=2026-10-27T00:46:18.076Z level=DEBUG msg="Running hooks" test=cdc-parity tool=conduit-pg step=post-infrastructure count=2
+time=2026-10-27T00:46:18.076Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-pg step=post-infrastructure hook=reset-sink tools="[conduit conduit-aa connect redpanda-connect]"
+time=2026-10-27T00:46:18.076Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-pg step=post-infrastructure hook=reset-s3 tools="[conduit-s3 conduit-s3-aa connect-s3]"
+time=2026-10-27T00:46:18.076Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-pg step=post-infrastructure
+time=2026-10-27T00:46:18.076Z level=INFO msg="Running step" test=cdc-parity tool=conduit-pg step=pre-tool
+time=2026-10-27T00:46:18.076Z level=DEBUG msg="Running hooks" test=cdc-parity tool=conduit-pg step=pre-tool count=0
+time=2026-10-27T00:46:18.076Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-pg step=pre-tool
+time=2026-10-27T00:46:18.076Z level=INFO msg="Running step" test=cdc-parity tool=conduit-pg step=tool
+time=2026-10-27T00:46:18.076Z level=INFO msg="Waiting for container status to be healthy" test=cdc-parity tool=conduit-pg step=tool container=cdcparity-conduit-pg status=N/A
+time=2026-10-27T00:46:18.076Z level=DEBUG msg="Executing command" command="/usr/bin/docker compose -f ./tools/compose-conduit-pg.yml up"
+time=2026-10-27T00:46:18.157Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:18.158Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:18.180Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:18.181Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:18.181Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:18.182Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:18.658Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:18.659Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:18.683Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:18.684Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:18.684Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:18.685Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:19.077Z level=DEBUG msg="Inspected container" test=cdc-parity tool=conduit-pg step=tool container=cdcparity-conduit-pg response="{ContainerJSONBase:0xc0007cc000 Mounts:[{Type:bind Name: Source:/tmp/cdcparity-prof Destination:/prof Driver: Mode:rw RW:true Propagation:rprivate} {Type:bind Name: Source:/home/ubuntu/conduit/benchi/v021-cdc-parity/pipelines/conduit-pg.yml Destination:/app/pipelines/conduit-pg.yml Driver: Mode:ro RW:false Propagation:rprivate}] Config:0xc00053fa40 NetworkSettings:0xc0006fcb00 ImageManifestDescriptor:0xc000830550}" state="{Status:running Running:true Paused:false Restarting:false OOMKilled:false Dead:false Pid:288500 ExitCode:0 Error: StartedAt:2026-10-27T00:46:18.737549229Z FinishedAt:0001-01-01T00:00:00Z Health:<nil>}"
+time=2026-10-27T00:46:19.078Z level=INFO msg="Container is running (consider adding a health check!)" test=cdc-parity tool=conduit-pg step=tool container=/cdcparity-conduit-pg
+time=2026-10-27T00:46:19.078Z level=INFO msg="Tools started" test=cdc-parity tool=conduit-pg step=tool
+time=2026-10-27T00:46:19.078Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-pg step=tool
+time=2026-10-27T00:46:19.078Z level=INFO msg="Running step" test=cdc-parity tool=conduit-pg step=post-tool
+time=2026-10-27T00:46:19.078Z level=DEBUG msg="Running hooks" test=cdc-parity tool=conduit-pg step=post-tool count=4
+time=2026-10-27T00:46:19.078Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-pg step=post-tool hook=register-connect-connectors tools=[connect]
+time=2026-10-27T00:46:19.078Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-pg step=post-tool hook=register-connect-pg-connectors tools=[connect-pg]
+time=2026-10-27T00:46:19.078Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-pg step=post-tool hook=register-connect-s3-connectors tools=[connect-s3]
+time=2026-10-27T00:46:19.078Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-pg step=post-tool hook=register-connect-kafka-connectors tools=[connect-kafka]
+time=2026-10-27T00:46:19.078Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-pg step=post-tool
+time=2026-10-27T00:46:19.078Z level=INFO msg="Running step" test=cdc-parity tool=conduit-pg step=pre-test
+time=2026-10-27T00:46:19.078Z level=DEBUG msg="Running hooks" test=cdc-parity tool=conduit-pg step=pre-test count=5
+time=2026-10-27T00:46:19.078Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-pg step=pre-test hook=wait-and-count-before tools="[conduit conduit-aa connect redpanda-connect]"
+time=2026-10-27T00:46:19.078Z level=INFO msg="Running command in existing container" container=cdcparity-counter command="count() {\n  q=\"SELECT COALESCE(SUM(cnt),0)::bigint FROM (\"\n  i=0\n  while [ \"$i\" -lt \"${TABLES:-1}\" ]; do\n    if [ \"$i\" -gt 0 ]; then q=\"$q UNION ALL\"; fi\n    q=\"$q SELECT count(*) AS cnt FROM bench_dest_${i}\"\n    i=$((i+1))\n  done\n  q=\"$q) t\"\n  c=$(PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tAc \"$q\" 2>/dev/null | tr -d ' ')\n  echo \"${c:-0}\"\n}\nn=0\nwhile [ \"$n\" -lt 180 ]; do\n  if [ \"$(count)\" -gt 0 ]; then break; fi\n  n=$((n+1))\n  sleep 1\ndone\nsleep 15\necho \"ROWS_BEFORE=$(count)\"\n"
+time=2026-10-27T00:46:19.078Z level=DEBUG msg="Executing command" test=cdc-parity tool=conduit-pg step=pre-test hook=wait-and-count-before-pg command="/usr/bin/docker exec --interactive cdcparity-counter sh -c count() {\n  q=\"SELECT COALESCE(SUM(cnt),0)::bigint FROM (\"\n  i=0\n  while [ \"$i\" -lt \"${TABLES:-1}\" ]; do\n    if [ \"$i\" -gt 0 ]; then q=\"$q UNION ALL\"; fi\n    q=\"$q SELECT count(*) AS cnt FROM bench_dest_${i}\"\n    i=$((i+1))\n  done\n  q=\"$q) t\"\n  c=$(PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tAc \"$q\" 2>/dev/null | tr -d ' ')\n  echo \"${c:-0}\"\n}\nn=0\nwhile [ \"$n\" -lt 180 ]; do\n  if [ \"$(count)\" -gt 0 ]; then break; fi\n  n=$((n+1))\n  sleep 1\ndone\nsleep 15\necho \"ROWS_BEFORE=$(count)\"\n"
+time=2026-10-27T00:46:19.160Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:19.186Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:19.186Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:19.187Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:19.187Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:19.661Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:19.688Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:19.689Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:19.689Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:19.690Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:20.163Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:20.192Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:20.192Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:20.193Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:20.193Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:20.665Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:20.694Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:20.695Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:20.696Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:20.697Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:21.166Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:21.198Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:21.199Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:21.199Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:21.200Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:21.668Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:21.701Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:21.701Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:21.702Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:21.702Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:22.169Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:22.204Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:22.204Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:22.205Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:22.205Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:22.670Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:22.706Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:22.707Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:22.707Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:22.708Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:23.171Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:23.209Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:23.210Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:23.210Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:23.211Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:23.673Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:23.712Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:23.712Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:23.713Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:23.714Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:24.174Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:24.215Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:24.216Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:24.216Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:24.217Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:24.676Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:24.718Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:24.719Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:24.719Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:24.720Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:25.177Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:25.221Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:25.222Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:25.222Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:25.223Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:25.679Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:25.724Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:25.725Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:25.725Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:25.726Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:26.180Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:26.227Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:26.228Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:26.228Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:26.229Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:26.682Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:26.730Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:26.731Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:26.731Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:26.732Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:27.183Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:27.233Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:27.234Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:27.234Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:27.235Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:27.685Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:27.736Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:27.736Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:27.737Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:27.737Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:28.186Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:28.238Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:28.239Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:28.239Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:28.240Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:28.688Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:28.741Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:28.741Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:28.742Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:28.743Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:29.189Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:29.244Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:29.245Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:29.245Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:29.246Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:29.691Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:29.747Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:29.747Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:29.748Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:29.748Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:30.192Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:30.249Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:30.250Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:30.250Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:30.251Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:30.694Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:30.752Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:30.753Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:30.753Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:30.754Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:31.196Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:31.255Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:31.255Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:31.256Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:31.256Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:31.697Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:31.757Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:31.758Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:31.758Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:31.759Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:32.198Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:32.260Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:32.260Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:32.261Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:32.261Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:32.700Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:32.763Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:32.764Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:32.764Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:32.765Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:33.201Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:33.266Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:33.267Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:33.267Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:33.268Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:33.703Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:33.769Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:33.770Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:33.770Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:33.771Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:34.204Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:34.271Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:34.272Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:34.273Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:34.273Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:34.705Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:34.774Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:34.775Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:34.776Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:34.776Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:35.172Z level=INFO msg="ROWS_BEFORE=58779" test=cdc-parity tool=conduit-pg step=pre-test hook=wait-and-count-before-pg container=cdcparity-counter stream=stdout
+time=2026-10-27T00:46:35.175Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-pg step=pre-test hook=wait-and-count-before-s3 tools="[conduit-s3 conduit-s3-aa connect-s3]"
+time=2026-10-27T00:46:35.175Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-pg step=pre-test hook=wait-and-count-before-kafka tools="[conduit-kafka conduit-kafka-aa connect-kafka]"
+time=2026-10-27T00:46:35.175Z level=INFO msg="Running command in existing container" container=cdcparity-counter command="PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tA -F ' ' -c \"SELECT 'TS_BEFORE_MS=' || (extract(epoch from clock_timestamp())*1000)::bigint, 'SRC_EVENTS_BEFORE=' || COALESCE(sum(n_tup_ins+n_tup_upd+n_tup_del),0)::bigint, 'SRC_NET_BEFORE=' || COALESCE(sum(n_tup_ins-n_tup_del),0)::bigint FROM pg_stat_user_tables WHERE relname LIKE 'bench_source_%'\"\n"
+time=2026-10-27T00:46:35.175Z level=DEBUG msg="Executing command" test=cdc-parity tool=conduit-pg step=pre-test hook=mark-before command="/usr/bin/docker exec --interactive cdcparity-counter sh -c PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tA -F ' ' -c \"SELECT 'TS_BEFORE_MS=' || (extract(epoch from clock_timestamp())*1000)::bigint, 'SRC_EVENTS_BEFORE=' || COALESCE(sum(n_tup_ins+n_tup_upd+n_tup_del),0)::bigint, 'SRC_NET_BEFORE=' || COALESCE(sum(n_tup_ins-n_tup_del),0)::bigint FROM pg_stat_user_tables WHERE relname LIKE 'bench_source_%'\"\n"
+time=2026-10-27T00:46:35.207Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:35.244Z level=INFO msg="TS_BEFORE_MS=1793061995244 SRC_EVENTS_BEFORE=310000 SRC_NET_BEFORE=189613" test=cdc-parity tool=conduit-pg step=pre-test hook=mark-before container=cdcparity-counter stream=stdout
+time=2026-10-27T00:46:35.248Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-pg step=pre-test
+time=2026-10-27T00:46:35.248Z level=INFO msg="Running step" test=cdc-parity tool=conduit-pg step=test
+time=2026-10-27T00:46:35.248Z level=INFO msg="Running collector" test=cdc-parity tool=conduit-pg step=test name=docker type=docker
+time=2026-10-27T00:46:35.248Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-pg step=test time-left=1m0s
+time=2026-10-27T00:46:35.248Z level=DEBUG msg="Collecting stats" test=cdc-parity tool=conduit-pg collector=docker type=docker collector=docker type=docker container=cdcparity-postgres
+time=2026-10-27T00:46:35.248Z level=DEBUG msg="Collecting stats" test=cdc-parity tool=conduit-pg collector=docker type=docker collector=docker type=docker container=cdcparity-loader
+time=2026-10-27T00:46:35.278Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:35.279Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:35.279Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:35.280Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:35.708Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:35.781Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:35.782Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:35.782Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:35.783Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:36.209Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:36.284Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:36.284Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:36.285Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:36.286Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:36.711Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:36.787Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:36.788Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:36.788Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:36.789Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:37.212Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:37.290Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:37.290Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:37.291Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:37.292Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:37.714Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:37.793Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:37.793Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:37.794Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:37.795Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:38.215Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:38.295Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:38.296Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:38.297Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:38.297Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:38.716Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:38.799Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:38.799Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:38.800Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:38.800Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:39.217Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:39.302Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:39.303Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:39.303Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:39.304Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:39.718Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:39.805Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:39.805Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:39.806Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:39.807Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:40.220Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:40.249Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-pg step=test time-left=55s
+time=2026-10-27T00:46:40.308Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:40.308Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:40.309Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:40.309Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:40.722Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:40.810Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:40.811Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:40.811Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:40.812Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:41.223Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:41.313Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:41.314Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:41.314Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:41.315Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:41.724Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:41.816Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:41.817Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:41.818Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:41.818Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:42.226Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:42.319Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:42.320Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:42.321Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:42.321Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:42.727Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:42.823Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:42.823Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:42.824Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:42.825Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:43.229Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:43.326Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:43.326Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:43.327Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:43.328Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:43.731Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:43.829Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:43.830Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:43.830Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:43.831Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:44.232Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:44.332Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:44.333Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:44.333Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:44.334Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:44.733Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:44.835Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:44.835Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:44.836Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:44.836Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:45.235Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:45.248Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-pg step=test time-left=50s
+time=2026-10-27T00:46:45.338Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:45.338Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:45.339Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:45.340Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:45.736Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:45.841Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:45.842Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:45.842Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:45.843Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:46.237Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:46.344Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:46.345Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:46.345Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:46.346Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:46.738Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:46.847Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:46.848Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:46.848Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:46.849Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:47.240Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:47.350Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:47.351Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:47.351Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:47.352Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:47.741Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:47.852Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:47.853Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:47.854Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:47.854Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:48.243Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:48.356Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:48.356Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:48.357Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:48.358Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:48.745Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:48.859Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:48.860Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:48.860Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:48.861Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:49.246Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:49.362Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:49.362Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:49.363Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:49.363Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:49.747Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:49.864Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:49.865Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:49.866Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:49.866Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:50.248Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:50.248Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-pg step=test time-left=45s
+time=2026-10-27T00:46:50.367Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:50.368Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:50.368Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:50.369Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:50.749Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:50.870Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:50.871Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:50.871Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:50.872Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:51.250Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:51.373Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:51.374Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:51.374Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:51.375Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:51.752Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:51.876Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:51.877Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:51.877Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:51.878Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:52.253Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:52.379Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:52.380Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:52.381Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:52.382Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:52.754Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:52.883Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:52.884Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:52.885Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:52.885Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:53.256Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:53.386Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:53.387Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:53.387Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:53.388Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:53.757Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:53.889Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:53.890Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:53.891Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:53.891Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:54.258Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:54.392Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:54.393Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:54.393Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:54.394Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:54.760Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:54.894Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:54.895Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:54.896Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:54.896Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:55.249Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-pg step=test time-left=40s
+time=2026-10-27T00:46:55.261Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:55.398Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:55.398Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:55.399Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:55.400Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:55.762Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:55.901Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:55.902Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:55.902Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:55.904Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:56.264Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:56.405Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:56.405Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:56.406Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:56.406Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:56.765Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:56.908Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:56.908Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:56.909Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:56.909Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:57.266Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:57.410Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:57.411Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:57.412Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:57.412Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:57.768Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:57.914Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:57.914Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:57.915Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:57.916Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:58.270Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:58.416Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:58.417Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:58.418Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:58.418Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:58.771Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:58.920Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:58.920Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:58.921Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:58.922Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:59.272Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:59.423Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:59.424Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:59.424Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:59.425Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:46:59.774Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:46:59.926Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:46:59.927Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:46:59.928Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:46:59.929Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:00.248Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-pg step=test time-left=35s
+time=2026-10-27T00:47:00.275Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:00.430Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:00.431Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:00.431Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:00.432Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:00.777Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:00.933Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:00.934Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:00.935Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:00.935Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:01.277Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:01.436Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:01.437Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:01.438Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:01.438Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:01.779Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:01.939Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:01.940Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:01.940Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:01.941Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:02.280Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:02.442Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:02.442Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:02.443Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:02.443Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:02.781Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:02.945Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:02.946Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:02.946Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:02.947Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:03.282Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:03.447Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:03.448Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:03.449Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:03.449Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:03.784Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:03.951Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:03.951Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:03.952Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:03.952Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:04.285Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:04.453Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:04.454Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:04.454Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:04.455Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:04.786Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:04.956Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:04.957Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:04.957Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:04.958Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:05.249Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-pg step=test time-left=30s
+time=2026-10-27T00:47:05.288Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:05.459Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:05.460Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:05.460Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:05.461Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:05.789Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:05.961Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:05.962Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:05.963Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:05.963Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:06.291Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:06.464Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:06.465Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:06.465Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:06.466Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:06.793Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:06.967Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:06.968Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:06.968Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:06.969Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:07.294Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:07.470Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:07.471Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:07.471Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:07.472Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:07.795Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:07.973Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:07.974Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:07.975Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:07.975Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:08.297Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:08.477Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:08.477Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:08.478Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:08.478Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:08.798Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:08.980Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:08.980Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:08.981Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:08.981Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:09.299Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:09.483Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:09.483Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:09.484Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:09.485Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:09.800Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:09.985Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:09.986Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:09.987Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:09.987Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:10.248Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-pg step=test time-left=25s
+time=2026-10-27T00:47:10.302Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:10.488Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:10.489Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:10.490Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:10.490Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:10.803Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:10.991Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:10.992Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:10.992Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:10.993Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:11.304Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:11.494Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:11.494Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:11.495Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:11.495Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:11.806Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:11.997Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:11.997Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:11.998Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:11.999Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:12.307Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:12.499Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:12.500Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:12.501Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:12.501Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:12.808Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:13.003Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:13.003Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:13.004Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:13.004Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:13.310Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:13.505Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:13.506Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:13.506Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:13.507Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:13.811Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:14.008Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:14.009Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:14.009Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:14.010Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:14.312Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:14.511Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:14.511Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:14.512Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:14.512Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:14.814Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:15.013Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:15.014Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:15.015Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:15.015Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:15.249Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-pg step=test time-left=20s
+time=2026-10-27T00:47:15.315Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:15.517Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:15.517Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:15.518Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:15.519Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:15.817Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:16.020Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:16.021Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:16.021Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:16.021Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:16.318Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:16.523Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:16.524Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:16.524Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:16.525Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:16.819Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:17.026Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:17.027Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:17.027Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:17.028Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:17.320Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:17.529Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:17.530Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:17.530Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:17.531Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:17.821Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:18.032Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:18.033Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:18.034Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:18.034Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:18.322Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:18.535Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:18.536Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:18.536Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:18.537Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:18.824Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:19.038Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:19.038Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:19.039Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:19.039Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:19.325Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:19.540Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:19.541Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:19.542Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:19.542Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:19.826Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:20.044Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:20.045Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:20.045Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:20.046Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:20.249Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-pg step=test time-left=15s
+time=2026-10-27T00:47:20.327Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:20.547Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:20.547Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:20.548Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:20.548Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:20.828Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:21.049Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:21.050Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:21.051Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:21.051Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:21.329Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:21.552Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:21.553Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:21.553Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:21.554Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:21.831Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:22.055Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:22.056Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:22.056Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:22.057Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:22.333Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:22.558Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:22.559Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:22.559Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:22.560Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:22.834Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:23.061Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:23.062Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:23.063Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:23.063Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:23.335Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:23.564Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:23.565Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:23.565Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:23.566Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:23.837Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:24.067Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:24.068Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:24.068Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:24.069Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:24.338Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:24.570Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:24.570Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:24.571Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:24.572Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:24.839Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:25.073Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:25.074Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:25.074Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:25.075Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:25.249Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-pg step=test time-left=10s
+time=2026-10-27T00:47:25.340Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:25.576Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:25.577Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:25.577Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:25.578Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:25.841Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:26.079Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:26.080Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:26.080Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:26.081Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:26.343Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:26.582Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:26.582Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:26.583Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:26.584Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:26.844Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:27.085Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:27.086Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:27.087Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:27.088Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:27.346Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:27.588Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:27.589Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:27.590Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:27.590Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:27.847Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:28.092Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:28.092Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:28.093Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:28.094Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:28.349Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:28.596Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:28.596Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:28.597Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:28.597Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:28.850Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:29.098Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:29.099Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:29.100Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:29.100Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:29.351Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:29.602Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:29.603Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:29.603Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:29.604Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:29.853Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:30.105Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:30.106Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:30.106Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:30.107Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:30.248Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-pg step=test time-left=5s
+time=2026-10-27T00:47:30.354Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:30.608Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:30.608Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:30.609Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:30.609Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:30.855Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:31.110Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:31.111Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:31.112Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:31.112Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:31.356Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:31.613Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:31.614Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:31.614Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:31.615Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:31.858Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:32.117Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:32.117Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:32.118Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:32.118Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:32.359Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:32.619Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:32.620Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:32.621Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:32.621Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:32.861Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:33.122Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:33.123Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:33.124Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:33.124Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:33.362Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:33.625Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:33.626Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:33.626Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:33.627Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:33.864Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:34.128Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:34.128Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:34.129Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:34.130Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:34.365Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:34.630Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:34.631Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:34.632Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:34.632Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:34.866Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:35.134Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:35.135Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:35.135Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:35.136Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:35.248Z level=INFO msg="Test in progress" test=cdc-parity tool=conduit-pg step=test time-left=0s
+time=2026-10-27T00:47:35.368Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:35.637Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:35.637Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:35.638Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:35.639Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:35.748Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-pg step=test
+time=2026-10-27T00:47:35.749Z level=INFO msg="Running step" test=cdc-parity tool=conduit-pg step=post-test
+time=2026-10-27T00:47:35.749Z level=INFO msg="Exporting metrics" test=cdc-parity tool=conduit-pg step=post-test collector=docker path=/home/ubuntu/conduit/benchi/v021-cdc-parity/results/v022-shipped-defaults-classic/r2-conduit-pg/cdc-parity_conduit-pg/docker.csv
+time=2026-10-27T00:47:35.749Z level=DEBUG msg="Running hooks" test=cdc-parity tool=conduit-pg step=post-test count=5
+time=2026-10-27T00:47:35.749Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-pg step=post-test hook=count-after tools="[conduit conduit-aa connect redpanda-connect]"
+time=2026-10-27T00:47:35.749Z level=INFO msg="Running command in existing container" container=cdcparity-counter command="count() {\n  q=\"SELECT COALESCE(SUM(cnt),0)::bigint FROM (\"\n  i=0\n  while [ \"$i\" -lt \"${TABLES:-1}\" ]; do\n    if [ \"$i\" -gt 0 ]; then q=\"$q UNION ALL\"; fi\n    q=\"$q SELECT count(*) AS cnt FROM bench_dest_${i}\"\n    i=$((i+1))\n  done\n  q=\"$q) t\"\n  c=$(PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tAc \"$q\" 2>/dev/null | tr -d ' ')\n  echo \"${c:-0}\"\n}\necho \"ROWS_AFTER=$(count)\"\n"
+time=2026-10-27T00:47:35.749Z level=DEBUG msg="Executing command" test=cdc-parity tool=conduit-pg step=post-test hook=count-after-pg command="/usr/bin/docker exec --interactive cdcparity-counter sh -c count() {\n  q=\"SELECT COALESCE(SUM(cnt),0)::bigint FROM (\"\n  i=0\n  while [ \"$i\" -lt \"${TABLES:-1}\" ]; do\n    if [ \"$i\" -gt 0 ]; then q=\"$q UNION ALL\"; fi\n    q=\"$q SELECT count(*) AS cnt FROM bench_dest_${i}\"\n    i=$((i+1))\n  done\n  q=\"$q) t\"\n  c=$(PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tAc \"$q\" 2>/dev/null | tr -d ' ')\n  echo \"${c:-0}\"\n}\necho \"ROWS_AFTER=$(count)\"\n"
+time=2026-10-27T00:47:35.834Z level=INFO msg="ROWS_AFTER=264557" test=cdc-parity tool=conduit-pg step=post-test hook=count-after-pg container=cdcparity-counter stream=stdout
+time=2026-10-27T00:47:35.837Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-pg step=post-test hook=count-after-s3 tools="[conduit-s3 conduit-s3-aa connect-s3]"
+time=2026-10-27T00:47:35.837Z level=DEBUG msg="Skipping hook" test=cdc-parity tool=conduit-pg step=post-test hook=count-after-kafka tools="[conduit-kafka conduit-kafka-aa connect-kafka]"
+time=2026-10-27T00:47:35.837Z level=INFO msg="Running command in existing container" container=cdcparity-counter command="PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tA -F ' ' -c \"SELECT 'TS_AFTER_MS=' || (extract(epoch from clock_timestamp())*1000)::bigint, 'SRC_EVENTS_AFTER=' || COALESCE(sum(n_tup_ins+n_tup_upd+n_tup_del),0)::bigint, 'SRC_NET_AFTER=' || COALESCE(sum(n_tup_ins-n_tup_del),0)::bigint FROM pg_stat_user_tables WHERE relname LIKE 'bench_source_%'\"\n"
+time=2026-10-27T00:47:35.837Z level=DEBUG msg="Executing command" test=cdc-parity tool=conduit-pg step=post-test hook=mark-after command="/usr/bin/docker exec --interactive cdcparity-counter sh -c PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tA -F ' ' -c \"SELECT 'TS_AFTER_MS=' || (extract(epoch from clock_timestamp())*1000)::bigint, 'SRC_EVENTS_AFTER=' || COALESCE(sum(n_tup_ins+n_tup_upd+n_tup_del),0)::bigint, 'SRC_NET_AFTER=' || COALESCE(sum(n_tup_ins-n_tup_del),0)::bigint FROM pg_stat_user_tables WHERE relname LIKE 'bench_source_%'\"\n"
+time=2026-10-27T00:47:35.869Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:35.909Z level=INFO msg="TS_AFTER_MS=1793062055910 SRC_EVENTS_AFTER=1510000 SRC_NET_AFTER=908429" test=cdc-parity tool=conduit-pg step=post-test hook=mark-after container=cdcparity-counter stream=stdout
+time=2026-10-27T00:47:35.913Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-pg step=post-test
+time=2026-10-27T00:47:35.913Z level=INFO msg="Running step" test=cdc-parity tool=conduit-pg step=pre-cleanup
+time=2026-10-27T00:47:35.913Z level=DEBUG msg="Running hooks" test=cdc-parity tool=conduit-pg step=pre-cleanup count=0
+time=2026-10-27T00:47:35.913Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-pg step=pre-cleanup
+time=2026-10-27T00:47:35.914Z level=INFO msg="Running step" test=cdc-parity tool=conduit-pg step=cleanup
+time=2026-10-27T00:47:35.914Z level=INFO msg="Stopping containers" test=cdc-parity tool=conduit-pg step=tool
+time=2026-10-27T00:47:35.914Z level=DEBUG msg="Executing command" command="/usr/bin/docker compose -f ./tools/compose-conduit-pg.yml down"
+time=2026-10-27T00:47:36.139Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:36.140Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:36.141Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:36.141Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:36.370Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:36.371Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:36.372Z level=INFO msg="Stopping containers" test=cdc-parity tool=conduit-pg step=infrastructure
+time=2026-10-27T00:47:36.372Z level=DEBUG msg="Executing command" command="/usr/bin/docker compose -f ./infra/compose.yml down"
+time=2026-10-27T00:47:36.642Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:36.643Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:36.643Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:36.643Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:36.643Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:36.643Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:36.871Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:36.871Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:37.145Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:37.145Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:37.146Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:37.146Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:37.146Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:37.146Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:37.146Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:37.372Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:37.372Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:37.646Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:37.647Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:37.647Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:37.647Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:37.647Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:37.647Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:37.648Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:37.873Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:37.874Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:38.148Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:38.149Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:38.149Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:38.149Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:38.149Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:38.149Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:38.149Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:38.374Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:38.375Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:38.650Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:38.651Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:38.651Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:38.651Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:38.651Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:38.651Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:38.651Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:38.875Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:38.875Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:39.152Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:39.153Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:39.153Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:39.153Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:39.153Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:39.153Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:39.153Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:39.376Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:39.377Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:39.654Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:39.655Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:39.655Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:39.655Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:39.655Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:39.655Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:39.655Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:39.877Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:39.878Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:40.156Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:40.157Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:40.157Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:40.157Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:40.157Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:40.157Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:40.157Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:40.378Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:40.379Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:40.658Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:40.659Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:40.659Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:40.659Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:40.659Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:40.659Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:40.659Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:40.879Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:40.880Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:41.160Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:41.161Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:41.161Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:41.161Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:41.161Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:41.161Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:41.161Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:41.380Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:41.381Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:41.662Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:41.663Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:41.663Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:41.663Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:41.663Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:41.663Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:41.663Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:41.881Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:41.882Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:42.164Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:42.165Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:42.165Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:42.165Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:42.165Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:42.165Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:42.165Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:42.382Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:42.383Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:42.666Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:42.667Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:42.667Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:42.667Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:42.667Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:42.667Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:42.667Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:42.883Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:42.884Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:43.167Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:43.168Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:43.168Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:43.168Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:43.169Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:43.169Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:43.169Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:43.384Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:43.384Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:43.670Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:43.670Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:43.671Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:43.671Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:43.671Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:43.671Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:43.671Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:43.885Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:43.885Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:44.171Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:44.172Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:44.172Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:44.172Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:44.172Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:44.172Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:44.172Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:44.385Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:44.386Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:44.673Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:44.674Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:44.674Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:44.674Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:44.674Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:44.674Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:44.674Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:44.887Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:44.887Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:45.175Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:45.176Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:45.176Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:45.176Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:45.176Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:45.176Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:45.177Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:45.388Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:45.389Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:45.677Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:45.678Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:45.678Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:45.678Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:45.678Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:45.678Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:45.678Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:45.890Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:45.890Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:46.179Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:46.179Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:46.180Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:46.180Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:46.180Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:46.180Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:46.180Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:46.391Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:46.391Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-conduit-pg
+time=2026-10-27T00:47:46.667Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-pg step=cleanup
+time=2026-10-27T00:47:46.667Z level=INFO msg="Running step" test=cdc-parity tool=conduit-pg step=post-cleanup
+time=2026-10-27T00:47:46.667Z level=DEBUG msg="Running hooks" test=cdc-parity tool=conduit-pg step=post-cleanup count=0
+time=2026-10-27T00:47:46.667Z level=INFO msg="Step successful" test=cdc-parity tool=conduit-pg step=post-cleanup
+time=2026-10-27T00:47:46.668Z level=INFO msg="Exporting aggregated metrics" path=/home/ubuntu/conduit/benchi/v021-cdc-parity/results/v022-shipped-defaults-classic/r2-conduit-pg/aggregated-results.csv
+time=2026-10-27T00:47:46.668Z level=INFO msg="Removing docker network" network=benchi
+time=2026-10-27T00:47:46.668Z level=INFO msg="Removing network" network=benchi
+time=2026-10-27T00:47:46.680Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:46.681Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-counter
+time=2026-10-27T00:47:46.681Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:46.681Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-loader
+time=2026-10-27T00:47:46.681Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:46.681Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-minio
+time=2026-10-27T00:47:46.681Z level=DEBUG msg="Inspecting container" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:46.681Z level=DEBUG msg="Container not found" model=container-monitor name=cdcparity-postgres
+time=2026-10-27T00:47:46.745Z level=INFO msg="Network removed" network=benchi
