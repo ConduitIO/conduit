@@ -82,6 +82,7 @@ func TestFlushPending_CollidingPositionsAcrossSources_DroppedAckAcksNothing(t *t
 		err := task.doBuffered(ctx, NewBatch([]opencdc.Record{b}), newRecordingAckNacker(logB))
 
 		is.True(err != nil)               // the flush fails instead of succeeding
+		is.Equal(dest.calls, 2)           // read the partial set, then read again and hit the closed stream
 		is.Equal(len(logA.snapshot()), 0) // source A not acked
 		is.Equal(len(logB.snapshot()), 0) // source B not acked
 	}
