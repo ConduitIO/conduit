@@ -148,33 +148,34 @@ rule for raising it is pre-registered in benchi arm 2.
 ### E. A second coalescing site: #3201's flusher, or #3292's inbox carry slot
 
 - **Lost:** two places to get the caps, the look-ahead and the completion rules right. The flusher is
-  folded into the writer, and #3292's R4 becomes this doc's R2.
+  folded into the writer, and #3292's former R4 is this doc's R2.
 
 ## Decision
 
 ### Ownership per shape
 
-After #3292 and this doc have both landed:
+After #3292 and this doc have both landed. #3292 at `848122e7` carries the same table.
 
 | Shape | Stream owner | Worker waits for its write? | Coalescing | Owning doc |
 | --- | --- | --- | --- | --- |
 | 1x1, any batching | writer and AckReader, read-ahead mode | no | yes | this doc |
-| Nx1, any batching, bare or with processors | writer and AckReader, read-ahead mode; `sharedMu` (processor roots only) held for the processor pass and the enqueue | no | yes, across sources | this doc |
+| Nx1, any batching, bare or with processors | writer and AckReader, read-ahead mode; `sharedMu` (processor roots only) held for the processor pass and the enqueue | no | yes: across sources for a verified destination, one source per `Write` otherwise (see the single-source guard) | this doc |
 | 1xM, M of 2 or more | direct `Do` (unchanged) | yes | no | neither |
-| NxM, M and N of 2 or more, bare, no batching | writer and AckReader, #3292 concurrent mode | yes | yes, across workers (N or fewer queued) | #3292 |
+| NxM, M and N of 2 or more, bare, no batching | writer and AckReader, #3292 concurrent mode | yes | per this doc's take policy, single-source guard included | #3292 |
 | NxM with batching, or with processor roots | synchronous, under `sharedMu` (unchanged) | yes | no | neither; needs the #2978 ledger |
 
 The predicate is simple: one destination means read-ahead mode; two or more means #3292's rules.
-**Landing order and merge conditions.** #3292 lands first: it builds the writer, the AckReader and
-their R1 to R3. This doc's implementation PR comes after it. #3292 at `da419ea9` gates concurrent
-mode on `batchingEnabled() == false` and two or more workers, which includes Nx1. Its author is
-revising the gate to two or more destinations. That revision is a merge condition for this doc, not a
-request. Until the revised head lands, the Nx1 row above does not hold, and this doc cites
-`da419ea9` as the head it was checked against.
+**Landing order and merge conditions.** The order is: the prerequisite fixes on `main`; then #3292's
+component and concurrent mode, which build the writer, the AckReader, the completion hook and R1 to
+R3; then this doc's take policy and read-ahead mode. This matches #3292's open question 2. #3292 at
+`848122e7` narrows concurrent mode to two or more sources, two or more bare destinations and no
+batching. It moves its former "phase 2" and its R4 to this doc. That head, or a later one that keeps
+the same table, is a merge condition for this doc.
 
 **Who completes, in read-ahead mode.** #3292's rule is that the AckReader never touches the worker's
 batch, and that workers ack their own source. Read-ahead mode reverses that rule, for this mode only.
-The AckReader is the single completion goroutine. When a write's acks are all in, it runs
+The AckReader is the single completion goroutine. It attaches through the completion hook #3292
+defines for this purpose. When a write's acks are all in, it runs
 `markSpans` and then the group's entries in queue order. A data entry runs `ackPending`, which goes
 through `runAckNacker` to `Worker.Ack` or `Worker.Nack`, and so to `Source.Ack` and `DLQ.Nack`. A
 barrier entry runs the call it recorded. The writer hands a barrier that has nothing in flight ahead
@@ -201,9 +202,20 @@ out of scope for both docs.
   capped by records only. Nothing in `funnel` knows today whether a destination is standalone. The
   connector plugin service already knows, because the dispenser comes from either `builtinReg` or
   `standaloneReg` (`plugin/connector/service.go`). The implementation exposes that as a `Standalone()`
-  method on the dispensed connector. `buildDestinationTasks` then passes `maxWriteBytes` to
-  `NewBatchingDestinationTask`: the computed cap for a standalone destination, 0 (no byte cap) for a
-  builtin one. The task never inspects plugin names.
+  method on the dispensed connector, next to #3292's verified flag (builtin, or `orderedAcks`).
+  `buildDestinationTasks` passes both to `NewBatchingDestinationTask`. `maxWriteBytes` is the computed
+  cap for a standalone destination and 0 (no byte cap) for a builtin one. The task never inspects
+  plugin names.
+- **Single-source guard (#3292, H2).** A destination is _verified_ if it is builtin, or if it is
+  standalone and declares `orderedAcks` (#3292's capability gate; old plugins read as false). For an
+  unverified destination, one `Write` carries records from one source only, and the in-flight limit is
+  1. The writer takes the longest prefix of the queue whose data entries all come from the head's
+  source. Barriers carry no records and no acks, so they never break the prefix. Without this, a
+  dropped ack on a stream that mixes sources with byte-identical positions would ack one source for
+  another source's record. That is loss, not a duplicate. The guard therefore also applies to the
+  opt-in accumulator on Nx1. For an unverified destination the accumulator keeps one buffer per
+  source, which closes `main`'s current Nx1-with-batching exposure for standalone destinations.
+  Builtin destinations, and every 1x1, are unaffected.
 - **Look-ahead.** The queue is a mutex-guarded slice. The writer peeks before it takes, and takes the
   longest prefix that stays under both caps. A head submission that is over a cap on its own goes
   alone, and is subject to the oversize error below.
@@ -373,13 +385,13 @@ exactly once" checkable in tests.
 
 ## Requirements and tests
 
-R1 to R4 extend #3292's R1 to R4 to coalesced groups and barriers. Each test is written to fail without
+R1 to R4 extend #3292's R1 to R3, and its former R4, to coalesced groups and barriers. Each test is written to fail without
 its fix.
 
 | # | Requirement | Test |
 | --- | --- | --- |
 | R1 | Group completion: a failure or cancel completes every submission in the taken group and in the queue exactly once, with k computed per the model | `TestWriter_WriteErrorCompletesGroup`, `TestWriter_CancelCompletesQueue`; outstanding counters reach zero |
-| R2 | Cap look-ahead (#3292 R4): never take past either cap, never lose or reorder at the cut | `TestTakePolicy_RecordCap`, `TestTakePolicy_ByteCap`, and a rapid property: the `Write`s concatenated equal the submissions in order, each `Write` is under the caps unless it holds a single submission, and each submission completes once |
+| R2 | Cap look-ahead (#3292's former R4): never take past either cap, never lose or reorder at the cut | `TestTakePolicy_RecordCap`, `TestTakePolicy_ByteCap`, and a rapid property: the `Write`s concatenated equal the submissions in order, each `Write` is under the caps unless it holds a single submission, and each submission completes once |
 | R3 | Enqueue versus close (#3292 R2) | `TestDestinationTask_EnqueueRacesClose`, `-race -count=500` |
 | R4 | A sent `Write` completes only through its real acks or a stream end (#3292 R3) | `TestDestinationTask_CloseWaitsForSentWriteAcks` |
 | R5 | Nack fan-back in a coalesced `Write` | `TestCoalescedWrite_NackMapsToOwningSubmission`, with the nack first, middle and last, and across ack chunks |
@@ -391,6 +403,7 @@ its fix.
 | R11 | Every source ack and nack goes through the queue in order (H1) | `TestReadAhead_FilteredBatchWaitsForEarlierWrite`, `TestReadAhead_ProcessorNackWaitsForEarlierRecords`, and a chaos test that SIGKILLs between a processor nack and the write of records ahead of it; asserts no persisted position passes an undelivered record |
 | R12 | Split-run state has one owner at a time (H2): nothing from a pass is enqueued before the pass ends | `TestReadAhead_SplitRecordRacesCompletionVote` (`SplitRecord` on sub-batch B against an instant completion of sub-batch A, `-race -count=200`, flagged with staging switched off), and `TestReadAhead_SplitRunDivergentMembers` |
 | R13 | Total completion model | `TestAckPending_NackFailsMidSubmission`: sub-batch 1 acked, sub-batch 2's DLQ write fails; the persisted position is the end of sub-batch 1, the run fails, and restart replays from there |
+| R14 | Single-source guard for unverified destinations | `TestTakePolicy_UnverifiedNeverMixesSources`: 2 sources with byte-identical positions into 1 unverified destination; every `Write` holds one source's records, barriers interleave freely, and the in-flight limit is 1. Plus `TestDoBuffered_UnverifiedAccumulatorPerSource` |
 
 ### Chaos
 
@@ -484,8 +497,9 @@ pre-registered and is valid only when the floor is under 5%.
 
 ## Related
 
-- `docs/design-documents/20261027-funnel-shared-destination-concurrency.md` (#3292): the writer and
-  AckReader, its R1 to R4, and its concurrent mode for NxM. A prerequisite.
+- `docs/design-documents/20261027-funnel-shared-destination-concurrency.md` (#3292, checked at
+  `848122e7`): the writer, the AckReader, the completion hook, R1 to R3, the verified-destination gate
+  and the single-source guard, and concurrent mode for NxM. A prerequisite.
 - `docs/design-documents/20261027-default-source-batching.md`: the hard gate.
 - `docs/design-documents/20261017-funnel-destination-batching.md` and
   `docs/design-documents/20261019-funnel-read-ahead-pipelining.md`: the accumulator, the fan-back, and
