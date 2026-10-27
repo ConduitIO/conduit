@@ -3,45 +3,51 @@
 ## Summary
 
 When a destination's writer is free, send every submission already queued for it as one `Write`: no
-timer, no added wait, bounded by a record cap and a byte cap. This turns the arch-v2 funnel's default
-single-destination path, which today is stop-and-wait (read, write, wait for the ack, ack the source,
-read again), into a pipelined path whose per-`Write` cost is shared by whatever queued up while the
-previous `Write` was in flight. When the destination keeps up, the queue is empty and each source read
-goes out alone, as it does today.
+timer, no added wait, bounded by a record cap and a byte cap. For a single-destination pipeline (1x1,
+Nx1), the worker also stops waiting for each write. It enqueues and reads on, and the destination
+acks the source in queue order once a write is durably confirmed. The default path is stop-and-wait
+today: read, write, wait for the ack, ack the source, read again. This doc turns it into a pipelined
+path whose per-`Write` cost is shared by whatever queued while the previous `Write` was in flight.
+When the destination keeps up, the queue is empty and each read goes out alone, as it does today.
 
-This is not a second batching mechanism. It generalizes the read-ahead flusher that destination-write
-batching already uses (#3201, #3203, #3210): every single-destination pipeline gets the flusher, the
-flusher's bounded channel becomes a record- and byte-bounded queue of submissions, and the flusher takes
-every queued submission that fits under the caps instead of one. The explicit `sdk.batch.*` accumulator
-stays, as an optional stage in front of the queue.
+There is one stream owner and one coalescing site. The per-destination writer and AckReader come from
+`docs/design-documents/20261027-funnel-shared-destination-concurrency.md` (#3292). This doc adds three
+things on top of that component:
 
-Risk tier: Tier 1. It changes the default data path of every single-destination arch-v2 pipeline: the
-source ack moves off the worker goroutine, a source batch can be acked after later batches were read,
-and one `Write` can carry several source batches (from several sources, on a shared destination).
+- a **take policy**, which is how the writer picks queued submissions under the caps, and is the only
+  place coalescing happens in either mode;
+- a **read-ahead completion mode** for single-destination pipelines, which absorbs today's #3210
+  flusher;
+- the byte cap and size estimator.
+
+This doc owns #3292's "phase 2: fold the flusher into the writer".
+
+**Hard gate.** Default source batching
+(`docs/design-documents/20261027-default-source-batching.md`) lands first. This design is implemented
+only if benchi then shows a gain on top of it (see "Benchmark plan").
+
+Risk tier: Tier 1. It changes the default data path of every single-destination arch-v2 pipeline.
+The source ack moves off the worker goroutine. A source batch can be acked after later batches have
+been read. One `Write` can carry several source batches, from several sources on a shared destination.
 
 ## Context and problem
 
 An exploratory profile of `main` at `a23efb64` (generator to file, 1 source and 1 destination,
 connector defaults, host mode on a c7i.4xlarge; not the A/A-controlled harness) shows the pipeline is
 not CPU-bound. It uses about 1.4 of 16 cores. The worker goroutine is blocked 41.9 s of a ~50 s run:
-21.5 s in `Source.Read`, waiting on the source plugin goroutine, and 20.3 s in `Destination.Ack`,
-waiting on the destination's ack. Each hop of read, write, ack, source ack is a goroutine wakeup, and
-nothing overlaps.
+21.5 s in `Source.Read` and 20.3 s in `Destination.Ack`. Each hop is a goroutine wakeup, and nothing
+overlaps.
 
-Main already has the fix for this shape, but only behind an opt-in:
+Main overlaps them only behind an opt-in. Destination-write batching
+(`20261017-funnel-destination-batching.md`) runs only when the destination sets `sdk.batch.size` or
+`sdk.batch.delay`; the 3000-row default from #3203 is the threshold for delay-only batching, not a
+switch. Read-ahead (`20261019-funnel-read-ahead-pipelining.md`, #3210) runs only with batching on and
+one destination. With no `sdk.batch.*` on the destination, which is the default, the pipeline takes
+the synchronous `DestinationTask.Do`.
 
-- Destination-write batching (`docs/design-documents/20261017-funnel-destination-batching.md`) runs
-  only when the destination sets `sdk.batch.size` or `sdk.batch.delay`. The 3000-row default from
-  #3203 is the threshold used when only a delay is set; it does not turn batching on.
-- Read-ahead (`docs/design-documents/20261019-funnel-read-ahead-pipelining.md`) moves the flush onto a
-  flusher goroutine, but only when batching is on and the pipeline has one destination.
-
-A pipeline with no `sdk.batch.*` settings on its destination, which is the default, takes the
-synchronous `DestinationTask.Do` path: one source read, one `Write`, every ack, then the next read.
-
-A local prototype on `a23efb64` added the #2978 async destination machinery (async acks, read-ahead
-credits, ledger prefix release, no `sharedMu`) and then writer-side coalescing on top. Exploratory
-numbers, records/s at the sink, 3 interleaved rounds, round-to-round spread at most 3.5%:
+A local prototype on `a23efb64` added the #2978 async destination machinery, then writer-side
+coalescing on top. Exploratory records/s at the sink, 3 interleaved rounds, round-to-round spread at
+most 3.5%:
 
 | Shape | `main` | #2978 rebased | + coalescing |
 | --- | --- | --- | --- |
@@ -50,358 +56,362 @@ numbers, records/s at the sink, 3 interleaved rounds, round-to-round spread at m
 | 1x1, source batch 100 | 221k to 235k | 220k | 221k |
 | 4x4, source batch 1, per sink | 29.9k | 47.2k | 152.9k |
 
-These are a reason to do the work, not a performance claim. Two things limit what they say about this
-design. First, the prototype arm includes more than coalescing: its 1x1 gain sits on top of async
-acks, which this design does not adopt (Alternative D). Second, the 4x4 gain needs the shared
-destination lock gone, which is the sibling doc's job, not this one's. Once the source batches 100
-records or more, nothing helps; the connectors' per-record SDK work dominates.
+These motivate the work; they are not a claim. Source batching at 100 reaches 221k to 235k with no
+engine change, more than double the best coalescing figure at batch 1. That is why source batching is
+a hard gate and not a preference.
+
+### Existing defects this depends on
+
+Reading the opt-in batching path for this design turned up defects that pipelining by default would
+spread to every pipeline. They are fixed on `main` as separate PRs. This design names them as
+prerequisites and does not redesign them:
+
+- **#3231.** A partial batch has no flush timer. On graceful stop, `Worker.Stop` tears down the source
+  before `DestinationTask.Close` drains the flusher, so the trailing source acks fail with
+  `plugin.ErrPluginNotRunning` and the records replay. `tests/chaos/pipelined_flusher_sigkill_test.go`
+  works around it: `pipelinedFlusherRestart` turns batching off for the restart.
+- **H1, out-of-order source acks.** An all-filtered batch (`doBuffered`, and the worker's
+  `!b.HasActiveRecords()` shortcut) and a processor-nacked sub-batch (`acker.Nack` to `Worker.Nack` to
+  `Source.Ack(positions[:n])`) ack the source immediately, on the worker goroutine. Earlier records of
+  the same read, or earlier reads, may still be buffered or in flight. `Source.Ack` persists the last
+  position unconditionally, so a crash in that window resumes past records that were never written.
+  That violates invariants 1, 2 and 3.
+- **H2, unsynchronized `splitRun` voting.** A split run's members can be voted by the flusher (members
+  written) and by the worker (members filtered or nacked) at once. `splitRun`'s fields are not
+  synchronized, so a lost or a double release is possible.
+- **Accumulator byte cap.** The accumulator cuts on record count only. For a standalone destination,
+  3000 records can exceed the plugin's 4 MiB receive limit. This ships as its own `fix:` PR with a
+  regression test that fails on `main` (requirement R9 below).
 
 ## Constraints
 
-1. **Invariant 1.** A source batch is acked only after the coalesced `Write` that carried it has been
-   sent and every one of its records' acks has been read from the destination.
-2. **Invariant 2.** Source acks go out in source order, per source. Coalescing must not let submission
-   N+1's ack overtake submission N's, and a failure must not ack anything after the failed submission.
-3. **Invariant 3.** Every submission reaches exactly one terminal outcome: acked, acked with
-   per-record nacks routed to the DLQ, or abandoned. Abandoned means never acked, the run fails or
-   stops, and the records replay. No path may complete a submission twice or never.
-4. **Invariant 4.** Within a source, records reach the destination in read order. Interleaving
-   between sources in one `Write` is allowed.
-5. **Invariant 6.** A per-record nack inside a coalesced `Write` is attributed to exactly the record
-   that failed, in exactly the submission that owns it, and follows the DLQ policy.
-6. **Invariant 7.** SIGTERM drains queued submissions before the source is torn down, so a graceful
-   stop of a default pipeline produces no more duplicates than it does today, which is none.
-   `kill -9` at any instant replays and never loses.
-7. **Single writer.** `Destination.Write` and `Destination.Ack` stay on one goroutine per destination,
-   in FIFO order (read-ahead doc, constraint 6).
-8. **Message size.** A standalone plugin rejects a gRPC message over `connectors.max-receive-record-size`
-   (default 4 MiB, `pconnector/server.DefaultMaxReceiveRecordSize`). `connector.Destination.Write`
-   sends all of a `Write`'s records as one `DestinationRunRequest`, so a coalesced `Write` must fit.
-9. **Bounded memory.** The bound must be no worse than read-ahead's `(maxInFlightFlushes + 2) × S`
-   records, and it must also be bounded in bytes.
-10. **No added latency.** The writer never waits for more work. A sparse source's record is written
-    as soon as the writer is free.
+1. **Invariant 1.** A source position is acked only after every record at or before it in that
+   source's queue order has been written and acked by the destination, or has a terminal outcome
+   (filtered, or routed to the DLQ) that does not need a write.
+2. **Invariant 2.** Each source's acks reach `Source.Ack` in ascending order, from one goroutine.
+   Nothing after a failed submission is released.
+3. **Invariant 3.** Every position in a submission is either released (acked or DLQ'd) or replays. No
+   position is released twice, and none waits forever.
+4. **Invariant 4.** Within a source, records reach the destination in read order. Interleaving between
+   sources is allowed.
+5. **Invariant 6.** A per-record nack in a coalesced `Write` is attributed to exactly that record, in
+   the submission that owns it, and follows the DLQ policy.
+6. **Invariant 7.** SIGTERM drains the queue before the source is torn down. A graceful stop of a
+   default pipeline produces no duplicates, which is today's behaviour. `kill -9` replays and never
+   loses.
+7. **One stream owner.** One writer calls `Write`, and one AckReader calls `Ack`, per destination
+   (#3292, constraint 7).
+8. **Message size.** A standalone plugin rejects a request over `connectors.max-receive-record-size`
+   (default 4 MiB). `connector.Destination.Write` sends a whole `Write` as one `DestinationRunRequest`.
+9. **Bounded memory and replay.** The records and bytes held unacked are bounded, and the bound is
+   published, because it is also the crash replay window.
+10. **No added latency.** The writer never waits for more work.
 
 ## Alternatives considered
 
-### A. Natural coalescing inside the existing flusher (chosen)
+### A. Take policy on the #3292 writer, plus a read-ahead completion mode (chosen)
 
-Each source read becomes a submission. With `sdk.batch.*` set, one submission is a whole accumulated
-buffer. Submissions go on a bounded FIFO queue. The flusher, the only goroutine that calls
-`Write`/`Ack`, takes the queue head plus every following submission that fits under the caps, writes
-them as one `Write`, drains the acks, and acks each submission in order through the existing
-`flushPending`/`markSpans`/`ackPending` code.
+Each `doBuffered` call becomes a submission. Without `sdk.batch.*`, that is one call per source read
+or per sub-batch of a tainted read. With `sdk.batch.*`, it is one accumulator flush. The writer takes
+the queue head plus every following submission that fits under the caps and writes them as one
+`Write`. The AckReader completes writes in FIFO order. In read-ahead mode, completion runs the
+existing fan-back: `markSpans`, then `ackPending` in queue order.
 
-- **Pros:** one mechanism instead of two. The ack fan-back already exists and is tested
-  (`flushSpan`, `markSpans`, `ackPending`). No timer and no added latency. Works for every destination
-  and every SDK version, because it needs nothing from the connector.
-- **Cons:** makes read-ahead the default for every single-destination pipeline, which moves the
-  source ack off the worker goroutine and needs a drain step before source teardown (constraint 6).
-  With one `Write` in flight, it shares the per-`Write` cost but cannot overlap two `Write`s.
+- **Pros:** one stream owner and one coalescing site for every mode. The fan-back already exists. No
+  timer. It needs nothing from the connector, so it works with old SDKs too.
+- **Cons:** every source ack in read-ahead mode has to go through the queue (H1). The replay window
+  gets larger (M2, quantified below).
 
-### B. Turn on timer-based batching by default
+### B. Default timer-based batching
 
-Give every destination a default `sdk.batch.delay` (say 5 ms), so #3201's accumulator always runs.
+Give every destination a default `sdk.batch.delay`.
 
-- **Lost because** it adds up to the delay to every record at low rates. Worse, the deadline is
-  checked only when the next record arrives (#3201 rejected a ticker, its Alternative C). With a
-  sparse source, the last records before a lull sit in the buffer until the next record or until
-  shutdown, an unbounded latency. Fixing that means a ticker goroutine that acks the source, which
-  #3201 rejected for good reason.
+- **Lost:** it adds the delay to every record. The deadline is checked only when the next record
+  arrives (#3231), so a sparse source's tail waits without bound. A ticker that acks the source was
+  rejected in #3201.
 
 ### C. Default source batching only
 
-Ship `sdk.batch.size=100`, `sdk.batch.delay=10ms` as the source default
-(`docs/design-documents/20261027-default-source-batching.md`). On generator to file this reaches the
-plateau, about 4x the default.
+- **The gate, not a rival.** It reaches the plateau on generator to file. But it needs a new enough
+  SDK, adds up to the delay for sparse sources, and has to be checked per connector. Coalescing goes
+  ahead only if it adds measurably on top (benchi arm 3).
 
-- **Not rejected; it is the other half.** It cannot replace coalescing for three reasons. It needs an
-  SDK that knows the setting, because standalone connectors on old SDKs reject unknown `sdk.*`
-  parameters. It adds up to 10 ms to sparse sources. And it has to be re-checked per connector against
-  that connector's semantics: CDC transaction boundaries, Kafka offsets. Coalescing needs none of
-  that. Where source batching is on, coalescing measured no gain, so the two overlap rather than
-  stack. Open question 1 asks whether we need both.
+### D. Several `Write`s in flight in read-ahead mode
 
-### D. Separate ack reader, several `Write`s in flight (#2978 shape)
+The AckReader from #3292 makes this a parameter, not a new component. Phase 1 starts at one coalesced
+`Write` in flight per destination. That is today's flusher, and the simplest ordering argument. The
+rule for raising it is pre-registered in benchi arm 2.
 
-Split the flusher into a writer and an ack reader, so `Write` N+1 is sent before `Write` N's acks
-return, bounded by an unacked-records window. This is the shape the prototype measured.
+### E. A second coalescing site: #3201's flusher, or #3292's inbox carry slot
 
-- **Deferred, not rejected.** It is the roadmap's "Destination ack reader" item. It is also where all
-  four bugs from the prototype review lived, because completion becomes a cross-goroutine handshake.
-  It is a strictly larger change. If benchi shows Alternative A recovers most of the prototype's 1x1
-  gain, D is not worth its surface. If it does not, D becomes its own design doc on top of this one.
-  The queue, caps, completion rules and tests below carry over unchanged.
-
-### E. Coalesce inside the `pkg/connector` destination adapter
-
-- **Lost for the reason #3201's Alternative B lost.** The adapter does not own the source ack, so the
-  ack deferral and fan-back would be split across two packages.
+- **Lost:** two places to get the caps, the look-ahead and the completion rules right. The flusher is
+  folded into the writer, and #3292's R4 becomes this doc's R2.
 
 ## Decision
 
-### One mechanism
+### Ownership per shape
 
-`DestinationTask` gets a submission queue in place of `flushCh`. Every destination task in a
-single-destination pipeline is pipelined (`SetPipelined` no longer requires `batchingEnabled`). The
-DLQ's task and fan-out pipelines (M > 1 destinations) keep the synchronous path until phase 2.
+After #3292 and this doc have both landed:
 
-```text
-worker: read -> processors -> [accumulator, only if sdk.batch.* set] -> enqueue submission
-flusher: take head + every queued submission under the caps -> one Write -> drain acks
-         -> markSpans -> ackPending(submission 1), ackPending(submission 2), ... in queue order
-```
+| Shape | Stream owner | Worker waits for its write? | Coalescing | Owning doc |
+| --- | --- | --- | --- | --- |
+| 1x1, any batching | writer and AckReader, read-ahead mode | no | yes | this doc |
+| Nx1, any batching, bare or with processors | writer and AckReader, read-ahead mode; `sharedMu` (processor roots only) held for the processor pass and the enqueue | no | yes, across sources | this doc |
+| 1xM, M of 2 or more | direct `Do` (unchanged) | yes | no | neither |
+| NxM, M and N of 2 or more, bare, no batching | writer and AckReader, #3292 concurrent mode | yes | yes, across workers (N or fewer queued) | #3292 |
+| NxM with batching, or with processor roots | synchronous, under `sharedMu` (unchanged) | yes | no | neither; needs the #2978 ledger |
 
-- **Submission.** One `pendingBatch` group: a single source read without `sdk.batch.*`, or a whole
-  accumulator flush with it. A submission is never split across `Write`s, so a split run
-  (`run_ledger.go`), which lives inside one source batch, never straddles two `Write`s.
-- **Record cap.** `effectiveBatchSize()`: an explicit `sdk.batch.size`, otherwise 3000. One knob
-  across the accumulator and coalescing, so an operator who set `sdk.batch.size: 500` for a database's
-  bind-parameter limit never gets a 1000-record `Write`.
-- **Byte cap.** `maxWriteBytes = connectors.max-receive-record-size / 2` (2 MiB by default). It
-  applies to the accumulator as well as to coalescing. The accumulator has no byte cap today, so by
-  reading the code, 3000 records over about 1.4 KB each already exceed the 4 MiB limit of a standalone
-  destination with `sdk.batch.delay` set. This is not reproduced; the implementation PR adds the test
-  that shows it either way. Builtin destinations get the same cap, so one path also bounds per-`Write`
-  memory (open question 3).
-- **Taking from the queue.** The queue is a mutex-guarded slice, not a channel. The flusher peeks
-  before it takes, so it takes the longest prefix whose record and byte totals stay under the caps. A
-  submission that would cross a cap stays at the head for the next `Write`. A head submission that is
-  over a cap on its own is taken and written alone (today's behaviour for that read).
-- **Queue credit.** Enqueue blocks while the queue holds `maxInFlightFlushes × S` records or
-  `maxInFlightFlushes × maxWriteBytes` estimated bytes. An empty queue always admits one submission,
-  so an oversized submission cannot deadlock. Enqueue unblocks on dequeue, flusher exit, close, or
-  run-context cancel. The memory bound stays `(maxInFlightFlushes + 2) × S` records, plus one source
-  read of overshoot, and is now also bounded in bytes.
-- **No waiting.** The flusher blocks only while the queue is empty. It never waits for the queue to
-  fill.
+The predicate is simple: one destination means read-ahead mode; two or more means #3292's rules.
+Phase 1 of #3292 currently gates concurrent mode on `batchingEnabled() == false` and two or more
+workers, which includes Nx1. I am asking its author to narrow that gate to M of 2 or more, so Nx1 has
+one owner and never runs a mode that lives for only one release. If #3292 lands first with Nx1
+included, this doc's PR moves Nx1 to read-ahead mode and deletes the gate branch.
 
-### Size estimator
+Earlier drafts said fan-out coalescing would wait on an ordered cross-batch source-ack release from #3292.
+It does not provide one, and does not need one, because its workers wait for their own
+completion. Fan-out read-ahead, where the worker does not wait, still needs the #2978 ledger and is
+out of scope for both docs.
 
-`estimateRecordBytes(r)` adds `metrics.RecordBytesHistogram.SizeOf(r)` (key, before and after, the
-JSON-size walk from #2268 that never calls `Bytes()`), the position length, metadata key and value
-lengths, and a fixed 64 bytes of per-record framing. It runs once per record at enqueue, on the worker
-goroutine, so the flusher only adds integers. The estimate is reused for the
-`conduit_connector_bytes` observation instead of being recomputed after the ack.
+### Take policy (the one coalescing site)
 
-The JSON walk is not the protobuf wire size. `google.protobuf.Struct` adds framing per field and
-encodes every number as an 8-byte double, so a record of many small numeric fields can encode larger
-than its JSON. The 2x headroom in `maxWriteBytes` covers that. A rapid property test checks the
-headroom: for generated records, raw and structured, numeric-heavy and string-heavy, the
-`DestinationRunRequest` that `connector.Destination.Write` would send must be at most twice the
-estimate. If the test finds a counterexample, the estimator changes; the headroom does not.
+- **Submission.** One `doBuffered` call: its `*Batch`, its `ackNacker`, its records, and an estimated
+  byte size. A submission is never split across `Write`s.
+- **Record cap.** An explicit `sdk.batch.size` is the cap. Without one, the cap is `512` records, the
+  prototype's measured setting, not 3000. That keeps the replay window small (see "Credit and replay
+  window"). Delay-only batching keeps its 3000 threshold for the accumulator, and coalescing is
+  capped at 3000 too.
+- **Byte cap.** This applies to standalone destinations only, and to the accumulator as well (R9):
+  `maxWriteBytes = connectors.max-receive-record-size × 7/8`, which is 3.5 MiB by default. It is
+  derived from wire size; see the estimator. Builtin destinations have no message limit and are
+  capped by records only.
+- **Look-ahead.** The queue is a mutex-guarded slice. The writer peeks before it takes, and takes the
+  longest prefix that stays under both caps. A head submission that is over a cap on its own goes
+  alone, and is subject to the oversize error below.
+- **No waiting.** The writer blocks only while the queue is empty, or while the in-flight limit is
+  reached (1 in phase 1).
 
-When a single submission's estimate is over `maxWriteBytes` and the destination is standalone, the
-flusher logs a warning with the estimate and the limit before sending it. If the plugin then rejects
-it with gRPC `ResourceExhausted`, the error is wrapped as
-`pipeline.destination_write_exceeds_message_limit`, with the config path and a fix: raise
-`connectors.max-receive-record-size`, or lower the source's `sdk.batch.size`. Today that failure is an
-opaque stream error, and likely a restart loop, because the replay rebuilds a similar oversized `Write`.
+### Size estimator (from wire size)
 
-### Ack fan-back, nacks and the DLQ
+The cap has to hold against the size that goes over the wire. The JSON-size walk the bytes metric uses
+(`metrics.RecordBytesHistogram.SizeOf`) is far below that for structured data. Measured with
+`proto.Size` on `toproto.DestinationRunRequest` (protocol v0.11.1) for one record each, against the
+JSON walk of key and payload:
 
-`flushPending` already concatenates several `pendingBatch` values into one `Write`, remembers each
-one's span, validates acks by position in order, marks per-record nacks with `markSpans` against the
-owning batch, and only after every ack is in, acks or nacks each batch in order with `ackPending`.
-Coalescing feeds it several submissions instead of one accumulator buffer. That code path is reused
-and not rewritten.
+| Record | JSON walk | Wire | Ratio |
+| --- | --- | --- | --- |
+| raw, 1 KiB | 1029 | 1105 | 1.07 |
+| struct, 20 one-character keys, single-digit numbers | 126 | 401 | 3.18 |
+| struct, a list of 100 single-digit numbers | 212 | 1193 | 5.63 |
+| struct, 20 keys, 7-digit numbers | 386 | 541 | 1.40 |
+| struct, 10 keys, 64-byte strings | 746 | 841 | 1.13 |
 
-- A nack in submission 2 of 3 marks exactly that record on submission 2's `*Batch`. `ackPending`
-  splits submission 2 by flag and sends the nacked sub-batch to `acker.Nack`, then the DLQ through
-  `Worker.Nack`. Submissions 1 and 3 ack wholesale. Source acks go out 1, 2, 3.
-- If the DLQ write fails or the nack window trips, `ackPending` returns an error. Submissions after
-  that one are abandoned, never acked; the flush error is recorded and the run fails. Positions stay
-  monotonic, because nothing after the failure is acked.
-- If the stream errors partway through the ack drain, nothing in the group is acked, including
-  submissions whose acks had all arrived. Releasing that prefix would save at most one `Write`'s worth
-  of duplicates, at the cost of a second completion path. It is not worth it.
+`google.protobuf.Struct` spends 11 bytes on each number in a list (tag, length, an 8-byte double), and
+about 15 bytes plus the key on each map entry with a numeric value. No fixed headroom over JSON is
+safe.
 
-### Exactly-once completion
+So `estimateWireBytes(r)` walks the record and adds up the protobuf encoding size directly. Raw data
+is its exact length. For structured data, each `Struct` field, `Value` kind and list element is counted
+with its tag and varint length prefix; numbers are 9 bytes, strings are a tag, a varint and the bytes.
+Position, metadata entries, operation and the record's own framing are counted the same way. It
+allocates nothing. Requirement R8 is a rapid property test asserting the estimate is at least
+`proto.Size` of the request, for every generated record, and within 5% of it. The 1/8 margin under the
+limit covers request-level framing and varint rounding.
 
-Each submission gets a `state` field moved by compare-and-swap, from `queued` to `taken` to one of
-`acked` or `abandoned`. A second move into a terminal state is a bug: tests panic, production returns
-`(bug)` and fails the run. Every exit path names its submissions explicitly:
+The walk runs on the worker goroutine at enqueue, only for standalone destinations. Its cost is a new
+benchi arm (arm 6). If one standalone submission is over `maxWriteBytes`, the writer logs the estimate
+and the limit, and sends it alone. A plugin rejection with gRPC `ResourceExhausted` is wrapped as
+`pipeline.destination_write_exceeds_message_limit`, naming `connectors.max-receive-record-size` and
+the source's `sdk.batch.size` as the fixes.
 
-- A `Write` error, an ack error or an `ackPending` error abandons every submission in the taken group
-  that did not reach `acked`.
-- The flusher exiting on a run-context cancel abandons the taken group and everything still queued.
-- `Close` waits for the flusher (below) and then abandons whatever is left.
+### Credit and replay window
 
-Each worker keeps an outstanding-submission counter. It goes up at enqueue and down on the terminal
-transition, whichever one it is. That counter is what the graceful-stop drain waits on, so a missed
-completion becomes a test failure on a stop deadline, not a silent hang.
+The queue credit counts records and bytes that have been submitted but not completed: queued plus in
+flight. An empty queue always admits one submission. Enqueue unblocks on completion, writer exit,
+close or cancel.
+
+| Destination settings | Record cap C | Credit | Records unacked at most (the SIGKILL replay window) |
+| --- | --- | --- | --- |
+| none (default) | 512 | 2 × C | 1024, plus one source read in progress |
+| `sdk.batch.size: S` | S | 2 × S, as today | 4 × S, as #3210 documents today |
+| `sdk.batch.delay` only | 3000 | 6000 | 12 000, as today |
+
+For a default pipeline, a SIGKILL today replays at most the one batch in flight, which is one record at
+source batch 1. After this change it replays up to about 1024 records, which is about 11 ms of data at
+90k records/s. Duplicates only, never loss. But that is a visible change for consumers that are not
+idempotent. It goes in the release notes and in `docs/operations/archv2-destination-batching.md`.
+Graceful stop does not grow: R6 drains to zero.
+
+### Every source ack goes through the queue (H1)
+
+In read-ahead mode the worker never calls the source's ack or nack itself. Every terminal outcome
+reached before the destination becomes a **barrier submission**: a submission with no records, which
+carries the `*Batch` and acker call it would have made. That covers an all-filtered batch, the first
+task's no-active-records shortcut, and a processor-nacked sub-batch, whose DLQ write is deferred with
+it. The writer passes a barrier through without a `Write`. The AckReader completes it in FIFO order,
+after every earlier submission. The completion goroutine is the only goroutine that calls the
+source's ack, `Worker.Nack` or `DLQ.Nack` for that destination. `TestDestinationTask_DoBuffered_AllFilteredAcksImmediately`
+asserts the old bypass, and is replaced.
+
+This depends on the H1 fix on `main` for opt-in batching, which may take a different route. Whatever
+that fix chooses, R11 is the invariant both have to pass.
+
+### Split-run votes on one goroutine (H2)
+
+With H1's routing, every vote for a source batch's split runs in read-ahead mode is cast on the
+completion goroutine, so the votes are serialized by construction. The H2 fix on `main` (synchronizing
+`splitRun`) remains the defence for the other modes. R12 is a `-race` test with a split run whose
+members diverge: some written, some filtered, some nacked.
+
+### Completion model (total)
+
+`ackPending` releases a submission as a sequence of sub-batches, each one acked or nacked by flag. One
+completion function per submission runs once, guarded by a `completed` flag and the per-worker
+outstanding counter:
+
+- **Released in full:** every sub-batch acked or nacked.
+- **Released prefix k:** sub-batches 1 to k released, then the release of sub-batch k+1 failed
+  (`Source.Ack` error, DLQ write failure, or nack window exceeded). Positions after sub-batch k replay.
+  The error is sticky and fails the run, so no later submission releases anything.
+- **Not released (k = 0):** a `Write` error, an `Ack` error or mismatch, a run-context cancel, or close
+  with the submission still queued. Every position replays.
+
+Each submission ends in exactly one of these, defined by k, so the model is total. Persisted positions
+are then always a prefix of queue order per source (invariant 2), whatever state the run ends in. This
+is a flag and a counter, not a state machine. That is the least machinery that makes "completes
+exactly once" checkable in tests.
 
 ### Close and stop
 
-- **Graceful stop (Invariant 7).** `Worker.Stop` sets `w.stop`, then, before `tearDownSource`, asks
-  each destination it feeds to flush its accumulator and waits for its own outstanding counter to reach
-  zero, bounded by the context passed to `Stop` (bounded stop is #2990). The flusher's ack path does not take `processingLock`,
-  so the wait cannot deadlock against `Stop` holding it. If the deadline passes, `Stop` tears down the
-  source anyway. Late acks then hit a closed source stream (`isClosedSourceStream`) and the records
-  replay. This also fixes a duplicate-on-stop that opt-in batching has today: the read-ahead doc
-  accepts that the trailing source acks fail on graceful stop.
-- **`DestinationTask.Close`.** Under the queue mutex it sets `closed`, then wakes the flusher, which
-  drains the queue and exits. Close then waits for the flusher, then tears down the destination.
-  Close never fails a `Write` that has already been sent; its acks are still read, and a real ack wins
-  over teardown.
-- **Fatal error or force-stop.** The run context is cancelled. The flusher stops after its current
-  `Ack` call returns or fails, and abandons everything it holds. Records replay.
-
-### Shared destinations and fan-out
-
-- **Phase 1: one destination (1x1 and Nx1).** Nx1 is already pipelined when batching is on, with one
-  flusher for the shared destination. Coalescing needs only three things: one flusher owns the stream;
-  enqueue order matches each source's order; and a flush error is sticky, so every worker's next
-  enqueue gets it, which is the same effect as `poisoned`. It does not need `sharedMu`. While
-  `sharedMu` exists, a worker holds it only for the enqueue, not for `Write` plus the ack wait.
-- **Phase 2: fan-out (M > 1).** Fan-out stays synchronous for the reason the read-ahead doc gives: M
-  flushers would race on the worker's cross-batch source ack. Coalescing under fan-out depends on
-  `docs/design-documents/20261027-funnel-shared-destination-concurrency.md`, which is being written
-  in parallel and is expected to remove `sharedMu` and give fan-out an ordered cross-batch source-ack
-  release. The 4x4 number above needs both docs. Phase 2 is a follow-up PR against that design. This
-  doc does not change the fan-out path.
+- **Graceful stop (R6, includes #3231).** `Worker.Stop` sets `w.stop`, flushes any accumulator it
+  feeds, and waits for its outstanding counter to reach zero, bounded by the context passed to `Stop`.
+  Only then does it call `tearDownSource`. The completion path does not take `processingLock`, and a
+  batch read after `stop` is armed is discarded (`worker.go`), so nothing is enqueued after the wait
+  sees zero. If the deadline passes, teardown goes ahead, and late releases fail and replay. The
+  comment in `connector/source.go` that claims no `Ack` can start once `Teardown` begins is corrected
+  in the same PR. R6 also deletes the `pipelinedFlusherRestart` workaround, so the chaos restart runs
+  batching again.
+- **`DestinationTask.Close`** follows #3292 R2 and R3: close and enqueue share the queue mutex, writes
+  already sent complete through their real acks, and the join completes whatever is left.
+- **Fatal error or force-stop:** cancel. Everything not yet released replays.
 
 ## Requirements and tests
 
-Each requirement below comes with the test that proves it, written to fail without the fix. The first
-four are the bugs the security review found in the prototype. Each one has a counterpart on `main`'s
-code or would be introduced by coalescing.
+R1 to R4 extend #3292's R1 to R4 to coalesced groups and barriers. Each test is written to fail without
+its fix.
 
 | # | Requirement | Test |
 | --- | --- | --- |
-| R1 | Taken-group completion. A `Write`, ack or `ackPending` error, or a context cancel, moves every submission in the taken group and in the queue to exactly one terminal state. Prototype bug: the writer returned on an error or on close without completing the batch it took. | `TestFlusher_WriteErrorCompletesTakenGroup`, `TestFlusher_CancelCompletesQueue`: outstanding counters reach zero, no source ack, the run fails |
-| R2 | Cap look-ahead. The flusher never takes a submission that would cross either cap, and no submission is lost or reordered at the cut. Prototype bug: the drain took one item past the cap. | `TestFlusher_CoalesceRespectsRecordCap`, `TestFlusher_CoalesceRespectsByteCap`, and a rapid property: for random submission sizes and caps, every `Write` is under the caps unless it holds one submission, the concatenated `Write`s equal the submissions in order, and each submission completes once |
-| R3 | Enqueue versus close. Enqueue and `closed` share one mutex. An enqueue after close fails without acking, and the submission replays. Prototype bug: enqueue could land behind close's drain. Main avoids it only through ordering (the sink closes after every worker exits), which phase 2 may change. | `TestDestinationTask_EnqueueRacesClose`, `-race -count=500`: never panics, never hangs, every submission is completed or rejected |
-| R4 | No orphaned `Write`s. A `Write` already sent completes only through its real acks, or through a stream error or context cancel; close never fails it early. Prototype bug: the ack reader exited on close, so sent `Write`s never completed. | `TestDestinationTask_CloseWaitsForSentWriteAcks` (real ack wins), `TestDestinationTask_StreamErrorAbandonsSentWrite` |
-| R5 | Nack fan-back. A per-record nack in a coalesced `Write` reaches the DLQ for that record only. Other submissions ack, in order. | `TestCoalescedWrite_NackMapsToOwningSubmission`, with the nack in the first, middle and last submission and across ack chunks |
-| R6 | Graceful drain. `Stop` waits for this worker's submissions before source teardown. | `TestWorker_StopDrainsBeforeSourceTeardown`, plus a chaos SIGTERM test: a default destination with a slow `Write`, stop mid-stream, zero duplicates on restart |
-| R7 | Per-source order on Nx1. Coalesced `Write`s interleave sources and never reorder one. | Extend `worker_nsource_test.go`: 4 sources, 1 default destination, assert per-source order and ascending position acks |
-| R8 | Estimator soundness. The encoded request is at most twice the estimate. | `TestEstimateRecordBytes_BoundsWireSize` (rapid) |
-| R9 | Accumulator byte cap. Opt-in batching cuts on bytes too. | `TestDoBuffered_CutsOnByteCap`, and a standalone test over 4 MiB that fails on `main` |
-| R10 | Existing suites in the new default. The fan-out-share, deep-clone, retry-bound, poison and ack-order tests pass with the single-destination default now pipelined. | Run the existing `pkg/lifecycle-poc/funnel` and `tests/chaos` suites unchanged |
+| R1 | Group completion: a failure or cancel completes every submission in the taken group and in the queue exactly once, with k computed per the model | `TestWriter_WriteErrorCompletesGroup`, `TestWriter_CancelCompletesQueue`; outstanding counters reach zero |
+| R2 | Cap look-ahead (#3292 R4): never take past either cap, never lose or reorder at the cut | `TestTakePolicy_RecordCap`, `TestTakePolicy_ByteCap`, and a rapid property: the `Write`s concatenated equal the submissions in order, each `Write` is under the caps unless it holds a single submission, and each submission completes once |
+| R3 | Enqueue versus close (#3292 R2) | `TestDestinationTask_EnqueueRacesClose`, `-race -count=500` |
+| R4 | A sent `Write` completes only through its real acks or a stream end (#3292 R3) | `TestDestinationTask_CloseWaitsForSentWriteAcks` |
+| R5 | Nack fan-back in a coalesced `Write` | `TestCoalescedWrite_NackMapsToOwningSubmission`, with the nack first, middle and last, and across ack chunks |
+| R6 | Graceful drain before source teardown (#3231) | `TestWorker_StopDrainsBeforeSourceTeardown`; chaos SIGTERM with zero duplicates; `pipelinedFlusherRestart` workaround removed |
+| R7 | Per-source order on Nx1 | `worker_nsource_test.go`: 4 sources, 1 default destination |
+| R8 | The estimator bounds wire size | `TestEstimateWireBytes_BoundsProtoSize` (rapid): at least `proto.Size`, within 5% |
+| R9 | Accumulator byte cap (its own `fix:` PR first) | `TestDoBuffered_CutsOnByteCap`, and a standalone test over 4 MiB that fails on `main` |
+| R10 | Existing suites pass in the new default | the `pkg/lifecycle-poc/funnel` and `tests/chaos` suites, unchanged |
+| R11 | Every source ack and nack goes through the queue in order (H1) | `TestReadAhead_FilteredBatchWaitsForEarlierWrite`, `TestReadAhead_ProcessorNackWaitsForEarlierRecords`, and a chaos test that SIGKILLs between a processor nack and the write of records ahead of it; asserts no persisted position passes an undelivered record |
+| R12 | Split-run votes are serialized (H2) | `TestReadAhead_SplitRunDivergentMembers_Race`, `-race -count=200` |
+| R13 | Total completion model | `TestAckPending_NackFailsMidSubmission`: sub-batch 1 acked, sub-batch 2's DLQ write fails; the persisted position is the end of sub-batch 1, the run fails, and restart replays from there |
 
 ### Chaos
 
-`TestSIGKILL_CoalescedWrite_CrashMidWrite` in `tests/chaos`, modelled on
-`pipelined_flusher_sigkill_test.go`, uses a destination with no `sdk.batch.*` settings and a paced
-`Write`, so the queue builds and coalesced groups of two or more submissions are in flight. The child
-SIGKILLs itself while a coalesced `Write` is sent but not yet acked. The test also asserts, through a
-test hook, that at least one group of two or more was in flight at the kill; otherwise it proves
-nothing. Assertions are the existing ones: at the kill, every position the upstream ledger committed
-was durably delivered (Invariant 1); after restart, the upstream ledger reaches the total and every
-position was delivered at least once (Invariant 3). It runs in `tests/chaos (race, x3)`, which is
-required. A second variant runs 4 sources into 1 destination.
+`TestSIGKILL_CoalescedWrite_CrashMidWrite`, modelled on `pipelined_flusher_sigkill_test.go`, uses a
+default destination with a paced `Write`, so groups of two or more submissions are in flight. A test
+hook asserts that at least one group of two or more was in flight at the kill; otherwise the test
+proves nothing. It reuses `assertRecoveryInvariantsAtKill` (invariant 1) and
+`assertRecoveryInvariantsAfterRestart` (invariant 3), and also asserts that the duplicates delivered
+are no more than the replay-window bound in the table. There are variants with 4 sources into 1
+destination, and with a filtering processor (for R11). All run in the required `tests/chaos (race, x3)`.
 
 ## Failure modes
 
-- **SIGKILL with submissions queued or a coalesced `Write` in flight.** Nothing in the queue or the
-  group was acked, so no position was persisted. Replay from the last persisted position, with
-  duplicates bounded by the queue credit plus one `Write`. Covered by the chaos test.
-- **`Write` fails.** The group and the queue are abandoned (R1), the flush error is sticky, and the
-  run fails. On a shared destination, every worker gets the error on its next enqueue.
-- **Ack stream fails partway through a group.** Nothing in the group is acked. Replay.
-- **Destination returns a per-record error.** That record goes to the DLQ (R5). A DLQ failure fails
-  the run and abandons the rest.
-- **Oversized submission on a standalone destination.** Written alone. If the plugin rejects it, the
-  run fails with `pipeline.destination_write_exceeds_message_limit`, not an opaque stream error.
-- **Estimator underestimates past the headroom.** The plugin rejects the `Write` with the same error
-  and the run fails. Nothing is acked, so nothing is lost. R8 exists to find this before users do.
-- **Slow destination.** The queue fills to its credit, enqueue blocks, and the source stops reading.
-  The pipeline runs at the destination's rate, as with read-ahead today.
-- **Sparse source.** The queue is empty, each read is written immediately, and latency equals today's
-  stop-and-wait. The benchi latency arm checks this.
-- **Wedged destination at shutdown.** The flusher blocks in `Ack` until the stop deadline cancels the
-  run context. That is the same bound the synchronous path has.
-- **Close racing enqueue.** Impossible by construction (R3).
-- **Processor mutates a record after enqueue.** The worker builds a fresh `Batch` each pass. The
-  record ownership rules from #3201 and the fan-out deep-clone rules already apply to buffered batches,
-  and R10 runs those tests in the new default.
+- **SIGKILL with a queue or a coalesced `Write` in flight.** Nothing past the persisted prefix was
+  released, so it replays, within the published bound.
+- **`Write` or `Ack` failure, or an ack mismatch.** Sticky. Every submission completes with k = 0, the
+  run fails, and every worker's next enqueue gets the error (#3292).
+- **Release fails partway through a submission.** Prefix k is released and the rest replays (R13).
+- **A filter or processor nack ahead of an unwritten record.** It waits in the queue as a barrier
+  (R11).
+- **Oversized standalone submission.** Sent alone. Rejected with
+  `pipeline.destination_write_exceeds_message_limit`. Nothing is released.
+- **Estimator below the wire size.** R8 exists to prevent it. If it happens anyway, it is the same
+  rejection, and nothing is lost.
+- **Slow destination.** Credit fills, enqueue blocks, and the source stops reading.
+- **Sparse source.** The queue is empty, so each read is written at once with no added latency (benchi
+  arm 5).
+- **Wedged destination at stop.** The bounded `Stop` deadline, then cancel.
 
 ## Upgrade and rollback
 
-No serialized format changes: positions, checkpoints, connector state and the connector protocol are
-untouched, so N+1 reads N's state and N reads N+1's. Behaviour does change: one `Write` can carry
-records from several source reads. A destination that assumed one `Write` per source read would see
-that already under opt-in batching, and connectors must handle multi-record `Write`s under the SDK
-contract anyway. The release notes call it out.
-
-Rollback is reverting the PR. The per-pipeline escape hatch is open question 2. No new config surface
-is proposed beyond reusing `connectors.max-receive-record-size`.
+No serialized format changes: positions, state, protocol and config schema are untouched, so N and N+1
+read each other's state. Behaviour changes, and the release notes say so. One `Write` can carry
+several reads and sources. The SIGKILL replay window of a default pipeline grows to about 1024 records.
+Source acks for filtered and processor-nacked records can lag behind later reads. Rollback is a revert.
+The per-pipeline escape hatch is open question 1.
 
 ## Observability
 
-New metrics, labelled the same as the `conduit_connector_*` family (pipeline, plugin, type,
-`component_id`), so no new cardinality:
+Labelled like the `conduit_connector_*` family, so no new cardinality:
 
-- `conduit_funnel_destination_write_submissions`: histogram of submissions per `Write`. A value of 1
-  everywhere means the destination keeps up and coalescing is idle.
-- `conduit_funnel_destination_write_records`: histogram of records per `Write`.
-- `conduit_funnel_destination_write_bytes`: histogram of estimated bytes per `Write`, with buckets up
-  to `maxWriteBytes`.
-- `conduit_funnel_destination_cap_cuts_total{reason="records|bytes"}`: counter of `Write`s cut short by
-  a cap. A high byte-cut rate means records are large relative to the message limit.
-- `conduit_funnel_destination_queue_records`: gauge of queued, not-yet-written records.
-- `conduit_funnel_destination_enqueue_blocked_seconds_total`: counter of time workers spent blocked on
-  queue credit. It is the direct "destination is the bottleneck" signal.
+- `conduit_funnel_destination_write_submissions` (histogram): submissions per `Write`, barriers
+  excluded.
+- `conduit_funnel_destination_write_records` (histogram): records per `Write`.
+- `conduit_funnel_destination_write_bytes` (histogram): estimated wire bytes per `Write`, standalone
+  destinations only.
+- `conduit_funnel_destination_cap_cuts_total{reason="records|bytes"}` (counter).
+- `conduit_funnel_destination_unacked_records` (gauge): records submitted but not completed, the
+  live replay window.
+- `conduit_funnel_destination_enqueue_blocked_seconds_total` (counter): time blocked on credit,
+  meaning the destination is the bottleneck.
 
-At debug, the flusher logs its caps on start. The oversized-submission warning and the new error code
-get a runbook entry in `docs/operations/archv2-destination-batching.md`, which the implementation PR
-extends to cover coalescing. `llms.txt` and the arch-v2 docs on `conduit.io` change in the same PR.
+The `inflight_writes` and `submit_wait_seconds` metrics from #3292 cover its mode. The oversize error and the replay
+window get runbook text in `docs/operations/archv2-destination-batching.md`. `llms.txt` and the
+`conduit.io` arch-v2 docs change in the implementation PR.
 
 ## Benchmark plan
 
-Nothing here is a claim until benchi says so. The implementation PR commits configs and results under
-`benchi/archv2-write-coalescing/`, using the A/A-controlled methodology in `benchi/METHODOLOGY.md`
-(interleaved base and head, 5 rounds, medians with spread, cited noise floor).
+Nothing here is a claim until benchi says so. Configs and results go under
+`benchi/archv2-write-coalescing/`, following `benchi/METHODOLOGY.md`: base, head and base again,
+interleaved over 5 rounds, medians with spread, and the A/A noise floor cited. Each decision below is
+pre-registered and is valid only when the floor is under 5%.
 
-1. **1x1 generator to file, source batch 1, 10, 100.** The exploratory table, reproduced. Pass: a
-   gain at batch 1 well above the noise floor, and no regression above the noise floor at batch 100.
-2. **Prototype comparison.** The same shape, this design against the prototype's coalescing arm, to
-   answer Alternative D. If this design recovers less than about two-thirds of the prototype's 1x1
-   gain, write the ack-reader doc.
-3. **CDC parity** (`benchi/v021-cdc-parity`, Postgres `logrepl` to a destination). The real-connector
-   shape the v0.22 engine flip is gated on, with and without the default-source-batching change, to
-   answer open question 1.
+1. **The gate (arm 3 first).** CDC parity (`benchi/v021-cdc-parity`) and generator to file at 1x1,
+   both with default source batching already on `main`. Coalescing proceeds only if it improves either
+   shape by more than twice the floor, and regresses neither by more than the floor.
+2. **In-flight writes.** 1x1 generator to file, source batch 1, this design against the prototype's
+   coalescing arm. If the median is under 79k records/s (two-thirds of the prototype's +36k gain over
+   54.5k), raise phase 1's in-flight limit to a records window, as in Alternative D, and re-run.
+3. **Source batch 1, 10, 100** at 1x1: no regression above the floor at 100.
 4. **Nx1** (`benchi/archv2-nxm` with M = 1): 4 sources into 1 destination.
-5. **Standalone destination, 2 KB and 16 KB records.** Proves the byte cap holds and measures its
-   cost.
-6. **Latency.** A paced generator at 100 and 1000 records/s, reporting p50 and p99 source-read-to-ack
-   latency against `main`. Pass: no p99 regression above the noise floor.
-7. **`make bench-engine`.** Add `BenchmarkDestinationTask_Coalesced` so the per-PR gate covers the
-   path from now on.
-
-4x4 is measured in phase 2, with the shared-destination doc.
+5. **Latency:** a paced generator at 100 and 1000 records/s, p50 and p99 from read to ack. No p99
+   regression above the floor.
+6. **Standalone destination:** 2 KiB raw records and numeric-heavy structured records. This measures
+   the estimator's cost at 1x1, batch 1, and proves the byte cap holds.
+7. **`make bench-engine`:** add `BenchmarkDestinationTask_Coalesced` so the per-PR gate covers the
+   path.
 
 ## Open questions for DeVaris
 
-1. **Both, or one?** Default source batching reaches the plateau on generator to file, and where it
-   is on, coalescing adds nothing. Coalescing adds no latency and works for old SDKs and non-batching
-   sources. My recommendation: land default source batching first, because it is the smaller change.
-   Then ship coalescing only if benchi arm 3 shows a gain on CDC parity on top of it, or if source
-   batching cannot be the default for enough connectors. Do you agree with that gate?
-2. **Escape hatch.** Making read-ahead and coalescing the default for every single-destination
-   pipeline is a big behaviour change for one PR. Options: (a) no switch, revert to roll back; (b) an
-   explicit destination `sdk.batch.size: 1` means "stop-and-wait, as before", which needs
-   `SDKBatchSettings` to tell unset apart from 1; (c) a temporary engine flag that follows the
-   deprecation policy. I lean to (b): it reuses an existing knob and is per pipeline.
-3. **Byte cap for builtin destinations.** The same 2 MiB cap keeps one code path and bounds memory per
-   `Write`, but builtins have no message limit and may lose throughput on large records. Same cap, or
-   records only?
-4. **Accumulator byte cap as a separate fix.** R9 fixes what looks like a live bug in opt-in batching
-   for standalone destinations. Should it go out first as its own `fix:` PR, with a regression test,
-   ahead of this design?
-5. **Phase 2 sequencing.** Is it acceptable that the 4x4 gain waits for the shared-destination doc,
-   or do you want fan-out coalescing designed here once that doc settles?
+1. **Escape hatch.** Options: revert only; an explicit destination `sdk.batch.size: 1` meaning
+   stop-and-wait, which needs `SDKBatchSettings` to tell unset apart from 1; or a temporary flag. I
+   lean to the explicit `sdk.batch.size: 1`.
+2. **Replay window.** Is about 1024 records (512 plus a 2x credit) acceptable for default pipelines?
+   Or should the default credit be 1x, which gives about 512 at some cost to coalescing?
+3. **Nx1 ownership.** Do you agree with "one destination means read-ahead mode", with #3292 narrowed to
+   M of 2 or more?
 
 ## Related
 
-- `docs/design-documents/20261017-funnel-destination-batching.md`: the accumulator and `flushPending`
-  fan-back this reuses.
-- `docs/design-documents/20261019-funnel-read-ahead-pipelining.md`: the flusher this generalizes.
-- `docs/design-documents/20261027-funnel-shared-destination-concurrency.md`: `sharedMu` and fan-out,
-  a prerequisite for phase 2. Being written in parallel.
-- `docs/design-documents/20261027-default-source-batching.md`: the complementary source-side default.
-- `docs/design-documents/20260801-archv2-multiconnector-nsource.md`: shared destination, poisoning.
-- #2978: the staged batch engine prototype, and the async machinery the review findings come from.
+- `docs/design-documents/20261027-funnel-shared-destination-concurrency.md` (#3292): the writer and
+  AckReader, its R1 to R4, and its concurrent mode for NxM. A prerequisite.
+- `docs/design-documents/20261027-default-source-batching.md`: the hard gate.
+- `docs/design-documents/20261017-funnel-destination-batching.md` and
+  `docs/design-documents/20261019-funnel-read-ahead-pipelining.md`: the accumulator, the fan-back, and
+  the flusher this folds in.
+- #3231: partial batch, and stop before drain.
+- The H1, H2 and byte-cap fixes on `main` (prerequisites; see "Existing defects this depends on").
+- #2978: the prototype and its review findings.
 - Roadmap: v0.21 engine, "Adaptive batching by default" and "Destination ack reader". v0.22, "Default
-  engine flip", gated on parity-or-faster at shipped defaults.
+  engine flip".
