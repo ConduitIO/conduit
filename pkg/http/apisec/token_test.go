@@ -128,20 +128,31 @@ func TestTokensEqual_TimingDoesNotDependOnMatchLength(t *testing.T) {
 	early := "b" + secret[1:]
 	late := secret[:len(secret)-1] + "b"
 
-	measure := func(candidate string) time.Duration {
-		best := time.Duration(1<<63 - 1)
-		for run := 0; run < 7; run++ {
-			start := time.Now()
-			for i := 0; i < 500; i++ {
-				tokensEqual(secret, candidate)
-			}
-			if d := time.Since(start); d < best {
-				best = d
-			}
+	// Interleave the two candidates and keep the fastest round of each. Timing
+	// one candidate's rounds before the other's let warm-up, GC and CI noise
+	// land on whichever went first, and on CI the first was reliably 2-3x
+	// slower even though the comparison is constant time.
+	timeRound := func(candidate string) time.Duration {
+		start := time.Now()
+		for i := 0; i < 500; i++ {
+			tokensEqual(secret, candidate)
 		}
-		return best
+		return time.Since(start)
 	}
-	e, l := measure(early), measure(late)
+	timeRound(early) // warm up
+	timeRound(late)
+	e, l := time.Duration(1<<63-1), time.Duration(1<<63-1)
+	for round := 0; round < 21; round++ {
+		first, second := early, late
+		if round%2 == 1 {
+			first, second = late, early
+		}
+		d1, d2 := timeRound(first), timeRound(second)
+		if round%2 == 1 {
+			d1, d2 = d2, d1
+		}
+		e, l = min(e, d1), min(l, d2)
+	}
 	ratio := float64(e) / float64(l)
 	if ratio < 0.5 || ratio > 2 {
 		t.Fatalf("rejecting an early mismatch took %v, a late mismatch %v (ratio %.2f): comparison time depends on where the mismatch is", e, l, ratio)
