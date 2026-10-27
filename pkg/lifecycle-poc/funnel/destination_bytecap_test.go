@@ -17,10 +17,12 @@ package funnel
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
 )
@@ -129,7 +131,7 @@ func TestDestinationTask_DoBuffered_FlushesOnBytes(t *testing.T) {
 	is.True(len(dest.writes) >= 2) // flushed before 100 records accumulated
 	is.NoErr(task.Close(ctx))
 	for _, sz := range dest.sizes {
-		is.True(sz <= writeLimit(testMaxReceive)+recordWireSize(recs[0])) // never more than one record over the cap
+		is.True(sz <= writeLimit(testMaxReceive)) // every Write is within the budget
 	}
 	is.Equal(dest.receivedPositions(), bytecapPositions(recs...))
 }
@@ -173,4 +175,61 @@ func bytecapPositions(recs ...opencdc.Record) []opencdc.Position {
 		out[i] = r.Position
 	}
 	return out
+}
+
+// oversizeRecords returns three records whose middle one alone cannot fit in a
+// testMaxReceive request.
+func oversizeRecords() []opencdc.Record {
+	recs := bigRecords(3, 200)
+	recs[1].Payload.After = opencdc.RawData(make([]byte, 2*testMaxReceive))
+	return recs
+}
+
+func assertOversizeNacked(is *is.I, statusErr error, pos opencdc.Position) {
+	ce, ok := conduiterr.Get(statusErr)
+	is.True(ok)
+	is.Equal(ce.Code.Reason(), CodeRecordExceedsMaxReceiveSize.Reason())
+	is.True(strings.Contains(ce.Message, "connectors.max-receive-record-size"))
+	is.True(strings.Contains(ce.Message, log.KeyHash(pos)))
+}
+
+// TestDestinationTask_Do_OversizeRecordIsNackedNotSent: a record that alone
+// exceeds the connector's receive limit would fail the whole stream at the plugin
+// (RESOURCE_EXHAUSTED, no per-record nack) and, replayed on restart, stall the
+// pipeline. It is nacked with a coded error before the Write so the DLQ policy
+// decides; the records around it are written and acked as usual.
+func TestDestinationTask_Do_OversizeRecordIsNackedNotSent(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	task, dest := newByteCapTask(t, 0)
+
+	recs := oversizeRecords()
+	batch := NewBatch(recs)
+	is.NoErr(task.Do(ctx, batch))
+
+	is.Equal(dest.receivedPositions(), bytecapPositions(recs[0], recs[2])) // the huge record never reached the plugin
+	is.Equal(batch.recordStatuses[0].Flag, RecordFlagAck)
+	is.Equal(batch.recordStatuses[1].Flag, RecordFlagNack)
+	is.Equal(batch.recordStatuses[2].Flag, RecordFlagAck)
+	assertOversizeNacked(is, batch.recordStatuses[1].Error, recs[1].Position)
+}
+
+// TestDestinationTask_DoBuffered_OversizeRecordIsNackedNotSent: same on the
+// coalescing path, where the record sits inside a flush with its neighbours.
+func TestDestinationTask_DoBuffered_OversizeRecordIsNackedNotSent(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	task, dest := newByteCapTask(t, 100)
+
+	recs := oversizeRecords()
+	batch := NewBatch(recs)
+	alog := &eventLog{}
+	err := task.doBuffered(ctx, batch, newRecordingAckNacker(alog))
+	is.True(err == nil || isBuffered(err))
+	is.NoErr(task.Close(ctx))
+
+	is.Equal(dest.receivedPositions(), bytecapPositions(recs[0], recs[2]))
+	is.Equal(batch.recordStatuses[1].Flag, RecordFlagNack)
+	assertOversizeNacked(is, batch.recordStatuses[1].Error, recs[1].Position)
+	is.Equal(alog.snapshot(), []string{"acker.ack", "acker.nack", "acker.ack"}) // tainted batch: split by flag, in order
 }

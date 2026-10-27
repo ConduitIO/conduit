@@ -218,7 +218,19 @@ func (t *DestinationTask) flushPending(ctx context.Context, pending []pendingBat
 		// in source order. A failure in any chunk acks nothing upstream.
 		ackCount := 0
 		for from := 0; from < len(records); {
-			end := chunkEnd(records, from, t.writeLimit)
+			end, oversize := nextChunk(records, from, t.writeLimit, t.maxReceive)
+			if oversize {
+				// Invariant 3: nack a record that can never be received instead
+				// of sending it; it takes its place in the ack sequence so the
+				// global indices (and source order) are unchanged.
+				t.markSpans(spans, []connector.DestinationAck{{
+					Position: positions[from],
+					Error:    t.errRecordTooLarge(positions[from], recordWireSize(records[from])),
+				}}, ackCount)
+				ackCount++
+				from = end
+				continue
+			}
 			err := t.destination.Write(ctx, records[from:end])
 			if err != nil {
 				t.metrics.ObserveError()

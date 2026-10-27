@@ -64,6 +64,9 @@ type DestinationTask struct {
 	// connectors.max-receive-record-size (0 = unlimited). Set once, before Open,
 	// by SetMaxReceiveRecordSize.
 	writeLimit int
+	// maxReceive is connectors.max-receive-record-size itself (0 = unlimited): a
+	// single record whose request exceeds it can never be received.
+	maxReceive int
 
 	mu            sync.Mutex
 	pending       []pendingBatch // buffered source batches awaiting flush
@@ -167,6 +170,25 @@ func (t *DestinationTask) ID() string {
 // before Open.
 func (t *DestinationTask) SetMaxReceiveRecordSize(n int) {
 	t.writeLimit = writeLimit(n)
+	t.maxReceive = n
+}
+
+// WriteLimit returns the byte budget of one multi-record Write, 0 if unlimited.
+func (t *DestinationTask) WriteLimit() int {
+	return t.writeLimit
+}
+
+// errRecordTooLarge is the coded error a record is nacked with when it alone
+// exceeds the connector's receive limit.
+func (t *DestinationTask) errRecordTooLarge(pos opencdc.Position, size int) error {
+	ce := conduiterr.New(CodeRecordExceedsMaxReceiveSize, fmt.Sprintf(
+		"record (position hash %s) is %d bytes on the wire, over connectors.max-receive-record-size (%d bytes), "+
+			"so destination %s cannot receive it",
+		log.KeyHash(pos), size, t.maxReceive, t.id,
+	))
+	ce.Suggestion = "raise connectors.max-receive-record-size (the plugin must accept it too), shrink the record " +
+		"upstream (a processor can drop or truncate large fields), or route it to the dead-letter queue"
+	return ce
 }
 
 // SetPipelined enables read-ahead pipelining (a dedicated flusher goroutine)
@@ -238,10 +260,21 @@ func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
 	// source order. Nothing is acked upstream until Do returns, so a failure in
 	// a later chunk replays the whole batch (at-least-once).
 	start := time.Now()
+	if len(records) == 0 {
+		return t.writeChunk(ctx, batch, records, positions, 0, start)
+	}
 	from := 0
 	for {
-		end := chunkEnd(records, from, t.writeLimit)
-		if err := t.writeChunk(ctx, batch, records[from:end], positions[from:end], from, start); err != nil {
+		end, oversize := nextChunk(records, from, t.writeLimit, t.maxReceive)
+		if oversize {
+			// Invariant 3: a record that can never be received is nacked, so the
+			// DLQ policy decides (the default DLQ stops the pipeline), instead of
+			// being sent to fail the whole stream and replay forever.
+			t.markBatchRecords(batch, from, []connector.DestinationAck{{
+				Position: positions[from],
+				Error:    t.errRecordTooLarge(positions[from], recordWireSize(records[from])),
+			}})
+		} else if err := t.writeChunk(ctx, batch, records[from:end], positions[from:end], from, start); err != nil {
 			return err
 		}
 		from = end

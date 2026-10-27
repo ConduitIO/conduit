@@ -17,87 +17,139 @@ package funnel
 import (
 	"encoding/base64"
 	"fmt"
+	"math"
 
 	"github.com/conduitio/conduit-commons/opencdc"
+	"google.golang.org/protobuf/encoding/protowire"
 )
 
 // writeLimitMarginPercent is the share of connectors.max-receive-record-size a
-// single Write may use. The wire estimate below is already an upper-biased
-// walk, the margin covers the request framing around the records.
-const writeLimitMarginPercent = 95
+// multi-record Write may use. recordWireSize is exact, so this only leaves room
+// for request framing the estimate does not model.
+const writeLimitMarginPercent = 99
 
-// recordWireSize estimates the bytes a record occupies in a
-// DestinationRunRequest, which is what a standalone connector's gRPC server
-// bounds with MaxRecvMsgSize (connectors.max-receive-record-size).
+// recordWireSize returns the bytes a record adds to a DestinationRunRequest (its
+// `records` field tag, length and body), which is what a standalone connector's
+// gRPC server bounds with MaxRecvMsgSize (connectors.max-receive-record-size).
 //
-// It is deliberately not the JSON size used for metrics
-// (metrics.RecordBytesHistogram.SizeOf): structured data travels as a
-// google.protobuf.Struct, where a number costs a 9-byte Value plus tags (about
-// 11 bytes against 1-2 bytes of JSON) and every map entry carries its own
-// framing. It never allocates the encoded output. It errs high, since an
-// over-estimate only splits a Write a little earlier, while an under-estimate
-// fails the whole batch at the plugin.
+// It mirrors the protobuf encoding of opencdc.v1.Record, taking the larger of
+// what the v2 and v3 encoders write wherever they differ (integers inside
+// structured data), using protowire size functions, and never allocates the
+// encoded output. It is deliberately not
+// the JSON size used for metrics (metrics.RecordBytesHistogram.SizeOf): structured
+// data travels as a google.protobuf.Struct, where a number costs a 9-byte Value
+// plus tags against 1-2 bytes of JSON, and every list element and map entry
+// carries its own tag and varint length. TestRecordWireSize_MatchesProtocolEncoders
+// pins it against the real v2 and v3 encoders.
+//
+// Where it cannot be exact (a value type the encoders do not support) it errs
+// high: an over-estimate only splits a Write earlier, an under-estimate fails the
+// whole batch at the plugin.
 func recordWireSize(r opencdc.Record) int {
-	n := 24 + len(r.Position) + 4 // operation, tags, position
-	for k, v := range r.Metadata {
-		n += len(k) + len(v) + 8
+	body := 0
+	if n := len(r.Position); n > 0 {
+		body += protowire.SizeTag(1) + protowire.SizeBytes(n)
 	}
-	n += dataWireSize(r.Key)
-	n += dataWireSize(r.Payload.Before)
-	n += dataWireSize(r.Payload.After)
-	return n
+	if r.Operation != 0 {
+		body += protowire.SizeTag(2) + protowire.SizeVarint(uint64(max(int(r.Operation), 0)))
+	}
+	for k, v := range r.Metadata {
+		// map<string,string> entry: a message with key (1) and value (2). The Go
+		// encoder writes both fields of an entry even when empty.
+		entry := protowire.SizeTag(1) + protowire.SizeBytes(len(k)) +
+			protowire.SizeTag(2) + protowire.SizeBytes(len(v))
+		body += protowire.SizeTag(3) + protowire.SizeBytes(entry)
+	}
+	if r.Key != nil {
+		body += protowire.SizeTag(4) + protowire.SizeBytes(dataWireSize(r.Key))
+	}
+	// The encoders always emit the payload message, empty or not.
+	change := 0
+	if r.Payload.Before != nil {
+		change += protowire.SizeTag(1) + protowire.SizeBytes(dataWireSize(r.Payload.Before))
+	}
+	if r.Payload.After != nil {
+		change += protowire.SizeTag(2) + protowire.SizeBytes(dataWireSize(r.Payload.After))
+	}
+	body += protowire.SizeTag(5) + protowire.SizeBytes(change)
+	return protowire.SizeTag(1) + protowire.SizeBytes(body)
 }
 
+// dataWireSize is the encoded size of an opencdc.v1.Data message.
 func dataWireSize(d opencdc.Data) int {
 	switch v := d.(type) {
-	case nil:
-		return 0
 	case opencdc.RawData:
-		return len(v) + 4
+		return protowire.SizeTag(1) + protowire.SizeBytes(len(v))
 	case opencdc.StructuredData:
-		return structWireSize(map[string]any(v)) + 4
+		return protowire.SizeTag(2) + protowire.SizeBytes(structWireSize(map[string]any(v)))
 	default:
-		return len(d.Bytes()) + 4
+		return protowire.SizeTag(1) + protowire.SizeBytes(len(d.Bytes()))
 	}
 }
 
+// structWireSize is the encoded size of a google.protobuf.Struct.
 func structWireSize(m map[string]any) int {
-	n := 4
+	n := 0
 	for k, v := range m {
-		n += len(k) + 8 + valueWireSize(v)
+		entry := protowire.SizeTag(1) + protowire.SizeBytes(len(k)) +
+			protowire.SizeTag(2) + protowire.SizeBytes(valueWireSize(v))
+		n += protowire.SizeTag(1) + protowire.SizeBytes(entry)
 	}
 	return n
 }
 
+// valueWireSize is the encoded size of a google.protobuf.Value.
 func valueWireSize(v any) int {
 	switch val := v.(type) {
 	case nil:
-		return 4
+		return protowire.SizeTag(1) + protowire.SizeVarint(0) // null_value
 	case bool:
-		return 4
+		return protowire.SizeTag(4) + protowire.SizeVarint(1) // bool_value
 	case string:
-		return len(val) + 4
+		return protowire.SizeTag(3) + protowire.SizeBytes(len(val))
 	case []byte:
-		return base64.StdEncoding.EncodedLen(len(val)) + 4
+		// Encoded as a base64 string.
+		return protowire.SizeTag(3) + protowire.SizeBytes(base64.StdEncoding.EncodedLen(len(val)))
 	case map[string]any:
-		return structWireSize(val)
+		return protowire.SizeTag(5) + protowire.SizeBytes(structWireSize(val))
 	case opencdc.StructuredData:
-		return structWireSize(map[string]any(val))
+		return protowire.SizeTag(5) + protowire.SizeBytes(structWireSize(map[string]any(val)))
 	case []any:
-		n := 4
+		list := 0
 		for _, e := range val {
-			n += valueWireSize(e)
+			list += protowire.SizeTag(1) + protowire.SizeBytes(valueWireSize(e))
 		}
-		return n
-	case float64, float32, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-		return 11
+		return protowire.SizeTag(6) + protowire.SizeBytes(list)
+	case float64, float32:
+		return protowire.SizeTag(2) + 8 // number_value (double)
+	case int:
+		return intWireSize(int64(val))
+	case int8:
+		return intWireSize(int64(val))
+	case int16:
+		return intWireSize(int64(val))
+	case int32:
+		return intWireSize(int64(val))
+	case int64:
+		return intWireSize(val)
+	case uint:
+		return uintWireSize(uint64(val))
+	case uint8:
+		return uintWireSize(uint64(val))
+	case uint16:
+		return uintWireSize(uint64(val))
+	case uint32:
+		return uintWireSize(uint64(val))
+	case uint64:
+		return uintWireSize(val)
 	default:
-		return len(fmt.Sprint(v)) + 4
+		// Not a type the encoders accept; size it as its printed form, which errs high.
+		return protowire.SizeTag(3) + protowire.SizeBytes(len(fmt.Sprint(v)))
 	}
 }
 
 // writeLimit converts connectors.max-receive-record-size into the byte budget
-// of one Write, or 0 for "no limit".
+// of one multi-record Write, or 0 for "no limit".
 func writeLimit(maxReceiveRecordSize int) int {
 	if maxReceiveRecordSize <= 0 {
 		return 0
@@ -105,23 +157,49 @@ func writeLimit(maxReceiveRecordSize int) int {
 	return maxReceiveRecordSize * writeLimitMarginPercent / 100
 }
 
-// chunkEnd returns the end (exclusive) of the longest run of records starting
-// at from whose estimated wire size stays within limit. A record that alone
-// exceeds limit still forms a chunk of one: it cannot be split, and the plugin
-// reports the oversize error for exactly that record. limit <= 0 means no limit.
-func chunkEnd(records []opencdc.Record, from, limit int) int {
-	if limit <= 0 {
-		return len(records)
+// nextChunk returns the end (exclusive) of the chunk starting at from, and
+// whether that chunk is a single record too large to ever be received.
+//
+// A chunk is the longest run of records whose total wire size stays within
+// limit. A record that alone exceeds limit still forms a chunk of one (it cannot
+// be split). If it also exceeds maxReceive, the connector's receive limit, the
+// request can never succeed: it would fail the whole stream at the plugin with
+// RESOURCE_EXHAUSTED and, replayed on restart, stall the pipeline on that one
+// record. The caller nacks it instead of sending it (oversize == true). limit
+// and maxReceive of 0 mean no limit.
+func nextChunk(records []opencdc.Record, from, limit, maxReceive int) (end int, oversize bool) {
+	if limit <= 0 && maxReceive <= 0 {
+		return len(records), false
 	}
-	size := 0
-	end := from
+	first := recordWireSize(records[from])
+	if maxReceive > 0 && first > maxReceive {
+		return from + 1, true
+	}
+	size := first
+	end = from + 1
 	for end < len(records) {
 		s := recordWireSize(records[end])
-		if end > from && size+s > limit {
+		if (maxReceive > 0 && s > maxReceive) || (limit > 0 && size+s > limit) {
 			break
 		}
 		size += s
 		end++
 	}
-	return end
+	return end, false
+}
+
+// intWireSize and uintWireSize size an integer inside a google.protobuf.Value.
+// The v2 encoder writes it as number_value, a double (9 bytes with its tag); the
+// v3 encoder writes it as a varint, which is 11 bytes for a negative number. The
+// plugin may speak either, so the larger of the two is used.
+func intWireSize(v int64) int {
+	if v < 0 {
+		// A negative int64 is a 10-byte varint (two's complement).
+		return protowire.SizeTag(2) + protowire.SizeVarint(math.MaxUint64)
+	}
+	return uintWireSize(uint64(v))
+}
+
+func uintWireSize(v uint64) int {
+	return max(protowire.SizeTag(2)+8, protowire.SizeTag(2)+protowire.SizeVarint(v))
 }
