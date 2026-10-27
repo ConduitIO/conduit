@@ -1,11 +1,16 @@
 package main
 
 import (
+	"bytes"
+	"compress/flate"
 	"fmt"
+	"math/rand"
 	"strings"
 	"testing"
 	"time"
 )
+
+var testRnd = rand.New(rand.NewSource(7))
 
 func testGen() genConfig {
 	return genConfig{Tables: 3, Window: 50, Batch: 7, InsertFrac: 0.7, UpdateFrac: 0.2, Seed: 42}
@@ -60,7 +65,7 @@ func TestMarkerRoundTrip(t *testing.T) {
 	now := time.Unix(1793000000, 123456789)
 	for _, size := range []int{48, 64, 1024, 16384} {
 		o := op{Kind: opUpdate, Table: 12, ID: 99, Seq: 1234567}
-		p := encodePayload(o, size, now)
+		p := encodePayload(o, size, now, rand.New(rand.NewSource(int64(size))))
 		if len(p) != size {
 			t.Fatalf("size %d: payload is %d bytes", size, len(p))
 		}
@@ -70,6 +75,8 @@ func TestMarkerRoundTrip(t *testing.T) {
 			`{"before":null,"after":{"id":99,"payload":"` + p + `"},"op":"u"}`,
 			`{"schema":{},"payload":{"id":99,"payload":"` + p + `"}}`,
 			`{"key":{"id":99},"payload":{"after":{"payload":"` + p + `"}}}`,
+			"{before=null, after=Struct{id=99,payload=" + p + "}}",
+			"\x00\x00\x00\x00\x07\xc6\x01\x80\x01" + p + "\x02\x0eS9ab~x", // Avro bytes around the string
 		} {
 			ms := findMarkers(line)
 			if len(ms) != 1 {
@@ -79,6 +86,9 @@ func TestMarkerRoundTrip(t *testing.T) {
 				t.Fatalf("size %d: decoded %+v", size, m)
 			}
 		}
+	}
+	if ms := findMarkers(`{"id":5,"msg":"S1.2|T1234567890123456789|abc"}`); len(ms) != 0 { // no '~' sentinel
+		t.Fatalf("unterminated marker accepted: %+v", ms)
 	}
 	if ms := findMarkers(`{"id":5,"msg":"xS1.2|T123|"}`); len(ms) != 0 {
 		t.Fatalf("false marker: %+v", ms)
@@ -95,7 +105,7 @@ func sinkLines(ex *expected, payload int) [][]string {
 			if o.Kind == opDelete {
 				l = fmt.Sprintf(`{"before":{"id":%d},"after":null,"source":{"table":"bench_source_%d"},"op":"d"}`, o.ID, tb)
 			} else {
-				l = fmt.Sprintf(`{"before":null,"after":{"id":%d,"payload":"%s"},"op":"c"}`, o.ID, encodePayload(o, payload, time.Now()))
+				l = fmt.Sprintf(`{"before":null,"after":{"id":%d,"payload":"%s"},"op":"c"}`, o.ID, encodePayload(o, payload, time.Now(), testRnd))
 			}
 			out[tb] = append(out[tb], l)
 		}
@@ -135,7 +145,7 @@ func TestVerifyFindsLossDuplicatesReorderCorruption(t *testing.T) {
 	// table 1: corrupt the payload length of one insert
 	for i, l := range lines[1] {
 		if strings.Contains(l, `"op":"c"`) {
-			lines[1][i] = strings.Replace(l, "xxxx", "xxx", 1)
+			lines[1][i] = strings.Replace(l, "~", "A~", 1) // one byte too long
 			break
 		}
 	}
@@ -166,5 +176,67 @@ func TestScheduleParse(t *testing.T) {
 	}
 	if _, err := parseSchedule("20000"); err == nil {
 		t.Fatal("missing duration accepted")
+	}
+}
+
+// The padding must neither be free to compress (a run of one byte) nor
+// incompressible: about 2x, so compression on or off is a real trade-off.
+func TestPayloadCompressibility(t *testing.T) {
+	var raw bytes.Buffer
+	g := newGenerator(testGen())
+	for i := 0; i < 2000; i++ {
+		raw.WriteString(encodePayload(g.next(), 1024, time.Now(), testRnd))
+	}
+	var z bytes.Buffer
+	w, _ := flate.NewWriter(&z, flate.BestSpeed)
+	w.Write(raw.Bytes())
+	w.Close()
+	ratio := float64(raw.Len()) / float64(z.Len())
+	if ratio < 1.6 || ratio > 3.0 {
+		t.Fatalf("compression ratio %.2f, want about 2 (1.6-3.0)", ratio)
+	}
+	t.Logf("deflate(BestSpeed) ratio %.2f", ratio)
+}
+
+func TestZipfSkewIsDeterministic(t *testing.T) {
+	cfg := testGen()
+	cfg.Tables, cfg.Skew = 16, 1.2
+	a, b := newGenerator(cfg), newGenerator(cfg)
+	hot := 0
+	for a.filling() {
+		a.next()
+		b.next()
+	}
+	for i := 0; i < 20000; i++ {
+		x, y := a.next(), b.next()
+		if x != y {
+			t.Fatalf("op %d differs", i)
+		}
+		if x.Table == 0 {
+			hot++
+		}
+	}
+	if hot < 20000/16*2 {
+		t.Fatalf("table 0 got %d of 20000 ops: not skewed", hot)
+	}
+}
+
+func TestVerifyKafkaKeyAttributesTombstonesAndBlanksFail(t *testing.T) {
+	ex := replay(genConfig{Tables: 1, Window: 3, Batch: 1, InsertFrac: 0.5, UpdateFrac: 0, Seed: 3}, 6)
+	v := newEventVerifier(ex, 64, true, false)
+	for _, o := range ex.ops[0] {
+		key := fmt.Sprintf(`{"id":%d}`, o.ID)
+		if o.Kind == opDelete {
+			v.line("cdcparity.public.bench_source_0/0", key+"\t") // tombstone: key only
+		} else {
+			v.line("cdcparity.public.bench_source_0/0", key+"\t"+`{"id":`+fmt.Sprint(o.ID)+`,"payload":"`+encodePayload(o, 64, time.Now(), testRnd)+`"}`)
+		}
+	}
+	if rep := v.report(); rep["ok"] != true {
+		t.Fatalf("key-attributed tombstones not accepted: %+v", rep)
+	}
+	v.line("x", "") // a blank where a record should be
+	if rep := v.report(); rep["ok"] != false {
+		t.Fatal("a blank record passed")
 	}
 }

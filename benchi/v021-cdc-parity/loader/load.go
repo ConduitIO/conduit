@@ -11,7 +11,6 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -20,8 +19,8 @@ import (
 )
 
 // progress is the loader's committed work, served on -http. Counts move only
-// after a batch's statements have all executed (each is its own autocommit
-// transaction), so they never run ahead of what Postgres has committed.
+// after a batch's transactions have all committed (see writer.exec), so they
+// never run ahead of what Postgres has committed.
 type progress struct {
 	Inserts atomic.Int64
 	Updates atomic.Int64
@@ -89,6 +88,7 @@ func genFlags(fs *flag.FlagSet) *genConfig {
 	fs.Float64Var(&g.InsertFrac, "insert-frac", 0.70, "fraction of INSERT operations")
 	fs.Float64Var(&g.UpdateFrac, "update-frac", 0.20, "fraction of UPDATE operations")
 	fs.Int64Var(&g.Seed, "seed", 0xC0FFEE, "op sequence seed")
+	fs.Float64Var(&g.Skew, "skew", 0, "Zipf exponent (> 1) for choosing each op's table; 0 = round-robin")
 	return g
 }
 
@@ -114,6 +114,9 @@ func runLoad(args []string) error {
 		total       = fs.Int64("total", 0, "stop after this many workload ops (0 = run until stopped); the fill is not counted")
 		payload     = fs.Int("payload", 64, "payload size in bytes (at least 48: the marker)")
 		conns       = fs.Int("conns", 1, "Postgres connections; tables are assigned to connections by index")
+		txn         = fs.Int("txn", 0, "statements per transaction (0 = one transaction per -batch round trip)")
+		shape       = fs.String("shape", "narrow", "row shape: narrow (id, payload) or wide (id, payload + 28 typed columns)")
+		alterAt     = fs.Duration("alter-at", 0, "if > 0: ALTER TABLE ... ADD COLUMN on every source table this long after the workload starts (schema evolution)")
 		fillOnly    = fs.Bool("fill-only", false, "insert the initial window, then stop writing (snapshot cells)")
 		doneFile    = fs.String("done-file", "", "with -fill-only: create this file once the fill is committed")
 		httpAddr    = fs.String("http", ":9100", "address of the /progress endpoint (empty disables it)")
@@ -175,9 +178,13 @@ func runLoad(args []string) error {
 		log.Printf("loader: replication slot(s) present")
 	}
 
+	if *shape != "narrow" && *shape != "wide" {
+		return fmt.Errorf("-shape must be narrow or wide")
+	}
+	w := newWriter(*shape, *payload, *txn)
 	gen := newGenerator(*gc)
 	fillStart := time.Now()
-	if err := fillAll(ctx, cs[0], gen, *payload, &prog); err != nil {
+	if err := w.fill(ctx, cs[0], gen, &prog); err != nil {
 		return fmt.Errorf("fill: %w", err)
 	}
 	log.Printf("loader: FILL_DONE tables=%d rows/table=%d in %s", gc.Tables, gc.Window, time.Since(fillStart).Round(time.Millisecond))
@@ -205,7 +212,16 @@ func runLoad(args []string) error {
 	setStep(0)
 
 	batches := make([][]op, *conns)
+	workStart := time.Now()
+	altered := false
 	for ctx.Err() == nil {
+		if *alterAt > 0 && !altered && time.Since(workStart) >= *alterAt {
+			if err := w.alter(ctx, cs[0], gc.Tables); err != nil {
+				return fmt.Errorf("alter: %w", err)
+			}
+			altered = true
+			log.Printf("loader: ALTER_MS=%d", time.Now().UnixMilli())
+		}
 		if *total > 0 && totalOps >= *total {
 			prog.Done.Store(true)
 			log.Printf("loader: TOTAL_DONE ops=%d", totalOps)
@@ -231,7 +247,7 @@ func runLoad(args []string) error {
 		}
 
 		start := time.Now()
-		if err := execParallel(ctx, cs, batches, *payload, &prog); err != nil {
+		if err := w.execParallel(ctx, cs, batches, &prog); err != nil {
 			if ctx.Err() != nil {
 				break
 			}
@@ -257,104 +273,6 @@ func runLoad(args []string) error {
 		}
 	}
 	log.Printf("loader: stopping after %d total ops", totalOps)
-	return nil
-}
-
-// fillAll inserts every table's initial window with COPY, in sequence order.
-func fillAll(ctx context.Context, conn *pgx.Conn, gen *generator, payload int, prog *progress) error {
-	const chunk = 10000
-	rows := make([][]any, 0, chunk)
-	table := -1
-	flush := func() error {
-		if len(rows) == 0 {
-			return nil
-		}
-		_, err := conn.CopyFrom(ctx, pgx.Identifier{fmt.Sprintf("bench_source_%d", table)}, []string{"id", "payload"}, pgx.CopyFromRows(rows))
-		if err == nil {
-			prog.Inserts.Add(int64(len(rows)))
-		}
-		rows = rows[:0]
-		return err
-	}
-	for gen.filling() {
-		o := gen.next()
-		if o.Table != table {
-			if err := flush(); err != nil {
-				return err
-			}
-			table = o.Table
-		}
-		rows = append(rows, []any{o.ID, encodePayload(o, payload, time.Now())})
-		if len(rows) == chunk {
-			if err := flush(); err != nil {
-				return err
-			}
-		}
-	}
-	return flush()
-}
-
-// execParallel runs each connection's ops as one pgx.Batch, all connections
-// concurrently, and returns once every batch has executed.
-func execParallel(ctx context.Context, cs []*pgx.Conn, batches [][]op, payload int, prog *progress) error {
-	if len(cs) == 1 {
-		return execBatch(ctx, cs[0], batches[0], payload, prog)
-	}
-	var wg sync.WaitGroup
-	errs := make([]error, len(cs))
-	for i := range cs {
-		if len(batches[i]) == 0 {
-			continue
-		}
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			errs[i] = execBatch(ctx, cs[i], batches[i], payload, prog)
-		}(i)
-	}
-	wg.Wait()
-	for _, err := range errs {
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func execBatch(ctx context.Context, conn *pgx.Conn, ops []op, payload int, prog *progress) error {
-	if len(ops) == 0 {
-		return nil
-	}
-	b := &pgx.Batch{}
-	now := time.Now()
-	var ins, upd, del int64
-	for _, o := range ops {
-		table := "bench_source_" + strconv.Itoa(o.Table)
-		switch o.Kind {
-		case opInsert:
-			b.Queue("INSERT INTO "+table+" (id, payload) VALUES ($1, $2)", o.ID, encodePayload(o, payload, now))
-			ins++
-		case opUpdate:
-			b.Queue("UPDATE "+table+" SET payload = $2 WHERE id = $1", o.ID, encodePayload(o, payload, now))
-			upd++
-		case opDelete:
-			b.Queue("DELETE FROM "+table+" WHERE id = $1", o.ID)
-			del++
-		}
-	}
-	br := conn.SendBatch(ctx, b)
-	for i := 0; i < b.Len(); i++ {
-		if _, err := br.Exec(); err != nil {
-			br.Close()
-			return err
-		}
-	}
-	if err := br.Close(); err != nil {
-		return err
-	}
-	prog.Inserts.Add(ins)
-	prog.Updates.Add(upd)
-	prog.Deletes.Add(del)
 	return nil
 }
 

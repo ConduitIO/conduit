@@ -6,8 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"os/signal"
+	"regexp"
 	"strconv"
 	"sync"
 	"syscall"
@@ -20,6 +22,10 @@ import (
 // The Kafka-source and file-source cells measure how fast a pipeline DRAINS a
 // pre-filled backlog: the backlog is written before the pipeline starts, so
 // the measured window is the pipeline alone, not a race with a producer.
+//
+// fill-kafka is idempotent: a topic that already holds -count records is left
+// alone. A drain cell fills its topic once and every run reads it with a fresh
+// consumer group (run-cell.sh keeps the broker volume for the cell's runs).
 //
 // Records are inserts of table 0 with id == seq, so `verify` replays them with
 // the generator at -insert-frac 1 -window 0 -tables 1. Their shape is the
@@ -76,11 +82,24 @@ func runFillKafka(args []string) error {
 		return err
 	}
 	adm := kadm.NewClient(cl)
+	if n, err := kafkaCount(ctx, adm, "^"+regexp.QuoteMeta(*topic)+"$"); err == nil && n == *count {
+		log.Printf("fill-kafka: FILL_DONE topic=%s already holds %d records (reused)", *topic, n)
+		if err := touch(*doneFile); err != nil {
+			return err
+		}
+		if *wait {
+			<-ctx.Done()
+		}
+		return nil
+	} else if err == nil && n > 0 {
+		return fmt.Errorf("topic %s holds %d records, want 0 or %d: refusing to append to a partial backlog", *topic, n, *count)
+	}
 	if _, err := adm.CreateTopic(ctx, int32(*partitions), 1, nil, *topic); err != nil {
 		log.Printf("fill-kafka: create topic %s: %v (continuing; it may exist)", *topic, err)
 	}
 
 	gen := newGenerator(genConfig{Tables: 1, Batch: 1, InsertFrac: 1, Seed: 1})
+	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
 	start := time.Now()
 	var (
 		mu     sync.Mutex
@@ -88,7 +107,7 @@ func runFillKafka(args []string) error {
 	)
 	for i := int64(0); i < *count && ctx.Err() == nil; i++ {
 		o := gen.next()
-		r := &kgo.Record{Key: envelopeKey(o.ID), Value: envelopeValue(o.ID, encodePayload(o, *payload, time.Now()))}
+		r := &kgo.Record{Key: envelopeKey(o.ID), Value: envelopeValue(o.ID, encodePayload(o, *payload, time.Now(), rnd))}
 		cl.Produce(ctx, r, func(_ *kgo.Record, err error) {
 			if err != nil {
 				mu.Lock()
@@ -158,10 +177,11 @@ func runFillFile(args []string) error {
 	}
 	w := bufio.NewWriterSize(f, 1<<20)
 	gen := newGenerator(genConfig{Tables: 1, Batch: 1, InsertFrac: 1, Seed: 1})
+	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
 	start := time.Now()
 	for i := int64(0); i < *count; i++ {
 		o := gen.next()
-		if _, err := w.WriteString(flatLine(o.ID, encodePayload(o, *payload, time.Now())) + "\n"); err != nil {
+		if _, err := w.WriteString(flatLine(o.ID, encodePayload(o, *payload, time.Now(), rnd)) + "\n"); err != nil {
 			return err
 		}
 	}

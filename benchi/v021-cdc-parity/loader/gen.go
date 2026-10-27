@@ -48,14 +48,18 @@ type genConfig struct {
 	InsertFrac float64
 	UpdateFrac float64
 	Seed       int64
+	// Skew > 1 picks each op's table from a Zipf(Skew) distribution (table 0
+	// hottest) instead of round-robin: many tables with realistic skew.
+	Skew float64
 }
 
 // generator produces the loader's op sequence: first every table's initial
 // fill (ids [0, Window), as inserts), then workload batches of Batch ops,
-// round-robin across the tables within each batch.
+// round-robin across the tables within each batch (or Zipf-skewed, Skew).
 type generator struct {
 	cfg   genConfig
 	rng   *rand.Rand
+	zipf  *rand.Zipf
 	low   []int64
 	high  []int64
 	seq   []int64
@@ -73,6 +77,9 @@ func newGenerator(cfg genConfig) *generator {
 	}
 	if cfg.Window <= 0 {
 		g.fillT = cfg.Tables
+	}
+	if cfg.Skew > 1 && cfg.Tables > 1 {
+		g.zipf = rand.NewZipf(g.rng, cfg.Skew, 1, uint64(cfg.Tables-1))
 	}
 	return g
 }
@@ -93,6 +100,9 @@ func (g *generator) next() op {
 		return o
 	}
 	t := g.slot % g.cfg.Tables
+	if g.zipf != nil {
+		t = int(g.zipf.Uint64())
+	}
 	g.slot++
 	if g.slot == g.cfg.Batch {
 		g.slot = 0
@@ -119,15 +129,23 @@ func (g *generator) next() op {
 // The payload of every inserted or updated row encodes the change it came
 // from, so a sink's output can be checked record by record:
 //
-//	S<table>.<seq>|T<unix nanos, 19 digits>|xxxx...
+//	S<table>.<seq>|T<unix nanos, 19 digits>|<padding>~
 //
-// padded with 'x' to exactly the configured payload size. T is taken when the
-// statement is queued, just before its batch commits; latency is measured from
-// it. The marker contains no character that JSON, CSV or a Kafka Connect
-// struct would escape, so it survives every sink format unchanged.
+// exactly the configured payload size, '~' last. T is taken when the
+// statement is queued, before its transaction commits; latency is measured
+// from it. Nothing in it is escaped by JSON, CSV, Avro strings or a Kafka
+// Connect struct's toString, so it survives every sink format unchanged.
+//
+// The padding is NOT a constant run (which every codec compresses to almost
+// nothing and which would make compression free): it is groups of 8 random
+// alphanumerics, each written twice, about 2x compressible by lz4 or snappy
+// (TestPayloadCompressibility pins the ratio). The padding is not part of the
+// replayed sequence; verify checks only its length.
 const minPayload = 48
 
-func encodePayload(o op, size int, now time.Time) string {
+const padAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+func encodePayload(o op, size int, now time.Time, rnd *rand.Rand) string {
 	var b strings.Builder
 	b.Grow(size)
 	b.WriteByte('S')
@@ -137,9 +155,20 @@ func encodePayload(o op, size int, now time.Time) string {
 	b.WriteString("|T")
 	b.WriteString(fmt.Sprintf("%019d", now.UnixNano()))
 	b.WriteByte('|')
-	for b.Len() < size {
-		b.WriteByte('x')
+	var grp [8]byte
+	for b.Len() < size-1 {
+		for i := range grp {
+			grp[i] = padAlphabet[rnd.Intn(len(padAlphabet))]
+		}
+		for rep := 0; rep < 2; rep++ {
+			for _, c := range grp {
+				if b.Len() < size-1 {
+					b.WriteByte(c)
+				}
+			}
+		}
 	}
+	b.WriteByte('~')
 	return b.String()
 }
 
@@ -191,9 +220,13 @@ func parseMarker(s string) (marker, int, bool) {
 		return m, 0, false
 	}
 	end := l + 1
-	for end < len(s) && s[end] == 'x' {
+	for end < len(s) && s[end] != '~' && isAlnum(s[end]) && s[end] != '_' {
 		end++
 	}
+	if end >= len(s) || s[end] != '~' {
+		return m, 0, false
+	}
+	end++
 	m.Table, m.Seq, m.TS, m.Len = int(t), seq, ts, end
 	return m, end, true
 }

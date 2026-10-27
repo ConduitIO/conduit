@@ -1,10 +1,16 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -110,14 +116,17 @@ func runFirst(args []string) error {
 		case "file":
 			fc := newFileCounter(s.Arg)
 			counters = append(counters, fc.count)
-		case "pg":
+		case "pg", "pgins":
 			counters = append(counters, func() (int64, error) {
 				c, err := pgx.Connect(ctx, e.pgURL)
 				if err != nil {
 					return 0, err
 				}
 				defer c.Close(ctx)
-				return pgCount(ctx, c, pgTables(s.Arg, e.tables))
+				if s.Kind == "pgins" {
+					return pgInserts(ctx, c, pgTables(s.Arg, e.tables))
+				}
+				return pgPosition(ctx, c, pgTables(s.Arg, e.tables))
 			})
 		case "kafka":
 			cl, err := kgo.NewClient(kgo.SeedBrokers(e.brokers))
@@ -128,12 +137,38 @@ func runFirst(args []string) error {
 			adm := kadm.NewClient(cl)
 			counters = append(counters, func() (int64, error) { return kafkaCount(ctx, adm, s.Arg) })
 		case "s3":
+			// Only outside measured windows (first record, settle): downloads.
 			cl, err := s3Client(e)
 			if err != nil {
 				return err
 			}
-			sc := &s3Counter{cl: cl, bucket: s.Arg, seen: map[string]bool{}}
-			counters = append(counters, func() (int64, error) { n, _, err := sc.count(ctx); return n, err })
+			seen := map[string]int64{}
+			counters = append(counters, func() (int64, error) {
+				var sum int64
+				for obj := range cl.ListObjects(ctx, s.Arg, minio.ListObjectsOptions{Recursive: true}) {
+					if obj.Err != nil {
+						return 0, obj.Err
+					}
+					if n, ok := seen[obj.Key]; ok {
+						sum += n
+						continue
+					}
+					r, err := cl.GetObject(ctx, s.Arg, obj.Key, minio.GetObjectOptions{})
+					if err != nil {
+						return 0, err
+					}
+					sc := bufio.NewScanner(r)
+					sc.Buffer(make([]byte, 1<<20), 64<<20)
+					var n int64
+					for sc.Scan() {
+						n++
+					}
+					r.Close()
+					seen[obj.Key] = n
+					sum += n
+				}
+				return sum, nil
+			})
 		case "http":
 			counters = append(counters, func() (int64, error) {
 				m, err := httpStats(ctx, s.Arg)
@@ -202,4 +237,66 @@ func loaderDone(ctx context.Context, url string) bool {
 	}
 	d, _ := p["done"].(bool)
 	return d
+}
+
+// runPoll polls an HTTP endpoint every -every and appends each answer, with
+// its timestamp, to -out: Jolokia bulk reads of the JVM sides' MBeans and
+// Conduit's Prometheus metrics, in diagnosis runs only (polling is not free).
+func runPoll(args []string) error {
+	fs := flag.NewFlagSet("poll", flag.ExitOnError)
+	url := fs.String("url", "", "endpoint")
+	body := fs.String("body", "", "file with a POST body (Jolokia bulk read); empty = GET")
+	token := fs.String("token-file", "", "file with a bearer token")
+	every := fs.Duration("every", 10*time.Second, "interval")
+	out := fs.String("out", "", "output JSON lines")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	var payload []byte
+	if *body != "" {
+		b, err := os.ReadFile(*body)
+		if err != nil {
+			return err
+		}
+		payload = b
+	}
+	var tok string
+	if *token != "" {
+		b, err := os.ReadFile(*token)
+		if err != nil {
+			return err
+		}
+		tok = strings.TrimSpace(string(b))
+	}
+	f, err := os.OpenFile(*out, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	for {
+		t0 := time.Now()
+		method := http.MethodGet
+		var rd io.Reader
+		if payload != nil {
+			method, rd = http.MethodPost, bytes.NewReader(payload)
+		}
+		req, _ := http.NewRequest(method, *url, rd)
+		if tok != "" {
+			req.Header.Set("Authorization", "Bearer "+tok)
+		}
+		row := map[string]any{"t_ms": t0.UnixMilli()}
+		if resp, err := (&http.Client{Timeout: 8 * time.Second}).Do(req); err != nil {
+			row["err"] = err.Error()
+		} else {
+			b, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			row["status"] = resp.StatusCode
+			row["body"] = string(b)
+		}
+		if err := enc.Encode(row); err != nil {
+			return err
+		}
+		time.Sleep(time.Until(t0.Add(*every)))
+	}
 }

@@ -36,7 +36,12 @@ import (
 // Postgres sinks (upsert on the key) cannot show duplicates or order; verify
 // compares the final table state with the replayed final state: rows missing,
 // rows that should have been deleted, and rows whose payload is not the last
-// write of that id.
+// write of that id. A lost INTERMEDIATE update (a later write of the same id
+// arrived) is invisible to a final-state check; that limit is stated in
+// PLAN.md.
+//
+// Kafka records are read as key, tab, value: a delete event or tombstone is
+// attributed by the key's id and the topic's table.
 func runVerify(args []string) error {
 	fs := flag.NewFlagSet("verify", flag.ExitOnError)
 	var (
@@ -140,7 +145,7 @@ func replay(gc genConfig, total int64) *expected {
 
 var (
 	reTable = regexp.MustCompile(`bench_source_([0-9]+)`)
-	reID    = regexp.MustCompile(`"id"\s*:\s*([0-9]+)`)
+	reID    = regexp.MustCompile(`"id"\s*:\s*([0-9]+)|\bid=([0-9]+)`)
 	reFile  = regexp.MustCompile(`_([0-9]+)\.[a-z]+$`)
 )
 
@@ -181,7 +186,7 @@ func (v *eventVerifier) sample(class, s string) {
 
 func (v *eventVerifier) line(source, line string) {
 	v.lines++
-	if line == "" || line == "null" {
+	if line == "" || line == "null" || line == "\t" || line == "\tnull" {
 		v.unattrib++ // a tombstone or empty record carries no change
 		v.sample("unattributed", source+": "+line)
 		return
@@ -222,7 +227,7 @@ func (v *eventVerifier) line(source, line string) {
 		v.sample("unattributed", source+": "+line)
 		return
 	}
-	id, _ := strconv.ParseInt(idm[1], 10, 64)
+	id, _ := strconv.ParseInt(idm[1]+idm[2], 10, 64)
 	i, ok := v.ex.delAt[t][id]
 	if !ok {
 		v.unknown++
@@ -234,7 +239,7 @@ func (v *eventVerifier) line(source, line string) {
 
 func hasID(line string, id int64) bool {
 	for _, m := range reID.FindAllStringSubmatch(line, -1) {
-		if m[1] == strconv.FormatInt(id, 10) {
+		if m[1]+m[2] == strconv.FormatInt(id, 10) {
 			return true
 		}
 	}
@@ -297,8 +302,13 @@ func (v *eventVerifier) report() map[string]any {
 	} else {
 		rep["reordered"] = "not checked (sink does not preserve a per-table order)"
 	}
-	rep["ok"] = miss[0]+miss[1]+miss[2] == 0 && v.malformed == 0 && v.unknown == 0 &&
+	// A record nobody can attribute (a blank, a tombstone with no key) is a
+	// failure too: a sink that writes blanks where data should be must not pass.
+	rep["ok"] = miss[0]+miss[1]+miss[2] == 0 && v.malformed == 0 && v.unknown == 0 && v.unattrib == 0 &&
 		(!v.ordered || v.reordered[0]+v.reordered[1]+v.reordered[2] == 0)
+	rep["summary"] = fmt.Sprintf("missing %d, duplicates %d (%.1f per million), malformed %d, unknown %d, unattributed %d, reordered %v",
+		miss[0]+miss[1]+miss[2], dup[0]+dup[1]+dup[2], perMillion(dup[0]+dup[1]+dup[2], exp[0]+exp[1]+exp[2]),
+		v.malformed, v.unknown, v.unattrib, rep["reordered"])
 	return rep
 }
 
@@ -370,4 +380,11 @@ func verifyPG(ctx context.Context, e env, pattern string, ex *expected, payload 
 		"samples":       samples,
 		"ok":            missing == 0 && extra == 0 && stale == 0 && malformed == 0,
 	}, nil
+}
+
+func perMillion(n, of int64) float64 {
+	if of == 0 {
+		return 0
+	}
+	return float64(n) / float64(of) * 1e6
 }

@@ -24,12 +24,20 @@ import (
 // A sink spec names where a cell's destination writes and how to read it back:
 //
 //	file:/sink/out_*.txt        lines across the matching files
-//	pg:bench_dest_%d            rows of the tables (one per source table index)
-//	kafka:^cdcparitykafka\..*   records across the matching topics
-//	s3:bench                    lines across every object in the bucket
+//	pg:bench_dest_%d            source position applied: sum over the tables of
+//	                            max(seq)+1 (seq is a generated, indexed column
+//	                            decoded from the payload marker), so the count is
+//	                            in source ops, like every other sink, and costs
+//	                            one index probe per table instead of a scan
+//	pgins:bench_dest_%d         inserts applied (pg_stat_user_tables), for the
+//	                            snapshot cells, where every event is an insert
+//	kafka:^cdcparitykafka\..*   records across the matching topics (end offsets)
+//	s3:bench                    lines across every object in the bucket; NOT read
+//	                            while a run is measured (see collect s3-index)
 //	http:http://cdcparity-receiver:8090
 //
-// `sample` counts a sink repeatedly; `verify` reads it once, completely.
+// `sample` counts a sink repeatedly; `verify` reads it once, completely;
+// `collect` indexes it after the run.
 type sinkSpec struct {
 	Kind string
 	Arg  string
@@ -47,7 +55,7 @@ func parseSinks(s string) ([]sinkSpec, error) {
 			return nil, fmt.Errorf("sink %q: want kind:arg", part)
 		}
 		switch k {
-		case "file", "pg", "kafka", "s3", "http":
+		case "file", "pg", "pgins", "kafka", "s3", "http":
 		default:
 			return nil, fmt.Errorf("sink %q: unknown kind %q", part, k)
 		}
@@ -153,11 +161,13 @@ func pgTables(pattern string, n int) []string {
 	return out
 }
 
+// pgCount is count(*) across the tables: verify and the end-of-run check only,
+// never the sampler (it scans the tables the sink is writing).
 func pgCount(ctx context.Context, conn *pgx.Conn, tables []string) (int64, error) {
 	var sum int64
 	for _, t := range tables {
 		var c int64
-		if err := conn.QueryRow(ctx, "SELECT count(*) FROM "+pgx.Identifier{t}.Sanitize()).Scan(&c); err != nil {
+		if err := conn.QueryRow(ctx, "SELECT count(*) FROM "+pgIdent(t)).Scan(&c); err != nil {
 			return 0, err
 		}
 		sum += c
@@ -165,26 +175,35 @@ func pgCount(ctx context.Context, conn *pgx.Conn, tables []string) (int64, error
 	return sum, nil
 }
 
-// pgLatency returns the latency percentiles of rows that landed after since,
-// from the landed_at column the latency cells' trigger maintains.
-func pgLatency(ctx context.Context, conn *pgx.Conn, tables []string, since time.Time) (map[string]int64, time.Time, error) {
-	var parts []string
+// pgPosition is the source position the destination has applied: per table
+// the highest seq landed (+1, seq counts from 0), summed. One index probe per
+// table (bench_dest_i_seq). Because seq is the per-table op index, deletes
+// and updates in between count too: the result is comparable with the
+// loader's committed ops and with the event sinks' counts.
+func pgPosition(ctx context.Context, conn *pgx.Conn, tables []string) (int64, error) {
+	var sum int64
 	for _, t := range tables {
-		parts = append(parts, "SELECT landed_at, payload FROM "+pgx.Identifier{t}.Sanitize()+" WHERE landed_at > $1")
+		var c int64
+		if err := conn.QueryRow(ctx, "SELECT COALESCE(max(seq)+1, 0) FROM "+pgIdent(t)).Scan(&c); err != nil {
+			return 0, err
+		}
+		sum += c
 	}
-	q := `SELECT count(*),
-	  COALESCE(percentile_disc(0.5) WITHIN GROUP (ORDER BY lat),0),
-	  COALESCE(percentile_disc(0.99) WITHIN GROUP (ORDER BY lat),0),
-	  COALESCE(percentile_disc(0.999) WITHIN GROUP (ORDER BY lat),0),
-	  COALESCE(max(landed_at), $1)
-	FROM (SELECT landed_at, (extract(epoch from landed_at)*1000000)::bigint - substring(payload from 'T([0-9]{19})')::bigint/1000 AS lat
-	      FROM (` + strings.Join(parts, " UNION ALL ") + `) u) l`
-	var n, p50, p99, p999 int64
-	var last time.Time
-	if err := conn.QueryRow(ctx, q, since).Scan(&n, &p50, &p99, &p999, &last); err != nil {
-		return nil, since, err
+	return sum, nil
+}
+
+// pgInserts is the inserts applied to the tables, from the statistics views.
+func pgInserts(ctx context.Context, conn *pgx.Conn, tables []string) (int64, error) {
+	var sum int64
+	err := conn.QueryRow(ctx, "SELECT COALESCE(sum(n_tup_ins),0)::bigint FROM pg_stat_user_tables WHERE relname = ANY($1)", tables).Scan(&sum)
+	return sum, err
+}
+
+func pgIdent(t string) string {
+	if s, n, ok := strings.Cut(t, "."); ok {
+		return pgx.Identifier{s, n}.Sanitize()
 	}
-	return map[string]int64{"lat_n": n, "lat_p50_us": p50, "lat_p99_us": p99, "lat_p999_us": p999}, last, nil
+	return pgx.Identifier{t}.Sanitize()
 }
 
 // ---- kafka
@@ -233,62 +252,16 @@ func kafkaCount(ctx context.Context, adm *kadm.Client, pattern string) (int64, e
 	return sum, nil
 }
 
-// kafkaTailLatency reads up to n records from the end of every partition and
-// returns the latency from each record's marker to its broker append time.
-// The brokers run with log.message.timestamp.type=LogAppendTime, so the record
-// timestamp is when the broker accepted it, not what the producer claimed.
-func kafkaTailLatency(ctx context.Context, e env, adm *kadm.Client, pattern string, n int64) (map[string]int64, error) {
-	topics, err := kafkaTopics(ctx, adm, pattern)
-	if err != nil || len(topics) == 0 {
-		return percentiles(nil), err
-	}
-	ends, err := adm.ListEndOffsets(ctx, topics...)
-	if err != nil {
-		return nil, err
-	}
-	assign := map[string]map[int32]kgo.Offset{}
-	want := int64(0)
-	ends.Each(func(o kadm.ListedOffset) {
-		from := o.Offset - n
-		if from < 0 {
-			from = 0
-		}
-		if o.Offset == from {
-			return
-		}
-		if assign[o.Topic] == nil {
-			assign[o.Topic] = map[int32]kgo.Offset{}
-		}
-		assign[o.Topic][o.Partition] = kgo.NewOffset().At(from)
-		want += o.Offset - from
-	})
-	if want == 0 {
-		return percentiles(nil), nil
-	}
-	cl, err := kgo.NewClient(kgo.SeedBrokers(e.brokers), kgo.ConsumePartitions(assign))
-	if err != nil {
-		return nil, err
-	}
-	defer cl.Close()
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	var lat []int64
-	got := int64(0)
-	for got < want && ctx.Err() == nil {
-		fetches := cl.PollFetches(ctx)
-		fetches.EachRecord(func(r *kgo.Record) {
-			got++
-			if ms := findMarkers(string(r.Value)); len(ms) > 0 {
-				lat = append(lat, (r.Timestamp.UnixNano()-ms[len(ms)-1].TS)/1000)
-			}
-		})
-	}
-	return percentiles(lat), nil
+// eachKafkaRecord reads every matching topic from its start offset to the end
+// offset at call time, partition by partition order preserved. The line is
+// key, a tab, then value, so a tombstone (no value) is still attributed by
+// its key. With rec, the raw record is passed too (collect uses its
+// timestamp).
+func eachKafkaRecord(ctx context.Context, e env, pattern string, fn func(source, line string)) error {
+	return eachKafkaRaw(ctx, e, pattern, func(src string, r *kgo.Record) { fn(src, string(r.Key)+"\t"+string(r.Value)) })
 }
 
-// eachKafkaRecord reads every matching topic from its start offset to the end
-// offset at call time, partition by partition order preserved.
-func eachKafkaRecord(ctx context.Context, e env, pattern string, fn func(source, line string)) error {
+func eachKafkaRaw(ctx context.Context, e env, pattern string, fn func(source string, r *kgo.Record)) error {
 	cl, err := kgo.NewClient(kgo.SeedBrokers(e.brokers))
 	if err != nil {
 		return err
@@ -334,7 +307,7 @@ func eachKafkaRecord(ctx context.Context, e env, pattern string, fn func(source,
 				}
 				fetches.EachRecord(func(r *kgo.Record) {
 					if r.Offset < end.Offset {
-						fn(src, string(r.Value))
+						fn(src, r)
 					}
 					next = r.Offset + 1
 				})
@@ -354,47 +327,6 @@ func s3Client(e env) (*minio.Client, error) {
 		Secure: strings.HasPrefix(e.s3URL, "https://"),
 		Region: "us-east-1",
 	})
-}
-
-type s3Counter struct {
-	cl     *minio.Client
-	bucket string
-	seen   map[string]bool
-	lines  int64
-}
-
-// count downloads only objects it has not seen. Both S3 sinks write immutable
-// objects, so an object's line count never changes once listed. lat holds, for
-// each new line with a marker, the object's LastModified minus the marker
-// (one-second resolution: S3 timestamps are whole seconds).
-func (c *s3Counter) count(ctx context.Context) (int64, []int64, error) {
-	var lat []int64
-	for obj := range c.cl.ListObjects(ctx, c.bucket, minio.ListObjectsOptions{Recursive: true}) {
-		if obj.Err != nil {
-			return c.lines, lat, obj.Err
-		}
-		if c.seen[obj.Key] {
-			continue
-		}
-		r, err := c.cl.GetObject(ctx, c.bucket, obj.Key, minio.GetObjectOptions{})
-		if err != nil {
-			return c.lines, lat, err
-		}
-		sc := bufio.NewScanner(r)
-		sc.Buffer(make([]byte, 1<<20), 64<<20)
-		for sc.Scan() {
-			c.lines++
-			if ms := findMarkers(sc.Text()); len(ms) > 0 {
-				lat = append(lat, (obj.LastModified.UnixNano()-ms[len(ms)-1].TS)/1000)
-			}
-		}
-		r.Close()
-		if err := sc.Err(); err != nil {
-			return c.lines, lat, err
-		}
-		c.seen[obj.Key] = true
-	}
-	return c.lines, lat, nil
 }
 
 func eachS3Line(ctx context.Context, e env, bucket string, fn func(source, line string)) error {

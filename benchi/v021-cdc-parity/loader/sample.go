@@ -19,33 +19,32 @@ import (
 
 // sample writes one JSON object per interval to -out:
 //
-//	{"ts_ms":..., "src_events":..., "src_net":..., "step":..., "target":...,
-//	 "sinks":{"<spec>":{"count":..., "lat_n":..., "lat_p50_us":..., ...}}}
+//	{"ts_ms":..., "src":{"t_ms":..., "events":..., "net":..., "step":..., "target":...},
+//	 "sinks":{"<spec>":{"t_ms":..., "count":...}}, "slots":{"<slot>":lag_bytes}}
 //
-// src_* is the loader's committed progress (the offered rate it achieved);
-// each sink's count is the ground truth read back from the sink. Every rate,
-// lag, step verdict and capacity in the results is computed from these rows
-// offline (matrix/analyze.py), so the raw series is the record of the run.
+// Every reading carries its own t_ms, the midpoint of the read, so a slow
+// read cannot skew a rate: analysis divides count deltas by the reading's own
+// timestamps, never by the row's.
 //
-// Latency is sampled every -latency-every (it reads data, counts do not):
-// Kafka from the tail of each partition against broker append time, Postgres
-// from the landed_at trigger column, HTTP from the receiver's arrival clock,
-// S3 from object LastModified (one-second resolution). File sinks have no
-// arrival timestamp, so no latency is reported for them.
+// What sample does NOT do, on purpose, because it would load the measured box
+// in a way that depends on the arm:
+//   - no count(*) on a destination table: Postgres progress is one index probe
+//     per table (pgPosition);
+//   - no S3 reads: objects are indexed after the run (collect s3-index), and
+//     the count series is rebuilt from LastModified;
+//   - no latency reads: latency comes from exact histograms built after the
+//     run (collect kafka-hist, pg-hist, http-hist).
 func runSample(args []string) error {
 	fs := flag.NewFlagSet("sample", flag.ExitOnError)
 	var (
-		out          = fs.String("out", "/out/samples.jsonl", "output file (JSON lines)")
-		interval     = fs.Duration("interval", 5*time.Second, "count interval")
-		latEvery     = fs.Duration("latency-every", 30*time.Second, "latency interval (0 disables latency)")
-		progressURL  = fs.String("progress", "http://cdcparity-loader:9100/progress", "loader progress endpoint (empty = no source)")
-		sinks        = fs.String("sinks", "", "comma-separated sink specs (see sinks.go)")
-		pgURL        = fs.String("pg", "postgres://bench:bench@cdcparity-postgres:5432/bench?sslmode=disable", "Postgres URL for pg sinks")
-		pgLat        = fs.Bool("pg-latency", false, "pg sinks have the landed_at trigger column")
-		brokers      = fs.String("brokers", "cdcparity-kafka:9092", "Kafka bootstrap servers for kafka sinks")
-		s3URL        = fs.String("s3", "http://cdcparity-minio:9000", "S3 endpoint for s3 sinks")
-		tables       = fs.Int("tables", 1, "number of source tables (pg sink table count)")
-		kafkaTailLen = fs.Int64("kafka-tail", 2000, "records per partition read for Kafka latency")
+		out         = fs.String("out", "/out/samples.jsonl", "output file (JSON lines)")
+		interval    = fs.Duration("interval", 5*time.Second, "sample interval")
+		progressURL = fs.String("progress", "http://cdcparity-loader:9100/progress", "loader progress endpoint (empty = no source)")
+		sinks       = fs.String("sinks", "", "comma-separated sink specs (see sinks.go)")
+		pgURL       = fs.String("pg", "postgres://bench:bench@cdcparity-postgres:5432/bench?sslmode=disable", "Postgres URL")
+		slots       = fs.Bool("slots", false, "sample replication slot lag (Postgres sources)")
+		brokers     = fs.String("brokers", "cdcparity-kafka:9092", "Kafka bootstrap servers for kafka sinks")
+		tables      = fs.Int("tables", 1, "number of destination tables (pg sinks)")
 	)
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -54,7 +53,6 @@ func runSample(args []string) error {
 	if err != nil {
 		return err
 	}
-	e := env{pgURL: *pgURL, brokers: *brokers, s3URL: *s3URL, s3Key: "conduitminio", s3Sec: "conduitminiosecret", tables: *tables}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -65,133 +63,107 @@ func runSample(args []string) error {
 	defer f.Close()
 	enc := json.NewEncoder(f)
 
+	var pg *pgx.Conn
+	pgConn := func(ctx context.Context) (*pgx.Conn, error) {
+		if pg == nil || pg.IsClosed() {
+			c, err := pgx.Connect(ctx, *pgURL)
+			if err != nil {
+				return nil, err
+			}
+			pg = c
+		}
+		return pg, nil
+	}
+
 	type reader struct {
-		spec  sinkSpec
-		count func(context.Context, bool) (map[string]any, error)
+		spec sinkSpec
+		read func(context.Context) (int64, error)
 	}
 	var readers []reader
 	for _, s := range specs {
 		s := s
-		var fn func(context.Context, bool) (map[string]any, error)
+		var fn func(context.Context) (int64, error)
 		switch s.Kind {
 		case "file":
 			fc := newFileCounter(s.Arg)
-			fn = func(context.Context, bool) (map[string]any, error) {
-				n, err := fc.count()
-				return map[string]any{"count": n}, err
-			}
-		case "pg":
-			var conn *pgx.Conn
+			fn = func(context.Context) (int64, error) { return fc.count() }
+		case "pg", "pgins":
 			tbls := pgTables(s.Arg, *tables)
-			since := time.Unix(0, 0)
-			fn = func(ctx context.Context, lat bool) (map[string]any, error) {
-				if conn == nil || conn.IsClosed() {
-					c, err := pgx.Connect(ctx, e.pgURL)
-					if err != nil {
-						return nil, err
-					}
-					conn = c
-				}
-				n, err := pgCount(ctx, conn, tbls)
+			fn = func(ctx context.Context) (int64, error) {
+				c, err := pgConn(ctx)
 				if err != nil {
-					conn.Close(ctx)
-					conn = nil
-					return nil, err
+					return 0, err
 				}
-				res := map[string]any{"count": n}
-				if lat && *pgLat {
-					l, last, err := pgLatency(ctx, conn, tbls, since)
-					if err == nil {
-						since = last
-						for k, v := range l {
-							res[k] = v
-						}
-					}
+				if s.Kind == "pgins" {
+					return pgInserts(ctx, c, tbls)
 				}
-				return res, nil
+				return pgPosition(ctx, c, tbls)
 			}
 		case "kafka":
-			cl, err := kgo.NewClient(kgo.SeedBrokers(e.brokers))
+			cl, err := kgo.NewClient(kgo.SeedBrokers(*brokers))
 			if err != nil {
 				return err
 			}
 			defer cl.Close()
 			adm := kadm.NewClient(cl)
-			fn = func(ctx context.Context, lat bool) (map[string]any, error) {
-				n, err := kafkaCount(ctx, adm, s.Arg)
-				if err != nil {
-					return nil, err
-				}
-				res := map[string]any{"count": n}
-				if lat {
-					if l, err := kafkaTailLatency(ctx, e, adm, s.Arg, *kafkaTailLen); err == nil {
-						for k, v := range l {
-							res[k] = v
-						}
-					}
-				}
-				return res, nil
-			}
+			fn = func(ctx context.Context) (int64, error) { return kafkaCount(ctx, adm, s.Arg) }
 		case "s3":
-			cl, err := s3Client(e)
-			if err != nil {
-				return err
-			}
-			sc := &s3Counter{cl: cl, bucket: s.Arg, seen: map[string]bool{}}
-			var pending []int64
-			fn = func(ctx context.Context, lat bool) (map[string]any, error) {
-				n, l, err := sc.count(ctx)
-				pending = append(pending, l...)
-				res := map[string]any{"count": n}
-				if lat {
-					for k, v := range percentiles(pending) {
-						res[k] = v
-					}
-					pending = nil
-				}
-				return res, err
-			}
+			continue // indexed after the run
 		case "http":
-			fn = func(ctx context.Context, _ bool) (map[string]any, error) {
+			fn = func(ctx context.Context) (int64, error) {
 				m, err := httpStats(ctx, s.Arg)
 				if err != nil {
-					return nil, err
+					return 0, err
 				}
-				return m, nil
+				n, _ := m["count"].(float64)
+				return int64(n), nil
 			}
 		}
 		readers = append(readers, reader{s, fn})
 	}
 
-	log.Printf("sample: writing %s every %s (latency every %s), sinks %v", *out, *interval, *latEvery, specs)
+	log.Printf("sample: writing %s every %s, sinks %v", *out, *interval, specs)
 	tick := time.NewTicker(*interval)
 	defer tick.Stop()
-	nextLat := time.Now().Add(*latEvery)
 	for {
 		row := map[string]any{"ts_ms": time.Now().UnixMilli()}
 		if *progressURL != "" {
-			if p, err := getJSON(ctx, *progressURL); err == nil {
-				row["src_events"], row["src_net"], row["step"], row["target"], row["src_done"] = p["events"], p["net"], p["step"], p["target"], p["done"]
+			t0 := time.Now()
+			p, err := getJSON(ctx, *progressURL)
+			src := map[string]any{"t_ms": mid(t0)}
+			if err == nil {
+				src["events"], src["net"], src["step"], src["target"], src["done"] = p["events"], p["net"], p["step"], p["target"], p["done"]
 			} else {
-				row["src_err"] = err.Error()
+				src["err"] = err.Error()
 			}
-		}
-		lat := *latEvery > 0 && time.Now().After(nextLat)
-		if lat {
-			nextLat = time.Now().Add(*latEvery)
+			row["src"] = src
 		}
 		sm := map[string]any{}
 		for _, r := range readers {
 			cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
-			res, err := r.count(cctx, lat)
+			t0 := time.Now()
+			n, err := r.read(cctx)
 			cancel()
+			res := map[string]any{"t_ms": mid(t0), "read_ms": time.Since(t0).Milliseconds()}
 			if err != nil {
-				res = map[string]any{"err": err.Error()}
+				res["err"] = err.Error()
+				if r.spec.Kind == "pg" || r.spec.Kind == "pgins" {
+					if pg != nil {
+						pg.Close(ctx)
+					}
+					pg = nil
+				}
+			} else {
+				res["count"] = n
 			}
 			sm[r.spec.String()] = res
 		}
 		row["sinks"] = sm
-		row["ts_end_ms"] = time.Now().UnixMilli()
+		if *slots {
+			if c, err := pgConn(ctx); err == nil {
+				row["slots"] = slotLag(ctx, c)
+			}
+		}
 		if err := enc.Encode(row); err != nil {
 			return fmt.Errorf("write sample: %w", err)
 		}
@@ -201,6 +173,30 @@ func runSample(args []string) error {
 		case <-tick.C:
 		}
 	}
+}
+
+// mid is the midpoint between t0 and now, in unix ms.
+func mid(t0 time.Time) int64 {
+	return t0.Add(time.Since(t0) / 2).UnixMilli()
+}
+
+// slotLag is, per replication slot, the WAL bytes between the server's
+// current LSN and what the slot's consumer has confirmed.
+func slotLag(ctx context.Context, c *pgx.Conn) map[string]int64 {
+	out := map[string]int64{}
+	rows, err := c.Query(ctx, "SELECT slot_name, COALESCE(pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn),0)::bigint FROM pg_replication_slots")
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var n string
+		var v int64
+		if rows.Scan(&n, &v) == nil {
+			out[n] = v
+		}
+	}
+	return out
 }
 
 func getJSON(ctx context.Context, url string) (map[string]any, error) {

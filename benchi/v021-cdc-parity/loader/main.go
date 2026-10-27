@@ -9,6 +9,8 @@
 //	loader receive ...          HTTP receiver: the ground truth of HTTP sinks
 //	loader sample ...           time series of source progress, sink counts, latency
 //	loader verify ...           record-by-record check of a sink against the workload
+//	loader collect ...          post-run indexes and exact latency histograms
+//	loader poll ...             diag runs: poll an HTTP endpoint (Jolokia, metrics)
 //	loader now|first|wait-file|mkbucket   helpers the benchi hooks call
 //
 // # load
@@ -32,14 +34,17 @@
 // timestamps to measure end-to-end latency.
 //
 // Rate: -rate ops/s, or -rate 0 for as fast as Postgres takes them (the
-// capacity cells), or -schedule "20000:210s,40000:210s,..." for an offered-rate
-// ramp (each step's start is logged as STEP lines). -total stops the workload
+// capacity cells), or -schedule "20000:120s,40000:120s,..." for an offered-rate
+// ramp (each step's start is logged as STEP lines). -txn sets statements per
+// transaction (write.go), -shape wide adds 28 typed columns, -skew picks
+// tables from a Zipf distribution, -alter-at adds a column mid-run. -total stops the workload
 // after that many ops (the correctness and recovery runs, which need a known
 // end); the loader then idles so its container stays up.
 //
 // Statements go through pgx.Batch, one round trip per -batch statements, over
 // -conns connections (tables are assigned to connections by table index, so
-// per-table order is the generated order). The loader's own progress
+// per-table order is the generated order). A pgx Batch is one implicit
+// transaction unless it carries BEGIN/COMMIT; -txn does that (write.go). The loader's own progress
 // (committed ops by kind) is served on -http, which `sample` reads: that is the
 // offered rate the loader ACHIEVED, recorded next to every sink count.
 //
@@ -76,6 +81,10 @@ func main() {
 		err = runSample(args)
 	case "verify":
 		err = runVerify(args)
+	case "collect":
+		err = runCollect(args)
+	case "poll":
+		err = runPoll(args)
 	case "now":
 		err = runNow(args)
 	case "first":
@@ -85,7 +94,7 @@ func main() {
 	case "mkbucket":
 		err = runMkBucket(args)
 	default:
-		err = fmt.Errorf("unknown command %q (load, fill-kafka, fill-file, receive, sample, verify, now, first, wait-file, mkbucket)", cmd)
+		err = fmt.Errorf("unknown command %q (load, fill-kafka, fill-file, receive, sample, verify, collect, poll, now, first, wait-file, mkbucket)", cmd)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "loader:", err)
