@@ -1,9 +1,12 @@
 # Parity matrix: pre-registration
 
-**Status: pre-registered, no data.** Committed before any matrix run exists.
-Every cell below will be reported, including cells Conduit loses. Any cell
-dropped, added or re-run after data exists is recorded in the change log at
-the end, with the reason, before its results are used.
+**Status: pre-registered, no data. Amended once, before any data, after an
+independent adversarial review (section 15).** Every cell below will be
+reported, including cells Conduit loses. A cell dropped, added or re-run after
+data exists is recorded in the change log, with the reason, before its
+results are used. The plan's commit is tagged; every run records the harness
+hash (`cells.py hash`: the code the results depend on), and `analyze.py`
+refuses results from any other harness.
 
 The point is to find where and why Conduit is slower, so it can be fixed,
 with numbers that hold up when Debezium or Kafka Connect maintainers read
@@ -11,393 +14,555 @@ them. `GAP-ANALYSIS.md` (written after the runs) turns every cell Conduit
 loses into a profile-backed cause, a candidate arch-v2 fix and an estimated
 gain.
 
-Source of truth: `cells.py` (the cell registry and the config generator).
-The table in section 6 is generated from it (`cells.py table`), and
-`test_cells.py` checks the fairness rules below against every generated
-config.
+Source of truth: `cells.py` (cell registry, config generator, run order,
+plans). The tables in section 7 are generated from it, and `test_cells.py`
+checks the rules below against every generated config.
 
-## 1. Hypotheses (before data)
+## 1. Hypotheses (before data), with what would falsify each
 
-From the v0.21 results and the 2026-10-26 runs (`../results-aws/v022-*`):
+Informed by the v0.21 results and the 2026-10-26 runs (`../results-aws/v022-*`).
+"Resolved" means the section 10 label, not a significance test.
 
-- H1. Classic engine, shipped defaults: Postgres and Kafka destinations
-  stay 3.5-3.7x behind Kafka Connect (0.287x and 0.269x on 2026-10-26),
-  because the classic engine writes one record per destination round trip.
-- H2. arch-v2, shipped defaults: at 20,000 ops/s every destination tracks
-  on every side (2026-10-26: all four ratios 0.985-1.002). At saturation:
-  no prior data for arch-v2 against Connect above 40,000 ops/s; we
-  expect Conduit to saturate first on the Postgres destination (per-record
-  upsert statements against the JDBC sink's multi-row batches) and on S3
-  (both sides were at about 17,400/s on 2026-10-26, Conduit about 1.5%
-  behind).
-- H3. Debezium Server uses less memory and starts faster than Debezium on
-  Connect (no worker, no internal topics); Conduit is lower than both on
-  RSS and startup.
-- H4. Kafka-source drains (the Connect sink use case): no prior data.
-  Conduit's Kafka source is a single consumer per pipeline; with more than
-  one partition at shipped defaults both sides run one consumer (Connect's
-  tasks.max defaults to 1).
-- H5. FileStreamSource (an example connector) is slower than Conduit's file
-  source; this cell says little about production Connect.
-- H6. Correctness: no side loses a record; duplicates appear only around
-  the kill -9 restart (at-least-once).
+| id | comparison | prediction | falsified if |
+| --- | --- | --- | --- |
+| H1 | A2-pg-kafka, conduit-classic-s vs connect-avro-s (continuity) | classic well behind: ratio <= 0.5 | median ratio > 0.8 |
+| H2 | P1, P2: A2-pg-kafka, conduit-avro-s vs connect-avro-s / dbzserver-avro-s | within 10% of both | RESOLVED with \|ratio - 1\| > 0.10 either way |
+| H3 | P3, P4: A2-pg-pg, conduit-s vs connect-avro-s / dbzserver-avro-s | Conduit behind: 0.6-0.9 (per-record upserts vs batched JDBC) | median ratio >= 1.0, or < 0.4 |
+| H4 | P5: B-kafka-pg, conduit-s vs connect-s | Conduit behind: 0.5-0.9 (one consumer per pipeline, per-record upserts) | median ratio >= 1.0 |
+| H5 | P6: B-kafka-s3, conduit-s vs the best Connect flush size | within 10% | RESOLVED with \|ratio - 1\| > 0.10 |
+| H6 | P7: A1-pg-kafka ramp, highest tracked step | Conduit >= Connect | Conduit lower in >= 4 of 5 rounds |
+| H7 | P8: F-pg-kafka snapshot, land time | Conduit <= 1.2x Connect's time | Conduit > 1.2x in >= 4 of 5 rounds |
+| H8 | peak RSS and startup, every base cell | Debezium Server <= 0.5x the Connect worker on both; Conduit <= Debezium Server | either Server ratio > 0.8, or Conduit > Server |
+| H9 | every H and G cell | no side loses, corrupts or (on ordered sinks) reorders a record | any such record |
+| H10 | G, shipped tier | duplicates after kill -9: Connect and Debezium Server >= 10x Conduit (60 s vs 1 s position flush) | ratio < 3; and in the `e` tier (all at 1 s) within 3x of each other, falsified if not |
 
 ## 2. Sides and versions
 
 | side | what | pinned |
 | --- | --- | --- |
-| Conduit (arch-v2) | `--preview.pipeline-arch-v2` at shipped defaults | the commit in `environment.txt` (launch takes a full SHA); built from the repository Dockerfile |
-| Conduit (classic) | classic engine, base cells only, continuity with v0.21 | same build |
-| Kafka Connect | Debezium 3.7.0.Final Postgres source on the Debezium connect image (Kafka Connect 4.x, distributed mode, one worker); Confluent JDBC sink 10.9.6, Confluent S3 sink 12.1.11, Apache Kafka FileStream connectors | `quay.io/debezium/connect:3.7.0.Final@sha256:8dc50bab...` + `images/connect.Dockerfile` |
-| Debezium Server (JVM) | standalone Quarkus runtime, one Postgres connector per process | `quay.io/debezium/server:3.7.0.Final@sha256:9117f3fa...` |
-| Debezium Server (native) | Mandrel native build, HTTP cells only (native supports the Redis and HTTP sinks) | `quay.io/debezium/server-native:3.7.0.Final@sha256:6654a571...` |
+| Conduit arch-v2 | `--preview.pipeline-arch-v2`, OpenCDC JSON on Kafka, or (`conduit-avro`) the `avro.encode` processor through the registry | the SHA in `environment.txt`, built from the repository Dockerfile |
+| Conduit classic | ONE continuity cell (A2-pg-kafka-p1-b64); perf work is arch-v2 only | same build |
+| Debezium on Kafka Connect | Debezium 3.7.0.Final Postgres source, Kafka Connect 4.x (one distributed worker); Confluent JDBC sink 10.9.6 and S3 sink 12.1.11 (Confluent Community License), Apache FileStream connectors; JSON converter, or (`connect-avro`) the Apicurio Avro converter | `quay.io/debezium/connect:3.7.0.Final@sha256:8dc50bab...` + `images/connect.Dockerfile` |
+| Debezium Server | 3.7.0.Final JVM, one connector per process; JSON, or (`dbzserver-avro`) Avro through Apicurio; JDBC, Kafka and HTTP sinks; `dbzserver-avro-xn`: one process per table in one container | `quay.io/debezium/server:3.7.0.Final@sha256:9117f3fa...` |
+| Debezium Server native | Mandrel build, HTTP cells only | `quay.io/debezium/server-native:3.7.0.Final@sha256:6654a571...` |
+| schema registry | Apicurio Registry 3.3.3 (Apache-2.0), in-memory; Debezium sides use its native API, Conduit its Confluent-compatible API | `quay.io/apicurio/apicurio-registry:3.3.3@sha256:c9cae4c9...` |
 
-Debezium moves from 3.2 (v0.21 kit) to 3.7.0.Final on Connect, so both
-Debezium runtimes run the same Debezium. The quay.io tags are rebuilt daily on
-refreshed base images, so the digest is the pin.
+Both Debezium runtimes run the same Debezium (3.7.0.Final). quay.io tags are
+rebuilt daily; the digest is the pin.
+
+**Primary serialization.** For Postgres sources into Kafka or Postgres, the
+Debezium sides' primary arms use Avro through the registry: their documented
+production setup. Their JSON arms run shipped only, as exploratory columns.
+Into Kafka, Conduit is compared like for like (`conduit-avro` against the Avro
+arms, `conduit` against the JSON arms). Into Postgres, Conduit serializes
+nothing (no broker), so `conduit` is compared with the Avro arms. Key
+encoding into Kafka is schemaless JSON on every side (value Avro); into
+Postgres the Debezium sides use an Avro key (the JDBC sinks need the key
+schema).
 
 **Destinations without an equivalent are left out:**
 
-- Debezium Server has no file or S3 sink in 3.7.0.Final. Its sink modules are
-  kinesis, sqs, sns, http, pubsub, pulsar, eventhubs, redis, kafka, pravega,
-  nats-streaming, nats-jetstream, infinispan, rabbitmq, rocketmq, milvus,
-  qdrant, instructlab, fluss, databricks-zerobus and jdbc. The JDBC sink is
-  compiled into the default JVM distribution (`debezium-server-dist/pom.xml`
-  at v3.7.0.Final, scope compile) and is used for the Postgres cells; native
-  mode does not support it.
-- Apache Kafka ships no HTTP sink, and Confluent's is commercial-licensed, so
-  the HTTP cells compare Conduit and Debezium Server only.
+- Debezium Server 3.7.0.Final has no file or S3 sink. Its JDBC sink is in the
+  JVM distribution (`debezium-server-dist/pom.xml`, scope compile), not native.
+- Apache Kafka ships no HTTP sink; Confluent's is commercial-licensed. The
+  HTTP cells compare Conduit and Debezium Server only.
 - Conduit ships no HTTP destination. The only one in the ConduitIO and
   conduitio-labs inventory is `conduitio-labs/conduit-connector-http` v0.4.0
-  (Apache-2.0, built on SDK v0.14, pinned to commit 9bc6ada3). The HTTP cells
-  measure that labs plugin as a standalone connector, not a built-in.
-- S3 as a SOURCE: Confluent's Amazon S3 Source connector is proprietary
-  (Confluent Enterprise License, 30-day trial without a key), so it is not a
-  fair open-source equivalent. Apache-licensed Kafka Connect S3 sources exist
-  (Aiven's cloud-storage connectors, Lenses' stream-reactor). An S3-source
-  family against one of them is a follow-up; it is not in this matrix.
+  (Apache-2.0, SDK v0.14, commit 9bc6ada3), run as a standalone plugin. HTTP
+  cells are an appendix (plugin quality), never in a Conduit summary.
+- S3 as a SOURCE: Confluent's S3 Source is proprietary (Enterprise License);
+  Apache-licensed Connect S3 sources exist (Aiven, Lenses). A follow-up family,
+  not in this matrix.
+- FileStreamSource and FileStreamSink are Apache Kafka's example connectors:
+  every file cell is an appendix ("reference connectors"), never in a summary.
 
 ## 3. Tiers
 
-Two tiers per side, in every cell that has a tuned arm:
+- **s, shipped defaults.** Nothing is set except what a pipeline needs to exist
+  and to produce equivalent output (connections, tables, topics, snapshot mode,
+  converters and record formats, the hardening settings Conduit requires).
+  `test_cells.py` fails if a shipped arm sets any tuning knob. The one
+  exception is the Confluent S3 sink's `flush.size`, which has no default: the
+  shipped tier runs it at 1,000, 10,000 and 100,000 (`@f1k`, `@f10k`,
+  `@f100k`), and the primary comparison takes the best of the three per round.
+- **t, tuned with each vendor's documented knobs, at EQUAL values.** Every
+  side's tuned config is derived from one concept table (`cells.TUNED`), and
+  `test_cells.py` checks each tuned arm against it:
 
-- **s, shipped defaults.** Nothing is set except what the pipeline needs to
-  exist and to produce equivalent output: connection settings, table and
-  topic names, the snapshot mode the workload requires, converters and
-  record formats that make both sides write the same bytes, and the
-  operator settings Conduit's hardening requires (file allowlist `/sink`, API
-  on loopback). `test_cells.py` fails if a shipped arm sets any tuning knob.
-- **t, tuned per the vendor's own documented knobs.** Every knob, its value
-  and where it is documented:
+| concept | value | Conduit | Kafka Connect | Debezium (both runtimes) | source |
+| --- | --- | --- | --- | --- | --- |
+| source batch, wait | 8192, 100 ms | source `sdk.batch.size`, `sdk.batch.delay` | consumer `max.poll.records` (sinks), FileStreamSource `batch.size` | `max.batch.size`, `poll.interval.ms`; `max.queue.size` 4x | SDK parameter docs; https://kafka.apache.org/documentation/#consumerconfigs ; https://debezium.io/documentation/reference/3.7/connectors/postgresql.html (knobs documented, **no values published: ours**) |
+| producer | lz4; 200000 B, 100 ms | Kafka destination `compression` (no linger or batch-bytes knob of the same meaning) | `producer.batch.size`, `linger.ms`, `compression.type` | Server Kafka sink producer, same | https://docs.confluent.io/cloud/current/best-practices/optimizing/throughput.html (its `acks=1` advice is NOT applied: delivery parity) |
+| consumer fetch | 100000 B min, 10 MiB per partition | none (no knob: an asymmetry, reported) | `fetch.min.bytes`, `max.partition.fetch.bytes` | - | same Confluent page; per-partition value ours |
+| S3 object | 10000 records, 1 s | S3 `sdk.batch.size`, `sdk.batch.delay` | `flush.size`, `rotate.interval.ms` | - | https://docs.confluent.io/kafka-connectors/s3-sink/current/configuration_options.html |
+| Postgres sink batch | 8192 rows | arch-v2 funnel batches at 3000 by default (#3203; no per-pipeline knob); pgx `default_query_exec_mode=cache_statement` | JDBC `batch.size`, pgjdbc `reWriteBatchedInserts=true` | Debezium JDBC `batch.size`, `use.reduction.buffer` | Confluent JDBC sink docs; pgjdbc docs; Debezium JDBC docs. cache_statement is included because the v0.21 runs showed it matters (results.md): stated, not hidden. reWriteBatchedInserts: if it fails on duplicate keys within a batch (ON CONFLICT DO UPDATE affecting a row twice), smoke records it and the tuned arm drops it, in the change log |
+| snapshot fetch | 50000 rows | `snapshot.fetchSize` is 50000 by default | - | `snapshot.fetch.size` | connector docs |
+| heap | -Xms = -Xmx = 3 GiB | Go: GOGC and GOMEMLIMIT unset on every tier (no Conduit-documented knob) | worker heap | Server heap | https://docs.confluent.io/platform/current/kafka/deployment.html#jvm |
 
-| side | knob | shipped | tuned | source |
-| --- | --- | --- | --- | --- |
-| Connect worker | producer `batch.size`, `linger.ms`, `compression.type` | 16384, 5 ms, none | 200000, 100 ms, lz4 | https://docs.confluent.io/cloud/current/best-practices/optimizing/throughput.html (batch.size 100000-200000, linger.ms 10-100, lz4). Its `acks=1` advice is NOT applied: delivery parity |
-| Connect worker | heap | image default (recorded in environment.txt) | `-Xms3g -Xmx3g` | https://docs.confluent.io/platform/current/kafka/deployment.html#jvm (Xms = Xmx); 3g is half the 6g container limit, our choice |
-| Connect worker | consumer `max.poll.records` | 500 | 8192 | https://kafka.apache.org/documentation/#consumerconfigs_max.poll.records; value is ours, matched to the sink batch |
-| Connect | `tasks.max` (Kafka-source sinks) | 1 | partitions | https://kafka.apache.org/documentation/#connect_configuring |
-| Confluent JDBC sink | `batch.size` | 3000 | 8192 | https://docs.confluent.io/kafka-connectors/jdbc/current/sink-connector/sink_config_options.html; value is ours |
-| Confluent S3 sink | `flush.size` (required, no default) | 1000 (v0.21 kit) | 10000 | https://docs.confluent.io/kafka-connectors/s3-sink/current/configuration_options.html; value is ours |
-| Debezium (Connect and Server) | `max.batch.size`, `max.queue.size`, `poll.interval.ms` | 2048, 8192, 500 ms | 8192, 32768, 100 ms | https://debezium.io/documentation/reference/3.7/connectors/postgresql.html: the knobs and the max.queue.size > max.batch.size constraint are documented; **Debezium publishes no throughput values, these are ours** |
-| Debezium Server | heap | JVM default (1/4 of the container limit) | `-Xms3g -Xmx3g` | as for Connect |
-| Debezium Server | Kafka producer as Connect, JDBC `batch.size` as the JDBC sink | | | as above |
-| FileStreamSource | `batch.size` | 2000 | 8192 | Apache Kafka connect-file; value is ours |
-| Conduit | source `sdk.batch.size`, `sdk.batch.delay` | 0, 0 | 8192, 100 ms | the SDK's documented batching parameters (every connector's reference, e.g. https://github.com/ConduitIO/conduit-connector-kafka/blob/main/connector.yaml). Matched to Debezium's tuned batch and poll interval |
-| Conduit | Kafka destination `compression` | snappy | lz4 | conduit-connector-kafka `compression` parameter; matched to the tuned Connect producer |
-| Conduit | S3 destination `sdk.batch.size`, `sdk.batch.delay` | connector default | 10000, 1 s | SDK batching; matched to the tuned S3 sink's flush.size and rotate.interval.ms |
-| Conduit | Kafka source pipelines per partition | 1 | partitions, one consumer group | the connector's documented `groupID` (consumer group); the Conduit equivalent of tasks.max |
+  Tuned arms run only for the primary serialization; parallelism follows
+  section 6.
+- **e, recovery cells only**: shipped, but every side flushes positions every
+  1 s (Connect `offset.flush.interval.ms=1000` and
+  `scheduled.rebalance.max.delay.ms=0`; Debezium Server
+  `offset.flush.interval.ms=1000`; Conduit's persister is 1 s / 10,000 records
+  at shipped defaults, `pkg/connector/persister.go`).
 
-Rules: the tuned values of one side are never more aggressive than the
-other side's equivalent (same batch size, same wait, same compression). Where
-a vendor gives no number, the value is ours and says so. Conduit has no
-published production-tuning guide; only its documented parameters are used.
-Shipped differences between the sides (Conduit's Kafka destination defaults
-to snappy, the Connect producer to none) are part of the shipped tier.
+## 4. Delivery and durability (stated per side, not asserted equal)
 
-## 4. Delivery semantics (equal on every side, every cell)
+At-least-once everywhere; no side runs exactly-once (`test_cells.py`).
 
-At-least-once everywhere; no side runs exactly-once (`test_cells.py` checks
-that no config mentions it).
+| side | Kafka produce | source position advance | position flush cadence (shipped) |
+| --- | --- | --- | --- |
+| Conduit | `acks=all` | after the destination acks a record, end to end; the Postgres LSN is confirmed from acked positions | persister: every 1 s or 10,000 records (`pkg/connector/persister.go`) |
+| Kafka Connect | `acks=all` (explicit), idempotent producer default | sink: offsets committed after `put`/`flush`; Debezium source: confirmed LSN advances at offset commit | `offset.flush.interval.ms` 60 s |
+| Debezium Server | `acks=all` (explicit) | after the sink's `handle` returns, at offset commit | `offset.flush.interval.ms` 60 s (file store) |
 
-- Kafka producers: `acks=all` on Conduit's Kafka destination, the Connect
-  worker producer and Debezium Server's Kafka sink, set explicitly.
-  Idempotent producers stay at their defaults (on for the Java producer since
-  Kafka 3.0); idempotence prevents duplicates from producer retries, which
-  is not exactly-once.
-- Source positions advance only after the write is acknowledged: Conduit
-  acks end to end, then flushes the Postgres LSN or commits the Kafka
-  offset; Connect commits sink offsets after `put`/`flush` and source offsets
-  on its offset flush interval; Debezium Server flushes its file offset store
-  on its interval after the sink's `handle` returns.
-- Postgres destinations upsert on the key and delete on delete events on
-  every side, so their row counts converge to the same state.
+What "written" means here, for every side alike: Kafka is one broker, RF 1,
+no per-batch fsync (the leader's page cache). The file sinks do not fsync
+(Conduit's file destination and FileStreamSink alike). MinIO writes to a
+Docker volume. Postgres runs on EBS gp3 with fsync on, so destination commits
+are durable there. None of this matches a production durability bar; it is
+the same for every side. Fan-out (E) is an architecture comparison: Conduit's
+two destinations ack as a unit (the slower one gates the pipeline), Connect's
+two sinks are independent consumers; no speed ratio is headlined from it.
 
 ## 5. Resource parity
 
-- One container per system under test, named `cdcparity-sut`, with an
-  identical cpuset (the last two physical cores, both hardware threads: 4
-  vCPUs) and an identical memory limit (6 GiB, no swap) on every side.
-  `test_cells.py` checks every generated tool compose for it.
-- Postgres, the Kafka broker, MinIO, the loader, the HTTP receiver, the
-  sampler and the counter run on the other cores (`INFRA_CPUSET`), so they
-  never compete with the SUT for CPU. Instance: **c6i.4xlarge recommended**
-  (12 infrastructure vCPUs); c6i.2xlarge leaves the infrastructure 4 vCPUs,
-  which may make the loader or Postgres the ceiling at the higher steps (the
-  analysis then reports LOADER-BOUND instead of a verdict).
-- Kafka Connect cannot run without a broker; Conduit and Debezium Server need
-  one only for Kafka sources or destinations. Resources are reported twice:
-  SUT only, and footprint (SUT plus the broker, for the arms that need it).
-- Go: GOMAXPROCS is not set; Go is cgroup-aware and uses the 4-vCPU cpuset.
-  JVMs: the heap per tier (section 3); `ActiveProcessorCount` is not set, the
-  JVM reads the cpuset.
+- Every system under test is one container, `cdcparity-sut`, with an identical
+  cpuset (the last two physical cores, both hardware threads: 4 vCPUs), an
+  identical memory limit (6 GiB, no swap) and the same bounded log driver.
+- Postgres, the broker, MinIO, the registry, the loader, the receiver, the
+  sampler and the counter run on the other cores. So do `dockerd` and
+  `containerd` (systemd `CPUAffinity`, set before Docker starts), the harness
+  (`taskset`) and the samplers. Every veth receive queue's RPS mask points at
+  the infrastructure cores. Residual: the send side of container networking
+  still runs on the sender's CPU (section 14).
+- Resources are reported three ways per arm: SUT only; footprint (SUT plus the
+  broker, for arms that cannot run without one, which is the headline for
+  cross-architecture comparisons); and destination CPU (Postgres, MinIO,
+  registry, receiver) per million events, so CPU a side shifts onto its
+  destination is charged. Per-run steal and SUT CPU frequency are recorded.
+  No dollar figure is reported (the earlier $/billion was rank-equivalent to
+  throughput and misleading).
+- Go sees 4 CPUs because the cpuset limits the process's CPU affinity mask,
+  which Go reads for GOMAXPROCS (not because of the cgroup quota); the JVMs
+  read the same mask. Neither is overridden.
+- Instance: c6i.4xlarge (16 vCPUs: 4 for the SUT, 12 for everything else).
 
-## 6. Cells
+## 6. Workload
 
-A cell is one comparison; its arms are compared only with each other, in the
-same session on the same instance, rotated (Latin square), after one
-discarded warmup round per arm. Phase 1 is the core; phase 2 (the shape
-sweeps) is pre-registered here and runs only on a budget decision recorded
-in the change log **before** any phase 1 result is read.
+- **Rows**: `(id bigint, payload text)`; the `wide` shape adds 28 typed
+  columns (integer, bigint, numeric, text, varchar, timestamptz, date, boolean,
+  jsonb, uuid, double).
+- **Payload**: a marker naming the change and its commit-queue time, then
+  random alphanumerics written in pairs: about 2.3x compressible
+  (`TestPayloadCompressibility`, deflate level 1), so compression is a real
+  trade-off and not free. 16 KiB payloads TOAST.
+- **Transactions**: `-txn N` statements per transaction (BEGIN/COMMIT in the
+  pipelined batch); the base cells keep v0.21's one transaction per 1000-
+  statement round trip, the hold-out cells run 1, 10, 100 and 10,000.
+- **Mixes**: 70/20/10 INSERT/UPDATE/DELETE (base), 20/70/10 (update-heavy),
+  45/10/45 (delete-heavy). **Skew**: Zipf 1.2 over 16 tables. **Schema
+  evolution**: `ALTER TABLE ... ADD COLUMN` mid-window. **Idle**: 1 op/s.
+  **Slow sink**: 5 ms per request at the HTTP receiver.
+- **Parallelism**: with N tables, the shipped tier is ONE pipeline / connector /
+  Server process with a table list and one slot (the idiom on every side);
+  the tuned tier is one per table (N slots) for Conduit and Connect; Debezium
+  Server's scale-out is its own row, one process per table in one container.
+- **Postgres on EBS** (gp3, fsync on), never tmpfs. `max_slot_wal_keep_size`
+  40 GB bounds WAL a slow slot can retain; `shared_buffers` 4 GB.
+- **Hold-out**: the base cells are the shape Conduit's defaults were tuned on
+  (#3203, #3199). The hold-out plan (shapes, transaction sizes, mixes, wide
+  rows, skew, evolution, idle, backpressure) is mandatory before ANY public
+  claim; phase-1 results are internal until it has run.
 
-Arm names: `<side>-<tier>`; `conduit-s-aa` is the A/A twin of `conduit-s`
-(byte-for-byte the same config, its own slots).
+## 7. Cells
 
-| cell | phase | mode | source -> dest | shape | arms | rounds | diag | x-instance |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| A1-pg-file-ramp | 1 | ramp | pg -> file | 1 tables, 64 B | conduit-s, connect-s, conduit-s-aa, conduit-classic-s | 5 | - | - |
-| A2-pg-file-p1-b64 | 1 | capacity | pg -> file | 1 tables, 64 B | conduit-s, conduit-t, connect-s, connect-t, conduit-s-aa, conduit-classic-s | 5 | yes | - |
-| A2-pg-file-p4-b64 | 2 | capacity | pg -> file | 4 tables, 64 B | conduit-s, conduit-t, connect-s, connect-t | 5 | - | - |
-| A2-pg-file-p16-b64 | 2 | capacity | pg -> file | 16 tables, 64 B | conduit-s, conduit-t, connect-s, connect-t | 5 | - | - |
-| A2-pg-file-p1-b1024 | 2 | capacity | pg -> file | 1 tables, 1024 B | conduit-s, conduit-t, connect-s, connect-t | 5 | - | - |
-| A2-pg-file-p1-b16384 | 2 | capacity | pg -> file | 1 tables, 16384 B | conduit-s, conduit-t, connect-s, connect-t | 5 | - | - |
-| A1-pg-pg-ramp | 1 | ramp | pg -> pg | 1 tables, 64 B | conduit-s, connect-s, dbzserver-s, conduit-s-aa, conduit-classic-s | 5 | - | - |
-| A2-pg-pg-p1-b64 | 1 | capacity | pg -> pg | 1 tables, 64 B | conduit-s, conduit-t, connect-s, connect-t, dbzserver-s, dbzserver-t, conduit-s-aa, conduit-classic-s | 5 | yes | yes |
-| A2-pg-pg-p4-b64 | 2 | capacity | pg -> pg | 4 tables, 64 B | conduit-s, conduit-t, connect-s, connect-t, dbzserver-s, dbzserver-t | 5 | - | - |
-| A2-pg-pg-p16-b64 | 2 | capacity | pg -> pg | 16 tables, 64 B | conduit-s, conduit-t, connect-s, connect-t, dbzserver-s, dbzserver-t | 5 | - | - |
-| A2-pg-pg-p1-b1024 | 2 | capacity | pg -> pg | 1 tables, 1024 B | conduit-s, conduit-t, connect-s, connect-t, dbzserver-s, dbzserver-t | 5 | - | - |
-| A2-pg-pg-p1-b16384 | 2 | capacity | pg -> pg | 1 tables, 16384 B | conduit-s, conduit-t, connect-s, connect-t, dbzserver-s, dbzserver-t | 5 | - | - |
-| A1-pg-s3-ramp | 1 | ramp | pg -> s3 | 1 tables, 64 B | conduit-s, connect-s, conduit-s-aa, conduit-classic-s | 5 | - | - |
-| A2-pg-s3-p1-b64 | 1 | capacity | pg -> s3 | 1 tables, 64 B | conduit-s, conduit-t, connect-s, connect-t, conduit-s-aa, conduit-classic-s | 5 | yes | - |
-| A2-pg-s3-p4-b64 | 2 | capacity | pg -> s3 | 4 tables, 64 B | conduit-s, conduit-t, connect-s, connect-t | 5 | - | - |
-| A2-pg-s3-p16-b64 | 2 | capacity | pg -> s3 | 16 tables, 64 B | conduit-s, conduit-t, connect-s, connect-t | 5 | - | - |
-| A2-pg-s3-p1-b1024 | 2 | capacity | pg -> s3 | 1 tables, 1024 B | conduit-s, conduit-t, connect-s, connect-t | 5 | - | - |
-| A2-pg-s3-p1-b16384 | 2 | capacity | pg -> s3 | 1 tables, 16384 B | conduit-s, conduit-t, connect-s, connect-t | 5 | - | - |
-| A1-pg-kafka-ramp | 1 | ramp | pg -> kafka | 1 tables, 64 B | conduit-s, connect-s, dbzserver-s, conduit-s-aa, conduit-classic-s | 5 | - | - |
-| A2-pg-kafka-p1-b64 | 1 | capacity | pg -> kafka | 1 tables, 64 B | conduit-s, conduit-t, connect-s, connect-t, dbzserver-s, dbzserver-t, conduit-s-aa, conduit-classic-s | 5 | yes | yes |
-| A2-pg-kafka-p4-b64 | 2 | capacity | pg -> kafka | 4 tables, 64 B | conduit-s, conduit-t, connect-s, connect-t, dbzserver-s, dbzserver-t | 5 | - | - |
-| A2-pg-kafka-p16-b64 | 2 | capacity | pg -> kafka | 16 tables, 64 B | conduit-s, conduit-t, connect-s, connect-t, dbzserver-s, dbzserver-t | 5 | - | - |
-| A2-pg-kafka-p1-b1024 | 2 | capacity | pg -> kafka | 1 tables, 1024 B | conduit-s, conduit-t, connect-s, connect-t, dbzserver-s, dbzserver-t | 5 | - | - |
-| A2-pg-kafka-p1-b16384 | 2 | capacity | pg -> kafka | 1 tables, 16384 B | conduit-s, conduit-t, connect-s, connect-t, dbzserver-s, dbzserver-t | 5 | - | - |
-| A1-pg-http-ramp | 1 | ramp | pg -> http | 1 tables, 64 B | conduit-s, dbzserver-s, dbzserver-native-s, conduit-s-aa | 5 | - | - |
-| A2-pg-http-p1-b64 | 1 | capacity | pg -> http | 1 tables, 64 B | conduit-s, conduit-t, dbzserver-s, dbzserver-t, dbzserver-native-s, conduit-s-aa | 5 | yes | - |
-| A2-pg-http-p4-b64 | 2 | capacity | pg -> http | 4 tables, 64 B | conduit-s, conduit-t, dbzserver-s, dbzserver-t, dbzserver-native-s | 5 | - | - |
-| B-kafka-pg-p1-b64 | 1 | drain | kafka -> pg | 1 partitions, 64 B, backlog 50,000,000 | conduit-s, conduit-t, connect-s, connect-t, conduit-s-aa | 5 | yes | - |
-| B-kafka-pg-p4-b64 | 2 | drain | kafka -> pg | 4 partitions, 64 B, backlog 50,000,000 | conduit-s, conduit-t, connect-s, connect-t | 5 | - | - |
-| B-kafka-pg-p16-b64 | 2 | drain | kafka -> pg | 16 partitions, 64 B, backlog 50,000,000 | conduit-s, conduit-t, connect-s, connect-t | 5 | - | - |
-| B-kafka-pg-p1-b1024 | 2 | drain | kafka -> pg | 1 partitions, 1024 B, backlog 8,000,000 | conduit-s, conduit-t, connect-s, connect-t | 5 | - | - |
-| B-kafka-pg-p1-b16384 | 2 | drain | kafka -> pg | 1 partitions, 16384 B, backlog 600,000 | conduit-s, conduit-t, connect-s, connect-t | 5 | - | - |
-| B-kafka-s3-p1-b64 | 1 | drain | kafka -> s3 | 1 partitions, 64 B, backlog 50,000,000 | conduit-s, conduit-t, connect-s, connect-t, conduit-s-aa | 5 | yes | - |
-| B-kafka-s3-p4-b64 | 2 | drain | kafka -> s3 | 4 partitions, 64 B, backlog 50,000,000 | conduit-s, conduit-t, connect-s, connect-t | 5 | - | - |
-| B-kafka-s3-p16-b64 | 2 | drain | kafka -> s3 | 16 partitions, 64 B, backlog 50,000,000 | conduit-s, conduit-t, connect-s, connect-t | 5 | - | - |
-| B-kafka-s3-p1-b1024 | 2 | drain | kafka -> s3 | 1 partitions, 1024 B, backlog 8,000,000 | conduit-s, conduit-t, connect-s, connect-t | 5 | - | - |
-| B-kafka-s3-p1-b16384 | 2 | drain | kafka -> s3 | 1 partitions, 16384 B, backlog 600,000 | conduit-s, conduit-t, connect-s, connect-t | 5 | - | - |
-| B-kafka-file-p1-b64 | 1 | drain | kafka -> file | 1 partitions, 64 B, backlog 50,000,000 | conduit-s, conduit-t, connect-s, connect-t, conduit-s-aa | 5 | yes | - |
-| B-kafka-file-p1-b1024 | 2 | drain | kafka -> file | 1 partitions, 1024 B, backlog 8,000,000 | conduit-s, conduit-t, connect-s, connect-t | 5 | - | - |
-| B-kafka-file-p1-b16384 | 2 | drain | kafka -> file | 1 partitions, 16384 B, backlog 600,000 | conduit-s, conduit-t, connect-s, connect-t | 5 | - | - |
-| C-file-kafka-b64 | 1 | drain | file -> kafka | 1 partitions, 64 B, backlog 50,000,000 | conduit-s, conduit-t, connect-s, connect-t, conduit-s-aa | 5 | yes | - |
-| C-file-kafka-b1024 | 2 | drain | file -> kafka | 1 partitions, 1024 B, backlog 8,000,000 | conduit-s, conduit-t, connect-s, connect-t | 5 | - | - |
-| C-file-kafka-b16384 | 2 | drain | file -> kafka | 1 partitions, 16384 B, backlog 600,000 | conduit-s, conduit-t, connect-s, connect-t | 5 | - | - |
-| D-pg-kafka-transform | 1 | capacity | pg -> kafka (unwrap+rename) | 1 tables, 64 B | conduit-s, conduit-t, connect-s, connect-t, dbzserver-s, dbzserver-t, conduit-s-aa | 5 | yes | - |
-| E-pg-fanout-file-s3 | 1 | capacity | pg -> file+s3 | 1 tables, 64 B | conduit-s, conduit-t, connect-s, connect-t, conduit-s-aa | 5 | yes | - |
-| F-pg-kafka-snapshot | 1 | snapshot | pg -> kafka | 10,000,000 rows, 64 B | conduit-s, conduit-t, connect-s, connect-t, dbzserver-s, dbzserver-t, conduit-s-aa | 5 | - | - |
-| F-pg-pg-snapshot | 1 | snapshot | pg -> pg | 10,000,000 rows, 64 B | conduit-s, conduit-t, connect-s, connect-t, dbzserver-s, dbzserver-t, conduit-s-aa | 5 | - | - |
-| G-pg-kafka-kill9 | 1 | recover | pg -> kafka | 1 tables, 64 B | conduit-s, connect-s, dbzserver-s | 5 | - | - |
-| G-pg-pg-kill9 | 1 | recover | pg -> pg | 1 tables, 64 B | conduit-s, connect-s, dbzserver-s | 5 | - | - |
-| H-pg-file-verify | 1 | correct | pg -> file | 1 tables, 64 B | conduit-s, conduit-t, connect-s, connect-t | 1 | - | - |
-| H-pg-pg-verify | 1 | correct | pg -> pg | 1 tables, 64 B | conduit-s, conduit-t, connect-s, connect-t, dbzserver-s, dbzserver-t | 1 | - | - |
-| H-pg-s3-verify | 1 | correct | pg -> s3 | 1 tables, 64 B | conduit-s, conduit-t, connect-s, connect-t | 1 | - | - |
-| H-pg-kafka-verify | 1 | correct | pg -> kafka | 1 tables, 64 B | conduit-s, conduit-t, connect-s, connect-t, dbzserver-s, dbzserver-t | 1 | - | - |
-| H-pg-http-verify | 1 | correct | pg -> http | 1 tables, 64 B | conduit-s, conduit-t, dbzserver-s, dbzserver-t, dbzserver-native-s | 1 | - | - |
-| H-kafka-pg-verify | 1 | correct | kafka -> pg | 1 partitions, 64 B | conduit-s, conduit-t, connect-s, connect-t | 1 | - | - |
-| H-kafka-s3-verify | 1 | correct | kafka -> s3 | 1 partitions, 64 B | conduit-s, conduit-t, connect-s, connect-t | 1 | - | - |
-| H-kafka-file-verify | 1 | correct | kafka -> file | 1 partitions, 64 B | conduit-s, conduit-t, connect-s, connect-t | 1 | - | - |
-| H-file-kafka-verify | 1 | correct | file -> kafka | 1 partitions, 64 B | conduit-s, conduit-t, connect-s, connect-t | 1 | - | - |
-| H-pg-kafka-transform-verify | 1 | correct | pg -> kafka (unwrap+rename) | 1 tables, 64 B | conduit-s, conduit-t, connect-s, connect-t, dbzserver-s, dbzserver-t | 1 | - | - |
-| H-pg-fanout-file-s3-verify | 1 | correct | pg -> file+s3 | 1 tables, 64 B | conduit-s, conduit-t, connect-s, connect-t | 1 | - | - |
+Labels: **primary** (a pre-registered primary comparison, section 10),
+**reference** (example connector, appendix), **plugin** (labs plugin,
+appendix). Arm names: `<side>-<tier>[-aa][@variant]`; `-aa` is the A/A twin.
+Flagship cells have an A/A twin for EVERY side of their primary comparisons.
 
-Families: **A** Postgres CDC to file, Postgres, S3, Kafka, HTTP (A1 ramp,
-A2 capacity and shapes); **B** Kafka topic backlog to Postgres (JDBC sink),
-S3 and file: Kafka Connect's core use case, no Debezium; **C** file to Kafka
-(FileStreamSource); **D** transform (Debezium unwrap plus a ReplaceField
-rename vs Conduit's `field.rename` and a flattening record format); **E**
-fan-out (Conduit: one pipeline, two destinations; Connect: one topic, two
-sink connectors); **F** initial snapshot of 10 million rows; **G** kill -9
-recovery; **H** record-by-record correctness at saturation.
+Order: a cell's rounds are run back to back on one instance after one
+discarded warmup round per arm. In each round the primary arms run as one
+adjacent block, rotated and reversed on alternate rounds (AB/BA); the block
+and the other arms are shuffled with a seed derived from the cell and the
+round (`cells.py order`, recorded in `session.txt`). A fixed rotation is not
+used: with more arms than rounds it does not give every arm every position.
 
-Kafka-to-file runs single-partition only: FileStreamSink writes one file from
-every task, and more than one task interleaves partial lines.
+### Every cell
 
-## 7. Load
+| cell | plan | mode | source -> dest | shape / workload | arms | rounds | instances | diag | label |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| A1-pg-kafka-ramp | flagship | ramp | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, connect-avro-s-aa, dbzserver-avro-s-aa | 5 | 1 | - | primary |
+| A1-pg-pg-ramp | core | ramp | pg -> pg | 1 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
+| A1-pg-s3-ramp | core | ramp | pg -> s3 | 1 tables, 64 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-s-aa | 5 | 1 | - |  |
+| A1-pg-file-ramp | core | ramp | pg -> file | 1 tables, 64 B | conduit-s, connect-s, conduit-s-aa | 5 | 1 | - | reference |
+| A1-pg-http-ramp | core | ramp | pg -> http | 1 tables, 64 B | conduit-s, dbzserver-s, dbzserver-native-s, conduit-s-aa | 5 | 1 | - | plugin |
+| A2-pg-kafka-p1-b64 | flagship | capacity | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, connect-avro-s-aa, dbzserver-avro-s-aa, conduit-classic-s | 5 | 3 | yes | primary |
+| A2-pg-kafka-p4-b64 | holdout | capacity | pg -> kafka | 4 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, dbzserver-avro-xn-s | 5 | 1 | - |  |
+| A2-pg-kafka-p16-b64 | holdout | capacity | pg -> kafka | 16 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, dbzserver-avro-xn-s | 5 | 1 | - |  |
+| A2-pg-kafka-p1-b1024 | holdout | capacity | pg -> kafka | 1 tables, 1024 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
+| A2-pg-kafka-p1-b16384 | holdout | capacity | pg -> kafka | 1 tables, 16384 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
+| A2-pg-pg-p1-b64 | flagship | capacity | pg -> pg | 1 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa, connect-avro-s-aa, dbzserver-avro-s-aa | 5 | 2 | yes | primary |
+| A2-pg-pg-p4-b64 | holdout | capacity | pg -> pg | 4 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa, dbzserver-avro-xn-s | 5 | 1 | - |  |
+| A2-pg-pg-p16-b64 | holdout | capacity | pg -> pg | 16 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa, dbzserver-avro-xn-s | 5 | 1 | - |  |
+| A2-pg-pg-p1-b1024 | holdout | capacity | pg -> pg | 1 tables, 1024 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
+| A2-pg-pg-p1-b16384 | holdout | capacity | pg -> pg | 1 tables, 16384 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
+| A2-pg-s3-p1-b64 | core | capacity | pg -> s3 | 1 tables, 64 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 5 | 1 | yes |  |
+| A2-pg-s3-p4-b64 | holdout | capacity | pg -> s3 | 4 tables, 64 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
+| A2-pg-s3-p16-b64 | holdout | capacity | pg -> s3 | 16 tables, 64 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
+| A2-pg-s3-p1-b1024 | holdout | capacity | pg -> s3 | 1 tables, 1024 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
+| A2-pg-s3-p1-b16384 | holdout | capacity | pg -> s3 | 1 tables, 16384 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
+| A2-pg-file-p1-b64 | core | capacity | pg -> file | 1 tables, 64 B | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | yes | reference |
+| A2-pg-file-p4-b64 | holdout | capacity | pg -> file | 4 tables, 64 B | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - | reference |
+| A2-pg-file-p16-b64 | holdout | capacity | pg -> file | 16 tables, 64 B | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - | reference |
+| A2-pg-file-p1-b1024 | holdout | capacity | pg -> file | 1 tables, 1024 B | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - | reference |
+| A2-pg-file-p1-b16384 | holdout | capacity | pg -> file | 1 tables, 16384 B | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - | reference |
+| A2-pg-http-p1-b64 | core | capacity | pg -> http | 1 tables, 64 B | conduit-s, dbzserver-s, conduit-t, dbzserver-t, dbzserver-native-s, conduit-s-aa | 5 | 1 | yes | plugin |
+| B-kafka-pg-p1-b64 | flagship | drain | kafka -> pg | 1 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa, connect-s-aa | 5 | 1 | yes | primary |
+| B-kafka-pg-p4-b64 | holdout | drain | kafka -> pg | 4 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
+| B-kafka-pg-p16-b64 | holdout | drain | kafka -> pg | 16 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
+| B-kafka-pg-p1-b1024 | holdout | drain | kafka -> pg | 1 partitions, 1024 B, backlog 12 GiB (8,741,453 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
+| B-kafka-pg-p1-b16384 | holdout | drain | kafka -> pg | 1 partitions, 16384 B, backlog 12 GiB (765,409 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
+| B-kafka-s3-p1-b64 | flagship | drain | kafka -> s3 | 1 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa, connect-s-aa@f10k | 5 | 1 | yes | primary |
+| B-kafka-s3-p4-b64 | holdout | drain | kafka -> s3 | 4 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
+| B-kafka-s3-p16-b64 | holdout | drain | kafka -> s3 | 16 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
+| B-kafka-s3-p1-b1024 | holdout | drain | kafka -> s3 | 1 partitions, 1024 B, backlog 12 GiB (8,741,453 records) | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
+| B-kafka-s3-p1-b16384 | holdout | drain | kafka -> s3 | 1 partitions, 16384 B, backlog 12 GiB (765,409 records) | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
+| B-kafka-file-p1-b64 | core | drain | kafka -> file | 1 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | yes | reference |
+| B-kafka-file-p1-b1024 | holdout | drain | kafka -> file | 1 partitions, 1024 B, backlog 12 GiB (8,741,453 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - | reference |
+| B-kafka-file-p1-b16384 | holdout | drain | kafka -> file | 1 partitions, 16384 B, backlog 12 GiB (765,409 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - | reference |
+| C-file-kafka-b64 | core | drain | file -> kafka | 1 partitions, 64 B, backlog 8 GiB (91,382,282 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | yes | reference |
+| C-file-kafka-b1024 | holdout | drain | file -> kafka | 1 partitions, 1024 B, backlog 8 GiB (8,149,843 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - | reference |
+| C-file-kafka-b16384 | holdout | drain | file -> kafka | 1 partitions, 16384 B, backlog 8 GiB (523,329 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - | reference |
+| D-pg-kafka-transform | core | capacity | pg -> kafka (transform) | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-avro-s-aa | 5 | 1 | yes |  |
+| E-pg-fanout-file-s3 | core | capacity | pg -> file+s3 | 1 tables, 64 B | conduit-s, connect-s@f10k, conduit-t, connect-t, conduit-s-aa | 5 | 1 | yes |  |
+| F-pg-kafka-snapshot | flagship | snapshot | pg -> kafka | 10,000,000 rows, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - | primary |
+| F-pg-pg-snapshot | core | snapshot | pg -> pg | 10,000,000 rows, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
+| G-pg-kafka-kill9 | flagship | recover | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, connect-avro-e, dbzserver-avro-e | 5 | 1 | - |  |
+| G-pg-pg-kill9 | core | recover | pg -> pg | 1 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, connect-avro-e, dbzserver-avro-e | 5 | 1 | - |  |
+| G-pg-kafka-kill9-snapshot | core | recover-snapshot | pg -> kafka | 10,000,000 rows, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, connect-avro-e, dbzserver-avro-e | 5 | 1 | - |  |
+| H-pg-kafka-verify | core | correct | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s | 1 | 1 | - |  |
+| H-pg-pg-verify | core | correct | pg -> pg | 1 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s | 1 | 1 | - |  |
+| H-pg-s3-verify | core | correct | pg -> s3 | 1 tables, 64 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t | 1 | 1 | - |  |
+| H-pg-file-verify | core | correct | pg -> file | 1 tables, 64 B | conduit-s, connect-s, conduit-t, connect-t | 1 | 1 | - |  |
+| H-pg-http-verify | core | correct | pg -> http | 1 tables, 64 B | conduit-s, dbzserver-s, conduit-t, dbzserver-t, dbzserver-native-s | 1 | 1 | - |  |
+| H-kafka-pg-verify | core | correct | kafka -> pg | 1 partitions, 64 B | conduit-s, conduit-t, connect-s, connect-t | 1 | 1 | - |  |
+| H-kafka-s3-verify | core | correct | kafka -> s3 | 1 partitions, 64 B | conduit-s, conduit-t, connect-s@f10k, connect-t | 1 | 1 | - |  |
+| H-kafka-file-verify | core | correct | kafka -> file | 1 partitions, 64 B | conduit-s, conduit-t, connect-s, connect-t | 1 | 1 | - |  |
+| H-file-kafka-verify | core | correct | file -> kafka | 1 partitions, 64 B | conduit-s, conduit-t, connect-s, connect-t | 1 | 1 | - |  |
+| H-pg-kafka-transform-verify | core | correct | pg -> kafka (transform) | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s | 1 | 1 | - |  |
+| H-pg-fanout-file-s3-verify | core | correct | pg -> file+s3 | 1 tables, 64 B | conduit-s, connect-s@f10k | 1 | 1 | - |  |
+| H-pg-kafka-wide-txn1-verify | core | correct | pg -> kafka | 1 tables, 64 B, wide, txn 1 | conduit-avro-s, connect-avro-s, dbzserver-avro-s | 1 | 1 | - |  |
+| W-pg-kafka-txn1 | holdout | capacity | pg -> kafka | 4 tables, 64 B, txn 1 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
+| W-pg-kafka-txn10 | holdout | capacity | pg -> kafka | 4 tables, 64 B, txn 10 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
+| W-pg-kafka-txn100 | holdout | capacity | pg -> kafka | 4 tables, 64 B, txn 100 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
+| W-pg-kafka-txn10000 | holdout | capacity | pg -> kafka | 1 tables, 64 B, txn 10000 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
+| W-pg-kafka-updheavy | holdout | capacity | pg -> kafka | 1 tables, 64 B, mix 20/70/10 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
+| W-pg-kafka-delheavy | holdout | capacity | pg -> kafka | 1 tables, 64 B, mix 45/10/45 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
+| W-pg-kafka-wide | holdout | capacity | pg -> kafka | 1 tables, 64 B, wide | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
+| W-pg-kafka-skew16 | holdout | capacity | pg -> kafka | 16 tables, 64 B, zipf 1.2 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
+| W-pg-pg-txn1 | holdout | capacity | pg -> pg | 4 tables, 64 B, txn 1 | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
+| W-pg-pg-txn10 | holdout | capacity | pg -> pg | 4 tables, 64 B, txn 10 | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
+| W-pg-pg-txn100 | holdout | capacity | pg -> pg | 4 tables, 64 B, txn 100 | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
+| W-pg-pg-txn10000 | holdout | capacity | pg -> pg | 1 tables, 64 B, txn 10000 | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
+| W-pg-pg-updheavy | holdout | capacity | pg -> pg | 1 tables, 64 B, mix 20/70/10 | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
+| W-pg-pg-delheavy | holdout | capacity | pg -> pg | 1 tables, 64 B, mix 45/10/45 | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
+| W-pg-pg-wide | holdout | capacity | pg -> pg | 1 tables, 64 B, wide | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
+| W-pg-pg-skew16 | holdout | capacity | pg -> pg | 16 tables, 64 B, zipf 1.2 | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
+| W-pg-kafka-alter | holdout | capacity | pg -> kafka | 1 tables, 64 B, ALTER at 330s | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
+| W-pg-kafka-idle | holdout | idle | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
+| W-pg-http-slowsink | holdout | capacity | pg -> http | 1 tables, 64 B, sink delay 5 ms | conduit-s, dbzserver-s, dbzserver-native-s, conduit-s-aa | 5 | 1 | - | plugin |
+| P-pg-kafka-p1-b64 | pilot | capacity | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-s@i30, connect-avro-s@i30, dbzserver-avro-s@i30 | 3 | 1 | - |  |
+| P-kafka-pg-p1-b64 | pilot | drain | kafka -> pg | 1 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s | 2 | 1 | - |  |
 
-- **ramp** (A1): offered rate held at 20,000 ops/s for 180 s (warm-up,
-  excluded), then 20,000, 40,000, 50,000, 70,000, 100,000, 140,000 and 200,000
-  ops/s, 120 s each: 60 s to settle, 60 s measured. Every step is reported
-  for every arm. This fixes the v0.21 50,000 ops/s problem (the window
-  counted startup backlog drain): a step counts only as TRACKED if the lag
-  did not grow over its window, and every step records the rate the loader
-  actually achieved.
-- **capacity** (A2, D, E): the loader writes as fast as Postgres accepts
-  (`-rate 0`), so every side is offered more than it can take. 180 s
-  warm-up (JIT and GC steady state), then a **300 s** window.
-- **drain** (B, C): a backlog written before the pipeline starts (about
-  6-10 GB: 50 M x 64 B, 8 M x 1 KiB, 600 k x 16 KiB records); 180 s warm-up,
-  300 s window. A run whose backlog ran out inside the window is invalid.
+### Smoke plan (short variants of the cells above, one round)
+
+| cell | plan | mode | source -> dest | shape / workload | arms | rounds | instances | diag | label |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| A1-pg-kafka-ramp | smoke | ramp | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, connect-avro-s-aa, dbzserver-avro-s-aa | 1 | 1 | - | primary |
+| A2-pg-kafka-p1-b64 | smoke | capacity | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, connect-avro-s-aa, dbzserver-avro-s-aa, conduit-classic-s | 1 | 1 | yes | primary |
+| A2-pg-kafka-p4-b64 | smoke | capacity | pg -> kafka | 4 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, dbzserver-avro-xn-s | 1 | 1 | - |  |
+| A2-pg-pg-p1-b64 | smoke | capacity | pg -> pg | 1 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa, connect-avro-s-aa, dbzserver-avro-s-aa | 1 | 1 | - | primary |
+| A2-pg-s3-p1-b64 | smoke | capacity | pg -> s3 | 1 tables, 64 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 1 | 1 | - |  |
+| A2-pg-file-p1-b64 | smoke | capacity | pg -> file | 1 tables, 64 B | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 1 | 1 | - | reference |
+| A2-pg-http-p1-b64 | smoke | capacity | pg -> http | 1 tables, 64 B | conduit-s, dbzserver-s, conduit-t, dbzserver-t, dbzserver-native-s, conduit-s-aa | 1 | 1 | - | plugin |
+| B-kafka-pg-p1-b64 | smoke | drain | kafka -> pg | 1 partitions, 64 B, backlog 0 GiB (522,247 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa, connect-s-aa | 1 | 1 | - | primary |
+| B-kafka-s3-p1-b64 | smoke | drain | kafka -> s3 | 1 partitions, 64 B, backlog 0 GiB (522,247 records) | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa, connect-s-aa@f10k | 1 | 1 | - | primary |
+| B-kafka-file-p1-b64 | smoke | drain | kafka -> file | 1 partitions, 64 B, backlog 0 GiB (522,247 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 1 | 1 | - | reference |
+| C-file-kafka-b64 | smoke | drain | file -> kafka | 1 partitions, 64 B, backlog 0 GiB (2,855,696 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 1 | 1 | - | reference |
+| D-pg-kafka-transform | smoke | capacity | pg -> kafka (transform) | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-avro-s-aa | 1 | 1 | - |  |
+| E-pg-fanout-file-s3 | smoke | capacity | pg -> file+s3 | 1 tables, 64 B | conduit-s, connect-s@f10k, conduit-t, connect-t, conduit-s-aa | 1 | 1 | - |  |
+| F-pg-kafka-snapshot | smoke | snapshot | pg -> kafka | 500,000 rows, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 1 | 1 | - | primary |
+| F-pg-pg-snapshot | smoke | snapshot | pg -> pg | 500,000 rows, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa | 1 | 1 | - |  |
+| G-pg-kafka-kill9 | smoke | recover | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, connect-avro-e, dbzserver-avro-e | 1 | 1 | - |  |
+| G-pg-pg-kill9 | smoke | recover | pg -> pg | 1 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, connect-avro-e, dbzserver-avro-e | 1 | 1 | - |  |
+| G-pg-kafka-kill9-snapshot | smoke | recover-snapshot | pg -> kafka | 500,000 rows, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, connect-avro-e, dbzserver-avro-e | 1 | 1 | - |  |
+| H-pg-kafka-verify | smoke | correct | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s | 1 | 1 | - |  |
+| H-pg-pg-verify | smoke | correct | pg -> pg | 1 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s | 1 | 1 | - |  |
+| H-pg-s3-verify | smoke | correct | pg -> s3 | 1 tables, 64 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t | 1 | 1 | - |  |
+| H-pg-file-verify | smoke | correct | pg -> file | 1 tables, 64 B | conduit-s, connect-s, conduit-t, connect-t | 1 | 1 | - |  |
+| H-pg-http-verify | smoke | correct | pg -> http | 1 tables, 64 B | conduit-s, dbzserver-s, conduit-t, dbzserver-t, dbzserver-native-s | 1 | 1 | - |  |
+| H-kafka-pg-verify | smoke | correct | kafka -> pg | 1 partitions, 64 B | conduit-s, conduit-t, connect-s, connect-t | 1 | 1 | - |  |
+| H-kafka-s3-verify | smoke | correct | kafka -> s3 | 1 partitions, 64 B | conduit-s, conduit-t, connect-s@f10k, connect-t | 1 | 1 | - |  |
+| H-kafka-file-verify | smoke | correct | kafka -> file | 1 partitions, 64 B | conduit-s, conduit-t, connect-s, connect-t | 1 | 1 | - |  |
+| H-file-kafka-verify | smoke | correct | file -> kafka | 1 partitions, 64 B | conduit-s, conduit-t, connect-s, connect-t | 1 | 1 | - |  |
+| H-pg-kafka-transform-verify | smoke | correct | pg -> kafka (transform) | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s | 1 | 1 | - |  |
+| H-pg-fanout-file-s3-verify | smoke | correct | pg -> file+s3 | 1 tables, 64 B | conduit-s, connect-s@f10k | 1 | 1 | - |  |
+| H-pg-kafka-wide-txn1-verify | smoke | correct | pg -> kafka | 1 tables, 64 B, wide, txn 1 | conduit-avro-s, connect-avro-s, dbzserver-avro-s | 1 | 1 | - |  |
+| W-pg-kafka-txn1 | smoke | capacity | pg -> kafka | 4 tables, 64 B, txn 1 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 1 | 1 | - |  |
+| W-pg-kafka-wide | smoke | capacity | pg -> kafka | 1 tables, 64 B, wide | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 1 | 1 | - |  |
+| W-pg-kafka-alter | smoke | capacity | pg -> kafka | 1 tables, 64 B, ALTER at 60s | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 1 | 1 | - |  |
+| W-pg-kafka-idle | smoke | idle | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 1 | 1 | - |  |
+| P-pg-kafka-p1-b64 | smoke | capacity | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-s@i30, connect-avro-s@i30, dbzserver-avro-s@i30 | 1 | 1 | - |  |
+
+## 8. Load modes
+
+- **ramp** (A1): held at 20,000 ops/s for 180 s (warm-up, excluded), then
+  20,000, 40,000, 50,000, 70,000, 100,000, 140,000 and 200,000 ops/s, 120 s
+  each: 60 s to settle, 60 s measured, ending one sample before the sampler
+  first sees the next step. A step is TRACKED when the sink rate is at least
+  97% of the rate the loader achieved, the lag grew by at most 2% of the
+  window's offered events, AND the lag at the window's end is under 5 s of
+  offered load. A step where the loader achieved under 97% of its target is
+  LOADER-BOUND (no verdict). Loader round trips are 100 statements here (a
+  5 ms floor on marker-to-arrival latency at 20,000 ops/s).
+- **capacity** (A2, D, E, W): the loader writes as fast as Postgres accepts.
+  180 s warm-up, 300 s window. Valid only if the arm's lag grew in the window
+  (saturated). An arm that kept up is a LOWER BOUND (`>= loader rate`),
+  reported as such, and enters the verdict as one (section 10). The loader
+  feeds one table through one connection (per-table order), so a one-table
+  cell has a ceiling; the ramp and the multi-table cells show where it is.
+- **drain** (B, C): a backlog written before the pipeline starts, sized in
+  BYTES (12 GiB for Kafka sources, 8 GiB for file), filled ONCE per cell and
+  read by every run with its own consumer group / connector name. 180 s
+  warm-up, 300 s window; if the backlog runs out first, the run counts with at
+  least 120 s of window (flagged short), else it is invalid. The pilot
+  measures fill and drain rates; the sizes are revised from it (change log)
+  before any flagship run.
 - **snapshot** (F): 10 M rows loaded before the pipeline starts; time from
-  the first record to the last.
-- **correct** (H): 3 M ops at the loader's maximum rate (pg sources) or the
-  3 M-record backlog; wait until the sink has not moved for 60 s and the
-  loader is done; verify every record.
-- **recover** (G): 3 M ops at maximum rate; 120 s after the first record,
-  `docker kill -s KILL` the SUT, start it again at once; measure time to the
-  next delivered record; verify every record.
+  first record to the last landed.
+- **correct** (H): 3 M ops at the loader's maximum rate (Postgres sources) or
+  a 3 M-record backlog; wait until the sink is still for 60 s and the loader is
+  done; verify every record.
+- **recover** (G): the loader is PACED at 20,000 ops/s (every side tracked it
+  on 2026-10-26) for 6 M ops; when the sink has 30% of the expected events,
+  `docker kill -s KILL` the SUT and start it at once; the loader keeps
+  running; at the end verify every record. **recover-snapshot**: the same
+  kill at 30% of a 10 M-row snapshot. Shipped and `e` tiers. G kills
+  mid-stream and mid-snapshot only; kill mid-batch and mid-checkpoint are
+  covered by `tests/chaos` for Conduit, not compared here.
+- **idle** (W): 1 op/s for 300 s: CPU and memory of a pipeline with no traffic.
 
-Rounds: 5 measured rounds per arm (the correctness cells run once per arm;
-recovery 5 kills per arm). The base A2 cells for Postgres and Kafka run on two
-different instances (cross-instance variance).
+## 9. Metrics and counting
 
-## 8. Metrics
-
-All from ground truth at the sink or from the host, never from an engine's
-own metrics.
+All ground truth at the sink or the host; nothing from an engine's metrics.
+Nothing the sampler does during a window depends on how much an arm wrote:
 
 | metric | how |
 | --- | --- |
-| throughput | sink count delta / real elapsed time between the two samples bounding the window; counts: lines in the sink files, rows in the destination tables, lines in every S3 object, end-minus-start offsets of the topics, events at the HTTP receiver |
-| offered (achieved) | the loader's committed ops (by kind) from its `/progress`, sampled with every sink count |
-| lag | offered minus delivered, at the window's start and end |
-| latency p50/p99/p99.9 | from the marker's timestamp (written into every payload when the statement is queued) to: broker append time (Kafka, `LogAppendTime`), the destination row's `landed_at` trigger (Postgres, ramp cells), arrival at the receiver (HTTP), object LastModified (S3, 1 s resolution). Interval percentiles are combined as the median p50, median p99 and worst p99.9. File sinks: not measured |
-| CPU-seconds per million events | cgroup `usage_usec` delta over the window / events delivered; SUT only and footprint |
-| peak RSS | max cgroup `memory.stat` anon (page cache excluded) over the run |
-| startup to first record | first sink record minus the tool-start hook (includes Connect's REST registration and slot creation, which are part of starting) |
-| $ per billion events | instance price per hour / (rate x 3600) x 1e9 |
-| GC pauses | JVM `-Xlog:gc*` and Go `GODEBUG=gctrace=1`, every run (observation only) |
-| correctness | `loader verify`: missing, duplicate, malformed and reordered records per kind |
-| recovery | time from restart to the next delivered record; loss and duplicates from verify |
+| throughput | delta of the sink count over the window, each reading stamped at its own read midpoint (interpolated). File: new bytes since the last read. Postgres: per destination table `max(seq)+1`, `seq` being the source op index (a generated column decoded from the payload marker, indexed): one index probe per table, in source ops like every other sink. Kafka: end offsets. S3: NOT read during the window; after the run every object is indexed and the series rebuilt from LastModified. HTTP: the receiver's count |
+| offered | the loader's committed ops from `/progress` |
+| lag | offered minus delivered at the window's edges; replication slot lag in bytes every sample |
+| latency p50 / p99 / p99.9 | tracked ramp steps only (a saturated system's latency is its queue). Exact, from per-second histograms (2% buckets) built after the run: every Kafka record (broker LogAppendTime minus marker), every Postgres row's `landed_at` trigger (ramp cells only; a final-state sample), every HTTP event at the receiver, every S3 line (1 s resolution). File: not measured |
+| CPU-s per million events | cgroup CPU over the window / events: SUT, footprint, destination |
+| peak RSS | max cgroup anonymous memory (page cache excluded) |
+| startup to first record | first sink record minus the tool-start hook |
+| bytes per record, producer batches | bytes over records of every Kafka record or S3 line; per topic, the broker's log: batches, records per batch, codec (`kafka-dump-log` after the run) |
+| GC pauses | JVM `-Xlog:gc*`, Go `gctrace`, every run, every side |
+| bottleneck | per run: SUT CPU-bound (>= 3.6 of 4 cores or throttled), SUT waiting (with the busiest infrastructure container's cores), loader-bound, or not saturated |
+| stationarity | per run: first vs second half of the window within 5%, and the CV of 30 s sub-window rates; runs that fail are reported, not dropped |
+| correctness | `loader verify`: missing, duplicate, malformed, reordered, unattributed, per kind; Kafka read as key + value (tombstones attributed by key); Postgres: final state |
+| recovery | time from restart to the next delivered record; loss and duplicates from verify; delivered count at the kill |
 
-## 9. Analysis rules
+The pilot runs the counting-overhead control: the same arms with the sampler
+at 5 s and at 30 s; if their rates differ by more than the effective floor,
+the counter is not free and the change log records what replaces it.
 
-`analyze.py`, fixed now. `benchi/METHODOLOGY.md` sets the method (ground
-truth, A/A, medians with spread, interleaving) but contains no
-resolved/suggestive rule, so this plan defines one:
+## 10. Analysis rules (replaces the first version's rule)
 
-- **A/A floor** per family, destination and mode: the maximum per-round
-  `|conduit-s / conduit-s-aa - 1|` in that family's base cell.
-- **RESOLVED**: `|median per-round ratio - 1| > 2 x floor`, the bootstrap 95%
-  CI of the median ratio excludes 1, and at least 4 of 5 rounds have the same
-  sign. **SUGGESTIVE**: the median ratio is outside the floor but not all of
-  that holds. **UNRESOLVED**: otherwise, or with no floor.
-- A capacity run is valid only if the arm's lag grew in the window (it was
-  saturated); an arm that kept up with the unlimited loader is reported as
-  `>= loader rate`, not as a capacity. A drain run is valid only if its
-  backlog lasted the whole window. A ramp step where the loader achieved less
-  than 97% of its target is LOADER-BOUND: no verdict there.
-- **Correctness gates speed**: an arm with any lost, malformed or (on an
-  ordered sink) reordered record fails the cell, whatever its throughput.
+`analyze.py`, fixed now:
+
+- **Effective floor** for a pair = max(5% pre-registered minimum; the A/A
+  floor of EACH side that has a twin in the cell, max per-round
+  `|arm / arm-aa - 1|`; half the run-to-run range of either arm). A cell with
+  no twin borrows its family's floor, doubled (at least 10%).
+- **Label**, per pair, from the per-round ratios (same round, adjacent runs):
+  RESOLVED if `|median ratio - 1|` > floor and ALL rounds have the same sign;
+  SUGGESTIVE if above the floor and all but one round agree; else
+  UNRESOLVED. Reported with the median ratio, its range and the exact sign
+  count. **This is a consistency label, not a significance test**: with 5
+  rounds the smallest two-sided sign-test p is 0.0625. No bootstrap is used
+  (on 5 values its 95% CI is the range).
+- **Lower bounds**: if one arm kept up with the unlimited loader (valid capacity
+  unknown, at least the loader's rate) and the other saturated below that, in
+  at least 4 rounds, the pair is LOWER-BOUND (`a >= kx b`), not UNRESOLVED.
+- **Ramp**: ordinal. Each round's highest tracked step; RESOLVED (ordinal) if
+  one arm is higher in every round, SUGGESTIVE if in all but one. No ratio.
+  The delivered rate at the first untracked step is reported beside it.
+- **Cross-instance**: a cell run on several instances keeps a label only if
+  every instance gives the same label and the same sign; otherwise UNRESOLVED
+  (instances disagree). Flagship cells run on 3 instances (A2-pg-kafka) or 2
+  (A2-pg-pg).
+- **Correctness gates speed**: an arm with any lost, malformed, unattributed or
+  (on an ordered sink) reordered record fails the cell, whatever its speed.
   Duplicates are allowed (at-least-once) and reported per million.
-- Bootstrap: 10,000 percentile resamples, seeded. With 5 rounds the CI is
-  coarse; it is reported as computed.
+- **Primary comparisons** (at most 8, `cells.PRIMARY`):
 
-## 10. Diagnosis
+| id | cell | Conduit | vs |
+| --- | --- | --- | --- |
+| P1 | A2-pg-kafka-p1-b64 | conduit-avro-s | connect-avro-s |
+| P2 | A2-pg-kafka-p1-b64 | conduit-avro-s | dbzserver-avro-s |
+| P3 | A2-pg-pg-p1-b64 | conduit-s | connect-avro-s |
+| P4 | A2-pg-pg-p1-b64 | conduit-s | dbzserver-avro-s |
+| P5 | B-kafka-pg-p1-b64 | conduit-s | connect-s |
+| P6 | B-kafka-s3-p1-b64 | conduit-s | the best of connect-s@f1k / @f10k / @f100k, per round |
+| P7 | A1-pg-kafka-ramp | conduit-avro-s | connect-avro-s (ordinal) |
+| P8 | F-pg-kafka-snapshot | conduit-avro-s | connect-avro-s (land time) |
 
-Every base capacity and drain cell has one extra, unmeasured diag run per
-arm: Conduit with `--dev.cpuprofile`, `--dev.memprofile` and
-`--dev.blockprofile` (block rate 1); the JVM sides with async-profiler 4.6
-(itimer) for the 300 s window. Conduit's Prometheus metrics (per-stage source,
-processor, destination and ack histograms) are scraped at every window's start
-and end, in measured runs too. GC logs, cgroup CPU, memory and IO, and
-docker's network counters are kept for every run. `GAP-ANALYSIS.md`: per cell
-Conduit loses, the profile-backed cause, a candidate arch-v2 fix, an
-estimated gain; guesses marked as guesses.
+  **Multiplicity**: about 150 other pairs exist across the matrix; they are
+  exploratory. No headline, summary or claim is drawn from an exploratory
+  pair, a reference cell or a plugin cell. At an expected false-label rate of a
+  few percent per pair, several exploratory RESOLVED labels are expected by
+  chance.
 
-## 11. Reproducibility
+## 11. Diagnosis
 
-One command per cell on a bench instance (`matrix/run-cell.sh CELL OUT`), or
-the whole matrix with `matrix/aws/launch.sh RUN_ID CONDUIT_SHA N PHASES TYPE`.
-The kit tarball is `git archive` of a commit (launch refuses uncommitted
-changes; `KIT_COMMIT` is in it). Every image pinned by digest or built from a
-pinned base; the instance's AMI, kernel, type, CPU, Docker version, Conduit
-SHA and connector versions are in `environment.txt`. Raw per-run data
-(samples, resources, hooks, verify reports, profiles) is committed with the
-results.
+Every base capacity and drain cell has one extra, unmeasured diag run per arm.
+Measured runs take no profile and no scrape on any side.
 
-## 12. Cost
+- Conduit (a `-diag` build of the same commit: pprof served on the bench
+  network, mutex sampling 1/10, block 100 us, never the measured binary): a
+  60 s CPU profile from the window's start, mutex and block profiles at the
+  window's edges (their difference is the window), a 10 s execution trace
+  and a goroutine dump mid-window (off-CPU), the engine's metrics polled every
+  10 s (per-stage histograms as a series, GC CPU fraction, allocation rate).
+- JVM sides: async-profiler 4.6 itimer then wall clock, each for half the
+  window; Jolokia polled every 10 s (Debezium streaming metrics: queue
+  remaining capacity, ms behind source; Connect source and sink task metrics;
+  producer batch-size-avg, records-per-request-avg, request-latency-avg;
+  consumer fetch metrics; GC, heap).
+- Every run: pg_stat_statements and pg_stat_user_tables (statements, rows per
+  call, time), WAL stats, broker producer batches, the bottleneck label.
+- `GAP-ANALYSIS.md`: per losing cell, the bottleneck label, the stage from
+  the metrics series, the profile frames for the window, a candidate arch-v2
+  fix, an estimated gain, and an A/B experiment id that will confirm it.
+  Guesses are marked as guesses.
 
-`cells.py estimate`. Run lengths are estimates (startup, fill and snapshot
-times are guessed from the v0.21 runs); the cap per instance is its
-estimate plus 25%.
+## 12. Spend order, gates and cost
 
-| plan | runs | instance-hours | c6i.2xlarge ($0.424/h) | c6i.4xlarge ($0.848/h) | wall time on 2 / 4 / 8 instances |
-| --- | --- | --- | --- | --- | --- |
-| smoke | 16 cells, 1 run per arm | about 18 (upper bound) | $8 | $15 | 9 / 5 / 3 h |
-| phase 1 | 871 | 178 | $75 | $152 | 89 / 45 / 25 h |
-| phase 2 | 798 | 151 | $64 | $128 | 77 / 41 / 21 h |
-| both | 1,669 | 329 | $139 | $280 | 164 / 83 / 43 h |
+`cells.py estimate --plan P` (c6i.4xlarge, $0.848/h; run lengths are
+estimates until the pilot):
 
-Parallelism costs no extra instance-hours (about 20 min of setup per
-instance). The account's on-demand standard vCPU quota is 32: 2 x
-c6i.4xlarge or 4 x c6i.2xlarge at most, and only with no other instance
-running. EBS gp3 at 500 MB/s and 6000 IOPS adds about 3%.
+| step | plan | what | runs | instance-h | cost | wall time |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | smoke | every H and G cell, plus one cell per family and side, 1 round, short | 235 | 32 | $27 | 16 h on 2, 8 h on 4 |
+| 2 | pilot | 1 instance: per-arm noise, loader ceiling, WAL growth, fill and drain rates, counting-overhead control | 30 | 6 | $5 | 6 h |
+| 3 | flagship | A1-pg-kafka-ramp, A2-pg-kafka (3 instances), A2-pg-pg (2), B-kafka-pg, B-kafka-s3, F-pg-kafka, G-pg-kafka | 664 | 141 | $120 | 71 h on 2, 39 h on 4 |
+| 4 | core | the rest of the base cells | 548 | 127 | $108 | 64 h on 2, 32 h on 4 |
+| 5 | holdout | shapes and workload variants: mandatory before any public claim | 1,908 | 369 | $313 | 187 h on 2, 94 h on 4 |
 
-## 13. Known asymmetries (by design, reported with the results)
+Gates, in code: `aws/launch.sh` refuses any plan after smoke without the
+`gate.json` of a PASSING smoke run for the same harness hash (every H and G
+run verified clean, every run exited 0 and delivered a record, every arm ran;
+this is where the Connect file-sink format, the Debezium Server JDBC sink,
+the Avro paths and the reWriteBatchedInserts fallback are proven). In
+judgment, recorded in the change log: the flagship starts only after the
+pilot's numbers revise the backlog sizes, the loader ceiling and the minimum
+floor if they need it. The 32-vCPU quota allows 2 x c6i.4xlarge at a time.
 
-- Connect writes through a broker; for file, Postgres, S3 and HTTP
-  destinations Conduit and Debezium Server do not. That is architecture and
-  is measured; the footprint column carries the broker.
-- Debezium Server runs one connector per process, so with 4 or 16 tables it
-  captures through one slot; Conduit and Connect run one pipeline or
-  connector, with its own slot, per table.
-- Record bytes differ: Conduit writes OpenCDC JSON, Debezium the Debezium
-  envelope; on raw-payload paths (Kafka and file sources) both write the
-  payload bytes. Counts and latency are insensitive to this, CPU and IO are
-  not.
-- The Postgres destinations write differently: Conduit's builtin:postgres
-  vs the Confluent JDBC sink (Connect) vs Debezium's JDBC sink (Debezium
-  Server).
-- The HTTP cells measure a conduitio-labs plugin, not a built-in.
+## 13. Known asymmetries (by design, printed with the results)
 
-## 14. Limitations (what this matrix does not do)
+- Connect writes through a broker for file, Postgres and S3 destinations;
+  Conduit and Debezium Server do not. Architecture, measured; the footprint
+  column carries the broker, and "includes a durable log" is printed next to
+  every Connect number for those destinations.
+- Record bytes differ: OpenCDC JSON vs the Debezium envelope; on Avro, Conduit
+  encodes the row (`.Payload.After`) and Debezium the envelope (before, after,
+  source, op). Bytes per record and producer batch statistics are reported for
+  every arm.
+- The Kafka-source cells are Connect's home turf and use Connect-format
+  envelopes as input; Conduit needs `unwrap.kafkaconnect` for Postgres.
+- Conduit's Kafka source has no fetch-size knob; the tuned Connect consumer
+  does.
+- The Postgres destinations write differently: Conduit's builtin:postgres, the
+  Confluent JDBC sink, Debezium's JDBC sink (with its reduction buffer in the
+  tuned tier: fewer writes for the same final state).
+- The transform cell: Debezium's unwrap emits a tombstone for a delete,
+  Conduit an empty value; both are one record per event and are verified by
+  key.
 
-- **No mutex profile for Conduit**: the binary has no flag to enable mutex
-  profiling (`--dev.cpuprofile`, `--dev.memprofile` and `--dev.blockprofile`
-  only). Adding `--dev.mutexprofile` is a small change, not part of this run.
-- **async-profiler in itimer mode**, not perf_events: no kernel frames, no
-  hardware counters, because the JVM containers run without extra
-  privileges.
-- **File-sink latency is not measured**: there is no arrival timestamp
-  without polling the file. S3 latency has 1 s resolution.
-- **Postgres-destination latency only in the ramp cells**: the `landed_at`
-  trigger and its BRIN index cost writes on every side, so the capacity cells
-  run without them.
-- **One broker, one Postgres, one instance per run**: no network between
-  components, no replication; real deployments have both.
-- **5 rounds**: bootstrap CIs on 5 values are coarse; the A/A floor and the
-  same-sign rule carry most of the weight.
-- **Debezium Server JDBC table routing** uses a RegexRouter SMT (topic to
-  `bench_dest_i`), a routing step the other sides do not need.
-- **Correctness of Debezium Server native** is checked only on HTTP.
-- **Not measured**: S3 sources (section 2), multi-node Connect, Conduit
-  multi-instance, schema registry formats (Avro, Protobuf), TLS.
-- **Loader ceiling**: one source table is fed by one Postgres connection
-  (per-table order must match the replayed sequence), so in a one-table
-  capacity cell a side faster than the loader is reported as
-  `>= loader rate` (unresolved), not as a capacity. The ramp cells show
-  where that ceiling is.
-- **Untested end to end before the smoke run**: the harness was compiled and
-  unit-tested only (no Docker run anywhere outside AWS). The smoke run is the
-  first execution; its failures are fixed and recorded here before phase 1.
+## 14. Limitations
+
+- **No engine-level stage gauges.** Busy ratio and queue depth per funnel stage
+  would need an engine change; this matrix uses the per-stage histograms (as a
+  series), the execution trace and block/mutex profiles instead. Adding the
+  gauges is a separate Conduit PR, not part of the measured binary.
+- **async-profiler in itimer/wall mode**, without perf_events: no kernel
+  frames, no hardware counters (no extra container privileges).
+- **Network**: the send side of container networking runs on the sender's
+  cores; host networking was not used. Bytes on the wire are reported.
+- **File-sink latency** is not measured. S3 latency has 1 s resolution.
+  Postgres latency comes from the last write of each row (a sample biased
+  against frequently updated rows) and only in ramp cells.
+- **Postgres final-state check**: a lost INTERMEDIATE update is invisible to it.
+- **One broker, one Postgres, one instance per run**: no replication, no
+  network between components. No TLS. No multi-node Connect. No Conduit
+  multi-instance. No Protobuf.
+- **5 rounds**: labels are consistency labels (section 10), not tests.
+- **Shared tenancy**: c6i is virtualized; steal is recorded per run, not
+  prevented. `.metal` and dedicated tenancy were not chosen (cost); the
+  flagship's cross-instance repeats carry the host-variance question.
+- **Untested end to end before smoke**: compiled and unit-tested only (no
+  Docker run anywhere outside AWS). The smoke run is the first execution; its
+  fixes go in the change log before the pilot.
+
 
 ## 15. Change log
 
 | date | change | reason | data seen before the change? |
 | --- | --- | --- | --- |
-| 2026-10-27 | plan written | | no |
+| 2026-10-27 | plan written (commit c49b1986) | | no |
+| 2026-10-27 | amended after the adversarial methodology review (`bench-methodology-review.md`); every item and its resolution below | review | no |
+
+### Review items and resolutions
+
+Blockers:
+
+| item | resolution |
+| --- | --- |
+| B1 recovery confounded with arm speed; timers compared at defaults only | Fixed. The loader is paced at 20,000 ops/s for 6 M ops; the kill fires when the SINK has 30% of the expected events, with the loader still running (`run-cell.sh run_recover`). A recovery tier `e` flushes positions every 1 s on every side and sets `scheduled.rebalance.max.delay.ms=0` for Connect; both tiers are reported (H10). A mid-snapshot kill cell was added (G-pg-kafka-kill9-snapshot). Mid-batch and mid-checkpoint kills are not compared across systems; stated in section 8 (covered for Conduit by `tests/chaos`) |
+| B2 Connect pg-to-file writes a Java Map; correctness cells not in smoke; Server JDBC schemas | Fixed. Connect file sinks use StringConverter on the sink side (the source's JSON passes through), asserted by `test_connect_file_sink_writes_json_not_a_java_map`. Debezium Server's JSON arm into Postgres runs with `schemas.enable=true`; its Avro arm uses the registry (`test_jdbc_sinks_get_schemas`). Every H and G cell is in smoke (`test_smoke_contains_every_correctness_and_recovery_cell`), and a passing smoke gate is enforced by `launch.sh` before any later plan. Conduit's S3 `json` format is one OpenCDC object per line (connector source, `destination/format/format.go`) |
+| B3 JSON-with-schema strawman; no Avro + registry | Fixed. Avro through Apicurio Registry 3.3.3 is the PRIMARY serialization for the Debezium sides into Kafka and Postgres (Connect: Apicurio AvroConverter; Server: Avro format), with Conduit's `avro.encode` against them into Kafka; the JSON arms remain as exploratory columns. Bytes per record and producer batch statistics are reported for every arm |
+| B4 rotation is not a Latin square | Fixed. Per round, a seeded shuffle with the primary arms in one adjacent block, rotated and reversed on alternate rounds (AB/BA) (`cells.round_order`, `test_round_order_...`). Steal and SUT CPU frequency are recorded per run. `.metal` / dedicated tenancy declined (cost); the flagship's 3-instance repeat addresses host variance (section 14). conduit-classic dropped to one cell (fewer arms per round) |
+| B5 RESOLVED weaker than it reads; floor not valid | Fixed (section 10 rewritten). Effective floor = max(5% minimum, every side's A/A twin, half the pooled range); borrowed floors doubled; JVM-side twins in every flagship cell; bootstrap dropped, exact sign counts reported, the label called a consistency label; ramp ordinal; 8 primary comparisons named, the rest exploratory, multiplicity stated |
+| B6 the counter loads the box and skews timestamps | Fixed. Every reading carries its own read-midpoint time and rates interpolate on it. Postgres progress is `max(seq)` through an index (no count(*), and it counts source ops, so Postgres destinations are comparable with the other sinks; the old net-rows metric is gone). S3 is not read during windows (post-run index). Latency moved to post-run exact histograms. The 5 s vs 30 s counting-overhead control is a pilot cell |
+| B7 backlog sizing, per-run refill, fast arms invalidated | Fixed. Backlogs are sized in bytes with the measured envelope overhead (~450 B + payload per record), filled ONCE per cell (`fill-kafka` is idempotent; the broker volume persists across a drain cell's runs; every run uses its own consumer group and connector names). A backlog that runs out inside the window still counts with >= 120 s of window (flagged). Broker CPU and disk IO are reported; the pilot measures fill and drain rates before the flagship |
+| B8 workload realism | Fixed. Payload padding is random alphanumerics written in pairs (about 2.3x compressible, pinned by a test). Transaction size is a loader parameter with hold-out cells at 1, 10, 100 and 10,000 statements; update-heavy and delete-heavy mixes; a wide 30-column typed shape; 16 KiB rows TOAST; Zipf skew over 16 tables; schema evolution mid-run; idle; slow sink. Postgres runs on EBS gp3 with fsync on for EVERY cell (not one); `max_slot_wal_keep_size` 40 GB. The hold-out plan is mandatory before any public claim. The wrong comment about autocommit in the loader was corrected (a pgx Batch is one implicit transaction) |
+
+Majors:
+
+| item | resolution |
+| --- | --- |
+| M1 tuned tiers asymmetric, knobs missing, shipped not knob-free | Fixed: one concept table (`cells.TUNED`) for every side, checked by `test_tuned_tier_uses_the_same_values_on_every_side`. Added consumer fetch sizes (Connect), JDBC `reWriteBatchedInserts` (with the pre-registered fallback), Debezium JDBC `batch.size` and `use.reduction.buffer`, Debezium `snapshot.fetch.size`, Conduit pgx `cache_statement` (pre-registered openly, with why). `rotate.interval.ms` removed from the shipped S3 sink; `flush.size` (no default) swept at 1k/10k/100k. GOGC/GOMEMLIMIT stated as not tuned. Declined: Conduit has no Kafka fetch knob and no per-pipeline arch-v2 destination batch knob; reported as asymmetries |
+| M2 parity leaks, destination cost invisible, $/billion | Fixed: dockerd/containerd pinned to infra cores by systemd before start, the harness by taskset, RPS on veths; destination CPU charged per arm; footprint is the cross-architecture headline; $/billion removed. Host networking declined (would change every connection setting); the send-side residual is a stated limitation |
+| M3 delivery/durability asserted | Fixed: section 4 is a per-side table with sources, and states what "written" means for every sink (no fsync on file sinks, RF 1, MinIO on a volume, Postgres fsync on). Fan-out reframed as architecture. Transform: deletes are now verified (Kafka read as key + value; `-no-deletes` removed); `ok` now fails on any unattributed record |
+| M4 comparators that cannot carry a headline | Fixed: file cells are "reference connector" appendix cells, HTTP cells "labs plugin" appendix cells, both excluded from summaries. Debezium Server's scale-out is its own row (`dbzserver-avro-xn`: one process per table in one container) in the multi-table cells |
+| M5 coverage and the one-connector-per-table idiom | Fixed: shipped tier = one pipeline / connector / process with a table list; one-per-table is tuned. Added shapes listed under B8. Declined: TLS (out of scope, stated), multi-node Connect, slow-sink backpressure beyond HTTP |
+| M6 measurement validity | Fixed: stationarity check per run (halves within 5%, 30 s CV), reported not dropped; a 5 s absolute lag cap on "tracked"; latency only from tracked ramp steps and exact from post-run histograms; the ramp loader batch is 100 (5 ms floor, stated); no scrapes in measured runs on any side (diag runs only) |
+| M7 statistics and forking paths | Fixed: flagship cells on 3 (pg-kafka) and 2 (pg-pg) instances with an all-instances-agree rule; the plan commit is tagged and the harness hash recorded per run and checked by `analyze.py`; hypotheses carry predictions and falsification thresholds (section 1); lower bounds are reported instead of hidden |
+| M8 diagnostic value | Fixed with a diag-only build: window-scoped CPU, mutex, block, trace and goroutine profiles; metrics as a 10 s series; async-profiler wall clock as well as CPU; Jolokia for Debezium, Connect task, producer and consumer metrics; pg_stat_statements, WAL stats and broker batch statistics every run; a per-run bottleneck label; the GAP-ANALYSIS template requires an A/B experiment id. Declined here: engine stage busy-ratio and queue-depth gauges (an engine change; a separate PR, section 14) |
+| M9 spend order | Adopted: smoke (all H, all G, one per family) -> one-instance pilot -> flagship -> core -> hold-out, with the smoke gate enforced in code (section 12) |
+
+Minors: conduit-classic in one continuity cell only (`test_classic_runs_in_one_cell_only`);
+dbzserver-native kept in the HTTP appendix cells only; the "same bytes" claim
+removed and bytes per record reported; the price default and $/billion
+removed; the GOMAXPROCS reason corrected; broker version and its 4 GiB heap
+stated; Docker pinned to an exact apt version, and THP, swappiness,
+`vm.dirty_*`, clocksource and dockerd's affinity recorded; the stuck-run cap
+cut from 60 to 20 minutes past plan; `ok` includes unattributed records and the
+verify summary line carries duplicates per million; the Postgres final-state
+limit stated; bounded log driver on every container; the loader's SHA-256, the
+kit commit, the harness hash and the analysis version are recorded in
+`environment.txt` and `analysis.json`.

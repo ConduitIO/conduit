@@ -2,8 +2,9 @@
 """Writes the instance's environment record (environment.txt): everything a
 reader needs to reproduce the run or to doubt it.
 
-    envspec.py CONDUIT_ROOT
+    envspec.py CONDUIT_ROOT LOADER_BIN
 """
+import hashlib
 import json
 import os
 import platform
@@ -33,9 +34,30 @@ def imds(path):
         return "unknown"
 
 
+def read(p):
+    try:
+        with open(p) as f:
+            return f.read().strip()
+    except OSError:
+        return "unknown"
+
+
 def main():
-    root = sys.argv[1]
+    root, loader = sys.argv[1], sys.argv[2]
+    with open(loader, "rb") as f:
+        loader_sha = hashlib.sha256(f.read()).hexdigest()
+    here = os.path.dirname(os.path.abspath(__file__))
     lines = {
+        "harness_hash": cells.harness_hash(),
+        "kit_commit": read(os.path.join(here, "KIT_COMMIT")),
+        "loader_sha256": loader_sha,
+        "thp": read("/sys/kernel/mm/transparent_hugepage/enabled"),
+        "swappiness": read("/proc/sys/vm/swappiness"),
+        "dirty_ratio": read("/proc/sys/vm/dirty_ratio"),
+        "dirty_background_ratio": read("/proc/sys/vm/dirty_background_ratio"),
+        "perf_event_paranoid": read("/proc/sys/kernel/perf_event_paranoid"),
+        "clocksource": read("/sys/devices/system/clocksource/clocksource0/current_clocksource"),
+        "dockerd_affinity": sh("sh", "-c", "taskset -cp $(pidof dockerd) 2>/dev/null"),
         "conduit_sha": sh("git", "-C", root, "rev-parse", "HEAD"),
         "conduit_describe": sh("git", "-C", root, "describe", "--tags", "--always"),
         "kit_dirty_files": sh("git", "-C", root, "status", "--porcelain", "--", "benchi/v021-cdc-parity"),
@@ -57,7 +79,8 @@ def main():
         "conduit_connectors": sh("sh", "-c", f"grep -E 'conduit-connector-(postgres|s3|file|kafka|sdk) ' {root}/go.mod"),
         "images": {k: v for k, v in cells.IMG.items()},
         "built_images": {t: sh("docker", "image", "inspect", "-f", "{{.Id}}", t)
-                         for t in ("matrix-conduit:bench", "matrix-conduit:bench-http", "matrix-connect:3.7.0")},
+                         for t in ("matrix-conduit:bench", "matrix-conduit:bench-diag", "matrix-conduit:bench-http", "matrix-connect:3.7.0")},
+        "kafka_broker": "apache/kafka 4.0.0 (pinned digest), heap 4 GiB, RF 1, one broker",
         "connect_runtime": sh("docker", "run", "--rm", "--entrypoint", "sh", "matrix-connect:3.7.0", "-c",
                               "ls /kafka/libs | grep -E '^connect-runtime-'"),
         "connect_default_heap": sh("docker", "run", "--rm", "--entrypoint", "sh", "matrix-connect:3.7.0", "-c",
@@ -66,6 +89,7 @@ def main():
         "postgres_server": sh("docker", "run", "--rm", "--entrypoint", "postgres", cells.IMG["postgres"], "--version"),
         "ramp_steps": cells.RAMP_STEPS, "ramp_step_s": cells.RAMP_STEP, "ramp_settle_s": cells.RAMP_SETTLE,
         "capacity_warm_s": cells.CAP_WARM, "capacity_window_s": cells.CAP_WINDOW, "rounds": cells.ROUNDS,
+        "smoke": cells.SMOKE,
     }
     for k, v in lines.items():
         print(f"{k} {json.dumps(v) if not isinstance(v, str) else v}")

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Synthetic runs through analyze.py: the verdict rule, saturation validity,
-ramp tracking. python3 -m unittest -v test_analyze"""
+"""Synthetic runs through analyze.py: the pre-registered rule, lower bounds,
+borrowed floors, cross-instance agreement, ramp ordinals, the harness check
+and the smoke gate.   python3 -m unittest -v test_analyze"""
 import json
 import os
 import shutil
@@ -11,52 +12,133 @@ import analyze
 import cells
 
 
-def write_run(root, cid, label, arm, rate, offered, warm=180, window=300, start=1_000_000):
-    rd = os.path.join(root, cid, label)
+def write_run(root, cdir, label, arm, rate, offered, warm=180, window=300, start=1_000_000, verify=None, exit_code=0):
+    rd = os.path.join(root, cdir, label)
     os.makedirs(rd)
     with open(os.path.join(rd, "samples.jsonl"), "w") as f:
         for i in range(0, warm + window + 60, 5):
             t = start + i * 1000
-            f.write(json.dumps({"ts_ms": t, "src_events": int(offered * i) + 1,
-                                "sinks": {"kafka:x": {"count": int(rate * i) + 1}}}) + "\n")
-    json.dump({"arm": arm, "label": label, "exit_code": 0, "hooks": {"TOOL_START_MS": start - 20000}},
-              open(os.path.join(rd, "run.json"), "w"))
+            f.write(json.dumps({"ts_ms": t, "src": {"t_ms": t + 3, "events": int(offered * i) + 1},
+                                "sinks": {"kafka:x": {"t_ms": t + 40, "count": int(rate * i) + 1}}}) + "\n")
+    json.dump({"arm": arm, "label": label, "exit_code": exit_code, "hooks": {"TOOL_START_MS": start - 20000},
+               "verify": verify or {}}, open(os.path.join(rd, "run.json"), "w"))
 
 
-class Verdicts(unittest.TestCase):
+class Rule(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
-        self.cell = cells.BY_ID["A2-pg-kafka-p1-b64"]
-        cells.gen(self.cell, os.path.join(self.tmp, self.cell.id, "cell"))
 
     def tearDown(self):
         shutil.rmtree(self.tmp)
 
-    def test_resolved_when_far_outside_floor(self):
-        rates = {"conduit-s": 50000, "conduit-s-aa": 50200, "connect-s": 40000, "conduit-t": 60000,
-                 "connect-t": 59900, "dbzserver-s": 45000, "dbzserver-t": 52000, "conduit-classic-s": 9000}
-        for r in range(1, 6):
-            for arm, v in rates.items():
-                jitter = 1 + 0.002 * ((r * 7 + len(arm)) % 3 - 1)
-                write_run(self.tmp, self.cell.id, f"r{r}-{arm}", arm, v * jitter, offered=200000)
-        md = analyze.report(self.tmp)
-        res = json.load(open(os.path.join(self.tmp, "analysis.json")))[self.cell.id]
-        v = res["verdicts"]
-        self.assertEqual(v["conduit-s vs connect-s"]["verdict"], "RESOLVED", md)
-        self.assertGreater(v["conduit-s vs connect-s"]["median_ratio"], 1.2)
-        # 60000 vs 59900 is inside a ~0.4%+ floor
-        self.assertNotEqual(v["conduit-t vs connect-t"]["verdict"], "RESOLVED")
-        self.assertIn("conduit-s vs dbzserver-s", v)
-        self.assertNotIn("conduit-s vs conduit-classic-s", v)
+    def cell(self, cid, cdir=None, meta_patch=None):
+        c = cells.BY_ID[cid]
+        d = cdir or cid
+        cells.gen(c, os.path.join(self.tmp, d, "cell"))
+        if meta_patch:
+            p = os.path.join(self.tmp, d, "cell", "cell.json")
+            m = json.load(open(p))
+            m.update(meta_patch)
+            json.dump(m, open(p, "w"))
+        return c
 
-    def test_unsaturated_capacity_is_invalid(self):
+    def rounds(self, cdir, rates, offered=400000, n=5):
+        for r in range(1, n + 1):
+            for arm, v in rates.items():
+                jitter = 1 + 0.004 * ((r * 7 + len(arm)) % 3 - 1)
+                write_run(self.tmp, cdir, f"r{r}-{arm}", arm, v * jitter, offered)
+
+    def verdicts(self):
+        _, out = analyze.report(self.tmp)
+        return out
+
+    def test_resolved_needs_more_than_the_floor_and_every_round(self):
+        c = self.cell("A2-pg-kafka-p1-b64")
+        rates = {a: 50000 for a in c.arms}
+        rates.update({"conduit-avro-s": 50000, "connect-avro-s": 40000, "dbzserver-avro-s": 48500})
+        self.rounds(c.id, rates)
+        v = self.verdicts()["cells"][c.id]["result"]["verdicts"]
+        self.assertEqual(v["conduit-avro-s vs connect-avro-s"]["final"], "RESOLVED")
+        self.assertTrue(v["conduit-avro-s vs connect-avro-s"]["primary"])
+        # 3% consistent difference is inside the pre-registered 5% minimum floor
+        self.assertEqual(v["conduit-avro-s vs dbzserver-avro-s"]["final"], "UNRESOLVED")
+        # like serialization only on Kafka: no JSON-vs-Avro pair
+        self.assertNotIn("conduit-avro-s vs connect-s", v)
+
+    def test_kept_up_is_a_lower_bound_not_a_ratio(self):
+        c = self.cell("A2-pg-kafka-p1-b64")
+        rates = {a: 30000 for a in c.arms}
+        rates["conduit-avro-s"] = 60000  # equal to the loader: kept up
+        rates["connect-avro-s"] = 30000  # saturated below it
+        self.rounds(c.id, rates, offered=60000)
+        out = self.verdicts()["cells"][c.id]
+        runs = [r for r in out["runs"][0] if r["arm"] == "conduit-avro-s"]
+        self.assertTrue(all(r["valid"] is False and r["lower_bound"] for r in runs))
+        v = out["result"]["verdicts"]["conduit-avro-s vs connect-avro-s"]["final"]
+        self.assertTrue(v.startswith("LOWER-BOUND: a >="), v)
+
+    def test_borrowed_floor_is_doubled(self):
+        c = self.cell("A2-pg-kafka-p4-b64")  # holdout shape: Conduit twin only, no comparator twin
+        rates = {a: 50000 for a in c.arms}
+        rates["conduit-avro-s-aa"] = 50000
+        rates["connect-avro-s"] = 45000   # 11%: above 5%, below 2x
+        self.rounds(c.id, rates)
+        v = self.verdicts()["cells"][c.id]["result"]["verdicts"]["conduit-avro-s vs connect-avro-s"]
+        self.assertGreaterEqual(v["per_instance"][0]["floor"], 0.05)
+
+    def test_instances_must_agree(self):
+        c = self.cell("A2-pg-kafka-p1-b64")
+        self.cell("A2-pg-kafka-p1-b64", "A2-pg-kafka-p1-b64-rep1")
+        base = {a: 50000 for a in c.arms}
+        a = dict(base, **{"connect-avro-s": 40000})
+        b = dict(base, **{"connect-avro-s": 60000})
+        self.rounds(c.id, a)
+        self.rounds("A2-pg-kafka-p1-b64-rep1", b)
+        v = self.verdicts()["cells"][c.id]["result"]["verdicts"]["conduit-avro-s vs connect-avro-s"]["final"]
+        self.assertEqual(v, "UNRESOLVED (instances disagree)")
+
+    def test_ramp_is_ordinal(self):
+        c = self.cell("A1-pg-kafka-ramp")
+        rp = cells.RAMP_STEPS
         for r in range(1, 6):
-            write_run(self.tmp, self.cell.id, f"r{r}-conduit-s", "conduit-s", 30000, offered=30000)
-        analyze.report(self.tmp)
-        res = json.load(open(os.path.join(self.tmp, "analysis.json")))[self.cell.id]
-        self.assertIsNone(res["arms"]["conduit-s"]["summary"])  # kept up: not a capacity number
-        runs = [r for r in res["runs"] if r["arm"] == "conduit-s"]
-        self.assertTrue(all(r["valid"] is False for r in runs))
+            for arm in c.arms:
+                rd = os.path.join(self.tmp, c.id, f"r{r}-{arm}")
+                os.makedirs(rd)
+                # conduit tracks up to 100k, connect to 50k
+                cap = 100000 if arm == "conduit-avro-s" else 50000
+                rows, t, src, dst = [], 1_000_000, 0, 0
+                for step in range(len(rp) + 1):
+                    target = rp[0] if step == 0 else rp[step - 1]
+                    dur = cells.RAMP_WARM if step == 0 else cells.RAMP_STEP
+                    for _ in range(0, dur, 5):
+                        src += target * 5
+                        dst += min(target, cap) * 5
+                        t += 5000
+                        rows.append({"ts_ms": t, "src": {"t_ms": t, "events": src, "step": step, "target": target},
+                                     "sinks": {"kafka:x": {"t_ms": t, "count": dst}}})
+                with open(os.path.join(rd, "samples.jsonl"), "w") as f:
+                    f.write("\n".join(json.dumps(x) for x in rows))
+                json.dump({"arm": arm, "label": f"r{r}-{arm}", "exit_code": 0, "hooks": {}}, open(os.path.join(rd, "run.json"), "w"))
+        out = self.verdicts()["cells"][c.id]
+        v = out["result"]["verdicts"]["conduit-avro-s vs connect-avro-s"]
+        self.assertEqual(v["final"], "RESOLVED (ordinal)")
+        run = next(r for r in out["runs"][0] if r["arm"] == "conduit-avro-s")
+        self.assertEqual(run["highest_tracked_rate"], 100000)
+
+    def test_refuses_another_harness(self):
+        c = self.cell("A2-pg-kafka-p1-b64", meta_patch={"harness_hash": "0000000000000000"})
+        self.rounds(c.id, {a: 1000 for a in c.arms}, n=1)
+        with self.assertRaises(SystemExit):
+            analyze.report(self.tmp)
+
+    def test_gate_fails_on_any_unverified_record(self):
+        c = self.cell("H-pg-kafka-verify")
+        for arm in c.arms:
+            ok = arm != "connect-avro-s"
+            write_run(self.tmp, c.id, f"r1-{arm}", arm, 1000, 1000, verify={"kafka": {"ok": ok, "summary": "missing 3"}})
+        g = analyze.gate(self.verdicts())
+        self.assertFalse(g["pass"])
+        self.assertTrue(any("connect-avro-s" in f for f in g["failures"]))
 
 
 if __name__ == "__main__":

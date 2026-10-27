@@ -20,10 +20,14 @@ variable "disk_gb" {
   type    = number
   default = 200
 }
-variable "phases" {
-  description = "Comma-separated pre-registered phases to run (1, 2 or 1,2)."
+variable "plan" {
+  description = "Pre-registered plan to run: smoke, pilot, flagship, core or holdout (PLAN.md section 12)."
   type        = string
-  default     = "1"
+}
+variable "docker_version" {
+  description = "Exact docker-ce apt version, pinned."
+  type        = string
+  default     = "5:29.9.2-1~ubuntu.24.04~noble"
 }
 variable "conduit_sha" {
   description = "Full Conduit commit SHA to build and benchmark."
@@ -32,11 +36,6 @@ variable "conduit_sha" {
 variable "max_minutes" {
   description = "Hard cap: each instance halts (and terminates) after this many minutes."
   type        = number
-}
-variable "smoke" {
-  description = "Run the smoke plan (one short run per side and family) instead of the matrix."
-  type        = bool
-  default     = false
 }
 variable "kit_tarball" {
   description = "Path to the kit tarball launch.sh builds."

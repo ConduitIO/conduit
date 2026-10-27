@@ -10,16 +10,22 @@ side at the same tier (PLAN.md section 9), one entry:
 ```
 ### <cell> / <tier>: Conduit <ratio>x of <side> (verdict, A/A floor, CI)
 
-Where: the stage that saturates, from the window's Conduit metrics (source
-read, processor, destination write, ack histograms: metrics-window-*.txt) and
-the SUT's cgroup CPU (saturated at 4 cores, or not: then it is waiting).
-Profile: the top frames of Conduit's CPU and block profiles (diag-conduit-*),
-next to the other side's async-profiler stacks for the same cell.
+Bottleneck label: the per-run classifier (SUT CPU-bound / SUT waiting on X /
+loader-bound), median over the rounds, with the busiest infrastructure
+container's cores.
+Where: the stage that saturates, from the diag run's metrics series
+(poll-metrics.jsonl: source read, processor, destination write, ack) and its
+execution trace (trace-window.out: what each stage's goroutines wait on).
+Profile, window only: Conduit's cpu-window.pprof, mutex and block (end minus
+start), next to the other side's cpu-window and wall-window collapsed stacks
+and its Jolokia series (queue capacity, batch sizes) for the same cell.
 Cause: one sentence, backed by the two above. A cause not backed by a profile
 or a metric is marked GUESS.
 Candidate fix (arch-v2 only): the change, the file and function it touches.
 Estimated gain: from the profile share of the removed work, marked as an
-estimate, with the experiment that would confirm it.
+estimate.
+Experiment: the A/B run (an id, a branch, the cell it reruns) that confirms or
+refutes the gain. No gain is claimed without one.
 ```
 
 Also reported for every cell, win or lose: CPU-seconds per million events

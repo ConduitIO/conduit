@@ -111,13 +111,13 @@ resource "aws_instance" "bench" {
   }
 
   user_data = templatefile("${path.module}/user-data.sh.tftpl", {
-    bucket      = aws_s3_bucket.results.id
-    shard       = count.index
-    shards      = var.instances
-    phases      = var.phases
-    conduit_sha = var.conduit_sha
-    max_minutes = var.max_minutes
-    smoke       = var.smoke ? "1" : "0"
+    bucket         = aws_s3_bucket.results.id
+    shard          = count.index
+    shards         = var.instances
+    plan           = var.plan
+    conduit_sha    = var.conduit_sha
+    max_minutes    = var.max_minutes
+    docker_version = var.docker_version
   })
 
   tags = { Name = "conduit-matrix-${var.run_id}-${count.index}" }

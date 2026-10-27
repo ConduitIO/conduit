@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Host-side resource sampler for one run.
 
-    res_sampler.py OUT.jsonl CONTAINER [CONTAINER ...]
+    res_sampler.py OUT.jsonl [CONTAINER ...]
+
+Default containers: the SUT and every infrastructure container, so the CPU a
+side shifts onto its destination (Postgres statements, broker requests, MinIO
+writes) is visible and charged (review M2).
 
 Every 5 s, for each named container that exists, appends one JSON line with
 its cgroup v2 counters: cumulative CPU time (cpu.stat usage_usec, so CPU-seconds
@@ -10,9 +14,16 @@ anon: the process RSS without page cache, so a file sink's cache does not count
 as its memory), memory.current, memory.peak, and block IO (io.stat). Every 15 s
 it adds docker's network counters (NetIO), which cgroups do not keep.
 
+Host rows, every sample: per-CPU steal and the SUT CPUs' frequency (a c6i is
+virtualized; steal is the neighbour signal), and the RPS mask: every veth
+receive queue is pointed at the INFRA cpuset, so packet processing for traffic
+into the infrastructure containers is not done on SUT cores (the send side
+still is: PLAN.md limitations).
+
 Reading cgroup files costs nothing inside the containers, so this runs in every
-run, measured or not.
+run, measured or not. It is itself pinned to the INFRA cpuset by run-shard.sh.
 """
+import glob
 import json
 import os
 import subprocess
@@ -87,8 +98,60 @@ def netio():
     return res
 
 
+DEFAULT = ["cdcparity-sut", "cdcparity-kafka", "cdcparity-postgres", "cdcparity-minio", "cdcparity-registry",
+           "cdcparity-receiver", "cdcparity-loader", "cdcparity-sampler", "cdcparity-counter"]
+
+
+def cpus(spec):
+    out = []
+    for part in (spec or "").split(","):
+        if "-" in part:
+            a, b = part.split("-")
+            out += list(range(int(a), int(b) + 1))
+        elif part.strip():
+            out.append(int(part))
+    return out
+
+
+def host_row(sut_cpus):
+    steal, mhz = {}, {}
+    try:
+        with open("/proc/stat") as f:
+            for line in f:
+                if line.startswith("cpu") and line[3:4].isdigit():
+                    p = line.split()
+                    steal[int(p[0][3:])] = int(p[8])
+    except OSError:
+        pass
+    try:
+        cpu = None
+        with open("/proc/cpuinfo") as f:
+            for line in f:
+                if line.startswith("processor"):
+                    cpu = int(line.split(":")[1])
+                elif line.startswith("cpu MHz") and cpu in sut_cpus:
+                    mhz[cpu] = float(line.split(":")[1])
+    except OSError:
+        pass
+    return {"steal_ticks": steal, "sut_mhz": mhz}
+
+
+def pin_rps(mask_hex):
+    if not mask_hex:
+        return
+    for p in glob.glob("/sys/class/net/veth*/queues/rx-*/rps_cpus"):
+        try:
+            with open(p, "w") as f:
+                f.write(mask_hex)
+        except OSError:
+            pass
+
+
 def main():
-    out, names = sys.argv[1], sys.argv[2:]
+    out, names = sys.argv[1], (sys.argv[2:] or DEFAULT)
+    sut_cpus = set(cpus(os.environ.get("SUT_CPUSET", "")))
+    infra = cpus(os.environ.get("INFRA_CPUSET", ""))
+    mask = "%x" % sum(1 << c for c in infra) if infra else ""
     ids = {}
     last_net = 0.0
     with open(out, "a") as f:
@@ -115,6 +178,8 @@ def main():
                     "io_rbytes": rb,
                     "io_wbytes": wb,
                 }
+            row["host"] = host_row(sut_cpus)
+            pin_rps(mask)
             if now - last_net >= 15:
                 row["net"] = netio()
                 last_net = now

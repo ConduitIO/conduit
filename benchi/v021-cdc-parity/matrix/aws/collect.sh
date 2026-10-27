@@ -13,5 +13,5 @@ for s in "$DEST"/raw/shard-*; do echo "$(basename "$s"): $(tail -1 "$s/status.tx
 # Merge the shards: every cell directory is unique across shards (a repeat is CELL-rep1).
 mkdir -p "$DEST/cells"
 for d in "$DEST"/raw/shard-*/*/; do [ -d "$d/cell" ] && cp -R "$d" "$DEST/cells/"; done
-python3 "$HERE/../analyze.py" "$DEST/cells" > "$DEST/results.md"
-echo "results: $DEST/results.md"
+python3 "$HERE/../analyze.py" "$DEST/cells" --gate "$DEST/gate.json" > "$DEST/results.md"
+echo "results: $DEST/results.md   gate: $DEST/gate.json ($(python3 -c "import json; print('PASS' if json.load(open('$DEST/gate.json'))['pass'] else 'FAIL')"))"
