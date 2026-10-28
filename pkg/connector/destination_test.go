@@ -17,8 +17,10 @@ package connector
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/conduitio/conduit-commons/database/inmemory"
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
@@ -303,4 +305,38 @@ func expectDestinationOpen(dest *Destination, destinationMock *mock.DestinationP
 	})
 
 	return stream
+}
+
+// TestDestination_Ack_HonoursOwnContext: Ack used to ignore its ctx and block in
+// stream.Recv until the stream's own (Open) context ended. It must return when
+// its ctx ends, and the abandoned receive must not swallow the next response.
+func TestDestination_Ack_HonoursOwnContext(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	dest, destinationMock := newTestDestination(ctx, t, ctrl)
+	dest.Instance.LastActiveConfig = dest.Instance.Config // no lifecycle event
+	stream := expectDestinationOpen(dest, destinationMock)
+	is.NoErr(dest.Open(ctx))
+	defer func() {
+		destinationMock.EXPECT().Teardown(gomock.Any(), gomock.Any()).Return(pconnector.DestinationTeardownResponse{}, nil)
+		_ = dest.Teardown(ctx)
+	}()
+
+	ackCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancel()
+	_, err := dest.Ack(ackCtx)
+	is.True(cerrors.Is(err, context.DeadlineExceeded)) // returned on its own ctx, not blocked on the stream
+
+	// The receive abandoned above is picked up by the next Ack.
+	go func() {
+		_ = stream.Server().Send(pconnector.DestinationRunResponse{
+			Acks: []pconnector.DestinationRunResponseAck{{Position: opencdc.Position("p1")}},
+		})
+	}()
+	acks, err := dest.Ack(ctx)
+	is.NoErr(err)
+	is.Equal(len(acks), 1)
+	is.Equal(acks[0].Position, opencdc.Position("p1"))
 }

@@ -56,6 +56,12 @@ type Destination struct {
 	// wg tracks the number of in flight calls to the connectorPlugin.
 	wg sync.WaitGroup
 
+	// pendingRecv holds the result channel of a stream.Recv started by an Ack
+	// whose context ended before the call returned. The next Ack consumes it
+	// instead of starting a new receive, so no ack response is lost or read
+	// twice. Only accessed by Ack, which must not be called concurrently.
+	pendingRecv <-chan destinationRecvResult
+
 	// engineBatches is set by the arch-v2 funnel when it will batch writes
 	// itself using the destination's sdk.batch.size/sdk.batch.delay settings.
 	// It strips those two settings before Configure so the connector SDK does
@@ -213,6 +219,7 @@ func (d *Destination) Teardown(ctx context.Context) error {
 	_, err := d.plugin.Teardown(ctx, pconnector.DestinationTeardownRequest{})
 
 	d.plugin = nil
+	d.pendingRecv = nil
 	d.Instance.connector = nil
 	if d.Instance.ProvisionedBy != ProvisionTypeDLQ {
 		// DLQ connectors are not persisted
@@ -272,14 +279,29 @@ func (d *Destination) Write(ctx context.Context, recs []opencdc.Record) error {
 	return nil
 }
 
-func (d *Destination) Ack(context.Context) ([]DestinationAck, error) {
+// Ack returns the next ack response from the destination. It returns when
+// ctx is done, not only when the stream's own context ends; a receive abandoned
+// that way stays pending and is picked up by the next Ack.
+func (d *Destination) Ack(ctx context.Context) ([]DestinationAck, error) {
 	cleanup, err := d.preparePluginCall()
 	defer cleanup()
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := d.stream.Recv()
+	// stream.Recv does not observe ctx, so it runs in its own goroutine and Ack
+	// selects on its result and ctx.Done().
+	if d.pendingRecv == nil {
+		d.pendingRecv = d.recv()
+	}
+	var res destinationRecvResult
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case res = <-d.pendingRecv:
+		d.pendingRecv = nil
+	}
+	resp, err := res.resp, res.err
 	if err != nil {
 		return nil, cerrors.Errorf("error receiving ack: %w", err)
 	}
@@ -295,6 +317,26 @@ func (d *Destination) Ack(context.Context) ([]DestinationAck, error) {
 		}
 	}
 	return acks, nil
+}
+
+type destinationRecvResult struct {
+	resp pconnector.DestinationRunResponse
+	err  error
+}
+
+// recv starts a stream.Recv call in a separate goroutine, tracked in wg so
+// Teardown waits for it (it returns once stopStream closes the stream). It must
+// only be called while a plugin call is in flight (see preparePluginCall).
+func (d *Destination) recv() <-chan destinationRecvResult {
+	ch := make(chan destinationRecvResult, 1)
+	stream := d.stream
+	d.wg.Add(1)
+	go func() {
+		defer d.wg.Done()
+		resp, err := stream.Recv()
+		ch <- destinationRecvResult{resp: resp, err: err}
+	}()
+	return ch
 }
 
 func (d *Destination) OnDelete(ctx context.Context) (err error) {
