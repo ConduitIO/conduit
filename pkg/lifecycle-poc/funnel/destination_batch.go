@@ -176,7 +176,7 @@ func (t *DestinationTask) doBuffered(ctx context.Context, batch *Batch, acker ac
 		}()
 	}
 
-	toFlush, shouldFlush, err := t.bufferBatch(batch, acker, len(records))
+	toFlush, shouldFlush, err := t.bufferBatch(batch, acker, records)
 	if err != nil {
 		return err
 	}
@@ -214,7 +214,7 @@ func (t *DestinationTask) doBuffered(ctx context.Context, batch *Batch, acker ac
 
 // bufferBatch appends batch to the pending buffer under mu and, if the buffer is
 // now due, takes it for flushing (counting it in outstanding).
-func (t *DestinationTask) bufferBatch(batch *Batch, acker ackNacker, n int) (toFlush []pendingBatch, shouldFlush bool, err error) {
+func (t *DestinationTask) bufferBatch(batch *Batch, acker ackNacker, records []opencdc.Record) (toFlush []pendingBatch, shouldFlush bool, err error) {
 	t.mu.Lock()
 	// Invariant 3: re-check under the lock that decides. The early check above
 	// is only a fast path; a flush can fail between it and here, and buffering
@@ -236,19 +236,20 @@ func (t *DestinationTask) bufferBatch(batch *Batch, acker ackNacker, n int) (toF
 		t.flushDeadline = now.Add(t.batchDelay)
 	}
 	t.pending = append(t.pending, pendingBatch{batch: batch, acker: acker})
-	t.bufferedCount += n
+	t.addBufferedLocked(records) // count and, with a byte cap, wire bytes
 
 	// len(pending) counts queued source acks too: each pins a *Batch and the
-	// source position, so a long run of them must not wait for more records.
-	shouldFlush = t.bufferedCount >= t.effectiveBatchSize() || len(t.pending) >= t.effectiveBatchSize()
+	// source position, so a long run of them must not wait for more records. The
+	// byte cap flushes before records the standalone connector could not receive
+	// in one Write accumulate (and bounds memory the count alone does not).
+	shouldFlush = t.bufferedCount >= t.effectiveBatchSize() || len(t.pending) >= t.effectiveBatchSize() || t.bytesDueLocked()
 	if !shouldFlush && t.batchDelay > 0 && !t.flushDeadline.IsZero() && now.After(t.flushDeadline) {
 		shouldFlush = true
 	}
 	if shouldFlush {
 		toFlush = t.pending
 		t.pending = nil
-		t.bufferedCount = 0
-		t.flushDeadline = time.Time{}
+		t.resetBufferedLocked()
 		// Counted on the synchronous path too: another source's filter or nack
 		// runs outside the shared lock and must see this write as ahead of it.
 		// Released by runFlusher (pipelined) or below (synchronous) once the
@@ -257,6 +258,32 @@ func (t *DestinationTask) bufferBatch(batch *Batch, acker ackNacker, n int) (toF
 	}
 	t.mu.Unlock()
 	return toFlush, shouldFlush, nil
+}
+
+// addBufferedLocked accounts records as buffered: their count and, when a write
+// size cap is set, their estimated wire size. t.mu must be held.
+func (t *DestinationTask) addBufferedLocked(records []opencdc.Record) {
+	t.bufferedCount += len(records)
+	if t.writeLimit > 0 {
+		for _, r := range records {
+			t.bufferedBytes += recordWireSize(r)
+		}
+	}
+}
+
+// bytesDueLocked reports whether the buffered bytes reached the write budget.
+// t.mu must be held.
+func (t *DestinationTask) bytesDueLocked() bool {
+	return t.writeLimit > 0 && t.bufferedBytes >= t.writeLimit
+}
+
+// resetBufferedLocked clears the buffered accounting after pending was taken.
+// Every site that takes pending must use it (or reset both fields): a stale byte
+// count would flush early. t.mu must be held.
+func (t *DestinationTask) resetBufferedLocked() {
+	t.bufferedCount = 0
+	t.bufferedBytes = 0
+	t.flushDeadline = time.Time{}
 }
 
 // deferOrdered runs ack (a source ack or nack for records that bypass this
@@ -315,8 +342,7 @@ func (t *DestinationTask) deferOrdered(ctx context.Context, ack func(context.Con
 		if t.releasableLocked() {
 			toFlush = t.pending
 			t.pending = nil
-			t.bufferedCount = 0
-			t.flushDeadline = time.Time{}
+			t.resetBufferedLocked() // count AND bytes: a stale byte count would flush early
 			t.outstanding++
 		}
 		t.mu.Unlock()
@@ -380,8 +406,7 @@ func (t *DestinationTask) releaseSync(ctx context.Context) error {
 		if t.outstanding == 0 && t.releasableLocked() {
 			toFlush = t.pending
 			t.pending = nil
-			t.bufferedCount = 0
-			t.flushDeadline = time.Time{}
+			t.resetBufferedLocked() // count AND bytes
 			t.outstanding++
 		}
 		t.mu.Unlock()
@@ -422,6 +447,7 @@ func (t *DestinationTask) flush(ctx context.Context) error {
 	pending := t.pending
 	t.pending = nil
 	t.bufferedCount = 0
+	t.bufferedBytes = 0
 	t.flushDeadline = time.Time{}
 	t.outstanding++
 	t.mu.Unlock()
@@ -490,26 +516,8 @@ func (t *DestinationTask) flushPending(ctx context.Context, pending []pendingBat
 
 	start := time.Now()
 	if len(records) > 0 {
-		err := t.destination.Write(ctx, records)
-		if err != nil {
-			t.metrics.ObserveError()
-			return cerrors.Errorf("failed to write %d records to destination: %w", len(positions), err)
-		}
-
-		ackCount := 0
-		for ackCount < len(positions) {
-			acks, err := t.destination.Ack(ctx)
-			if err != nil {
-				t.metrics.ObserveError()
-				return cerrors.Errorf("failed to receive acks for %d records from destination: %w", len(positions), err)
-			}
-			if err := t.validateAcks(acks, positions[ackCount:]); err != nil {
-				t.metrics.ObserveError()
-				return cerrors.Errorf("failed to validate acks: %w", err)
-			}
-			t.markSpans(spans, acks, ackCount)
-			t.metrics.Observe(records[ackCount:ackCount+len(acks)], start)
-			ackCount += len(acks)
+		if err := t.writeChunks(ctx, spans, records, positions, start); err != nil {
+			return err
 		}
 	}
 
@@ -519,6 +527,64 @@ func (t *DestinationTask) flushPending(ctx context.Context, pending []pendingBat
 		if err := t.ackPending(ctx, p); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// writeChunks writes the concatenated records of one flush, in chunks no larger
+// than the destination can receive, and drains each chunk's acks (marking
+// per-record nacks on the owning batches via spans) before sending the next.
+func (t *DestinationTask) writeChunks(ctx context.Context, spans []flushSpan, records []opencdc.Record, positions []opencdc.Position, start time.Time) error {
+	// Invariant 1: a coalesced flush larger than the destination can receive
+	// is written in chunks, each fully acked before the next is sent, so
+	// acks reach markSpans in position order and the source acks below stay
+	// in source order. A failure in any chunk acks nothing upstream.
+	ackCount := 0
+	for from := 0; from < len(records); {
+		end, oversize := nextChunk(records, from, t.writeLimit, t.maxReceive)
+		if oversize {
+			// Invariant 3: nack a record that can never be received instead
+			// of sending it; it takes its place in the ack sequence so the
+			// global indices (and source order) are unchanged.
+			t.markSpans(spans, []connector.DestinationAck{{
+				Position: positions[from],
+				Error:    t.errRecordTooLarge(positions[from], recordWireSize(records[from])),
+			}}, ackCount)
+			ackCount++
+			from = end
+			continue
+		}
+		err := t.destination.Write(ctx, records[from:end])
+		if err != nil {
+			t.metrics.ObserveError()
+			return cerrors.Errorf("failed to write %d records to destination: %w", end-from, err)
+		}
+
+		empty := 0
+		for ackCount < end {
+			acks, err := t.destination.Ack(ctx)
+			if err != nil {
+				t.metrics.ObserveError()
+				return cerrors.Errorf("failed to receive acks for %d records from destination: %w", end-ackCount, err)
+			}
+			// Engine policy, see maxConsecutiveEmptyAcks.
+			if len(acks) == 0 {
+				if empty++; empty >= maxConsecutiveEmptyAcks {
+					t.metrics.ObserveError()
+					return t.errEmptyAckFlood(end - ackCount)
+				}
+				continue
+			}
+			empty = 0
+			if err := t.validateAcks(acks, positions[ackCount:end]); err != nil {
+				t.metrics.ObserveError()
+				return cerrors.Errorf("failed to validate acks: %w", err)
+			}
+			t.markSpans(spans, acks, ackCount)
+			t.metrics.Observe(records[ackCount:ackCount+len(acks)], start)
+			ackCount += len(acks)
+		}
+		from = end
 	}
 	return nil
 }
@@ -713,6 +779,7 @@ func (t *DestinationTask) stopFlusher(ctx context.Context) error {
 		}
 		t.pending = nil
 		t.bufferedCount = 0
+		t.bufferedBytes = 0
 		t.flushDeadline = time.Time{}
 	}
 	t.mu.Unlock()

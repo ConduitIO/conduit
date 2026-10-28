@@ -163,3 +163,26 @@ func TestSyncAudit_QueuedAckNotWrittenAheadOfTakenFlush(t *testing.T) {
 	is.True(writtenAtAction != 0) // the action ran after the write (or not at all yet)
 	is.Equal(alog.snapshot(), []string{"acker.ack", "action"})
 }
+
+// TestReleaseSync_ResetsBufferedBytes: composition of the synchronous release path
+// with the byte cap. releaseSync takes pending; it must clear the byte count with
+// the record count, or the next small batch flushes early.
+func TestReleaseSync_ResetsBufferedBytes(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	task := NewBatchingDestinationTask("d", newFakeDestination("d"), log.Test(t), NoOpConnectorMetrics{}, 100, 0)
+	task.SetMaxReceiveRecordSize(testMaxReceive)
+	is.True(isBuffered(task.doBuffered(ctx, NewBatch(bigRecords(1, 1000)), newRecordingAckNacker(&eventLog{}))))
+	task.mu.Lock()
+	is.True(task.bufferedBytes > 0)
+	task.batchDelay = time.Millisecond
+	task.flushDeadline = time.Now().Add(-time.Second) // overdue: the queued ack releases the buffer
+	task.mu.Unlock()
+
+	is.NoErr(task.deferOrdered(ctx, func(context.Context) error { return nil }))
+
+	task.mu.Lock()
+	defer task.mu.Unlock()
+	is.Equal(task.bufferedCount, 0)
+	is.Equal(task.bufferedBytes, 0)
+}
