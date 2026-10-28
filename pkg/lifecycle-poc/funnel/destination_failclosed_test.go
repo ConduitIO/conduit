@@ -17,6 +17,7 @@ package funnel
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -384,10 +385,40 @@ func TestCtxMutex_LockCtxAbandonedWaiterReleases(t *testing.T) {
 	is.True(m.LockCtx(ctx) != nil) // gave up while the lock was held
 	m.Unlock()                     // the abandoned helper now acquires and must release
 	done := make(chan struct{})
-	go func() { m.Lock(); m.Unlock(); close(done) }()
+	go func() { m.Lock(); close(done); m.Unlock() }()
 	select {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("mutex left held by an abandoned LockCtx")
+	}
+}
+
+// TestCtxMutex_AbandonedHelperExitsOnRelease: LockCtx whose context won while the
+// holder is wedged leaves one helper goroutine parked in Lock(). It cannot outlive
+// the holder: when the holder releases (teardown, a force-stop unwedging it), the
+// helper acquires, sees it was abandoned, releases and exits. No goroutine and no
+// lock is left behind.
+func TestCtxMutex_AbandonedHelperExitsOnRelease(t *testing.T) {
+	is := is.New(t)
+	var m ctxMutex
+	before := runtime.NumGoroutine()
+
+	m.Lock() // a sibling mid-pass behind a wedged destination
+	for i := 0; i < 20; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+		is.True(m.LockCtx(ctx) != nil) // each stop attempt times out
+		cancel()
+	}
+	is.True(runtime.NumGoroutine() >= before+10) // the parked helpers
+
+	m.Unlock() // teardown: the holder finally lets go
+	waitForCondition(t, 2*time.Second, func() bool { return runtime.NumGoroutine() <= before })
+
+	done := make(chan struct{})
+	go func() { m.Lock(); close(done); m.Unlock() }()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("mutex left held after the helpers exited")
 	}
 }
