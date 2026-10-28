@@ -24,6 +24,7 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics/noop"
 	"github.com/conduitio/conduit/pkg/plugin"
@@ -515,4 +516,29 @@ func TestWorker_Stop_DrainFailure_PoisonedBeforeSharedLockIsReleased(t *testing.
 	}
 	is.True(!written[string(recs[0].Position)])
 	is.Equal(len(acked), 0)
+}
+
+// TestWorker_Stop_ReportsDrainFailure: a stop whose drain could not write the
+// buffered records must not be reported clean. The records replay; Stop returns
+// the failure with a stable code, and still tears the source down.
+func TestWorker_Stop_ReportsDrainFailure(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Test(t)
+	src := &teardownSource{fakeSource: newFakeSource("a", nil)}
+	dt := NewBatchingDestinationTask("dest", failingWriteDestination{newFakeDestination("dest")}, logger, NoOpConnectorMetrics{}, 10, 0)
+	is.NoErr(dt.Open(ctx))
+	srcNode := &TaskNode{Task: NewSourceTask("a", src, logger, NoOpConnectorMetrics{}), Next: []*TaskNode{{Task: dt}}}
+	w, err := NewWorker(srcNode, NewDLQ("dlq", newFakeDestination("dlq"), logger, NoOpConnectorMetrics{}, 10, 10), logger, noop.Timer{})
+	is.NoErr(err)
+	recs := randomRecords(1)
+	is.NoErr(w.doTask(ctx, srcNode.Next[0], NewBatch(recs), newRunAckNacker(w))) // buffered
+
+	err = w.Stop(ctx)
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code.Reason(), CodeFlushOnCloseFailed.Reason())
+	src.mu.Lock()
+	is.True(src.down) // teardown still ran
+	src.mu.Unlock()
 }

@@ -16,6 +16,7 @@ package funnel
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -264,9 +265,10 @@ func (t *DestinationTask) deferOrdered(ctx context.Context, ack func(context.Con
 		return err
 	}
 	if t.closed {
-		// Close runs after every worker has exited; nothing can be ahead.
+		// Close can overlap a Stop that is still draining, so "closed" does not
+		// prove nothing is ahead: refuse rather than ack inline.
 		t.mu.Unlock()
-		return ack(ctx)
+		return cerrors.Errorf("destination %s is closed", t.id)
 	}
 	// guard: funnel-ordered-source-ack tests=^(TestWorker_FilteredBatch_AckOrderedBehindInflightFlush|TestWorker_ProcessorNack_AckOrderedBehindBufferedRecords)$
 	if len(t.pending) > 0 || t.outstanding > 0 {
@@ -505,6 +507,9 @@ func (t *DestinationTask) runFlusher(ctx context.Context) {
 		case <-ctx.Done():
 			// Run context cancelled (fatal error / force-stop): stop flushing.
 			// In-flight and queued records are un-acked and replay on restart.
+			// Fail closed so nothing queues behind a flusher that is gone.
+			t.setFlushErr(cerrors.Errorf("destination %s flusher stopped: %w", t.id, ctx.Err()))
+			t.dropQueued(ctx, "run context ended")
 			return
 		case pending, ok := <-t.flushCh:
 			if !ok {
@@ -518,11 +523,13 @@ func (t *DestinationTask) runFlusher(ctx context.Context) {
 			// Checked under mu (flushError), where the flush error is recorded.
 			if t.flushError() != nil {
 				t.finishFlush(nil) // release the slot only
+				t.logger.Warn(ctx).Int("dropped_batches", 1+t.dropQueuedCount(ctx)).Msg("queued batches not flushed after a flush error (they replay on restart)")
 				return
 			}
 			err := t.flushPending(ctx, pending)
 			t.finishFlush(err)
 			if err != nil {
+				t.dropQueued(ctx, "flush failed")
 				return
 			}
 			for _, p := range pending {
@@ -565,7 +572,11 @@ func (t *DestinationTask) Drain(ctx context.Context) error {
 
 	// enqueueMu covers the take and the hand-off only; the wait below must not
 	// hold it, or a deferOrdered queued behind the barrier would deadlock.
-	t.enqueueMu.Lock()
+	if err := lockCtx(ctx, &t.enqueueMu); err != nil {
+		// Nothing was taken, so there is nothing to restore and no failure to
+		// record: the drain simply did not start before the stop deadline.
+		return &drainNotStartedError{err: cerrors.Errorf("drain of destination %s did not start: %w", t.id, err)}
+	}
 
 	done := make(chan struct{})
 	t.mu.Lock()
@@ -612,6 +623,38 @@ func (t *DestinationTask) Drain(ctx context.Context) error {
 	}
 }
 
+// drainNotStartedError marks a Drain that gave up before it took anything (its
+// ctx ended while waiting for a lock). Callers must not poison anything for it.
+type drainNotStartedError struct{ err error }
+
+func (e *drainNotStartedError) Error() string { return e.err.Error() }
+func (e *drainNotStartedError) Unwrap() error { return e.err }
+
+func isDrainNotStarted(err error) bool {
+	var d *drainNotStartedError
+	return cerrors.As(err, &d)
+}
+
+// lockCtx acquires mu, giving up when ctx ends. sync.Mutex has no cancellable
+// lock, so it polls TryLock; used where a stop deadline must be honoured.
+func lockCtx(ctx context.Context, mu *sync.Mutex) error {
+	if mu.TryLock() {
+		return nil
+	}
+	tick := time.NewTicker(time.Millisecond)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-tick.C:
+			if mu.TryLock() {
+				return nil
+			}
+		}
+	}
+}
+
 // drainNotSent undoes a Drain whose take never reached the flusher: the batches
 // go back at the front of the buffer, in order, and err is recorded so the
 // shared destination fails closed.
@@ -652,29 +695,69 @@ func (t *DestinationTask) drainStopped(batches int) error {
 	return cerrors.Errorf("destination %s flusher stopped before draining %d buffered batches", t.id, batches)
 }
 
+// dropQueued discards what is still queued in flushCh when the flusher exits,
+// releasing a slot in outstanding for each and logging how many batches will
+// replay. The records were never acknowledged upstream.
+func (t *DestinationTask) dropQueued(ctx context.Context, cause string) {
+	if n := t.dropQueuedCount(ctx); n > 0 {
+		t.logger.Warn(ctx).Int("dropped_batches", n).Str("cause", cause).Msg("queued batches not flushed (they replay on restart)")
+	}
+}
+
+func (t *DestinationTask) dropQueuedCount(context.Context) int {
+	n := 0
+	for {
+		select {
+		case _, ok := <-t.flushCh:
+			if !ok {
+				return n // closed by Close
+			}
+			n++
+			t.mu.Lock()
+			t.outstanding--
+			t.mu.Unlock()
+		default:
+			return n
+		}
+	}
+}
+
 // stopFlusher drains and stops the flusher goroutine before teardown. It is
 // called from Close, after every worker has exited, so no doBuffered can race
 // it. It enqueues any trailing partial batch, closes the channel so the flusher
 // drains, waits for it to exit, and returns any flush error (which Close logs,
 // not returns, so teardown still runs — the records replay on restart).
 func (t *DestinationTask) stopFlusher(ctx context.Context) error {
+	// enqueueMu orders this against every hand-off to flushCh (doBuffered,
+	// deferOrdered, Drain): closing the channel while one is blocked in its send
+	// would panic the process. A holder's send always resolves (send, flusherDone
+	// or its ctx), so this waits instead.
+	t.enqueueMu.Lock()
+	defer t.enqueueMu.Unlock()
+
 	t.mu.Lock()
 	t.closed = true
 	var trailing []pendingBatch
-	// Invariant 3: after a flush error the trailing batch is not sent (same rule
-	// as runFlusher); it stays unacknowledged and replays.
-	if len(t.pending) > 0 && t.flushErr == nil {
-		trailing = t.pending
+	dropped := 0
+	if len(t.pending) > 0 {
+		if t.flushErr == nil {
+			// Invariant 3: after a flush error the trailing batch is not sent (same
+			// rule as runFlusher); it stays unacknowledged and replays.
+			trailing = t.pending
+			t.outstanding++ // same critical section as the take
+		} else {
+			dropped = len(t.pending)
+		}
 		t.pending = nil
 		t.bufferedCount = 0
 		t.flushDeadline = time.Time{}
 	}
 	t.mu.Unlock()
+	if dropped > 0 {
+		t.logger.Warn(ctx).Int("dropped_batches", dropped).Msg("trailing batches not flushed after a flush error (they replay on restart)")
+	}
 
 	if len(trailing) > 0 {
-		t.mu.Lock()
-		t.outstanding++
-		t.mu.Unlock()
 		select {
 		case t.flushCh <- trailing:
 		case <-t.flusherDone:
@@ -694,17 +777,28 @@ func (t *DestinationTask) stopFlusher(ctx context.Context) error {
 // dead/errored flusher (flusherDone closed) or a cancelled run unblocks the
 // enqueuer so it fails instead of hanging.
 func (t *DestinationTask) enqueueFlush(ctx context.Context, pending []pendingBatch) error {
+	var err error
 	select {
 	case t.flushCh <- pending:
 		return errBuffered
 	case <-t.flusherDone:
-		if err := t.flushError(); err != nil {
-			return err
-		}
-		return cerrors.Errorf("destination %s flusher stopped before flushing %d buffered batches", t.id, len(pending))
+		err = cerrors.Errorf("destination %s flusher stopped before flushing %d buffered batches", t.id, len(pending))
 	case <-ctx.Done():
-		return ctx.Err()
+		err = cerrors.Errorf("destination %s: enqueue of %d buffered batches abandoned: %w", t.id, len(pending), ctx.Err())
 	}
+	// Invariant 3 (enforcement site): the taken batches are dropped (never
+	// written or acked, they replay). Release the slot and fail closed in one
+	// critical section, as drainNotSent does; otherwise a live flusher would go
+	// on to release a later queued ack past them.
+	t.logger.Warn(ctx).Int("dropped_batches", len(pending)).Err(err).Msg("buffered batches dropped before reaching the flusher (they replay on restart)")
+	t.mu.Lock()
+	t.outstanding--
+	if t.flushErr == nil {
+		t.flushErr = err
+	}
+	ferr := t.flushErr
+	t.mu.Unlock()
+	return ferr
 }
 
 // setFlushErr records the first flush error and makes the task fail closed:
