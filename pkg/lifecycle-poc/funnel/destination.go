@@ -76,6 +76,9 @@ type DestinationTask struct {
 	// flusherDone is closed when the flusher goroutine exits (on a flush error,
 	// run-context cancellation, or Close draining the channel).
 	flusherDone chan struct{}
+	// flusherExited is closed when the flusher goroutine has fully returned,
+	// after its exit drain (flusherDone is closed before that drain).
+	flusherExited chan struct{}
 	// closed is set by Close before it drains the flusher; guarded by mu.
 	// doBuffered refuses to buffer after it, so no batch can be appended behind
 	// the drain.

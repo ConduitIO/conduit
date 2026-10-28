@@ -50,7 +50,7 @@ func TestEnqueueCtxDropFailsClosed(t *testing.T) {
 	t.Cleanup(func() {
 		unblock()
 		cancelRun()
-		<-task.flusherDone
+		<-task.flusherExited
 	})
 	// batch 0 in flight (blocked), batches 1 and 2 fill flushCh (cap 2)
 	for i := 0; i < 3; i++ {
@@ -177,9 +177,8 @@ func TestEnqueueFlush_SendRacingFlusherExitLeavesNothingStranded(t *testing.T) {
 
 		task.testBeforeEnqueueSend = func() {
 			task.testBeforeEnqueueSend = nil
-			cancelRun() // the flusher exits (ctx.Done) ...
-			<-task.flusherDone
-			time.Sleep(time.Millisecond) // ... and has finished its exit drain
+			cancelRun()          // the flusher exits (ctx.Done) ...
+			<-task.flusherExited // ... and has finished its exit drain
 		}
 		is.True(isBuffered(task.doBuffered(context.Background(), NewBatch(randomRecords(1)), newRecordingAckNacker(&eventLog{}))))
 		err := task.doBuffered(context.Background(), NewBatch(randomRecords(1)), newRecordingAckNacker(&eventLog{})) // triggers the flush
@@ -189,7 +188,7 @@ func TestEnqueueFlush_SendRacingFlusherExitLeavesNothingStranded(t *testing.T) {
 		is.Equal(task.outstanding, 0)
 		task.mu.Unlock()
 		cancelRun()
-		<-task.flusherDone
+		<-task.flusherExited
 	}
 }
 
@@ -221,7 +220,7 @@ func TestRunFlusher_ClosesDoneBeforeDrainingQueue(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("flusher did not exit")
 	}
-	<-task.flusherDone
+	<-task.flusherExited
 }
 
 // TestCtxMutex covers the stop-path lock: LockCtx gives up with the context's
