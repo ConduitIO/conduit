@@ -194,6 +194,10 @@ run_recover() { # label arm
   export_env "$rd" "$arm" 0
   docker network create benchi >/dev/null
   start_res "$rd"
+  start_watch "$rd" "$label"
+  # Waits: first record, the kill threshold, the drain after the restart.
+  local w1=15m w2=30m w3=45m
+  [ "${MATRIX_SMOKE:-0}" = 1 ] && { w1=5m; w2=10m; w3=10m; }
   local P="cdcparity-$$" cfg="$rd/cfg" t0; t0=$(date +%s%3N)
   (cd "$cfg" && docker compose -p "$P" -f infra.yml up -d --wait) > "$rd/compose.log" 2>&1
   if [ "$MODE" = recover-snapshot ]; then
@@ -211,8 +215,8 @@ run_recover() { # label arm
   if [ "$MODE" = recover-snapshot ]; then expected=$(meta recover.snapshot_rows); else
     expected=$(( $(meta recover.ops) + 10000 * $(meta par) )); fi
   kill_at=$(python3 -c "print(int($expected * $(meta recover.kill_fraction)))")
-  docker exec cdcparity-counter /loader/loader first -sinks "$specs" -tables "$tbl" -timeout 15m >> "$rd/hooks.txt"
-  docker exec cdcparity-counter /loader/loader first -sinks "$specs" -tables "$tbl" -until "$kill_at" -timeout 30m >> "$rd/hooks.txt"
+  docker exec cdcparity-counter /loader/loader first -sinks "$specs" -tables "$tbl" -timeout "$w1" >> "$rd/hooks.txt" 2>&1
+  docker exec cdcparity-counter /loader/loader first -sinks "$specs" -tables "$tbl" -until "$kill_at" -timeout "$w2" >> "$rd/hooks.txt" 2>&1
   # kill -9 the system under test: no shutdown hooks, no flush, no ack.
   echo "KILL_MS=$(date +%s%3N)" >> "$rd/hooks.txt"
   docker kill -s KILL "$SUT_NAME" >/dev/null
@@ -220,7 +224,8 @@ run_recover() { # label arm
   echo "RESTART_MS=$(date +%s%3N)" >> "$rd/hooks.txt"
   docker start "$SUT_NAME" >/dev/null
   local prog=""; [ "$MODE" = recover ] && prog="-progress http://cdcparity-loader:9100/progress"
-  docker exec cdcparity-counter /loader/loader first -sinks "$specs" -tables "$tbl" -settle -stable 90s -timeout 45m $prog >> "$rd/hooks.txt"
+  # shellcheck disable=SC2086
+  docker exec cdcparity-counter /loader/loader first -sinks "$specs" -tables "$tbl" -settle -stable 90s -timeout "$w3" $prog >> "$rd/hooks.txt" 2>&1
   local spec args; args=$(meta verify_args)
   for spec in $(meta verify_sinks); do
     # shellcheck disable=SC2086
@@ -228,6 +233,7 @@ run_recover() { # label arm
       -out "/out/verify-${spec%%:*}.json" > /dev/null 2>> "$rd/hooks.txt"
   done
   docker logs "$SUT_NAME" > "$rd/sut-after-restart.log" 2>&1
+  stop_watch
   stop_res
   (cd "$cfg" && docker compose -p "$P-sut" -f tools/tool.yml down -v; docker compose -p "$P" -f infra.yml down -v) >> "$rd/compose.log" 2>&1
   docker network rm benchi >/dev/null 2>&1 || true
