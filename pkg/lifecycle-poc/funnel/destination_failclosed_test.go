@@ -372,3 +372,22 @@ func TestDeferOrdered_ReleaseResetsBufferedBytes(t *testing.T) {
 	is.Equal(task.bufferedCount, 0)
 	is.Equal(task.bufferedBytes, 0)
 }
+
+// TestCtxMutex_LockCtxAbandonedWaiterReleases: a LockCtx that gave up must not
+// leave the mutex held when its helper finally acquires it.
+func TestCtxMutex_LockCtxAbandonedWaiterReleases(t *testing.T) {
+	is := is.New(t)
+	var m ctxMutex
+	m.Lock()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	is.True(m.LockCtx(ctx) != nil) // gave up while the lock was held
+	m.Unlock()                     // the abandoned helper now acquires and must release
+	done := make(chan struct{})
+	go func() { m.Lock(); m.Unlock(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("mutex left held by an abandoned LockCtx")
+	}
+}
