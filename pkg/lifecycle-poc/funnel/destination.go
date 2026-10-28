@@ -32,6 +32,10 @@ import (
 )
 
 type DestinationTask struct {
+	// runCtx is the context Open was given (the run's). Close uses it to tell the
+	// run's own cancellation, an expected replay, from a context.Canceled that a
+	// destination plugin's transport returned while the run is alive.
+	runCtx      context.Context
 	id          string
 	destination Destination
 	logger      log.CtxLogger
@@ -96,6 +100,9 @@ type DestinationTask struct {
 	testAfterDeferErrCheck func()
 	// testAfterBufferErrCheck is the same window in doBuffered.
 	testAfterBufferErrCheck func()
+	// testBeforeEnqueueSend is called by enqueueFlush right before its send
+	// select, after its "flusher already gone" pre-check.
+	testBeforeEnqueueSend func()
 }
 
 type Destination interface {
@@ -171,6 +178,7 @@ func (t *DestinationTask) SetPipelined() {
 }
 
 func (t *DestinationTask) Open(ctx context.Context) error {
+	t.runCtx = ctx
 	t.logger.Debug(ctx).Msg("opening destination")
 	err := t.destination.Open(ctx)
 	if err != nil {
@@ -190,6 +198,14 @@ func (t *DestinationTask) Open(ctx context.Context) error {
 
 func (t *DestinationTask) connectorErrors() <-chan error {
 	return t.destination.Errors()
+}
+
+// runCancelled reports whether err is the run's own cancellation: the run
+// context is done and err is a cancellation. A bare context.Canceled while the
+// run is alive came from elsewhere (a plugin's transport) and is a real failure.
+func (t *DestinationTask) runCancelled(err error) bool {
+	return t.runCtx != nil && t.runCtx.Err() != nil &&
+		(cerrors.Is(err, context.Canceled) || cerrors.Is(err, t.runCtx.Err()))
 }
 
 func (t *DestinationTask) Close(ctx context.Context) error {
@@ -217,7 +233,7 @@ func (t *DestinationTask) Close(ctx context.Context) error {
 		// Report it so a stop that left records unwritten is not mistaken for a
 		// clean one. A source already torn down, or a run that was cancelled, is
 		// the expected replay case and stays a warning.
-		if !cerrors.Is(flushErr, plugin.ErrPluginNotRunning) && !cerrors.Is(flushErr, context.Canceled) {
+		if !cerrors.Is(flushErr, plugin.ErrPluginNotRunning) && !t.runCancelled(flushErr) {
 			ce := conduiterr.Wrap(CodeFlushOnCloseFailed,
 				fmt.Sprintf("destination %s was closed with records it could not write and acknowledge", t.id), flushErr)
 			ce.Suggestion = "no records were lost: they were not acknowledged upstream and are redelivered on restart; " +
