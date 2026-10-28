@@ -152,3 +152,44 @@ func TestDrain_DoesNotTakePendingAfterFlushError(t *testing.T) {
 		t.Fatalf("pending=%d outstanding=%d, want the batch left pending and no slot taken", len(task.pending), task.outstanding)
 	}
 }
+
+// TestDrain_BufferedAccountingStaysConsistentWithByteCap: composition of the drain
+// with the byte cap. Taking the buffer for a drain clears the byte count, and
+// restoring it after a failed hand-off recounts both records and bytes.
+func TestDrain_BufferedAccountingStaysConsistentWithByteCap(t *testing.T) {
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	defer cancelRun()
+	task := NewBatchingDestinationTask("d", newFakeDestination("d"), log.Test(t), NoOpConnectorMetrics{}, 100, 0)
+	task.SetMaxReceiveRecordSize(testMaxReceive)
+	task.SetPipelined()
+	if err := task.Open(runCtx); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cancelRun(); <-task.flusherExited })
+	recs := bigRecords(1, 1000)
+	batch := NewBatch(recs)
+	if !isBuffered(task.doBuffered(runCtx, batch, newRecordingAckNacker(&eventLog{}))) {
+		t.Fatal("expected buffered")
+	}
+	task.mu.Lock()
+	wantBytes := task.bufferedBytes
+	task.mu.Unlock()
+	if wantBytes == 0 {
+		t.Fatal("expected buffered bytes")
+	}
+
+	// A failed hand-off restores the batch and its accounting.
+	task.mu.Lock()
+	taken := task.pending
+	task.pending = nil
+	task.resetBufferedLocked()
+	task.outstanding++
+	task.mu.Unlock()
+	_ = task.drainNotSent(taken, context.DeadlineExceeded)
+	task.mu.Lock()
+	gotCount, gotBytes := task.bufferedCount, task.bufferedBytes
+	task.mu.Unlock()
+	if gotCount != 1 || gotBytes != wantBytes {
+		t.Fatalf("restored count=%d bytes=%d, want 1 and %d", gotCount, gotBytes, wantBytes)
+	}
+}

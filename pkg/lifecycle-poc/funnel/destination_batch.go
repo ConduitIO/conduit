@@ -683,9 +683,8 @@ func (t *DestinationTask) Drain(ctx context.Context) error {
 	toFlush = append(toFlush, taken...)
 	toFlush = append(toFlush, pendingBatch{done: done})
 	t.pending = nil
-	t.bufferedCount = 0
-	t.flushDeadline = time.Time{}
-	t.outstanding++ // the barrier flush is ahead of any deferOrdered that follows
+	t.resetBufferedLocked() // count AND bytes
+	t.outstanding++         // the barrier flush is ahead of any deferOrdered that follows
 	t.mu.Unlock()
 
 	select {
@@ -740,9 +739,10 @@ func (t *DestinationTask) drainNotSent(taken []pendingBatch, err error) error {
 	restored = append(restored, t.pending...)
 	t.pending = restored
 	t.bufferedCount = 0
+	t.bufferedBytes = 0
 	for _, p := range restored {
 		if p.batch != nil {
-			t.bufferedCount += len(p.batch.ActiveRecords())
+			t.addBufferedLocked(p.batch.ActiveRecords()) // count and bytes
 		}
 	}
 	if t.batchDelay > 0 && t.bufferedCount > 0 {
