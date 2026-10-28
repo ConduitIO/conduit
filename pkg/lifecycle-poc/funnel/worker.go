@@ -1159,7 +1159,16 @@ func poisonBatchingDestinations(n *TaskNode, err error) {
 }
 
 // hasBatchingBelow reports whether any batching destination task is strictly
-// below n. The answer is fixed once the task tree is built, so it is computed on
+// below n.
+//
+// Invariant it relies on: the task topology is fixed before any worker starts
+// (nodes are built per pipeline run by buildTaskNodes and the shared sink, and
+// are rebuilt for every run, never mutated while workers use them), and whether a
+// destination batches (DestinationTask.batchingEnabled) is fixed at construction.
+// So the answer cannot change after the first call and caching it is sound. A
+// cached "false" for a node with a batching destination below it would let a
+// filtered or nacked batch's source ack run inline ahead of buffered records (H1);
+// TestTaskNode_HasBatchingBelow_CachedAnswerIsStable pins that. The answer is fixed once the task tree is built, so it is computed on
 // first use and cached: the worker asks it for every batch that is acked at a
 // node, and walking the tree and allocating a closure there is measurable on the
 // in-process engine benchmark.
