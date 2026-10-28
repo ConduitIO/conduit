@@ -19,12 +19,14 @@ package funnel
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
 )
@@ -208,18 +210,21 @@ func (t *DestinationTask) Close(ctx context.Context) error {
 	} else {
 		flushErr = t.flush(ctx)
 	}
-	var deferredErr error
+	var closeErr error
 	if flushErr != nil {
 		t.logger.Err(ctx, flushErr).Msg("failed to flush buffered records before destination teardown (records replay on restart)")
-		// A queued source nack that failed (DLQ disabled or over threshold) is a
-		// pipeline failure, not a replayable ack: report it so a stop is not
-		// mistaken for a clean one. A source already torn down is the expected
-		// replay case.
-		if isDeferredAckError(flushErr) && !cerrors.Is(flushErr, plugin.ErrPluginNotRunning) {
-			deferredErr = flushErr
+		// Report it so a stop that left records unwritten is not mistaken for a
+		// clean one. A source already torn down, or a run that was cancelled, is
+		// the expected replay case and stays a warning.
+		if !cerrors.Is(flushErr, plugin.ErrPluginNotRunning) && !cerrors.Is(flushErr, context.Canceled) {
+			ce := conduiterr.Wrap(CodeFlushOnCloseFailed,
+				fmt.Sprintf("destination %s was closed with records it could not write and acknowledge", t.id), flushErr)
+			ce.Suggestion = "no records were lost: they were not acknowledged upstream and are redelivered on restart; " +
+				"check the destination connector's logs for the cause"
+			closeErr = ce
 		}
 	}
-	return cerrors.Join(deferredErr, t.destination.Teardown(ctx))
+	return cerrors.Join(closeErr, t.destination.Teardown(ctx))
 }
 
 func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {
