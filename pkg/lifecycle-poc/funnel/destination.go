@@ -28,6 +28,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/plugin"
 )
 
 // maxConsecutiveEmptyAcks bounds how many ack responses in a row may carry no
@@ -48,6 +49,10 @@ func (t *DestinationTask) errEmptyAckFlood(unacked int) error {
 }
 
 type DestinationTask struct {
+	// runCtx is the context Open was given (the run's). Close uses it to tell the
+	// run's own cancellation, an expected replay, from a context.Canceled that a
+	// destination plugin's transport returned while the run is alive.
+	runCtx      context.Context
 	id          string
 	destination Destination
 	logger      log.CtxLogger
@@ -73,6 +78,10 @@ type DestinationTask struct {
 	bufferedCount int            // number of active records currently buffered
 	bufferedBytes int            // estimated wire size of the buffered records (only when writeLimit > 0)
 	flushDeadline time.Time      // zero when nothing is buffered
+	// outstanding counts flushes handed to the flusher and not yet fully acked
+	// (queued or in flight); guarded by mu. Together with pending it tells
+	// deferOrdered whether any earlier batch is still ahead of a source ack.
+	outstanding int
 
 	// Pipelining state (see destination_batch.go). Zero values mean the
 	// flusher goroutine is not running (pipelining disabled, batching
@@ -93,10 +102,39 @@ type DestinationTask struct {
 	// flusherDone is closed when the flusher goroutine exits (on a flush error,
 	// run-context cancellation, or Close draining the channel).
 	flusherDone chan struct{}
+	// flusherExited is closed when the flusher goroutine has fully returned,
+	// after its exit drain (flusherDone is closed before that drain).
+	flusherExited chan struct{}
 	// closed is set by Close before it drains the flusher; guarded by mu.
 	// doBuffered refuses to buffer after it, so no batch can be appended behind
 	// the drain.
 	closed bool
+
+	// enqueueMu makes "take pending + send on flushCh" atomic with respect to
+	// deferOrdered on the pipelined path. Lock order: enqueueMu, then mu. The
+	// flusher never takes it.
+	enqueueMu ctxMutex
+
+	// testAfterTake, if set, is called by doBuffered after it took the pending
+	// buffer to flush and before it hands it to the flusher. Tests use it to
+	// hold that window open; nil in production.
+	testAfterTake func()
+	// testAfterFlushRelease, if set, is called right after a flush released its
+	// slot in outstanding, i.e. at the point a sibling can first see the task
+	// idle. Tests use it to interleave a sibling's ordered ack; nil in production.
+	testAfterFlushRelease func()
+	// testAfterDeferErrCheck, if set, is called by deferOrdered right after its
+	// early flush-error check, before it takes any lock. Tests use it to land a
+	// flush failure in the window between the check and the decision.
+	testAfterDeferErrCheck func()
+	// testAfterBufferErrCheck is the same window in doBuffered.
+	testAfterBufferErrCheck func()
+	// testBeforeEnqueueSend is called by enqueueFlush right before its send
+	// select, after its "flusher already gone" pre-check.
+	testBeforeEnqueueSend func()
+	// testMidFlusherExit is called by the flusher's exit path between closing
+	// flusherDone and draining flushCh; nil in production.
+	testMidFlusherExit func()
 }
 
 type Destination interface {
@@ -202,6 +240,7 @@ func (t *DestinationTask) SetPipelined() {
 }
 
 func (t *DestinationTask) Open(ctx context.Context) error {
+	t.runCtx = ctx
 	t.logger.Debug(ctx).Msg("opening destination")
 	err := t.destination.Open(ctx)
 	if err != nil {
@@ -223,6 +262,14 @@ func (t *DestinationTask) connectorErrors() <-chan error {
 	return t.destination.Errors()
 }
 
+// runCancelled reports whether err is the run's own cancellation: the run
+// context is done and err is a cancellation. A bare context.Canceled while the
+// run is alive came from elsewhere (a plugin's transport) and is a real failure.
+func (t *DestinationTask) runCancelled(err error) bool {
+	return t.runCtx != nil && t.runCtx.Err() != nil &&
+		(cerrors.Is(err, context.Canceled) || cerrors.Is(err, t.runCtx.Err()))
+}
+
 func (t *DestinationTask) Close(ctx context.Context) error {
 	// Invariant 7: flush any buffered records before tearing down the
 	// destination so a graceful stop writes them durably instead of dropping
@@ -235,14 +282,27 @@ func (t *DestinationTask) Close(ctx context.Context) error {
 	// On the pipelined path this also drains the flusher goroutine: the
 	// trailing partial batch is enqueued, the channel is closed, and Close
 	// waits for the flusher to finish every in-flight flush before teardown.
+	var flushErr error
 	if t.pipelined && t.flusherDone != nil {
-		if err := t.stopFlusher(ctx); err != nil {
-			t.logger.Err(ctx, err).Msg("failed to flush buffered records before destination teardown (records replay on restart)")
-		}
-	} else if err := t.flush(ctx); err != nil {
-		t.logger.Err(ctx, err).Msg("failed to flush buffered records before destination teardown (records replay on restart)")
+		flushErr = t.stopFlusher(ctx)
+	} else {
+		flushErr = t.flush(ctx)
 	}
-	return t.destination.Teardown(ctx)
+	var closeErr error
+	if flushErr != nil {
+		t.logger.Err(ctx, flushErr).Msg("failed to flush buffered records before destination teardown (records replay on restart)")
+		// Report it so a stop that left records unwritten is not mistaken for a
+		// clean one. A source already torn down, or a run that was cancelled, is
+		// the expected replay case and stays a warning.
+		if !cerrors.Is(flushErr, plugin.ErrPluginNotRunning) && !t.runCancelled(flushErr) {
+			ce := conduiterr.Wrap(CodeFlushOnCloseFailed,
+				fmt.Sprintf("destination %s was closed with records it could not write and acknowledge", t.id), flushErr)
+			ce.Suggestion = "no records were lost: they were not acknowledged upstream and are redelivered on restart; " +
+				"check the destination connector's logs for the cause"
+			closeErr = ce
+		}
+	}
+	return cerrors.Join(closeErr, t.destination.Teardown(ctx))
 }
 
 func (t *DestinationTask) Do(ctx context.Context, batch *Batch) error {

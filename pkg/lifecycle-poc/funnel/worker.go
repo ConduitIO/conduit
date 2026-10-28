@@ -526,6 +526,11 @@ func (w *Worker) doTask(
 		// above); the poison flag is what closes the window regardless of
 		// that race's outcome.
 		taskNode.poisoned.Store(true)
+		// The poison flag is only read on entry to the shared node. A sibling's
+		// ordered ack (ackInOrder) comes from its own processors, above the
+		// boundary, and never passes that check; failing the batching
+		// destinations below makes deferOrdered refuse too.
+		poisonBatchingDestinations(taskNode, err)
 	}
 
 	return err
@@ -685,7 +690,12 @@ func (w *Worker) doTaskAttempt(
 		if !taskNode.HasNext() || !b.HasActiveRecords() {
 			// Either this is the last task (the batch has made it end-to-end),
 			// or the batch has only filtered records. Let's ack!
-			return acker.Ack(ctx, b)
+			if !taskNode.hasBatchingBelow() {
+				return acker.Ack(ctx, b) // hot path: no closure, no destination walk
+			}
+			return w.ackInOrder(ctx, taskNode, func(ctx context.Context) error {
+				return acker.Ack(ctx, b)
+			})
 		}
 		// There is at least one task after this one, let's continue.
 		return w.doNextTask(ctx, taskNode, b, acker)
@@ -734,7 +744,14 @@ func (w *Worker) doTaskAttempt(
 				// or the batch has only filtered records. Let's ack!
 				// We need to ack all the records in the batch, not only active
 				// ones, filtered ones should also be acked.
-				err := acker.Ack(ctx, subBatch)
+				var err error
+				if taskNode.hasBatchingBelow() {
+					err = w.ackInOrder(ctx, taskNode, func(ctx context.Context) error {
+						return acker.Ack(ctx, subBatch)
+					})
+				} else {
+					err = acker.Ack(ctx, subBatch)
+				}
 				if err != nil {
 					return err
 				}
@@ -746,7 +763,14 @@ func (w *Worker) doTaskAttempt(
 				return err
 			}
 		case RecordFlagNack:
-			err := acker.Nack(ctx, subBatch, t.ID())
+			var err error
+			if taskNode.hasBatchingBelow() {
+				err = w.ackInOrder(ctx, taskNode, func(ctx context.Context) error {
+					return acker.Nack(ctx, subBatch, t.ID())
+				})
+			} else {
+				err = acker.Nack(ctx, subBatch, t.ID())
+			}
 			if err != nil {
 				return err
 			}
@@ -997,6 +1021,86 @@ func branchMutatesRecords(n *TaskNode) bool {
 	return false
 }
 
+// ackInOrder runs ack, a source ack or nack for records that stop at taskNode
+// without reaching the destinations below it (filtered, or nacked to the DLQ),
+// in source order relative to the batches those destinations have buffered.
+//
+// Invariant 1/2/3 (enforcement site): with destination batching, earlier
+// batches sit in a destination's buffer or flusher queue while later batches
+// are still being processed. Acking a bypassing batch right away would make
+// connector.Source.Ack persist a position past records that are not yet
+// durable. Each batching destination below taskNode (all of them, at a
+// fan-out) gets to queue the ack behind its earlier batches; see
+// DestinationTask.deferOrdered. With no batching destination below, ack runs
+// inline.
+func (w *Worker) ackInOrder(ctx context.Context, taskNode *TaskNode, ack func(context.Context) error) error {
+	return ackBehind(ctx, batchingDestinations(taskNode), ack)
+}
+
+// ackBehind queues ack behind the earlier batches of each destination in dts,
+// in turn: the ack of the last link runs only after every destination has
+// released everything that was ahead of it.
+func ackBehind(ctx context.Context, dts []*DestinationTask, ack func(context.Context) error) error {
+	if len(dts) == 0 {
+		return ack(ctx)
+	}
+	return dts[0].deferOrdered(ctx, func(ctx context.Context) error {
+		return ackBehind(ctx, dts[1:], ack)
+	})
+}
+
+// poisonBatchingDestinations records err as the flush error of every batching
+// destination at or below n, so they fail closed (see setFlushErr).
+func poisonBatchingDestinations(n *TaskNode, err error) {
+	if dt, ok := n.Task.(*DestinationTask); ok && dt.batchingEnabled() {
+		dt.setFlushErr(err)
+	}
+	for _, dt := range batchingDestinations(n) {
+		dt.setFlushErr(err)
+	}
+}
+
+// hasBatchingBelow reports whether any batching destination task is strictly
+// below n.
+//
+// Invariant it relies on: the task topology is fixed before any worker starts
+// (nodes are built per pipeline run by buildTaskNodes and the shared sink, and
+// are rebuilt for every run, never mutated while workers use them), and whether a
+// destination batches (DestinationTask.batchingEnabled) is fixed at construction.
+// So the answer cannot change after the first call and caching it is sound. A
+// cached "false" for a node with a batching destination below it would let a
+// filtered or nacked batch's source ack run inline ahead of buffered records (H1);
+// TestTaskNode_HasBatchingBelow_CachedAnswerIsStable pins that. The answer is fixed once the task tree is built, so it is computed on
+// first use and cached: the worker asks it for every batch that is acked at a
+// node, and walking the tree and allocating a closure there is measurable on the
+// in-process engine benchmark.
+func (n *TaskNode) hasBatchingBelow() bool {
+	switch n.batchingBelowState.Load() {
+	case 1:
+		return false
+	case 2:
+		return true
+	}
+	if len(batchingDestinations(n)) > 0 {
+		n.batchingBelowState.Store(2)
+		return true
+	}
+	n.batchingBelowState.Store(1)
+	return false
+}
+
+// batchingDestinations returns the batching destination tasks strictly below n.
+func batchingDestinations(n *TaskNode) []*DestinationTask {
+	var out []*DestinationTask
+	for _, next := range n.Next {
+		if dt, ok := next.Task.(*DestinationTask); ok && dt.batchingEnabled() {
+			out = append(out, dt)
+		}
+		out = append(out, batchingDestinations(next)...)
+	}
+	return out
+}
+
 func (w *Worker) Ack(ctx context.Context, batch *Batch) error {
 	originalBatch := batch.originalBatch()
 
@@ -1161,7 +1265,9 @@ type TaskNode struct {
 	sharedBoundary bool
 	// sharedMu is non-nil if and only if sharedBoundary is true. See
 	// MarkSharedBoundary and the lock acquisition in doTask.
-	sharedMu *sync.Mutex
+	sharedMu *ctxMutex
+	// batchingBelowState caches hasBatchingBelow: 0 unknown, 1 none, 2 some.
+	batchingBelowState atomic.Int32
 	// poisoned is only meaningful if sharedBoundary is true. H2 (adversarial
 	// review of #2734): set, under sharedMu, by doTask when a pass through
 	// this shared subtree returns an error - which may have left the shared
@@ -1187,7 +1293,7 @@ type TaskNode struct {
 // narrow the serialized region and is a caller bug.
 func (t *TaskNode) MarkSharedBoundary() {
 	t.sharedBoundary = true
-	t.sharedMu = &sync.Mutex{}
+	t.sharedMu = &ctxMutex{}
 }
 
 // IsFirst returns true if this task is the first task in the pipeline.
