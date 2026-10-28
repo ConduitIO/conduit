@@ -10,10 +10,15 @@ connector-restore-no-overwrite
 connector-restore-no-store-write-in-txn
 connector-source-delete-hook-marks-instance
 funnel-ack-rejects-empty-position
+funnel-drain-ctx-aware-shared-lock
+funnel-drain-failure-fails-closed
+funnel-eof-drains-before-teardown
 funnel-fanout-whole-runs-only
 funnel-multiack-ack-after-terminal-noop
 funnel-multiack-nack-after-terminal-noop
 funnel-nack-rejects-empty-position
+funnel-ordered-source-ack
+funnel-stop-drains-before-teardown
 lifecycle-checkstartable-before-build
 lifecycle-dlq-drops-record-content
 lifecycle-poc-checkstartable-before-build

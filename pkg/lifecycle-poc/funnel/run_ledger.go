@@ -17,6 +17,7 @@ package funnel
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -68,6 +69,15 @@ type splitRun struct {
 	// comment) cannot resolve that map lookup by the time the run completes.
 	origPos    opencdc.Position
 	origRecord opencdc.Record
+
+	// mu guards every field below. A run's members can be voted from different
+	// goroutines: the destination flusher votes the members that reached the
+	// destination while the worker goroutine votes siblings a processor nacked
+	// or filtered, and splits (Batch.SplitRecord grows total) keep running on
+	// the worker while the flusher credits members. Unsynchronised, the two
+	// could lose a vote (the run's position is then withheld forever) or
+	// release the run twice (a double ack, Invariant 1).
+	mu sync.Mutex
 
 	// total is the number of CURRENTLY LIVE members of the run - i.e. it can
 	// grow: Batch.SplitRecord increments it every time it splits an existing
@@ -255,7 +265,13 @@ func (r *runAckNacker) vote(ctx context.Context, batch *Batch, isAck bool, taskI
 			continue
 		}
 
+		// Invariant 1 (enforcement site): the released check, the vote and the
+		// release decision are one critical section, so exactly one voter
+		// observes the run complete and releases it. The parent is called
+		// outside the lock.
+		run.mu.Lock()
 		if run.released {
+			run.mu.Unlock()
 			// Should be unreachable: a run's members are never handed to
 			// another Ack/Nack call once the run has already been forwarded
 			// (see the type doc comment's ordering argument). Fail loud
@@ -266,7 +282,6 @@ func (r *runAckNacker) vote(ctx context.Context, batch *Batch, isAck bool, taskI
 				log.KeyHash(run.origPos),
 			)
 		}
-
 		run.terminalCount += j - i
 		if !isAck && !run.nacked {
 			run.nacked = true
@@ -275,16 +290,28 @@ func (r *runAckNacker) vote(ctx context.Context, batch *Batch, isAck bool, taskI
 		}
 
 		done, err := run.complete()
+		var releaseBatch *Batch
+		var releaseNack bool
+		var releaseTaskID string
+		if err == nil && done {
+			run.released = true
+			releaseNack, releaseTaskID = run.nacked, run.nackTaskID
+			if releaseNack {
+				releaseBatch = run.nackBatch()
+			} else {
+				releaseBatch = run.ackBatch()
+			}
+		}
+		run.mu.Unlock()
 		if err != nil {
 			return err
 		}
-		if done {
-			run.released = true
-			if run.nacked {
-				if err := r.parent.Nack(ctx, run.nackBatch(), run.nackTaskID); err != nil {
+		if releaseBatch != nil {
+			if releaseNack {
+				if err := r.parent.Nack(ctx, releaseBatch, releaseTaskID); err != nil {
 					return err
 				}
-			} else if err := r.parent.Ack(ctx, run.ackBatch()); err != nil {
+			} else if err := r.parent.Ack(ctx, releaseBatch); err != nil {
 				return err
 			}
 		}
@@ -359,13 +386,16 @@ func validateRunsWholeBeforeFanOut(b *Batch) error {
 	}
 
 	for run, n := range present {
-		if n >= run.total {
+		run.mu.Lock()
+		total := run.total
+		run.mu.Unlock()
+		if n >= total {
 			continue
 		}
 		ce := conduiterr.New(CodeSplitRunStraddlesFanOut, fmt.Sprintf(
 			"cannot fan out a batch holding only %d of the %d records that record %q was split into: "+
 				"the split run is cut across the fan-out boundary",
-			n, run.total, run.origPos,
+			n, total, run.origPos,
 		))
 		ce.Suggestion = "this happens when a processor BEFORE the fan-out splits a record and a later " +
 			"pre-fan-out processor resolves only part of that split (for example returning fewer records " +

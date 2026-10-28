@@ -250,10 +250,99 @@ func (w *Worker) Stop(ctx context.Context) error {
 	// TestServiceLifecycle_PipelineStop flaking with "failed to read from
 	// source: plugin is not running").
 	w.stop.Store(true)
+	// Invariant 1/7 (enforcement site, #3231): flush and ack everything the
+	// destinations hold BEFORE the source goes away; afterwards every source ack
+	// fails with plugin.ErrPluginNotRunning and the written records replay.
+	// guard: funnel-stop-drains-before-teardown tests=^TestWorker_Stop_DrainsDestinationBeforeSourceTeardown$
+	w.drainDestinationsBeforeTeardown(ctx)
+	// A drain that failed or ran out of time left records unwritten; they replay
+	// (nothing is lost). That is not a failed Stop: the worker is armed and the
+	// source is torn down below, and a Stop error here would make StopAndWait
+	// report "never began stopping, safe to retry" for a pipeline that is in
+	// fact stopping. The failure is reported where it belongs: the destination's
+	// Close (and the shared sink's Close) return it as
+	// pipeline.flush_on_close_failed.
 	if err := w.tearDownSource(ctx); err != nil {
 		return cerrors.Errorf("failed to tear down source: %w", err)
 	}
 	return nil
+}
+
+// drainDestinationsBeforeTeardown flushes every batching destination below this
+// worker and waits for its source acks, so they are issued while the source is
+// still running. A drain failure is logged, not returned: the records were not
+// acked and replay on restart (at-least-once), and teardown must still run.
+func (w *Worker) drainDestinationsBeforeTeardown(ctx context.Context) {
+	if err := drainNode(ctx, w.FirstTask, nil); err != nil {
+		w.logger.Err(ctx, err).Msg("failed to drain buffered records before source teardown (records replay on restart)")
+	}
+}
+
+// drainNode drains the batching destinations at and below n.
+//
+// Both modes take the outermost shared-boundary mutex on the way down, the
+// same lock doTask holds around a pass through a shared destination. For the
+// synchronous path that serialises the flush with a sibling's Write/Ack on the
+// one destination stream. For the pipelined path the flusher is the only writer
+// so it is not needed for the stream, but it orders the drain behind any
+// sibling pass that is mid hand-off. The flusher never takes the mutex, so
+// neither can deadlock.
+//
+// A drain that fails on a shared destination poisons it, exactly as a failed
+// doTask pass does (see doTask): the failure may have left the shared ack
+// stream desynchronized or a sibling's batches undelivered, and a sibling must
+// not go on to ack past them.
+func drainNode(ctx context.Context, n *TaskNode, shared *TaskNode) error {
+	if n.sharedBoundary && shared == nil {
+		shared = n
+	}
+	var errs []error
+	if dt, ok := n.Task.(*DestinationTask); ok && dt.batchingEnabled() {
+		err := drainTask(ctx, dt, shared)
+		if shared != nil && shared.testAfterDrain != nil {
+			shared.testAfterDrain()
+		}
+		errs = append(errs, err)
+	}
+	for _, next := range n.Next {
+		errs = append(errs, drainNode(ctx, next, shared))
+	}
+	return cerrors.Join(errs...)
+}
+
+// drainTask drains dt, holding the shared lock (if any) for the whole drain AND
+// for the poisoning that follows a failure, exactly as doTask poisons before it
+// releases sharedMu. Poisoning after the unlock would leave a window in which a
+// sibling takes the lock, sees an unpoisoned node and writes or acks a later
+// batch past the batch the failed drain dropped.
+func drainTask(ctx context.Context, dt *DestinationTask, shared *TaskNode) error {
+	if shared == nil {
+		return dt.Drain(ctx)
+	}
+	// The stop deadline must also bound the wait for the shared lock: a sibling
+	// can hold it while blocked behind a wedged destination. If the deadline
+	// ends before anything was taken there is nothing to poison.
+	acquired := shared.sharedMu.LockCtx(ctx) == nil
+	defer func() {
+		if acquired {
+			shared.sharedMu.Unlock()
+		}
+	}()
+	// guard: funnel-drain-ctx-aware-shared-lock tests=^TestWorker_Stop_DrainTimeoutIsNotAStopFailure$
+	if !acquired {
+		return &drainNotStartedError{err: cerrors.Errorf("drain of destination %s did not start: %w", dt.id, ctx.Err())}
+	}
+	err := dt.Drain(ctx)
+	if err != nil && !isDrainNotStarted(err) {
+		// Invariant 3 (enforcement site): poison before sharedMu is released.
+		// guard: funnel-drain-failure-fails-closed tests=^TestWorker_Stop_DrainFailure_PoisonedBeforeSharedLockIsReleased$
+		shared.poisoned.Store(true)
+		// The poison flag is only read on entry to the shared node; a sibling's
+		// ordered ack (ackInOrder) never passes that check. Fail the batching
+		// destinations too so deferOrdered refuses.
+		poisonBatchingDestinations(shared, err)
+	}
+	return err
 }
 
 // Stopping reports whether this worker has armed its stop — i.e. w.stop was set
@@ -526,6 +615,11 @@ func (w *Worker) doTask(
 		// above); the poison flag is what closes the window regardless of
 		// that race's outcome.
 		taskNode.poisoned.Store(true)
+		// The poison flag is only read on entry to the shared node. A sibling's
+		// ordered ack (ackInOrder) comes from its own processors, above the
+		// boundary, and never passes that check; failing the batching
+		// destinations below makes deferOrdered refuse too.
+		poisonBatchingDestinations(taskNode, err)
 	}
 
 	return err
@@ -641,6 +735,15 @@ func (w *Worker) doTaskAttempt(
 			// as long as any sibling worker is still running. See
 			// docs/design-documents/20260801-archv2-multiconnector-nsource.md.
 			w.stop.Store(true)
+			// Invariant 1/7 (#3231): same drain as Stop, under the processing
+			// lock so it cannot run concurrently with a Stop doing the same on
+			// a synchronous destination (this branch is reached without the
+			// lock: the read that returned io.EOF is not protected by it).
+			// guard: funnel-eof-drains-before-teardown tests=^TestWorker_SourceEOF_DrainsDestinationBeforeTeardown$
+			if release, lerr := w.acquireProcessingLock(ctx); lerr == nil {
+				w.drainDestinationsBeforeTeardown(ctx)
+				release()
+			}
 			if tdErr := w.tearDownSource(ctx); tdErr != nil {
 				return cerrors.Errorf("source finished but failed to tear down: %w", tdErr)
 			}
@@ -685,7 +788,12 @@ func (w *Worker) doTaskAttempt(
 		if !taskNode.HasNext() || !b.HasActiveRecords() {
 			// Either this is the last task (the batch has made it end-to-end),
 			// or the batch has only filtered records. Let's ack!
-			return acker.Ack(ctx, b)
+			if !taskNode.hasBatchingBelow() {
+				return acker.Ack(ctx, b) // hot path: no closure, no destination walk
+			}
+			return w.ackInOrder(ctx, taskNode, func(ctx context.Context) error {
+				return acker.Ack(ctx, b)
+			})
 		}
 		// There is at least one task after this one, let's continue.
 		return w.doNextTask(ctx, taskNode, b, acker)
@@ -734,7 +842,14 @@ func (w *Worker) doTaskAttempt(
 				// or the batch has only filtered records. Let's ack!
 				// We need to ack all the records in the batch, not only active
 				// ones, filtered ones should also be acked.
-				err := acker.Ack(ctx, subBatch)
+				var err error
+				if taskNode.hasBatchingBelow() {
+					err = w.ackInOrder(ctx, taskNode, func(ctx context.Context) error {
+						return acker.Ack(ctx, subBatch)
+					})
+				} else {
+					err = acker.Ack(ctx, subBatch)
+				}
 				if err != nil {
 					return err
 				}
@@ -746,7 +861,14 @@ func (w *Worker) doTaskAttempt(
 				return err
 			}
 		case RecordFlagNack:
-			err := acker.Nack(ctx, subBatch, t.ID())
+			var err error
+			if taskNode.hasBatchingBelow() {
+				err = w.ackInOrder(ctx, taskNode, func(ctx context.Context) error {
+					return acker.Nack(ctx, subBatch, t.ID())
+				})
+			} else {
+				err = acker.Nack(ctx, subBatch, t.ID())
+			}
 			if err != nil {
 				return err
 			}
@@ -997,6 +1119,86 @@ func branchMutatesRecords(n *TaskNode) bool {
 	return false
 }
 
+// ackInOrder runs ack, a source ack or nack for records that stop at taskNode
+// without reaching the destinations below it (filtered, or nacked to the DLQ),
+// in source order relative to the batches those destinations have buffered.
+//
+// Invariant 1/2/3 (enforcement site): with destination batching, earlier
+// batches sit in a destination's buffer or flusher queue while later batches
+// are still being processed. Acking a bypassing batch right away would make
+// connector.Source.Ack persist a position past records that are not yet
+// durable. Each batching destination below taskNode (all of them, at a
+// fan-out) gets to queue the ack behind its earlier batches; see
+// DestinationTask.deferOrdered. With no batching destination below, ack runs
+// inline.
+func (w *Worker) ackInOrder(ctx context.Context, taskNode *TaskNode, ack func(context.Context) error) error {
+	return ackBehind(ctx, batchingDestinations(taskNode), ack)
+}
+
+// ackBehind queues ack behind the earlier batches of each destination in dts,
+// in turn: the ack of the last link runs only after every destination has
+// released everything that was ahead of it.
+func ackBehind(ctx context.Context, dts []*DestinationTask, ack func(context.Context) error) error {
+	if len(dts) == 0 {
+		return ack(ctx)
+	}
+	return dts[0].deferOrdered(ctx, func(ctx context.Context) error {
+		return ackBehind(ctx, dts[1:], ack)
+	})
+}
+
+// poisonBatchingDestinations records err as the flush error of every batching
+// destination at or below n, so they fail closed (see setFlushErr).
+func poisonBatchingDestinations(n *TaskNode, err error) {
+	if dt, ok := n.Task.(*DestinationTask); ok && dt.batchingEnabled() {
+		dt.setFlushErr(err)
+	}
+	for _, dt := range batchingDestinations(n) {
+		dt.setFlushErr(err)
+	}
+}
+
+// hasBatchingBelow reports whether any batching destination task is strictly
+// below n.
+//
+// Invariant it relies on: the task topology is fixed before any worker starts
+// (nodes are built per pipeline run by buildTaskNodes and the shared sink, and
+// are rebuilt for every run, never mutated while workers use them), and whether a
+// destination batches (DestinationTask.batchingEnabled) is fixed at construction.
+// So the answer cannot change after the first call and caching it is sound. A
+// cached "false" for a node with a batching destination below it would let a
+// filtered or nacked batch's source ack run inline ahead of buffered records (H1);
+// TestTaskNode_HasBatchingBelow_CachedAnswerIsStable pins that. The answer is fixed once the task tree is built, so it is computed on
+// first use and cached: the worker asks it for every batch that is acked at a
+// node, and walking the tree and allocating a closure there is measurable on the
+// in-process engine benchmark.
+func (n *TaskNode) hasBatchingBelow() bool {
+	switch n.batchingBelowState.Load() {
+	case 1:
+		return false
+	case 2:
+		return true
+	}
+	if len(batchingDestinations(n)) > 0 {
+		n.batchingBelowState.Store(2)
+		return true
+	}
+	n.batchingBelowState.Store(1)
+	return false
+}
+
+// batchingDestinations returns the batching destination tasks strictly below n.
+func batchingDestinations(n *TaskNode) []*DestinationTask {
+	var out []*DestinationTask
+	for _, next := range n.Next {
+		if dt, ok := next.Task.(*DestinationTask); ok && dt.batchingEnabled() {
+			out = append(out, dt)
+		}
+		out = append(out, batchingDestinations(next)...)
+	}
+	return out
+}
+
 func (w *Worker) Ack(ctx context.Context, batch *Batch) error {
 	originalBatch := batch.originalBatch()
 
@@ -1161,7 +1363,13 @@ type TaskNode struct {
 	sharedBoundary bool
 	// sharedMu is non-nil if and only if sharedBoundary is true. See
 	// MarkSharedBoundary and the lock acquisition in doTask.
-	sharedMu *sync.Mutex
+	sharedMu *ctxMutex
+	// testAfterDrain, if set on a shared boundary node, is called by drainNode
+	// right after a drain released sharedMu. Tests use it to interleave a sibling
+	// at that instant; nil in production.
+	testAfterDrain func()
+	// batchingBelowState caches hasBatchingBelow: 0 unknown, 1 none, 2 some.
+	batchingBelowState atomic.Int32
 	// poisoned is only meaningful if sharedBoundary is true. H2 (adversarial
 	// review of #2734): set, under sharedMu, by doTask when a pass through
 	// this shared subtree returns an error - which may have left the shared
@@ -1187,7 +1395,7 @@ type TaskNode struct {
 // narrow the serialized region and is a caller bug.
 func (t *TaskNode) MarkSharedBoundary() {
 	t.sharedBoundary = true
-	t.sharedMu = &sync.Mutex{}
+	t.sharedMu = &ctxMutex{}
 }
 
 // IsFirst returns true if this task is the first task in the pipeline.

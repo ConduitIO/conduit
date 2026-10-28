@@ -414,10 +414,15 @@ func (s *Source) Teardown(ctx context.Context) error {
 	// onPersistFlushed's deferred ack needs preparePluginCall's
 	// Instance.RLock to succeed while s.plugin is still considered running
 	// (checked again below), which would deadlock against an exclusive
-	// lock held here. funnel.Worker's own stop sequencing (processingLock +
-	// the stop flag, see worker.go's Stop) already guarantees no new Ack
-	// call can start once a Teardown has begun, so this window introduces
-	// no new concurrent-Ack risk.
+	// lock held here. funnel.Worker.Stop drains every destination
+	// flusher (and so the Acks it issues) before it calls Teardown, but that is
+	// best effort, not a guarantee: the drain can time out or fail, and a
+	// force-stop or fatal error skips it, so an Ack can still be issued while or
+	// after Teardown runs. That is safe because of the wait group, not because of
+	// the ordering: an Ack already in flight is waited for below (wg), and one that
+	// starts after the plugin is released fails in preparePluginCall with
+	// plugin.ErrPluginNotRunning, which persists no position, so the records
+	// replay (at-least-once).
 	timeout := s.teardownFlushTimeout
 	if timeout <= 0 {
 		timeout = DefaultTeardownFlushTimeout
