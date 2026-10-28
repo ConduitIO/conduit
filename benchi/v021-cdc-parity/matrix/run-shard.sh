@@ -59,16 +59,28 @@ if [ ! -f "$JOLOKIA_JAR" ]; then
 fi
 
 log "building images"
-docker build -q -t matrix-conduit:bench -f "$ROOT/Dockerfile" "$ROOT" >/dev/null || { log "conduit image build failed"; exit 1; }
+# Builds download from Maven Central, Confluent Hub and GitHub: retried, and
+# each build's output kept (and uploaded when it fails).
+build() { # tag dockerfile context
+  local tag=$1 f=$2 ctx=$3 logf="$OUT/build-${1//[:\/]/_}.log" n
+  for n in 1 2 3; do
+    docker build --progress=plain -t "$tag" -f "$f" "$ctx" > "$logf" 2>&1 && return 0
+    log "build $tag attempt $n failed: $(tail -3 "$logf" | tr '\n' ' ' | cut -c1-300)"
+    sleep 20
+  done
+  [ -n "${MATRIX_S3:-}" ] && aws s3 cp --quiet "$logf" "$MATRIX_S3/shard-$I/$(basename "$logf")"
+  return 1
+}
+build matrix-conduit:bench "$ROOT/Dockerfile" "$ROOT" || { log "conduit image build failed"; exit 1; }
 # The diag build is the measured build plus one build tag: the SAME Dockerfile
 # (same base image, Go version, make target and flags), with the pprof file
 # added and -tags benchdiag on the same go build (review R2-M3).
 python3 "$HERE/images/diag-dockerfile.py" "$ROOT/Dockerfile" "$ROOT/Makefile" > "$ROOT/.matrix-diag.Dockerfile" || { log "diag Dockerfile"; exit 1; }
-docker build -q -t matrix-conduit:bench-diag -f "$ROOT/.matrix-diag.Dockerfile" "$ROOT" >/dev/null || { log "conduit-diag image build failed"; exit 1; }
+build matrix-conduit:bench-diag "$ROOT/.matrix-diag.Dockerfile" "$ROOT" || { log "conduit-diag image build failed"; exit 1; }
 rm -f "$ROOT/.matrix-diag.Dockerfile"
-docker build -q -t matrix-conduit:bench-http -f "$HERE/images/conduit-http.Dockerfile" "$HERE/images" >/dev/null || log "conduit-http image build failed (HTTP cells will fail)"
-docker build -q -t matrix-connect:3.7.0 -f "$HERE/images/connect.Dockerfile" "$HERE/images" >/dev/null || { log "connect image build failed"; exit 1; }
-docker build -q -t matrix-dbzserver:3.7.0 -f "$HERE/images/dbzserver.Dockerfile" "$HERE/images" >/dev/null || { log "dbzserver image build failed"; exit 1; }
+build matrix-conduit:bench-http "$HERE/images/conduit-http.Dockerfile" "$HERE/images" || log "conduit-http image build failed (HTTP cells will fail)"
+build matrix-connect:3.7.0 "$HERE/images/connect.Dockerfile" "$HERE/images" || { log "connect image build failed"; exit 1; }
+build matrix-dbzserver:3.7.0 "$HERE/images/dbzserver.Dockerfile" "$HERE/images" || { log "dbzserver image build failed"; exit 1; }
 for img in $(python3 -c "import sys; sys.path.insert(0,'$HERE'); import cells; print(' '.join(v for v in cells.IMG.values() if '@sha256:' in v))"); do
   docker pull -q "$img" >/dev/null || { log "pull failed: $img"; exit 1; }
 done
