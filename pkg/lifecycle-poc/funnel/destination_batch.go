@@ -375,7 +375,9 @@ func (t *DestinationTask) releaseSync(ctx context.Context) error {
 		}
 		t.mu.Lock()
 		var toFlush []pendingBatch
-		if t.releasableLocked() {
+		// outstanding > 0 means a flush already took earlier work that is not yet
+		// written; nothing queued may run ahead of it.
+		if t.outstanding == 0 && t.releasableLocked() {
 			toFlush = t.pending
 			t.pending = nil
 			t.bufferedCount = 0
@@ -393,7 +395,7 @@ func (t *DestinationTask) releaseSync(ctx context.Context) error {
 			return err
 		}
 		t.mu.Lock()
-		again := t.releasableLocked()
+		again := t.outstanding == 0 && t.releasableLocked()
 		t.mu.Unlock()
 		if !again {
 			return nil

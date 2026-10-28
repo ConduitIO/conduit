@@ -140,3 +140,26 @@ func TestDestinationTask_Sync_FlushNotOvertakenByQueuedAck(t *testing.T) {
 
 	is.Equal(ev.snapshot(), []string{"acker.ack", "sibling.action"})
 }
+
+// TestSyncAudit_QueuedAckNotWrittenAheadOfTakenFlush is the ack-path audit's
+// repro: the queued ack must not run while the batch taken for the flush has
+// not been written.
+func TestSyncAudit_QueuedAckNotWrittenAheadOfTakenFlush(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	dest := newFakeDestination("d")
+	task := NewBatchingDestinationTask("d", dest, log.Test(t), NoOpConnectorMetrics{}, 2, 0)
+	alog := &eventLog{}
+	writtenAtAction := -1
+	task.testAfterTake = func() {
+		task.testAfterTake = nil
+		is.NoErr(task.deferOrdered(ctx, func(context.Context) error {
+			writtenAtAction = len(dest.receivedPositions())
+			alog.append("action")
+			return nil
+		}))
+	}
+	is.NoErr(task.doBuffered(ctx, NewBatch(randomRecords(2)), newRecordingAckNacker(alog)))
+	is.True(writtenAtAction != 0) // the action ran after the write (or not at all yet)
+	is.Equal(alog.snapshot(), []string{"acker.ack", "action"})
+}
