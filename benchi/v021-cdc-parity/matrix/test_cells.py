@@ -351,6 +351,14 @@ class Generated(unittest.TestCase):
             self.assertIn(cid, smoke)
         self.assertEqual(sorted(c.id for c in cells.plan_cells("shakedown")), sorted(cells.SHAKEDOWN_CELLS))
 
+    def test_conduit_configs_have_no_dollar_references(self):
+        """Conduit expands $name in pipeline files as an environment variable."""
+        for c in self.cells():
+            for a in c.arms:
+                if cells.arm_side(a).startswith("conduit"):
+                    s = open(os.path.join(self.arm_dir(c, a), "pipelines", "pipelines.yml")).read()
+                    self.assertNotIn("$", s, (c.id, a))
+
     def test_kafka_broker_uses_append_time(self):
         for c in self.cells():
             infra = load(os.path.join(self.arm_dir(c, c.arms[0]), "infra.yml"))["services"]

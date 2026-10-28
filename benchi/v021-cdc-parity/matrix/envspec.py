@@ -86,6 +86,7 @@ def main():
                               "ls /kafka/libs | grep -E '^connect-runtime-'"),
         "connect_default_heap": sh("docker", "run", "--rm", "--entrypoint", "sh", "matrix-connect:3.7.0", "-c",
                                    "java -XX:+PrintFlagsFinal -version 2>/dev/null | grep -E ' MaxHeapSize '"),
+        "dbzserver_transform_jars": sh("docker", "run", "--rm", "--entrypoint", "cat", "matrix-dbzserver:3.7.0", "/debezium/MATRIX-CLASSES.txt"),
         "dbzserver_java": sh("docker", "run", "--rm", "--entrypoint", "sh", cells.IMG["dbzserver"], "-c", "java -version 2>&1 | head -1"),
         "postgres_server": sh("docker", "run", "--rm", "--entrypoint", "postgres", cells.IMG["postgres"], "--version"),
         "ramp_steps": cells.RAMP_STEPS, "ramp_step_s": cells.RAMP_STEP, "ramp_settle_s": cells.RAMP_SETTLE,

@@ -852,9 +852,12 @@ def conduit_pipelines(c: Cell, arm: str) -> list:
 
 # OpenCDC operation -> Debezium's op code.
 # .Operation is a typed enum: templates compare it as text (printf "%v"),
-# a direct comparison with a string fails at runtime (shakedown, 2026-10-28).
-OP_TEMPLATE = ('{{ $op := printf "%v" .Operation }}{{ if eq $op "create" }}c{{ else if eq $op "update" }}u'
-               '{{ else if eq $op "delete" }}d{{ else }}r{{ end }}')
+# a direct comparison with a string fails at runtime. No template variables:
+# Conduit expands $name in pipeline files as an environment variable, and its
+# hardening refuses names outside the allowlist (shakedown, 2026-10-28).
+_OP = '(printf "%v" .Operation)'
+OP_TEMPLATE = ('{{ if eq ' + _OP + ' "create" }}c{{ else if eq ' + _OP + ' "update" }}u'
+               '{{ else if eq ' + _OP + ' "delete" }}d{{ else }}r{{ end }}')
 
 
 def conduit_dest(c: Cell, d: str, i: int, tier: str, side: str, single: bool) -> dict:

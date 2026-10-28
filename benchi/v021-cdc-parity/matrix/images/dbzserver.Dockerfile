@@ -17,3 +17,8 @@ RUN set -e; \
     ls /conv/*.jar >/dev/null
 FROM ${BASE}
 COPY --from=conv /conv/*.jar /debezium/lib/
+# Diagnostic (the shakedown's Server arms could not load ExtractNewRecordState):
+# which jars on run.sh's classpath hold Debezium's transforms.
+USER root
+RUN (cd /debezium && grep -l -a 'io/debezium/transforms/ExtractNewRecordState' lib/*.jar *.jar lib_opt/*.jar 2>/dev/null || echo none) > /debezium/MATRIX-CLASSES.txt
+USER jboss

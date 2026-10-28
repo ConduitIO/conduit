@@ -215,8 +215,21 @@ run_recover() { # label arm
   if [ "$MODE" = recover-snapshot ]; then expected=$(meta recover.snapshot_rows); else
     expected=$(( $(meta recover.ops) + 10000 * $(meta par) )); fi
   kill_at=$(python3 -c "print(int($expected * $(meta recover.kill_fraction)))")
-  docker exec cdcparity-counter /loader/loader first -sinks "$specs" -tables "$tbl" -timeout "$w1" >> "$rd/hooks.txt" 2>&1
-  docker exec cdcparity-counter /loader/loader first -sinks "$specs" -tables "$tbl" -until "$kill_at" -timeout "$w2" >> "$rd/hooks.txt" 2>&1
+  # A run that never delivers (or never reaches the kill threshold) is a
+  # failed run: recorded and torn down at once, not waited out.
+  local ok=1
+  docker exec cdcparity-counter /loader/loader first -sinks "$specs" -tables "$tbl" -timeout "$w1" >> "$rd/hooks.txt" 2>&1 &&
+    docker exec cdcparity-counter /loader/loader first -sinks "$specs" -tables "$tbl" -until "$kill_at" -timeout "$w2" >> "$rd/hooks.txt" 2>&1 || ok=0
+  if [ "$ok" = 0 ]; then
+    echo "RECOVER_ABORTED=1 (no first record or kill threshold)" >> "$rd/hooks.txt"
+    for c in $(docker ps -a --filter name=cdcparity --format '{{.Names}}'); do docker logs "$c" > "$rd/$c.log" 2>&1; done
+    stop_watch; stop_res
+    (cd "$cfg" && docker compose -p "$P-sut" -f tools/tool.yml down -v; docker compose -p "$P" -f infra.yml down -v) >> "$rd/compose.log" 2>&1
+    docker network rm benchi >/dev/null 2>&1 || true
+    python3 "$HERE/runinfo.py" "$rd" "$arm" "$label" 1 "$t0" > "$rd/run.json"
+    publish_run "$label" 1 "$t0"
+    return
+  fi
   # kill -9 the system under test: no shutdown hooks, no flush, no ack.
   echo "KILL_MS=$(date +%s%3N)" >> "$rd/hooks.txt"
   docker kill -s KILL "$SUT_NAME" >/dev/null
