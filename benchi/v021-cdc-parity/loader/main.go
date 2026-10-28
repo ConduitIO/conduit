@@ -85,6 +85,8 @@ func main() {
 		err = runCollect(args)
 	case "poll":
 		err = runPoll(args)
+	case "post":
+		err = runPost(args)
 	case "now":
 		err = runNow(args)
 	case "first":

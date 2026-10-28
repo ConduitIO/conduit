@@ -384,7 +384,7 @@ def smoke_cells(cs: list) -> list:
 
 # The shakedown (review round 2): four cells, smoke-length, on one instance,
 # to flush wiring bugs before the gated smoke. Never results, never a gate.
-SHAKEDOWN_CELLS = ["A2-pg-kafka-p1-b64", "A2-pg-pg-p4-b64", "B-kafka-pg-p1-b64", "G-pg-kafka-kill9"]
+SHAKEDOWN_CELLS = ["B-kafka-pg-p1-b64", "A2-pg-pg-p4-b64", "A2-pg-kafka-p1-b64", "G-pg-kafka-kill9"]
 # One arm per wiring path (each side, JSON and Avro, the multi-table and
 # scale-out paths, one tuned Conduit arm), to stay under the $5 cap; the
 # other tuned arms are first exercised by the smoke run.
@@ -1273,7 +1273,7 @@ until wget -q -O /dev/null "$url/connectors" 2>/dev/null; do
   n=$((n+1)); [ "$n" -ge 300 ] && { echo "connect REST API never came up"; exit 1; }; sleep 1
 done
 for f in $(ls /cell/connect/*.json | sort); do
-  wget -q -O- --header='Content-Type: application/json' --post-file="$f" "$url/connectors" >/dev/null
+  /loader/loader post -url "$url/connectors" -file "$f"
 done
 /loader/loader now CONNECT_REGISTERED_MS
 """
@@ -1433,7 +1433,12 @@ def cell_meta(c: Cell) -> dict:
 # ---------------------------------------------------------------- planning
 def shard(k: int, plan: str = "all") -> list:
     """Longest-processing-time-first assignment of cells to k instances. A
-    cell with instances = n is placed n times, on n DIFFERENT instances."""
+    cell with instances = n is placed n times, on n DIFFERENT instances. The
+    shakedown runs on one instance in SHAKEDOWN_CELLS order (least proven
+    paths first)."""
+    if plan == "shakedown" and k == 1:
+        cs = plan_cells(plan)
+        return [(sum(cell_minutes(c) for c in cs), [(cid, 0) for cid in SHAKEDOWN_CELLS])]
     units = []
     for c in plan_cells(plan):
         for rep in range(c.instances):

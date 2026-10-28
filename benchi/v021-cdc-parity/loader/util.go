@@ -303,3 +303,30 @@ func runPoll(args []string) error {
 		time.Sleep(time.Until(t0.Add(*every)))
 	}
 }
+
+// runPost POSTs a JSON file and prints the status and the response body, so a
+// rejected Kafka Connect registration says why (busybox wget does not).
+// Exits non-zero on a non-2xx answer.
+func runPost(args []string) error {
+	fs := flag.NewFlagSet("post", flag.ExitOnError)
+	url := fs.String("url", "", "endpoint")
+	file := fs.String("file", "", "JSON body")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	body, err := os.ReadFile(*file)
+	if err != nil {
+		return err
+	}
+	resp, err := (&http.Client{Timeout: 60 * time.Second}).Post(*url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	fmt.Printf("POST %s %s -> %d %s\n", *url, *file, resp.StatusCode, strings.TrimSpace(string(b)))
+	if resp.StatusCode/100 != 2 {
+		return fmt.Errorf("POST %s: HTTP %d", *file, resp.StatusCode)
+	}
+	return nil
+}
