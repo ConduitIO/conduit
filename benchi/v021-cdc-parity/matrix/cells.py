@@ -384,13 +384,15 @@ def smoke_cells(cs: list) -> list:
 
 # The shakedown (review round 2): four cells, smoke-length, on one instance,
 # to flush wiring bugs before the gated smoke. Never results, never a gate.
-SHAKEDOWN_CELLS = ["B-kafka-pg-p1-b64", "A2-pg-pg-p4-b64", "A2-pg-kafka-p1-b64", "G-pg-kafka-kill9"]
+# Pass 3: only the paths not yet proven (B-kafka-pg and Conduit's
+# multi-table paths passed in pass 2).
+SHAKEDOWN_CELLS = ["A2-pg-kafka-p1-b64", "A2-pg-pg-p4-b64", "G-pg-kafka-kill9"]
 # One arm per wiring path (each side, JSON and Avro, the multi-table and
 # scale-out paths, one tuned Conduit arm), to stay under the $5 cap; the
 # other tuned arms are first exercised by the smoke run.
 SHAKEDOWN_ARMS = {
     "A2-pg-kafka-p1-b64": ("conduit-avro-s", "connect-avro-s", "dbzserver-avro-s"),
-    "A2-pg-pg-p4-b64": ("conduit-s", "conduit-t", "connect-avro-s", "dbzserver-avro-s", "dbzserver-avro-xn-s"),
+    "A2-pg-pg-p4-b64": ("connect-avro-s", "dbzserver-avro-s", "dbzserver-avro-xn-s"),
     "B-kafka-pg-p1-b64": ("conduit-s", "connect-s"),
     "G-pg-kafka-kill9": ("conduit-avro-s", "connect-avro-s", "dbzserver-avro-s"),
 }
@@ -899,7 +901,13 @@ def conduit_dest(c: Cell, d: str, i: int, tier: str, side: str, single: bool) ->
             s.update({"sdk.record.format": "template", "sdk.record.format.options": '{{ printf "%s" .Payload.After }}'})
         if side == "conduit-avro":
             s.update({"sdk.record.format": "template",
-                      "sdk.record.format.options": '{{ if .Payload.After }}{{ printf "%s" .Payload.After }}{{ end }}'})
+                      "sdk.record.format.options": '{{ if .Payload.After }}{{ printf "%s" .Payload.After }}{{ end }}',
+                      # The payload is already Avro: the destination must not
+                      # decode it again. avro.encode leaves the source's
+                      # schema metadata on the record, so the SDK's default
+                      # extraction decodes with the wrong schema and fails
+                      # every record (a Conduit defect, found by the shakedown).
+                      "sdk.schema.extract.payload.enabled": "false"})
         elif c.transform:
             s.update({"sdk.record.format": "template", "sdk.record.format.options": "{{ toJson .Payload.After }}"})
         if tier == "t":
@@ -977,7 +985,9 @@ def debezium_source(c: Cell, tier: str, slot: str, tables: list, arm: str = "") 
         "topic.prefix": "cdcparity", "table.include.list": ",".join(f"public.{t}" for t in tables),
         "plugin.name": "pgoutput", "slot.name": slot, "publication.name": slot.replace("_slot", "_pub"),
         "publication.autocreate.mode": "filtered",
-        "snapshot.mode": "initial" if snap else "never",
+        # Debezium 3.7 removed "never"; "no_data" streams changes with no
+        # snapshot (Connect rejected "never" in the shakedown).
+        "snapshot.mode": "initial" if snap else "no_data",
         "tombstones.on.delete": "false",
     }
     if tier == "t":
@@ -1207,7 +1217,9 @@ def dbzserver_props(c: Cell, arm: str, tables=None, slot=None, offsets="data/off
                   "debezium.transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
                   "debezium.transforms.route.regex": "cdcparity\\\\.public\\\\.bench_source_(.*)",
                   "debezium.transforms.route.replacement": "bench_dest_$1"})
-        p["debezium.sink.jdbc.collection.name.format"] = "${topic}"
+        # \${...}: Quarkus config expands ${...} itself; the JDBC sink needs the
+        # literal ${topic} (shakedown: "collection.name.format is required").
+        p["debezium.sink.jdbc.collection.name.format"] = r"\\${topic}"
         if tier == "t":
             # Debezium JDBC sink: batch.size (default 500), use.reduction.buffer
             # (collapses changes to one key within a batch). Both documented.
@@ -1256,11 +1268,12 @@ def dbzserver_service(c: Cell, arm: str) -> dict:
         # process gets its own working copy, config and offsets file.
         n = n_tables(c)
         s["volumes"][0] = "../dbzserver:/cfg:ro"
-        s["entrypoint"] = ["sh", "-c",
-                           "for i in $(seq 0 %d); do d=/tmp/dbz$i; mkdir -p $d && cp -r /debezium/. $d/ && "
-                           "cp /cfg/p$i/application.properties $d/config/application.properties && "
-                           "(cd $d && JAVA_OPTS=\"-Xmx%dm $JAVA_OPTS\" DBZ_PROC=$i ./run.sh > /prof/dbz$i.log 2>&1 &); done; wait"
-                           % (n - 1, max(96, 1536 // n))]
+        # $$: compose interpolates $name in the file; the shell gets $.
+        script = ("for i in $(seq 0 %d); do d=/tmp/dbz$i; mkdir -p $d && cp -r /debezium/. $d/ && "
+                  "cp /cfg/p$i/application.properties $d/config/application.properties && "
+                  "(cd $d && JAVA_OPTS=\"-Xmx%dm $JAVA_OPTS\" DBZ_PROC=$i ./run.sh > /prof/dbz$i.log 2>&1 &); done; wait"
+                  % (n - 1, max(96, 1536 // n)))
+        s["entrypoint"] = ["sh", "-c", script.replace("$", "$$")]
     return s
 
 
