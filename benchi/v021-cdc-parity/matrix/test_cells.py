@@ -237,9 +237,18 @@ class Generated(unittest.TestCase):
                 infra = load(os.path.join(self.arm_dir(c, a), "infra.yml"))["services"]
                 self.assertIn("registry", infra)
 
-    def test_classic_runs_in_one_cell_only(self):
+    def test_classic_runs_nowhere(self):
+        """Amendment 3: conduit-classic is not a primary, so it is dropped."""
         with_classic = [c.id for c in self.cells() if any(cells.arm_side(a) == "conduit-classic" for a in c.arms)]
-        self.assertEqual(with_classic, ["A2-pg-kafka-p1-b64"])
+        self.assertEqual(with_classic, [])
+
+    def test_trim_rounds_and_instances(self):
+        primary = {cid for cid, _, _ in cells.PRIMARY}
+        for c in self.cells():
+            if c.id in primary:
+                self.assertEqual((c.rounds, c.instances), (5, 2), c.id)
+            elif c.family not in ("H", "P"):
+                self.assertEqual((c.rounds, c.instances), (3, 1), c.id)
 
     def test_postgres_is_on_disk_and_counted_cheaply(self):
         for c in self.cells():

@@ -256,8 +256,6 @@ def build_cells() -> list:
     for d in ("kafka", "pg", "s3", "file", "http"):
         flag = d in ("kafka", "pg")
         arms = pg_arms(d, flagship=flag)
-        if d == "kafka":
-            arms += ("conduit-classic-s",)  # the one continuity cell
         cells.append(Cell(f"A2-pg-{d}-p1-b64", "A", "pg", (d,), "capacity", arms, diag=True,
                           instances=3 if d == "kafka" else (2 if d == "pg" else 1),
                           plan="flagship" if flag else "core", reference=d == "file", plugin=d == "http"))
@@ -339,15 +337,13 @@ def build_cells() -> list:
     # W: workload hold-out (mandatory before any public claim), pg -> kafka and pg -> pg.
     for d in ("kafka", "pg"):
         base = pg_arms(d, flagship=False, tiers=("s",))
-        for name, kw in (("txn1", dict(txn=1, par=4)), ("txn10", dict(txn=10, par=4)), ("txn100", dict(txn=100, par=4)),
-                         ("txn10000", dict(txn=10000)),
-                         ("updheavy", dict(insert_frac=0.2, update_frac=0.7)), ("delheavy", dict(insert_frac=0.45, update_frac=0.10)),
-                         ("wide", dict(shape="wide")), ("skew16", dict(par=16, skew=1.2))):
+        # Amendment 3 (2026-10-28): small transactions, update-heavy, wide
+        # typed rows (and the slow sink below). Deferred, not dropped from
+        # the design: txn100, txn10000, delete-heavy, skew16, the mid-run
+        # schema change and idle (the loader and generator keep them).
+        for name, kw in (("txn1", dict(txn=1, par=4)), ("txn10", dict(txn=10, par=4)),
+                         ("updheavy", dict(insert_frac=0.2, update_frac=0.7)), ("wide", dict(shape="wide"))):
             cells.append(Cell(f"W-pg-{d}-{name}", "W", "pg", (d,), "capacity", base, plan="holdout", **kw))
-    cells.append(Cell("W-pg-kafka-alter", "W", "pg", ("kafka",), "capacity", pg_arms("kafka", False, ("s",)),
-                      alter_at=CAP_WARM + CAP_WINDOW // 2, plan="holdout", note="schema evolution mid-window"))
-    cells.append(Cell("W-pg-kafka-idle", "W", "pg", ("kafka",), "idle", pg_arms("kafka", False, ("s",)), plan="holdout",
-                      note="cost of a running pipeline with no traffic (1 op/s)"))
     cells.append(Cell("W-pg-http-slowsink", "W", "pg", ("http",), "capacity", pg_arms("http", False, ("s",)),
                       sink_delay_ms=5, plan="holdout", plugin=True, note="5 ms per request at the receiver: backpressure"))
     # P: the pilot (one instance): per-arm noise, loader ceiling, WAL growth,
@@ -368,12 +364,43 @@ def build_cells() -> list:
     return cells
 
 
+# The pre-registered PRIMARY comparisons (PLAN.md section 9). Every other pair
+# is exploratory: reported, never headlined. Comparator "best-of:" means the
+# best of those arms per round (the S3 flush sweep).
+PRIMARY = [
+    ("A2-pg-kafka-p1-b64", "conduit-avro-s", "connect-avro-s"),
+    ("A2-pg-kafka-p1-b64", "conduit-avro-s", "dbzserver-avro-s"),
+    ("A2-pg-pg-p1-b64", "conduit-s", "connect-avro-s"),
+    ("A2-pg-pg-p1-b64", "conduit-s", "dbzserver-avro-s"),
+    ("B-kafka-pg-p1-b64", "conduit-s", "connect-s"),
+    ("B-kafka-s3-p1-b64", "conduit-s", "best-of:connect-s@f1k,connect-s@f10k,connect-s@f100k"),
+    ("A1-pg-kafka-ramp", "conduit-avro-s", "connect-avro-s"),
+    ("F-pg-kafka-snapshot", "conduit-avro-s", "connect-avro-s"),
+]
+
+
+def trim(cs: list) -> list:
+    """Amendment 3 (PLAN.md section 15): 5 rounds and a second instance only
+    for the cells of the 8 primary comparisons; every other measured cell 3
+    rounds on one instance. Correctness (H) and pilot (P) cells keep theirs."""
+    primary_cells = {cid for cid, _, _ in PRIMARY}
+    out = []
+    for c in cs:
+        if c.id in primary_cells:
+            out.append(replace(c, rounds=ROUNDS, instances=2))
+        elif c.family in ("H", "P"):
+            out.append(c)
+        else:
+            out.append(replace(c, rounds=3, instances=1))
+    return out
+
+
 def smoke_cells(cs: list) -> list:
     keep = {c.id for c in cs if c.family in ("H", "G")} | {
         "A2-pg-kafka-p1-b64", "A2-pg-pg-p1-b64", "A2-pg-s3-p1-b64", "A2-pg-file-p1-b64", "A2-pg-http-p1-b64",
         "A2-pg-kafka-p4-b64", "A2-pg-pg-p4-b64", "A1-pg-kafka-ramp", "B-kafka-pg-p1-b64", "B-kafka-s3-p1-b64", "B-kafka-file-p1-b64",
         "C-file-kafka-b64", "D-pg-kafka-transform", "E-pg-fanout-file-s3", "F-pg-kafka-snapshot", "F-pg-pg-snapshot",
-        "W-pg-kafka-txn1", "W-pg-kafka-wide", "W-pg-kafka-alter", "W-pg-kafka-idle", "P-pg-kafka-p1-b64"}
+        "W-pg-kafka-txn1", "W-pg-kafka-wide", "W-pg-http-slowsink", "P-pg-kafka-p1-b64"}
     out = []
     for c in cs:
         if c.id in keep:
@@ -410,22 +437,9 @@ def shakedown_cells(cs: list) -> list:
 if os.environ.get("MATRIX_PLAN") == "shakedown":
     CELLS = shakedown_cells(build_cells())
 else:
-    CELLS = smoke_cells(build_cells()) if SMOKE else build_cells()
+    CELLS = smoke_cells(build_cells()) if SMOKE else trim(build_cells())
 BY_ID = {c.id: c for c in CELLS}
 
-# The pre-registered PRIMARY comparisons (PLAN.md section 9). Every other pair
-# is exploratory: reported, never headlined. Comparator "best-of:" means the
-# best of those arms per round (the S3 flush sweep).
-PRIMARY = [
-    ("A2-pg-kafka-p1-b64", "conduit-avro-s", "connect-avro-s"),
-    ("A2-pg-kafka-p1-b64", "conduit-avro-s", "dbzserver-avro-s"),
-    ("A2-pg-pg-p1-b64", "conduit-s", "connect-avro-s"),
-    ("A2-pg-pg-p1-b64", "conduit-s", "dbzserver-avro-s"),
-    ("B-kafka-pg-p1-b64", "conduit-s", "connect-s"),
-    ("B-kafka-s3-p1-b64", "conduit-s", "best-of:connect-s@f1k,connect-s@f10k,connect-s@f100k"),
-    ("A1-pg-kafka-ramp", "conduit-avro-s", "connect-avro-s"),
-    ("F-pg-kafka-snapshot", "conduit-avro-s", "connect-avro-s"),
-]
 
 
 def plan_cells(plan: str) -> list:
@@ -435,8 +449,8 @@ def plan_cells(plan: str) -> list:
         return shakedown_cells(build_cells())
     order = ["pilot", "flagship", "core", "holdout"]
     if plan == "all":
-        return [c for c in build_cells() if c.plan in order]
-    return [c for c in build_cells() if c.plan == plan]
+        return [c for c in trim(build_cells()) if c.plan in order]
+    return [c for c in trim(build_cells()) if c.plan == plan]
 
 
 # ---------------------------------------------------------------- run order

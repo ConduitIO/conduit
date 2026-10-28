@@ -90,6 +90,24 @@ done
 
 python3 "$HERE/envspec.py" "$ROOT" "$LOADER_BIN" > "$OUT/environment.txt"
 
+# Spot: watch for the two-minute interruption notice and say so in the log.
+( while true; do
+    T=$(curl -s -m 2 -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' http://169.254.169.254/latest/api/token 2>/dev/null)
+    if curl -sf -m 2 -H "X-aws-ec2-metadata-token: $T" http://169.254.169.254/latest/meta-data/spot/instance-action >/dev/null 2>&1; then
+      log "SPOT INTERRUPTION notice: the current cell will be rerun on resume"; break
+    fi
+    sleep 5
+  done ) &
+
+# Resume after an interruption: cells already DONE in S3 are skipped; a cell
+# with runs in S3 but no DONE was interrupted, so its partial runs are removed
+# and it runs again from the start (no mixing of runs across instances).
+if [ -n "${MATRIX_S3:-}" ]; then
+  aws s3 ls --recursive "$MATRIX_S3/shard-$I/" 2>/dev/null | awk '{print $4}' | grep '/DONE$' | while read -r k; do
+    d="$OUT/$(basename "$(dirname "$k")")"; mkdir -p "$d"; touch "$d/DONE"
+  done
+fi
+
 mapfile -t UNITS < <(python3 "$HERE/cells.py" shard "$K" "$I" --plan "$PLAN")
 log "cells: ${#UNITS[@]}"
 for u in "${UNITS[@]}"; do
@@ -97,6 +115,8 @@ for u in "${UNITS[@]}"; do
   d="$OUT/$cell$([ "$rep" != 0 ] && echo "-rep$rep")"
   if [ -f "$d/DONE" ]; then log "skip $cell (done)"; continue; fi
   log "cell $cell rep $rep"
+  [ -n "${MATRIX_S3:-}" ] && aws s3 rm --quiet --recursive "$MATRIX_S3/shard-$I/$(basename "$d")/" 2>/dev/null
+  rm -rf "$d"
   bash "$HERE/run-cell.sh" "$cell" "$OUT" "$rep"
   log "cell $cell done"
   [ -n "${MATRIX_S3:-}" ] && aws s3 sync --quiet "$d" "$MATRIX_S3/shard-$I/$(basename "$d")"

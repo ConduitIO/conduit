@@ -96,7 +96,22 @@ resource "aws_instance" "bench" {
   vpc_security_group_ids               = [aws_security_group.bench.id]
   iam_instance_profile                 = aws_iam_instance_profile.bench.name
   instance_initiated_shutdown_behavior = "terminate"
-  associate_public_ip_address          = true # egress to GitHub, quay.io, Docker Hub; there is no ingress rule
+
+  # Spot by default (var.market); launch.sh falls back to on-demand only after
+  # two spot capacity failures, and records which market each launch used. An
+  # interrupted instance loses only its current cell (run-shard.sh resumes
+  # from the DONE markers in S3; aws/resume.sh relaunches).
+  dynamic "instance_market_options" {
+    for_each = var.market == "spot" ? [1] : []
+    content {
+      market_type = "spot"
+      spot_options {
+        spot_instance_type             = "one-time"
+        instance_interruption_behavior = "terminate"
+      }
+    }
+  }
+  associate_public_ip_address = true # egress to GitHub, quay.io, Docker Hub; there is no ingress rule
 
   metadata_options {
     http_tokens = "required"
@@ -106,8 +121,8 @@ resource "aws_instance" "bench" {
   root_block_device {
     volume_type           = "gp3"
     volume_size           = 120
-    iops                  = 6000
-    throughput            = 500
+    iops                  = 3000 # baseline: Docker's root is not the IO under test
+    throughput            = 125
     delete_on_termination = true
     tags                  = { "conduit-bench" = var.run_id, "role" = "root" }
   }

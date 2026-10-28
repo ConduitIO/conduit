@@ -1,7 +1,16 @@
 # Parity matrix: pre-registration
 
-**Status: pre-registered, no data. Amended twice, before any data, after two
-rounds of independent adversarial review (section 15). Tag: matrix-plan-v3.** Every cell below will be
+**Status: pre-registered, no data. Amended three times before any data: twice
+after independent adversarial review, once to trim the plan and move to spot
+instances (section 15, amendment 3). Tag: matrix-plan-v3.**
+
+**Sequencing (amendment 3).** The smoke run validates the harness only
+(correctness, recovery, Avro parity, every wiring path); its numbers are never
+results and it may run on any Conduit version. The pilot, flagship, core and
+hold-out run only after Conduit `main` ships the connectors on SDK v0.18.1 with
+default source batching: the matrix measures shipped defaults, and running it
+on the pre-batching release would publish numbers for a version no user will
+run. Every cell below will be
 reported, including cells Conduit loses. A cell dropped, added or re-run after
 data exists is recorded in the change log, with the reason, before its
 results are used. The plan's commit is tagged; every run records the harness
@@ -219,55 +228,55 @@ used: with more arms than rounds it does not give every arm every position.
 
 | cell | plan | mode | source -> dest | shape / workload | arms | rounds | instances | diag | label |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| A1-pg-kafka-ramp | flagship | ramp | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, connect-avro-s-aa, dbzserver-avro-s-aa | 5 | 1 | - | primary |
-| A1-pg-pg-ramp | core | ramp | pg -> pg | 1 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
-| A1-pg-s3-ramp | core | ramp | pg -> s3 | 1 tables, 64 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-s-aa | 5 | 1 | - |  |
-| A1-pg-file-ramp | core | ramp | pg -> file | 1 tables, 64 B | conduit-s, connect-s, conduit-s-aa | 5 | 1 | - | reference |
-| A1-pg-http-ramp | core | ramp | pg -> http | 1 tables, 64 B | conduit-s, dbzserver-s, dbzserver-native-s, conduit-s-aa | 5 | 1 | - | plugin |
-| A2-pg-kafka-p1-b64 | flagship | capacity | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, connect-avro-s-aa, dbzserver-avro-s-aa, conduit-classic-s | 5 | 3 | yes | primary |
-| A2-pg-kafka-p4-b64 | holdout | capacity | pg -> kafka | 4 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, dbzserver-avro-xn-s | 5 | 1 | - |  |
-| A2-pg-kafka-p16-b64 | holdout | capacity | pg -> kafka | 16 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, dbzserver-avro-xn-s | 5 | 1 | - |  |
-| A2-pg-kafka-p1-b1024 | holdout | capacity | pg -> kafka | 1 tables, 1024 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
-| A2-pg-kafka-p1-b16384 | holdout | capacity | pg -> kafka | 1 tables, 16384 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
+| A1-pg-kafka-ramp | flagship | ramp | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, connect-avro-s-aa, dbzserver-avro-s-aa | 5 | 2 | - | primary |
+| A1-pg-pg-ramp | core | ramp | pg -> pg | 1 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 3 | 1 | - |  |
+| A1-pg-s3-ramp | core | ramp | pg -> s3 | 1 tables, 64 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-s-aa | 3 | 1 | - |  |
+| A1-pg-file-ramp | core | ramp | pg -> file | 1 tables, 64 B | conduit-s, connect-s, conduit-s-aa | 3 | 1 | - | reference |
+| A1-pg-http-ramp | core | ramp | pg -> http | 1 tables, 64 B | conduit-s, dbzserver-s, dbzserver-native-s, conduit-s-aa | 3 | 1 | - | plugin |
+| A2-pg-kafka-p1-b64 | flagship | capacity | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, connect-avro-s-aa, dbzserver-avro-s-aa | 5 | 2 | yes | primary |
+| A2-pg-kafka-p4-b64 | holdout | capacity | pg -> kafka | 4 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, dbzserver-avro-xn-s | 3 | 1 | - |  |
+| A2-pg-kafka-p16-b64 | holdout | capacity | pg -> kafka | 16 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, dbzserver-avro-xn-s | 3 | 1 | - |  |
+| A2-pg-kafka-p1-b1024 | holdout | capacity | pg -> kafka | 1 tables, 1024 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 3 | 1 | - |  |
+| A2-pg-kafka-p1-b16384 | holdout | capacity | pg -> kafka | 1 tables, 16384 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 3 | 1 | - |  |
 | A2-pg-pg-p1-b64 | flagship | capacity | pg -> pg | 1 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa, connect-avro-s-aa, dbzserver-avro-s-aa | 5 | 2 | yes | primary |
-| A2-pg-pg-p4-b64 | holdout | capacity | pg -> pg | 4 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa, dbzserver-avro-xn-s | 5 | 1 | - |  |
-| A2-pg-pg-p16-b64 | holdout | capacity | pg -> pg | 16 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa, dbzserver-avro-xn-s | 5 | 1 | - |  |
-| A2-pg-pg-p1-b1024 | holdout | capacity | pg -> pg | 1 tables, 1024 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
-| A2-pg-pg-p1-b16384 | holdout | capacity | pg -> pg | 1 tables, 16384 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
-| A2-pg-s3-p1-b64 | core | capacity | pg -> s3 | 1 tables, 64 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 5 | 1 | yes |  |
-| A2-pg-s3-p4-b64 | holdout | capacity | pg -> s3 | 4 tables, 64 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
-| A2-pg-s3-p16-b64 | holdout | capacity | pg -> s3 | 16 tables, 64 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
-| A2-pg-s3-p1-b1024 | holdout | capacity | pg -> s3 | 1 tables, 1024 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
-| A2-pg-s3-p1-b16384 | holdout | capacity | pg -> s3 | 1 tables, 16384 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
-| A2-pg-file-p1-b64 | core | capacity | pg -> file | 1 tables, 64 B | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | yes | reference |
-| A2-pg-file-p4-b64 | holdout | capacity | pg -> file | 4 tables, 64 B | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - | reference |
-| A2-pg-file-p16-b64 | holdout | capacity | pg -> file | 16 tables, 64 B | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - | reference |
-| A2-pg-file-p1-b1024 | holdout | capacity | pg -> file | 1 tables, 1024 B | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - | reference |
-| A2-pg-file-p1-b16384 | holdout | capacity | pg -> file | 1 tables, 16384 B | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - | reference |
-| A2-pg-http-p1-b64 | core | capacity | pg -> http | 1 tables, 64 B | conduit-s, dbzserver-s, conduit-t, dbzserver-t, dbzserver-native-s, conduit-s-aa | 5 | 1 | yes | plugin |
-| B-kafka-pg-p1-b64 | flagship | drain | kafka -> pg | 1 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa, connect-s-aa | 5 | 1 | yes | primary |
-| B-kafka-pg-p4-b64 | holdout | drain | kafka -> pg | 4 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
-| B-kafka-pg-p16-b64 | holdout | drain | kafka -> pg | 16 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
-| B-kafka-pg-p1-b1024 | holdout | drain | kafka -> pg | 1 partitions, 1024 B, backlog 12 GiB (8,741,453 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
-| B-kafka-pg-p1-b16384 | holdout | drain | kafka -> pg | 1 partitions, 16384 B, backlog 12 GiB (765,409 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
-| B-kafka-s3-p1-b64 | flagship | drain | kafka -> s3 | 1 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa, connect-s-aa@f10k | 5 | 1 | yes | primary |
-| B-kafka-s3-p4-b64 | holdout | drain | kafka -> s3 | 4 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
-| B-kafka-s3-p16-b64 | holdout | drain | kafka -> s3 | 16 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
-| B-kafka-s3-p1-b1024 | holdout | drain | kafka -> s3 | 1 partitions, 1024 B, backlog 12 GiB (8,741,453 records) | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
-| B-kafka-s3-p1-b16384 | holdout | drain | kafka -> s3 | 1 partitions, 16384 B, backlog 12 GiB (765,409 records) | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - |  |
-| B-kafka-file-p1-b64 | core | drain | kafka -> file | 1 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | yes | reference |
-| B-kafka-file-p1-b1024 | holdout | drain | kafka -> file | 1 partitions, 1024 B, backlog 12 GiB (8,741,453 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - | reference |
-| B-kafka-file-p1-b16384 | holdout | drain | kafka -> file | 1 partitions, 16384 B, backlog 12 GiB (765,409 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - | reference |
-| C-file-kafka-b64 | core | drain | file -> kafka | 1 partitions, 64 B, backlog 8 GiB (91,382,282 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | yes | reference |
-| C-file-kafka-b1024 | holdout | drain | file -> kafka | 1 partitions, 1024 B, backlog 8 GiB (8,149,843 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - | reference |
-| C-file-kafka-b16384 | holdout | drain | file -> kafka | 1 partitions, 16384 B, backlog 8 GiB (523,329 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 5 | 1 | - | reference |
-| D-pg-kafka-transform | core | capacity | pg -> kafka (transform) | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-avro-s-aa | 5 | 1 | yes |  |
-| E-pg-fanout-file-s3 | core | capacity | pg -> file+s3 | 1 tables, 64 B | conduit-s, connect-s@f10k, conduit-t, connect-t, conduit-s-aa | 5 | 1 | yes |  |
-| F-pg-kafka-snapshot | flagship | snapshot | pg -> kafka | 10,000,000 rows, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - | primary |
-| F-pg-pg-snapshot | core | snapshot | pg -> pg | 10,000,000 rows, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
-| G-pg-kafka-kill9 | flagship | recover | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, connect-avro-e, dbzserver-avro-e | 5 | 1 | - |  |
-| G-pg-pg-kill9 | core | recover | pg -> pg | 1 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, connect-avro-e, dbzserver-avro-e | 5 | 1 | - |  |
-| G-pg-kafka-kill9-snapshot | core | recover-snapshot | pg -> kafka | 10,000,000 rows, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, connect-avro-e, dbzserver-avro-e | 5 | 1 | - |  |
+| A2-pg-pg-p4-b64 | holdout | capacity | pg -> pg | 4 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa, dbzserver-avro-xn-s | 3 | 1 | - |  |
+| A2-pg-pg-p16-b64 | holdout | capacity | pg -> pg | 16 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa, dbzserver-avro-xn-s | 3 | 1 | - |  |
+| A2-pg-pg-p1-b1024 | holdout | capacity | pg -> pg | 1 tables, 1024 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa | 3 | 1 | - |  |
+| A2-pg-pg-p1-b16384 | holdout | capacity | pg -> pg | 1 tables, 16384 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa | 3 | 1 | - |  |
+| A2-pg-s3-p1-b64 | core | capacity | pg -> s3 | 1 tables, 64 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 3 | 1 | yes |  |
+| A2-pg-s3-p4-b64 | holdout | capacity | pg -> s3 | 4 tables, 64 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 3 | 1 | - |  |
+| A2-pg-s3-p16-b64 | holdout | capacity | pg -> s3 | 16 tables, 64 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 3 | 1 | - |  |
+| A2-pg-s3-p1-b1024 | holdout | capacity | pg -> s3 | 1 tables, 1024 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 3 | 1 | - |  |
+| A2-pg-s3-p1-b16384 | holdout | capacity | pg -> s3 | 1 tables, 16384 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 3 | 1 | - |  |
+| A2-pg-file-p1-b64 | core | capacity | pg -> file | 1 tables, 64 B | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 3 | 1 | yes | reference |
+| A2-pg-file-p4-b64 | holdout | capacity | pg -> file | 4 tables, 64 B | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 3 | 1 | - | reference |
+| A2-pg-file-p16-b64 | holdout | capacity | pg -> file | 16 tables, 64 B | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 3 | 1 | - | reference |
+| A2-pg-file-p1-b1024 | holdout | capacity | pg -> file | 1 tables, 1024 B | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 3 | 1 | - | reference |
+| A2-pg-file-p1-b16384 | holdout | capacity | pg -> file | 1 tables, 16384 B | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 3 | 1 | - | reference |
+| A2-pg-http-p1-b64 | core | capacity | pg -> http | 1 tables, 64 B | conduit-s, dbzserver-s, conduit-t, dbzserver-t, dbzserver-native-s, conduit-s-aa | 3 | 1 | yes | plugin |
+| B-kafka-pg-p1-b64 | flagship | drain | kafka -> pg | 1 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa, connect-s-aa | 5 | 2 | yes | primary |
+| B-kafka-pg-p4-b64 | holdout | drain | kafka -> pg | 4 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 3 | 1 | - |  |
+| B-kafka-pg-p16-b64 | holdout | drain | kafka -> pg | 16 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 3 | 1 | - |  |
+| B-kafka-pg-p1-b1024 | holdout | drain | kafka -> pg | 1 partitions, 1024 B, backlog 12 GiB (8,741,453 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 3 | 1 | - |  |
+| B-kafka-pg-p1-b16384 | holdout | drain | kafka -> pg | 1 partitions, 16384 B, backlog 12 GiB (765,409 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 3 | 1 | - |  |
+| B-kafka-s3-p1-b64 | flagship | drain | kafka -> s3 | 1 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa, connect-s-aa@f10k | 5 | 2 | yes | primary |
+| B-kafka-s3-p4-b64 | holdout | drain | kafka -> s3 | 4 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 3 | 1 | - |  |
+| B-kafka-s3-p16-b64 | holdout | drain | kafka -> s3 | 16 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 3 | 1 | - |  |
+| B-kafka-s3-p1-b1024 | holdout | drain | kafka -> s3 | 1 partitions, 1024 B, backlog 12 GiB (8,741,453 records) | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 3 | 1 | - |  |
+| B-kafka-s3-p1-b16384 | holdout | drain | kafka -> s3 | 1 partitions, 16384 B, backlog 12 GiB (765,409 records) | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t, conduit-s-aa | 3 | 1 | - |  |
+| B-kafka-file-p1-b64 | core | drain | kafka -> file | 1 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 3 | 1 | yes | reference |
+| B-kafka-file-p1-b1024 | holdout | drain | kafka -> file | 1 partitions, 1024 B, backlog 12 GiB (8,741,453 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 3 | 1 | - | reference |
+| B-kafka-file-p1-b16384 | holdout | drain | kafka -> file | 1 partitions, 16384 B, backlog 12 GiB (765,409 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 3 | 1 | - | reference |
+| C-file-kafka-b64 | core | drain | file -> kafka | 1 partitions, 64 B, backlog 8 GiB (91,382,282 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 3 | 1 | yes | reference |
+| C-file-kafka-b1024 | holdout | drain | file -> kafka | 1 partitions, 1024 B, backlog 8 GiB (8,149,843 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 3 | 1 | - | reference |
+| C-file-kafka-b16384 | holdout | drain | file -> kafka | 1 partitions, 16384 B, backlog 8 GiB (523,329 records) | conduit-s, connect-s, conduit-t, connect-t, conduit-s-aa | 3 | 1 | - | reference |
+| D-pg-kafka-transform | core | capacity | pg -> kafka (transform) | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-avro-s-aa | 3 | 1 | yes |  |
+| E-pg-fanout-file-s3 | core | capacity | pg -> file+s3 | 1 tables, 64 B | conduit-s, connect-s@f10k, conduit-t, connect-t, conduit-s-aa | 3 | 1 | yes |  |
+| F-pg-kafka-snapshot | flagship | snapshot | pg -> kafka | 10,000,000 rows, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 2 | - | primary |
+| F-pg-pg-snapshot | core | snapshot | pg -> pg | 10,000,000 rows, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa | 3 | 1 | - |  |
+| G-pg-kafka-kill9 | flagship | recover | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, connect-avro-e, dbzserver-avro-e | 3 | 1 | - |  |
+| G-pg-pg-kill9 | core | recover | pg -> pg | 1 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, connect-avro-e, dbzserver-avro-e | 3 | 1 | - |  |
+| G-pg-kafka-kill9-snapshot | core | recover-snapshot | pg -> kafka | 10,000,000 rows, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, connect-avro-e, dbzserver-avro-e | 3 | 1 | - |  |
 | H-pg-kafka-verify | core | correct | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s | 1 | 1 | - |  |
 | H-pg-pg-verify | core | correct | pg -> pg | 1 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s | 1 | 1 | - |  |
 | H-pg-s3-verify | core | correct | pg -> s3 | 1 tables, 64 B | conduit-s, connect-s@f1k, connect-s@f10k, connect-s@f100k, conduit-t, connect-t | 1 | 1 | - |  |
@@ -282,25 +291,15 @@ used: with more arms than rounds it does not give every arm every position.
 | H-pg-pg-p4-verify | core | correct | pg -> pg | 4 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t | 1 | 1 | - |  |
 | H-pg-kafka-p4-verify | core | correct | pg -> kafka | 4 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t | 1 | 1 | - |  |
 | H-pg-kafka-wide-txn1-verify | core | correct | pg -> kafka | 1 tables, 64 B, wide, txn 1 | conduit-avro-s, connect-avro-s, dbzserver-avro-s | 1 | 1 | - |  |
-| W-pg-kafka-txn1 | holdout | capacity | pg -> kafka | 4 tables, 64 B, txn 1 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
-| W-pg-kafka-txn10 | holdout | capacity | pg -> kafka | 4 tables, 64 B, txn 10 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
-| W-pg-kafka-txn100 | holdout | capacity | pg -> kafka | 4 tables, 64 B, txn 100 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
-| W-pg-kafka-txn10000 | holdout | capacity | pg -> kafka | 1 tables, 64 B, txn 10000 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
-| W-pg-kafka-updheavy | holdout | capacity | pg -> kafka | 1 tables, 64 B, mix 20/70/10 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
-| W-pg-kafka-delheavy | holdout | capacity | pg -> kafka | 1 tables, 64 B, mix 45/10/45 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
-| W-pg-kafka-wide | holdout | capacity | pg -> kafka | 1 tables, 64 B, wide | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
-| W-pg-kafka-skew16 | holdout | capacity | pg -> kafka | 16 tables, 64 B, zipf 1.2 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
-| W-pg-pg-txn1 | holdout | capacity | pg -> pg | 4 tables, 64 B, txn 1 | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
-| W-pg-pg-txn10 | holdout | capacity | pg -> pg | 4 tables, 64 B, txn 10 | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
-| W-pg-pg-txn100 | holdout | capacity | pg -> pg | 4 tables, 64 B, txn 100 | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
-| W-pg-pg-txn10000 | holdout | capacity | pg -> pg | 1 tables, 64 B, txn 10000 | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
-| W-pg-pg-updheavy | holdout | capacity | pg -> pg | 1 tables, 64 B, mix 20/70/10 | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
-| W-pg-pg-delheavy | holdout | capacity | pg -> pg | 1 tables, 64 B, mix 45/10/45 | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
-| W-pg-pg-wide | holdout | capacity | pg -> pg | 1 tables, 64 B, wide | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
-| W-pg-pg-skew16 | holdout | capacity | pg -> pg | 16 tables, 64 B, zipf 1.2 | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 5 | 1 | - |  |
-| W-pg-kafka-alter | holdout | capacity | pg -> kafka | 1 tables, 64 B, ALTER at 330s | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
-| W-pg-kafka-idle | holdout | idle | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 5 | 1 | - |  |
-| W-pg-http-slowsink | holdout | capacity | pg -> http | 1 tables, 64 B, sink delay 5 ms | conduit-s, dbzserver-s, dbzserver-native-s, conduit-s-aa | 5 | 1 | - | plugin |
+| W-pg-kafka-txn1 | holdout | capacity | pg -> kafka | 4 tables, 64 B, txn 1 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 3 | 1 | - |  |
+| W-pg-kafka-txn10 | holdout | capacity | pg -> kafka | 4 tables, 64 B, txn 10 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 3 | 1 | - |  |
+| W-pg-kafka-updheavy | holdout | capacity | pg -> kafka | 1 tables, 64 B, mix 20/70/10 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 3 | 1 | - |  |
+| W-pg-kafka-wide | holdout | capacity | pg -> kafka | 1 tables, 64 B, wide | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 3 | 1 | - |  |
+| W-pg-pg-txn1 | holdout | capacity | pg -> pg | 4 tables, 64 B, txn 1 | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 3 | 1 | - |  |
+| W-pg-pg-txn10 | holdout | capacity | pg -> pg | 4 tables, 64 B, txn 10 | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 3 | 1 | - |  |
+| W-pg-pg-updheavy | holdout | capacity | pg -> pg | 1 tables, 64 B, mix 20/70/10 | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 3 | 1 | - |  |
+| W-pg-pg-wide | holdout | capacity | pg -> pg | 1 tables, 64 B, wide | conduit-s, connect-avro-s, dbzserver-avro-s, connect-s, dbzserver-s, conduit-s-aa | 3 | 1 | - |  |
+| W-pg-http-slowsink | holdout | capacity | pg -> http | 1 tables, 64 B, sink delay 5 ms | conduit-s, dbzserver-s, dbzserver-native-s, conduit-s-aa | 3 | 1 | - | plugin |
 | P-pg-kafka-p1-b64 | pilot | capacity | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-s@i30, connect-avro-s@i30, dbzserver-avro-s@i30 | 3 | 1 | - |  |
 | P-pg-pg-p1-b64 | pilot | capacity | pg -> pg | 1 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-s@noseq, connect-avro-s@noseq, dbzserver-avro-s@noseq | 3 | 1 | - |  |
 | P-kafka-pg-p1-b64 | pilot | drain | kafka -> pg | 1 partitions, 64 B, backlog 12 GiB (25,067,902 records) | conduit-s, connect-s | 2 | 1 | - |  |
@@ -310,7 +309,7 @@ used: with more arms than rounds it does not give every arm every position.
 | cell | plan | mode | source -> dest | shape / workload | arms | rounds | instances | diag | label |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | A1-pg-kafka-ramp | smoke | ramp | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, connect-avro-s-aa, dbzserver-avro-s-aa | 1 | 1 | - | primary |
-| A2-pg-kafka-p1-b64 | smoke | capacity | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, connect-avro-s-aa, dbzserver-avro-s-aa, conduit-classic-s | 1 | 1 | yes | primary |
+| A2-pg-kafka-p1-b64 | smoke | capacity | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, connect-avro-s-aa, dbzserver-avro-s-aa | 1 | 1 | yes | primary |
 | A2-pg-kafka-p4-b64 | smoke | capacity | pg -> kafka | 4 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa, dbzserver-avro-xn-s | 1 | 1 | - |  |
 | A2-pg-pg-p1-b64 | smoke | capacity | pg -> pg | 1 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa, connect-avro-s-aa, dbzserver-avro-s-aa | 1 | 1 | - | primary |
 | A2-pg-pg-p4-b64 | smoke | capacity | pg -> pg | 4 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, conduit-s-aa, dbzserver-avro-xn-s | 1 | 1 | - |  |
@@ -344,18 +343,16 @@ used: with more arms than rounds it does not give every arm every position.
 | H-pg-kafka-wide-txn1-verify | smoke | correct | pg -> kafka | 1 tables, 64 B, wide, txn 1 | conduit-avro-s, connect-avro-s, dbzserver-avro-s | 1 | 1 | - |  |
 | W-pg-kafka-txn1 | smoke | capacity | pg -> kafka | 4 tables, 64 B, txn 1 | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 1 | 1 | - |  |
 | W-pg-kafka-wide | smoke | capacity | pg -> kafka | 1 tables, 64 B, wide | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 1 | 1 | - |  |
-| W-pg-kafka-alter | smoke | capacity | pg -> kafka | 1 tables, 64 B, ALTER at 60s | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 1 | 1 | - |  |
-| W-pg-kafka-idle | smoke | idle | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-s, connect-s, dbzserver-s, conduit-avro-s-aa | 1 | 1 | - |  |
+| W-pg-http-slowsink | smoke | capacity | pg -> http | 1 tables, 64 B, sink delay 5 ms | conduit-s, dbzserver-s, dbzserver-native-s, conduit-s-aa | 1 | 1 | - | plugin |
 | P-pg-kafka-p1-b64 | smoke | capacity | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-s@i30, connect-avro-s@i30, dbzserver-avro-s@i30 | 1 | 1 | - |  |
 
 ### Shakedown (wiring only)
 
 | cell | plan | mode | source -> dest | shape / workload | arms | rounds | instances | diag | label |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| A2-pg-kafka-p1-b64 | shakedown | capacity | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, conduit-avro-t, connect-avro-t, dbzserver-avro-t, conduit-s, connect-s, dbzserver-s, conduit-classic-s | 1 | 1 | yes | primary |
-| A2-pg-pg-p4-b64 | shakedown | capacity | pg -> pg | 4 tables, 64 B | conduit-s, connect-avro-s, dbzserver-avro-s, conduit-t, connect-avro-t, dbzserver-avro-t, connect-s, dbzserver-s, dbzserver-avro-xn-s | 1 | 1 | - |  |
-| B-kafka-pg-p1-b64 | shakedown | drain | kafka -> pg | 1 partitions, 64 B, backlog 0 GiB (522,247 records) | conduit-s, connect-s, conduit-t, connect-t | 1 | 1 | - | primary |
-| G-pg-kafka-kill9 | shakedown | recover | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s, connect-avro-e, dbzserver-avro-e | 1 | 1 | - |  |
+| A2-pg-kafka-p1-b64 | shakedown | capacity | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s | 1 | 1 | yes | primary |
+| A2-pg-pg-p4-b64 | shakedown | capacity | pg -> pg | 4 tables, 64 B | connect-avro-s, dbzserver-avro-s, dbzserver-avro-xn-s | 1 | 1 | - |  |
+| G-pg-kafka-kill9 | shakedown | recover | pg -> kafka | 1 tables, 64 B | conduit-avro-s, connect-avro-s, dbzserver-avro-s | 1 | 1 | - |  |
 
 ## 8. Load modes
 
@@ -500,10 +497,20 @@ Measured runs take no profile and no scrape on any side.
 `cells.py estimate --plan P` (c6i.4xlarge, $0.848/h; run lengths are
 estimates until the pilot):
 
+Prices (amendment 3): spot c6i.4xlarge in us-west-1, $0.28-0.29/h over
+2026-10-27/28 (`aws ec2 describe-spot-price-history`, Linux/UNIX), estimated at
+$0.29/h, plus about $0.23/h of EBS per instance (three gp3 data volumes at 6000
+IOPS / 500 MB/s, root at baseline): **$0.52 per instance-hour**. On-demand
+fallback: $0.848 + $0.23 = $1.08/h. The table below is at $0.52/h.
+
 | step | plan | what | runs | instance-h | cost | wall time |
 | --- | --- | --- | --- | --- | --- | --- |
-| 0 | shakedown | 4 cells (A2-pg-kafka, A2-pg-pg multi-table, B-kafka-pg, G-pg-kafka-kill9), smoke length, A/A twins dropped, 1 instance, $5 cap: wiring only, never results or a gate | 38 | 4 | < $5 | 4 h |
-| 1 | smoke | every H and G cell, plus one cell per family and side, 1 round, short | 257 | 35 | $30 per pass; budget $60-90 (2-3 passes expected: every fix changes the hash) | 18 h on 2 |
+| 0 | shakedown | the least-proven wiring paths, smoke length, 1 instance: wiring only, never results or a gate | - | - | < $5 per pass | 1-2 h |
+| 1 | smoke | every H and G cell, plus one cell per family and side, 1 round, short (harness validation only) | 245 | 34 | $18 per pass | 17 h on 2, 9 h on 4 |
+| 2 | pilot | after the SDK v0.18.1 connectors ship | 54 | 11 | $6 | 6 h on 2 |
+| 3 | flagship | the 6 cells of the 8 primary comparisons, 5 rounds, each on 2 instances | 761 | 169 | $88 | 44 h on 4 |
+| 4 | core (trimmed) | the other base cells, 3 rounds | 406 | 93 | $48 | 24 h on 4 |
+| 5 | holdout (trimmed) | shape sweeps 3 rounds; workload variants trimmed (amendment 3) | 1,008 | 195 | $101 | 51 h on 4 |
 | 2 | pilot | 1 instance: per-arm noise, loader ceiling, WAL growth, fill and drain rates, counting-overhead control | 30 | 6 | $5 | 6 h |
 | 3 | flagship | A1-pg-kafka-ramp, A2-pg-kafka (3 instances), A2-pg-pg (2), B-kafka-pg, B-kafka-s3, F-pg-kafka, G-pg-kafka | 664 | 141 | $120 | 71 h on 2, 39 h on 4 |
 | 4 | core | the rest of the base cells | 548 | 127 | $108 | 64 h on 2, 32 h on 4 |
@@ -565,6 +572,21 @@ replaces the column. The 32-vCPU quota allows 2 x c6i.4xlarge at a time.
   intermediate updates yet reaches the same frontier. It adds a generated
   column and an index write to every destination write on every side; the
   pilot measures that cost (`@noseq`).
+- **Spot instances**: a spot interruption terminates the instance; the cell
+  that was running is discarded and rerun from the start on a new instance
+  (`aws/resume.sh`; cells already DONE in S3 are kept), so a cell's rounds
+  always come from one instance. Which market each launch used is recorded in
+  the bucket. Spot hosts may differ in noise from on-demand ones; steal is
+  recorded per run.
+- **Per-run image pins**: quay.io rebuilds the Debezium 3.7.0.Final images on
+  refreshed bases and deletes superseded manifests, so the digests are
+  resolved once per run (`images/pin.py`) and recorded, not fixed in the
+  repository; two runs a day apart may use different base-image builds of the
+  same Debezium version.
+- **Debezium Server image additions**: the stock 3.7.0.Final Server image
+  lacks the Apicurio Avro converter and Debezium's own SMT module
+  (`debezium-connect-plugins`, where ExtractNewRecordState moved in 3.7); the
+  matrix image adds both, at the versions Debezium's own 3.7 images use.
 - **Gates are local files and Terraform preconditions**: someone with the
   repository can bypass them; they stop accidents, not intent. Pilot to
   flagship is a recorded judgment, not a machine gate.
@@ -587,6 +609,7 @@ replaces the column. The 32-vCPU quota allows 2 x c6i.4xlarge at a time.
 | 2026-10-27 | plan written (commit c49b1986) | | no |
 | 2026-10-27 | amended after the adversarial methodology review (`bench-methodology-review.md`); every item and its resolution below | review | no |
 | 2026-10-27 | amended after review round 2 (conditional no-go); tag matrix-plan-v3; items below | review | no |
+| 2026-10-28 | amendment 3: trim, spot, sequencing (below) | budget and Conduit release sequencing, decided by DeVaris | no (shakedown runs only: wiring, no results) |
 
 ### Review items and resolutions
 
@@ -640,3 +663,34 @@ kit commit, the harness hash and the analysis version are recorded in
 | R2-M3 the diag binary is built differently | Fixed: generated from the repository Dockerfile with only the pprof file and `-tags benchdiag` added to the same `make build` (`images/diag-dockerfile.py`); profiles labelled indicative |
 | R2-M4 gate bypass, smoke cost, registry unproven | The gate is also a Terraform precondition, and each instance checks its kit's hash against the declared one; the smoke budget is $60-90 for the expected 2-3 passes, preceded by a < $5 shakedown; the registry is named by the bottleneck label when it is the busiest infrastructure container; Conduit uses one subject per table like the Apicurio converter |
 | minors | Diag runs expose the API and Jolokia on 0.0.0.0 inside an egress-only security group (stated); the empty `CONDUIT_API_TOKEN_FILE` in measured runs is checked by the shakedown |
+
+### Amendment 3 (2026-10-28, before any result)
+
+| change | detail |
+| --- | --- |
+| sequencing | smoke validates the harness only; pilot, flagship, core and hold-out wait until Conduit main ships the SDK v0.18.1 connectors with default source batching |
+| rounds and instances | 5 rounds and a second-instance repeat only for the cells of the 8 primary comparisons (A1-pg-kafka-ramp, A2-pg-kafka-p1-b64, A2-pg-pg-p1-b64, B-kafka-pg-p1-b64, B-kafka-s3-p1-b64, F-pg-kafka-snapshot); every other measured cell 3 rounds on one instance (labels in those cells need all 3 rounds to agree; they are exploratory). Correctness cells keep 1 round per arm, pilot cells their own counts. A2-pg-kafka-p1-b64 goes from 3 instances to 2 |
+| conduit-classic | dropped everywhere, including the A2-pg-kafka continuity arm (not a primary comparison; perf work is arch-v2 only). H1 is withdrawn untested |
+| hold-out | the workload variants are trimmed to small transactions (1 and 10 statements per transaction), update-heavy, wide typed rows and the slow sink. Deferred (designed, not scheduled): 100- and 10,000-statement transactions, delete-heavy, Zipf skew over 16 tables, the mid-run schema change, idle. The shape sweeps (parallelism 4 and 16, payloads 1 KiB and 16 KiB) stay, at 3 rounds |
+| market | spot instances, on-demand only after two spot capacity failures; an interrupted cell reruns from the start (section 14) |
+| estimate | section 12, at $0.52 per instance-hour (spot plus EBS) |
+
+### Shakedown findings (wiring, before any result)
+
+| finding | fix |
+| --- | --- |
+| macOS tar added `._*` files to the kit; the instance's hash refused it | tar without macOS metadata; the hash ignores `._*` |
+| results synced per cell: a hung run would lose a cell | every run is published as it ends; live view every 60 s |
+| `timeout` put benchi outside the pty's foreground group: its UI stopped on SIGTTIN and every run hung | `timeout --foreground -k 60` |
+| the instance ran the smoke arm list for the shakedown | runs use the plan's own cells (`MATRIX_PLAN`) |
+| Apicurio 3.3.3 never became healthy on its health paths | readiness = the registry API answers |
+| Connect: plugin directories owned by root; the Apicurio converter setting could not link into them | owned by the kafka user |
+| Conduit templates compared the operation enum with a string; and a template variable `$op` was expanded by Conduit as an environment variable | `printf "%v" .Operation`, no template variables |
+| Debezium Server: a directory mount hid the image's config files | mount only application.properties |
+| Debezium Server image: no Apicurio converter, no `debezium-connect-plugins` (ExtractNewRecordState) | added to the matrix image (section 14) |
+| quay.io deleted the pinned Debezium manifests within a day | per-run pins (section 14) |
+| Debezium 3.7 removed `snapshot.mode=never` | `no_data` |
+| Debezium Server JDBC: `${topic}` expanded by Quarkus config | escaped |
+| the scale-out arm's entrypoint `$` interpolated by compose | `$$` |
+| Conduit: `avro.encode` leaves the source schema metadata; the destination re-decodes the Avro bytes and fails every record | `sdk.schema.extract.payload.enabled=false` on that destination; reported as a Conduit defect |
+| recovery runs without a first record waited out every timeout | aborted at once, recorded as failed |

@@ -23,3 +23,6 @@ tfplan
 
 # Per-run image pins, written by aws/launch.sh into the kit.
 /matrix/images/PINS.json
+
+# Per-run launch state (kit, vars) for aws/resume.sh.
+/matrix/aws/runs/

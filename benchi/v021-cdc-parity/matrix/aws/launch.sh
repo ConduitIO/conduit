@@ -56,11 +56,40 @@ print(int(max(l for l, _ in cells.shard($N, '$PLAN')) * 1.25 + cells.SETUP_MIN +
 ")
 [ -n "${MAX_MINUTES:-}" ] && [ "$MAX_MINUTES" -lt "$MAXMIN" ] && MAXMIN=$MAX_MINUTES  # a budget cap
 echo "run $RUN_ID: $N x $TYPE, plan $PLAN, harness $HASH, cap $MAXMIN min per instance"
+# The run's kit and vars are kept (aws/runs/RUN_ID/, gitignored) so
+# aws/resume.sh can relaunch an interrupted spot instance on the same kit.
+RUNDIR="$HERE/runs/$RUN_ID"; mkdir -p "$RUNDIR"; cp "$WORK/kit.tgz" "$RUNDIR/kit.tgz"
+cat > "$RUNDIR/vars" <<VARS
+run_id=$RUN_ID
+conduit_sha=$SHA
+instances=$N
+plan=$PLAN
+instance_type=$TYPE
+max_minutes=$MAXMIN
+kit_tarball=$RUNDIR/kit.tgz
+harness_hash=$HASH
+gate_file=${GATE:+$(cd "$(dirname "$GATE")" && pwd)/$(basename "$GATE")}
+VARS
 cd "$HERE"
 terraform init -input=false >/dev/null
 terraform workspace select -or-create "$RUN_ID" >/dev/null
-terraform apply -input=false -auto-approve \
-  -var "run_id=$RUN_ID" -var "conduit_sha=$SHA" -var "instances=$N" -var "plan=$PLAN" \
-  -var "instance_type=$TYPE" -var "max_minutes=$MAXMIN" -var "kit_tarball=$WORK/kit.tgz" \
-  -var "harness_hash=$HASH" -var "gate_file=${GATE:+$(cd "$(dirname "$GATE")" && pwd)/$(basename "$GATE")}"
+# Spot first; on a capacity failure retry spot once, then on-demand. The
+# market used is recorded in the bucket (MARKET) and in the run's vars.
+apply() { # market
+  local args=() k v
+  while IFS='=' read -r k v; do args+=(-var "$k=$v"); done < "$RUNDIR/vars"
+  terraform apply -input=false -auto-approve "${args[@]}" -var "market=$1" 2>&1 | tee "$RUNDIR/apply-$1.log"
+  return "${PIPESTATUS[0]}"
+}
+MARKET=""
+for m in spot spot on-demand; do
+  if apply "$m"; then MARKET=$m; break; fi
+  grep -qiE 'InsufficientInstanceCapacity|capacity-not-available|MaxSpotInstanceCountExceeded|SpotMaxPriceTooLow|UnfulfillableCapacity|InsufficientCapacity' "$RUNDIR/apply-$m.log" || { echo "apply failed (not a capacity error); see $RUNDIR/apply-$m.log" >&2; exit 1; }
+  echo "spot capacity failure ($m); retrying" >&2
+done
+[ -n "$MARKET" ] || { echo "no capacity" >&2; exit 1; }
+echo "market=$MARKET" >> "$RUNDIR/vars"
+B=$(terraform output -raw bucket)
+echo "$MARKET $(date -u +%FT%TZ)" | aws s3 cp --quiet - "s3://$B/MARKET-$(date -u +%Y%m%dT%H%M%SZ)"
+echo "market: $MARKET"
 terraform output

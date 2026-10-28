@@ -16,6 +16,15 @@ variable "instance_type" {
   type        = string
   default     = "c6i.4xlarge"
 }
+variable "market" {
+  description = "spot (default) or on-demand."
+  type        = string
+  default     = "spot"
+  validation {
+    condition     = contains(["spot", "on-demand"], var.market)
+    error_message = "market must be spot or on-demand"
+  }
+}
 variable "harness_hash" {
   description = "cells.py hash of the kit being launched; the instance refuses a kit with another hash."
   type        = string

@@ -6,6 +6,11 @@
 # connect-converter 3.2.5, same MD5, Jackson jars removed because they
 # conflict with the runtime's), placed on run.sh's classpath (lib/*).
 # Extracted in an alpine stage: the server image has no gzip.
+#
+# Also Debezium's own SMTs: in 3.7 ExtractNewRecordState moved from
+# debezium-core into the new debezium-connect-plugins module, which the
+# 3.7.0.Final server distribution does not ship (the shakedown's Server arms
+# failed with ClassNotFoundException). Same version, MD5-checked.
 # BASE: quay.io/debezium/server:3.7.0.Final@<digest>, resolved per run (images/pin.py).
 ARG BASE=quay.io/debezium/server:3.7.0.Final
 FROM alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc AS conv
@@ -14,6 +19,9 @@ RUN set -e; \
     echo "0dc4bef6a31301d1a8da01812e6555bd  /tmp/conv.tgz" | md5sum -c -; \
     mkdir -p /conv && tar -xzf /tmp/conv.tgz -C /conv; \
     rm -f /conv/jackson-core* /conv/jackson-annotations* /conv/jackson-databind* /conv/jackson-dataformat*; \
+    wget -q -O /conv/debezium-connect-plugins-3.7.0.Final.jar \
+      https://repo1.maven.org/maven2/io/debezium/debezium-connect-plugins/3.7.0.Final/debezium-connect-plugins-3.7.0.Final.jar; \
+    echo "e626cb15d5f48e3678d98b54055fedf3  /conv/debezium-connect-plugins-3.7.0.Final.jar" | md5sum -c -; \
     ls /conv/*.jar >/dev/null
 FROM ${BASE}
 COPY --from=conv /conv/*.jar /debezium/lib/
