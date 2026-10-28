@@ -556,7 +556,8 @@ func TestWorker_Stop_DrainTimeoutIsNotAStopFailure(t *testing.T) {
 	is := is.New(t)
 	logger := log.Test(t)
 	src := &teardownSource{fakeSource: newFakeSource("a", nil)}
-	dt := NewBatchingDestinationTask("dest", newFakeDestination("dest"), logger, NoOpConnectorMetrics{}, 10, 0)
+	dest := newFakeDestination("dest")
+	dt := NewBatchingDestinationTask("dest", dest, logger, NoOpConnectorMetrics{}, 10, 0)
 	is.NoErr(dt.Open(context.Background()))
 	shared := &TaskNode{Task: dt}
 	shared.MarkSharedBoundary()
@@ -564,6 +565,10 @@ func TestWorker_Stop_DrainTimeoutIsNotAStopFailure(t *testing.T) {
 	w, err := NewWorker(srcNode, NewDLQ("dlq", newFakeDestination("dlq"), logger, NoOpConnectorMetrics{}, 10, 10), logger, noop.Timer{})
 	is.NoErr(err)
 
+	// One record is buffered. Stop must not drain it without the shared lock
+	// (the guard on drainTask's refusal): it stays pending, to be written by Close.
+	destRec := randomRecords(1)
+	is.True(isBuffered(dt.doBuffered(context.Background(), NewBatch(destRec), newRunAckNacker(w))))
 	shared.sharedMu.Lock() // a sibling mid-pass behind a wedged destination
 	defer shared.sharedMu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
@@ -575,5 +580,6 @@ func TestWorker_Stop_DrainTimeoutIsNotAStopFailure(t *testing.T) {
 	is.True(src.down)
 	src.mu.Unlock()
 	is.True(err == nil || !cerrors.Is(err, context.DeadlineExceeded))
-	is.True(!shared.poisoned.Load()) // the drain took nothing, so nothing is poisoned
+	is.True(!shared.poisoned.Load())           // the drain took nothing, so nothing is poisoned
+	is.Equal(len(dest.receivedPositions()), 0) // and did not run without the lock
 }

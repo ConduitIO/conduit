@@ -322,11 +322,16 @@ func drainTask(ctx context.Context, dt *DestinationTask, shared *TaskNode) error
 	// The stop deadline must also bound the wait for the shared lock: a sibling
 	// can hold it while blocked behind a wedged destination. If the deadline
 	// ends before anything was taken there is nothing to poison.
+	acquired := shared.sharedMu.LockCtx(ctx) == nil
+	defer func() {
+		if acquired {
+			shared.sharedMu.Unlock()
+		}
+	}()
 	// guard: funnel-drain-ctx-aware-shared-lock tests=^TestWorker_Stop_DrainTimeoutIsNotAStopFailure$
-	if err := shared.sharedMu.LockCtx(ctx); err != nil {
-		return &drainNotStartedError{err: cerrors.Errorf("drain of destination %s did not start: %w", dt.id, err)}
+	if !acquired {
+		return &drainNotStartedError{err: cerrors.Errorf("drain of destination %s did not start: %w", dt.id, ctx.Err())}
 	}
-	defer shared.sharedMu.Unlock()
 	err := dt.Drain(ctx)
 	if err != nil && !isDrainNotStarted(err) {
 		// Invariant 3 (enforcement site): poison before sharedMu is released.
