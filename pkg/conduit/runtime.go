@@ -706,7 +706,7 @@ func createServices(r *Runtime) error {
 	var lifecycleService lifecycleService
 	if r.Config.Preview.PipelineArchV2 {
 		r.logger.Info(context.Background()).Msg("using lifecycle service v2")
-		lifecycleService = lifecycle_v2.NewService(
+		lifecycleV2 := lifecycle_v2.NewService(
 			r.logger,
 			errRecoveryCfg,
 			connService,
@@ -715,6 +715,8 @@ func createServices(r *Runtime) error {
 			plService,
 			r.Config.Preview.PipelineArchV2DisableMetrics,
 		)
+		lifecycleV2.SetMaxReceiveRecordSize(r.Config.Connectors.MaxReceiveRecordSize)
+		lifecycleService = lifecycleV2
 	} else {
 		lifecycleService = lifecycle.NewService(r.logger, errRecoveryCfg, connService, procService, connPluginService, plService)
 	}

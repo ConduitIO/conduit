@@ -160,4 +160,16 @@ var (
 	// before this error is returned, so every unacked record is redelivered on
 	// restart (invariant 3).
 	CodeDestinationEmptyAckFlood = conduiterr.Register("pipeline.destination_empty_ack_flood", codes.Aborted)
+
+	// CodeRecordExceedsMaxReceiveSize is the error a record is nacked with when
+	// its encoded request alone is larger than connectors.max-receive-record-size,
+	// the largest request a standalone destination connector accepts.
+	//
+	// Sent anyway, such a record does not come back as a per-record nack: the
+	// connector's gRPC server rejects the request and closes the whole stream, and
+	// because a restart replays the same record the pipeline would stall on it.
+	// The engine nacks it before the Write instead, so the dead-letter queue policy
+	// decides what happens (the default stops the pipeline with this error; a DLQ
+	// with a budget keeps the record). Nothing is silently dropped (invariant 3).
+	CodeRecordExceedsMaxReceiveSize = conduiterr.Register("pipeline.record_exceeds_max_receive_size", codes.FailedPrecondition)
 )

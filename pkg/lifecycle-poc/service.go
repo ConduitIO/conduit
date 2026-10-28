@@ -31,6 +31,7 @@ import (
 	lifecyclev1 "github.com/conduitio/conduit/pkg/lifecycle"
 	"github.com/conduitio/conduit/pkg/lifecycle-poc/funnel"
 	"github.com/conduitio/conduit/pkg/pipeline"
+	"github.com/conduitio/conduit/pkg/plugin"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/processor"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
@@ -208,6 +209,19 @@ type Service struct {
 
 	isGracefulShutdown atomic.Bool
 	metricsDisabled    bool
+
+	// maxReceiveRecordSize is connectors.max-receive-record-size: the largest
+	// request a standalone connector accepts. Zero disables the destination
+	// write size cap. Set by SetMaxReceiveRecordSize before any pipeline starts.
+	maxReceiveRecordSize int
+}
+
+// SetMaxReceiveRecordSize makes every destination task of a non-built-in
+// connector split a Write whose estimated wire size exceeds n bytes (see
+// funnel.DestinationTask.SetMaxReceiveRecordSize). Call before starting
+// pipelines.
+func (s *Service) SetMaxReceiveRecordSize(n int) {
+	s.maxReceiveRecordSize = n
 }
 
 // NewService initializes and returns a lifecycle.Service.
@@ -1618,6 +1632,11 @@ func (s *Service) buildDestinationTasks(
 			batchSize,
 			batchDelay,
 		)
+		// Standalone connectors reject a request over
+		// connectors.max-receive-record-size; built-ins have no such limit.
+		if plugin.FullName(instance.Plugin).PluginType() != plugin.PluginTypeBuiltin {
+			destTask.SetMaxReceiveRecordSize(s.maxReceiveRecordSize)
+		}
 
 		// Add processor tasks
 		procTasks, err := s.buildProcessorTasks(ctx, pl, instance.ProcessorIDs, logger)
