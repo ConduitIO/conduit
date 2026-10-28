@@ -810,7 +810,7 @@ def conduit_pipelines(c: Cell, arm: str) -> list:
             src.update(conduit_source_batch(tier))
             conns.append({"id": "src0", "type": "source", "plugin": "builtin:file", "settings": src})
         if c.transform:
-            procs.append({"id": "rename", "plugin": "field.rename", "condition": '{{ ne .Operation "delete" }}',
+            procs.append({"id": "rename", "plugin": "field.rename", "condition": '{{ ne (printf "%v" .Operation) "delete" }}',
                           "settings": {"mapping": ".Payload.After.payload:body"}})
         if side == "conduit-avro":
             # EQUAL AVRO CONTENT (PLAN.md section 2): the row plus Debezium's
@@ -820,10 +820,10 @@ def conduit_pipelines(c: Cell, arm: str) -> list:
             # ("<topic>-value"), like the Apicurio converter's default
             # TopicIdStrategy: the subject is a static setting, so a
             # multi-table pipeline gets one conditional encoder per table.
-            procs.append({"id": "op", "plugin": "field.set", "condition": '{{ ne .Operation "delete" }}',
+            procs.append({"id": "op", "plugin": "field.set", "condition": '{{ ne (printf "%v" .Operation) "delete" }}',
                           "settings": {"field": ".Payload.After.__op", "value": OP_TEMPLATE}})
             for t in (tbls if c.source == "pg" and tbls else ["bench_source_0"]):
-                cond = '{{ and (ne .Operation "delete") (eq (index .Metadata "opencdc.collection") "%s") }}' % t
+                cond = '{{ and (ne (printf "%v" .Operation) "delete") (eq (index .Metadata "opencdc.collection") "' + t + '") }}'
                 procs.append({"id": f"avro-{t}", "plugin": "avro.encode", "condition": cond,
                               "settings": {"field": ".Payload.After", "schema.strategy": "autoRegister",
                                            "schema.autoRegister.subject": f"cdcparity.public.{t}-value"}})
@@ -837,8 +837,10 @@ def conduit_pipelines(c: Cell, arm: str) -> list:
 
 
 # OpenCDC operation -> Debezium's op code.
-OP_TEMPLATE = ('{{ if eq .Operation "create" }}c{{ else if eq .Operation "update" }}u'
-               '{{ else if eq .Operation "delete" }}d{{ else }}r{{ end }}')
+# .Operation is a typed enum: templates compare it as text (printf "%v"),
+# a direct comparison with a string fails at runtime (shakedown, 2026-10-28).
+OP_TEMPLATE = ('{{ $op := printf "%v" .Operation }}{{ if eq $op "create" }}c{{ else if eq $op "update" }}u'
+               '{{ else if eq $op "delete" }}d{{ else }}r{{ end }}')
 
 
 def conduit_dest(c: Cell, d: str, i: int, tier: str, side: str, single: bool) -> dict:
@@ -1220,7 +1222,10 @@ def dbzserver_service(c: Cell, arm: str) -> dict:
     s = {
         "image": img, "container_name": SUT,
         "cpuset": "${SUT_CPUSET}", "mem_limit": SUT_MEM, "memswap_limit": SUT_MEM, "logging": LOGGING,
-        "volumes": ["../dbzserver:/debezium/config:ro", "${PROF_DIR}:/prof", "${ASPROF_DIR}:/opt/async-profiler:ro",
+        # Only application.properties: the image's config directory holds its
+        # own files (debezium-jmx-config.yaml), which a directory mount hides.
+        "volumes": ["../dbzserver/application.properties:/debezium/config/application.properties:ro",
+                    "${PROF_DIR}:/prof", "${ASPROF_DIR}:/opt/async-profiler:ro",
                     "${JOLOKIA_JAR}:/opt/jolokia.jar:ro"],
         "networks": ["benchi"],
     }
@@ -1235,7 +1240,7 @@ def dbzserver_service(c: Cell, arm: str) -> dict:
         s["volumes"][0] = "../dbzserver:/cfg:ro"
         s["entrypoint"] = ["sh", "-c",
                            "for i in $(seq 0 %d); do d=/tmp/dbz$i; mkdir -p $d && cp -r /debezium/. $d/ && "
-                           "rm -rf $d/config && cp -r /cfg/p$i $d/config && "
+                           "cp /cfg/p$i/application.properties $d/config/application.properties && "
                            "(cd $d && JAVA_OPTS=\"-Xmx%dm $JAVA_OPTS\" DBZ_PROC=$i ./run.sh > /prof/dbz$i.log 2>&1 &); done; wait"
                            % (n - 1, max(96, 1536 // n))]
     return s

@@ -29,5 +29,10 @@ RUN set -e; \
     unzip -q /tmp/s3.zip -d /tmp/s3; \
     cp /tmp/s3/confluentinc-kafka-connect-s3-12.1.11/lib/*.jar /kafka/connect/kafka-connect-s3/; \
     rm -rf /tmp/s3.zip /tmp/s3; \
-    sha256sum /kafka/connect/kafka-connect-jdbc/*.jar /kafka/connect/kafka-connect-file/*.jar > /kafka/connect/MATRIX-SHA256SUMS
+    sha256sum /kafka/connect/kafka-connect-jdbc/*.jar /kafka/connect/kafka-connect-file/*.jar > /kafka/connect/MATRIX-SHA256SUMS; \
+    chown -R kafka:kafka /kafka/connect/kafka-connect-file /kafka/connect/kafka-connect-jdbc /kafka/connect/kafka-connect-s3
+# The plugin directories added above belong to the kafka user: with
+# ENABLE_APICURIO_CONVERTERS=true the image's entrypoint links the Apicurio
+# converter jars into every plugin directory at start (the shakedown's Connect
+# worker died on "Permission denied" without this).
 USER kafka
