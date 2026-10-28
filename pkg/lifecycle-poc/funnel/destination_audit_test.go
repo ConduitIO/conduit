@@ -16,6 +16,7 @@ package funnel
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -84,8 +85,17 @@ func TestDrain_HonoursCtxWhileWaitingForEnqueueMu(t *testing.T) {
 	}
 	recs := randomRecords(6)
 	alog := &eventLog{}
-	blocked, unblock := dest.blockWrites(recs[0].Position)
-	defer unblock()
+	blocked, release := dest.blockWrites(recs[0].Position)
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(release) }
+	// The flusher and the sibling goroutine log through t: wait for them.
+	sibling := make(chan struct{})
+	t.Cleanup(func() {
+		unblock()
+		cancelRun()
+		<-task.flusherDone
+		<-sibling
+	})
 	for i := 0; i < 3; i++ {
 		if err := task.doBuffered(runCtx, NewBatch(recs[2*i:2*i+2]), newRecordingAckNacker(alog)); !isBuffered(err) {
 			t.Fatalf("doBuffered %d: %v", i, err)
@@ -95,6 +105,7 @@ func TestDrain_HonoursCtxWhileWaitingForEnqueueMu(t *testing.T) {
 		}
 	}
 	go func() { // sibling source's filtered batch: blocks in enqueueFlush holding enqueueMu
+		defer close(sibling)
 		_ = task.deferOrdered(runCtx, func(context.Context) error { return nil })
 	}()
 	time.Sleep(30 * time.Millisecond)
@@ -112,5 +123,32 @@ func TestDrain_HonoursCtxWhileWaitingForEnqueueMu(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatalf("Drain(ctx 50ms) still blocked after 1s (enqueueMu taken without ctx)")
+	}
+}
+
+// TestDrain_DoesNotTakePendingAfterFlushError: after a flush error the flusher is
+// gone or going; Drain must not take pending and send it into a dead channel
+// (nothing would count or complete it). The batches stay pending, unacknowledged.
+func TestDrain_DoesNotTakePendingAfterFlushError(t *testing.T) {
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	defer cancelRun()
+	task := NewBatchingDestinationTask("d", newFakeDestination("d"), log.Test(t), NoOpConnectorMetrics{}, 10, 0)
+	task.SetPipelined()
+	if err := task.Open(runCtx); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cancelRun(); <-task.flusherDone })
+	if !isBuffered(task.doBuffered(runCtx, NewBatch(randomRecords(1)), newRecordingAckNacker(&eventLog{}))) {
+		t.Fatal("expected buffered")
+	}
+	task.setFlushErr(context.DeadlineExceeded)
+
+	if err := task.Drain(context.Background()); err == nil {
+		t.Fatal("Drain must return the flush error")
+	}
+	task.mu.Lock()
+	defer task.mu.Unlock()
+	if len(task.pending) != 1 || task.outstanding != 0 {
+		t.Fatalf("pending=%d outstanding=%d, want the batch left pending and no slot taken", len(task.pending), task.outstanding)
 	}
 }

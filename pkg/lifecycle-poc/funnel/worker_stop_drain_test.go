@@ -518,10 +518,13 @@ func TestWorker_Stop_DrainFailure_PoisonedBeforeSharedLockIsReleased(t *testing.
 	is.Equal(len(acked), 0)
 }
 
-// TestWorker_Stop_ReportsDrainFailure: a stop whose drain could not write the
-// buffered records must not be reported clean. The records replay; Stop returns
-// the failure with a stable code, and still tears the source down.
-func TestWorker_Stop_ReportsDrainFailure(t *testing.T) {
+// TestWorker_Stop_DrainFailureIsReportedByCloseNotStop: a drain that cannot write
+// the buffered records is not a failed Stop. The worker is armed and the source
+// torn down; the records replay. Returning it from Stop made StopAndWait report
+// "never began stopping, safe to retry" for a pipeline that is in fact stopping.
+// The failure is reported where it belongs: the destination's Close, with a stable
+// code.
+func TestWorker_Stop_DrainFailureIsReportedByCloseNotStop(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	logger := log.Test(t)
@@ -531,14 +534,46 @@ func TestWorker_Stop_ReportsDrainFailure(t *testing.T) {
 	srcNode := &TaskNode{Task: NewSourceTask("a", src, logger, NoOpConnectorMetrics{}), Next: []*TaskNode{{Task: dt}}}
 	w, err := NewWorker(srcNode, NewDLQ("dlq", newFakeDestination("dlq"), logger, NoOpConnectorMetrics{}, 10, 10), logger, noop.Timer{})
 	is.NoErr(err)
-	recs := randomRecords(1)
-	is.NoErr(w.doTask(ctx, srcNode.Next[0], NewBatch(recs), newRunAckNacker(w))) // buffered
+	is.NoErr(w.doTask(ctx, srcNode.Next[0], NewBatch(randomRecords(1)), newRunAckNacker(w))) // buffered
 
-	err = w.Stop(ctx)
-	ce, ok := conduiterr.Get(err)
+	is.NoErr(w.Stop(ctx)) // the drain failed, the stop did not
+	is.True(w.Stopping())
+	src.mu.Lock()
+	is.True(src.down) // teardown ran
+	src.mu.Unlock()
+
+	ce, ok := conduiterr.Get(dt.Close(ctx))
 	is.True(ok)
 	is.Equal(ce.Code.Reason(), CodeFlushOnCloseFailed.Reason())
+}
+
+// TestWorker_Stop_DrainTimeoutIsNotAStopFailure is the ack-path audit's R2-1
+// repro: when a sibling holds the shared lock past the stop deadline, Stop used to
+// return an error satisfying cerrors.Is(err, context.DeadlineExceeded) after it
+// had armed and torn down the source, which StopAndWait maps to the "never began
+// stopping, still running, safe to retry" phase.
+func TestWorker_Stop_DrainTimeoutIsNotAStopFailure(t *testing.T) {
+	is := is.New(t)
+	logger := log.Test(t)
+	src := &teardownSource{fakeSource: newFakeSource("a", nil)}
+	dt := NewBatchingDestinationTask("dest", newFakeDestination("dest"), logger, NoOpConnectorMetrics{}, 10, 0)
+	is.NoErr(dt.Open(context.Background()))
+	shared := &TaskNode{Task: dt}
+	shared.MarkSharedBoundary()
+	srcNode := &TaskNode{Task: NewSourceTask("a", src, logger, NoOpConnectorMetrics{}), Next: []*TaskNode{shared}}
+	w, err := NewWorker(srcNode, NewDLQ("dlq", newFakeDestination("dlq"), logger, NoOpConnectorMetrics{}, 10, 10), logger, noop.Timer{})
+	is.NoErr(err)
+
+	shared.sharedMu.Lock() // a sibling mid-pass behind a wedged destination
+	defer shared.sharedMu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	err = w.Stop(ctx)
+
+	is.True(w.Stopping())
 	src.mu.Lock()
-	is.True(src.down) // teardown still ran
+	is.True(src.down)
 	src.mu.Unlock()
+	is.True(err == nil || !cerrors.Is(err, context.DeadlineExceeded))
+	is.True(!shared.poisoned.Load()) // the drain took nothing, so nothing is poisoned
 }

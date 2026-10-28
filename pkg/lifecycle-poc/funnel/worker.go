@@ -80,10 +80,6 @@ type Task interface {
 // The rest of the records are processed as a sub-batch, and the same rules
 // apply to them.
 type Worker struct {
-	// drainErr is the failure of the drain Stop ran before tearing the source
-	// down; set and read by Stop under processingLock.
-	drainErr error
-
 	Source    Source
 	FirstTask *TaskNode
 	DLQ       *DLQ
@@ -259,20 +255,17 @@ func (w *Worker) Stop(ctx context.Context) error {
 	// fails with plugin.ErrPluginNotRunning and the written records replay.
 	// guard: funnel-stop-drains-before-teardown tests=^TestWorker_Stop_DrainsDestinationBeforeSourceTeardown$
 	w.drainDestinationsBeforeTeardown(ctx)
-	// A stop whose drain failed or ran out of time left records unwritten: they
-	// replay (nothing is lost), but report it with a stable code instead of a
-	// clean stop. Teardown still runs.
-	var drainErr error
-	if w.drainErr != nil {
-		ce := conduiterr.Wrap(CodeFlushOnCloseFailed, "stop could not drain the destination before tearing the source down", w.drainErr)
-		ce.Suggestion = "no records were lost: they were not acknowledged upstream and are redelivered on restart; " +
-			"raise the stop timeout if the destination is slow, or check its logs"
-		drainErr = ce
-	}
+	// A drain that failed or ran out of time left records unwritten; they replay
+	// (nothing is lost). That is not a failed Stop: the worker is armed and the
+	// source is torn down below, and a Stop error here would make StopAndWait
+	// report "never began stopping, safe to retry" for a pipeline that is in
+	// fact stopping. The failure is reported where it belongs: the destination's
+	// Close (and the shared sink's Close) return it as
+	// pipeline.flush_on_close_failed.
 	if err := w.tearDownSource(ctx); err != nil {
-		return cerrors.Join(drainErr, cerrors.Errorf("failed to tear down source: %w", err))
+		return cerrors.Errorf("failed to tear down source: %w", err)
 	}
-	return drainErr
+	return nil
 }
 
 // drainDestinationsBeforeTeardown flushes every batching destination below this
@@ -282,7 +275,6 @@ func (w *Worker) Stop(ctx context.Context) error {
 func (w *Worker) drainDestinationsBeforeTeardown(ctx context.Context) {
 	if err := drainNode(ctx, w.FirstTask, nil); err != nil {
 		w.logger.Err(ctx, err).Msg("failed to drain buffered records before source teardown (records replay on restart)")
-		w.drainErr = err // read by Stop under the processing lock it still holds
 	}
 }
 
@@ -330,7 +322,7 @@ func drainTask(ctx context.Context, dt *DestinationTask, shared *TaskNode) error
 	// The stop deadline must also bound the wait for the shared lock: a sibling
 	// can hold it while blocked behind a wedged destination. If the deadline
 	// ends before anything was taken there is nothing to poison.
-	if err := lockCtx(ctx, shared.sharedMu); err != nil {
+	if err := shared.sharedMu.LockCtx(ctx); err != nil {
 		return &drainNotStartedError{err: cerrors.Errorf("drain of destination %s did not start: %w", dt.id, err)}
 	}
 	defer shared.sharedMu.Unlock()
@@ -1323,7 +1315,7 @@ type TaskNode struct {
 	sharedBoundary bool
 	// sharedMu is non-nil if and only if sharedBoundary is true. See
 	// MarkSharedBoundary and the lock acquisition in doTask.
-	sharedMu *sync.Mutex
+	sharedMu *ctxMutex
 	// testAfterDrain, if set on a shared boundary node, is called by drainNode
 	// right after a drain released sharedMu. Tests use it to interleave a sibling
 	// at that instant; nil in production.
@@ -1353,7 +1345,7 @@ type TaskNode struct {
 // narrow the serialized region and is a caller bug.
 func (t *TaskNode) MarkSharedBoundary() {
 	t.sharedBoundary = true
-	t.sharedMu = &sync.Mutex{}
+	t.sharedMu = &ctxMutex{}
 }
 
 // IsFirst returns true if this task is the first task in the pipeline.

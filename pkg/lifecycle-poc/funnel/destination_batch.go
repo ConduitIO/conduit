@@ -16,7 +16,6 @@ package funnel
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -509,6 +508,9 @@ func (t *DestinationTask) runFlusher(ctx context.Context) {
 	cause := ""
 	defer func() {
 		close(t.flusherDone)
+		if t.testMidFlusherExit != nil {
+			t.testMidFlusherExit()
+		}
 		if cause != "" {
 			t.dropQueued(ctx, cause)
 		}
@@ -583,7 +585,7 @@ func (t *DestinationTask) Drain(ctx context.Context) error {
 
 	// enqueueMu covers the take and the hand-off only; the wait below must not
 	// hold it, or a deferOrdered queued behind the barrier would deadlock.
-	if err := lockCtx(ctx, &t.enqueueMu); err != nil {
+	if err := t.enqueueMu.LockCtx(ctx); err != nil {
 		// Nothing was taken, so there is nothing to restore and no failure to
 		// record: the drain simply did not start before the stop deadline.
 		return &drainNotStartedError{err: cerrors.Errorf("drain of destination %s did not start: %w", t.id, err)}
@@ -591,6 +593,14 @@ func (t *DestinationTask) Drain(ctx context.Context) error {
 
 	done := make(chan struct{})
 	t.mu.Lock()
+	// After a flush error the flusher is gone or going: do not take pending and
+	// send into a dead channel (nothing would count or complete it). The batches
+	// stay in pending, unacknowledged.
+	if err := t.flushErr; err != nil {
+		t.mu.Unlock()
+		t.enqueueMu.Unlock()
+		return err
+	}
 	if t.closed {
 		t.mu.Unlock()
 		t.enqueueMu.Unlock()
@@ -644,26 +654,6 @@ func (e *drainNotStartedError) Unwrap() error { return e.err }
 func isDrainNotStarted(err error) bool {
 	var d *drainNotStartedError
 	return cerrors.As(err, &d)
-}
-
-// lockCtx acquires mu, giving up when ctx ends. sync.Mutex has no cancellable
-// lock, so it polls TryLock; used where a stop deadline must be honoured.
-func lockCtx(ctx context.Context, mu *sync.Mutex) error {
-	if mu.TryLock() {
-		return nil
-	}
-	tick := time.NewTicker(time.Millisecond)
-	defer tick.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-tick.C:
-			if mu.TryLock() {
-				return nil
-			}
-		}
-	}
 }
 
 // drainNotSent undoes a Drain whose take never reached the flusher: the batches
