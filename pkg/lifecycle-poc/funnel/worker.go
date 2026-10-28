@@ -1223,7 +1223,7 @@ type TaskNode struct {
 	sharedBoundary bool
 	// sharedMu is non-nil if and only if sharedBoundary is true. See
 	// MarkSharedBoundary and the lock acquisition in doTask.
-	sharedMu *sync.Mutex
+	sharedMu *ctxMutex
 	// poisoned is only meaningful if sharedBoundary is true. H2 (adversarial
 	// review of #2734): set, under sharedMu, by doTask when a pass through
 	// this shared subtree returns an error - which may have left the shared
@@ -1249,7 +1249,7 @@ type TaskNode struct {
 // narrow the serialized region and is a caller bug.
 func (t *TaskNode) MarkSharedBoundary() {
 	t.sharedBoundary = true
-	t.sharedMu = &sync.Mutex{}
+	t.sharedMu = &ctxMutex{}
 }
 
 // IsFirst returns true if this task is the first task in the pipeline.

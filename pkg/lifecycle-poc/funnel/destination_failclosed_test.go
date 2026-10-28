@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -41,7 +42,16 @@ func TestEnqueueCtxDropFailsClosed(t *testing.T) {
 	is.NoErr(task.Open(runCtx))
 	recs := randomRecords(8)
 	alog := &eventLog{}
-	blocked, unblock := dest.blockWrites(recs[0].Position)
+	blocked, release := dest.blockWrites(recs[0].Position)
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(release) }
+	// The flusher and helper goroutines log through t: wait for them before the
+	// test returns.
+	t.Cleanup(func() {
+		unblock()
+		cancelRun()
+		<-task.flusherDone
+	})
 	// batch 0 in flight (blocked), batches 1 and 2 fill flushCh (cap 2)
 	for i := 0; i < 3; i++ {
 		is.True(isBuffered(task.doBuffered(runCtx, NewBatch(recs[2*i:2*i+2]), newRecordingAckNacker(alog))))
@@ -179,5 +189,64 @@ func TestEnqueueFlush_SendRacingFlusherExitLeavesNothingStranded(t *testing.T) {
 		is.Equal(task.outstanding, 0)
 		task.mu.Unlock()
 		cancelRun()
+		<-task.flusherDone
 	}
+}
+
+// TestRunFlusher_ClosesDoneBeforeDrainingQueue: the order is load-bearing. A
+// sender that wins its send select just as the flusher exits must be able to see
+// the flusher is gone; that only works if flusherDone is closed before the exit
+// drain runs (a send landing between a drain and a late close would return
+// "buffered" into a dead channel).
+func TestRunFlusher_ClosesDoneBeforeDrainingQueue(t *testing.T) {
+	is := is.New(t)
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	task := NewBatchingDestinationTask("d", newFakeDestination("d"), log.Test(t), NoOpConnectorMetrics{}, 2, 0)
+	task.SetPipelined()
+	is.NoErr(task.Open(runCtx))
+
+	closedAtMidExit := make(chan bool, 1)
+	task.testMidFlusherExit = func() {
+		select {
+		case <-task.flusherDone:
+			closedAtMidExit <- true
+		default:
+			closedAtMidExit <- false
+		}
+	}
+	cancelRun()
+	select {
+	case closed := <-closedAtMidExit:
+		is.True(closed)
+	case <-time.After(time.Second):
+		t.Fatal("flusher did not exit")
+	}
+	<-task.flusherDone
+}
+
+// TestCtxMutex covers the stop-path lock: LockCtx gives up with the context's
+// error without taking the lock, and takes it when it is free.
+func TestCtxMutex(t *testing.T) {
+	is := is.New(t)
+	var m ctxMutex
+
+	is.NoErr(m.LockCtx(context.Background()))
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	is.True(m.LockCtx(ctx) != nil) // held: gives up at the deadline
+
+	m.Unlock()
+	is.NoErr(m.LockCtx(context.Background())) // the failed attempt did not leave it locked
+	m.Unlock()
+
+	m.Lock()
+	acquired := make(chan struct{})
+	go func() { m.Lock(); close(acquired); m.Unlock() }()
+	select {
+	case <-acquired:
+		t.Fatal("second Lock acquired a held mutex")
+	case <-time.After(20 * time.Millisecond):
+	}
+	m.Unlock()
+	<-acquired
 }

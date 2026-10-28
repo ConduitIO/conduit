@@ -84,7 +84,7 @@ type DestinationTask struct {
 	// enqueueMu makes "take pending + send on flushCh" atomic with respect to
 	// deferOrdered on the pipelined path. Lock order: enqueueMu, then mu. The
 	// flusher never takes it.
-	enqueueMu sync.Mutex
+	enqueueMu ctxMutex
 	// syncMu serialises synchronous (non-pipelined) flushes; see flushTaken. Lock order: sharedMu, syncMu, mu.
 	syncMu sync.Mutex
 
@@ -105,6 +105,9 @@ type DestinationTask struct {
 	// testBeforeEnqueueSend is called by enqueueFlush right before its send
 	// select, after its "flusher already gone" pre-check.
 	testBeforeEnqueueSend func()
+	// testMidFlusherExit is called by the flusher's exit path between closing
+	// flusherDone and draining flushCh; nil in production.
+	testMidFlusherExit func()
 }
 
 type Destination interface {
