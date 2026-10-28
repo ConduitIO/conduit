@@ -257,7 +257,8 @@ else
     for arm in "${ORDER[@]}"; do run_benchi "r$r-$arm" "$arm" 0; done
   done
   if [ "$DIAG" = 1 ]; then
-    for arm in "${ARMS[@]}"; do run_benchi "diag-$arm" "$arm" 1; done
+    read -r -a DIAG_ARMS <<<"$(meta diag_arms)"
+    for arm in "${DIAG_ARMS[@]}"; do run_benchi "diag-$arm" "$arm" 1; done
   fi
 fi
 echo "finished $(date -u +%FT%TZ)" >> "$DIR/session.txt"

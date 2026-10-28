@@ -152,6 +152,7 @@ class Cell:
     payload: int = 64
     rounds: int = ROUNDS
     diag: bool = False        # one unmeasured profiling run per arm
+    diag_arms: tuple = ()     # restrict the diag runs to these arms (empty = every arm)
     instances: int = 1        # >1: the cell repeats on that many DIFFERENT instances
     transform: bool = False
     backlog_bytes: int = 0    # drain cells
@@ -379,15 +380,18 @@ SHAKEDOWN_CELLS = ["A2-pg-kafka-p1-b64", "A2-pg-pg-p4-b64", "B-kafka-pg-p1-b64",
 # scale-out paths, one tuned Conduit arm), to stay under the $5 cap; the
 # other tuned arms are first exercised by the smoke run.
 SHAKEDOWN_ARMS = {
-    "A2-pg-kafka-p1-b64": ("conduit-avro-s", "connect-avro-s", "dbzserver-avro-s", "conduit-s", "connect-s"),
+    "A2-pg-kafka-p1-b64": ("conduit-avro-s", "connect-avro-s", "dbzserver-avro-s"),
     "A2-pg-pg-p4-b64": ("conduit-s", "conduit-t", "connect-avro-s", "dbzserver-avro-s", "dbzserver-avro-xn-s"),
     "B-kafka-pg-p1-b64": ("conduit-s", "connect-s"),
     "G-pg-kafka-kill9": ("conduit-avro-s", "connect-avro-s", "dbzserver-avro-s"),
 }
+SHAKEDOWN_DIAG = {"A2-pg-kafka-p1-b64": ("conduit-avro-s", "connect-avro-s")}
 
 
 def shakedown_cells(cs: list) -> list:
-    return [replace(c, plan="shakedown", arms=SHAKEDOWN_ARMS[c.id]) for c in smoke_cells(cs) if c.id in SHAKEDOWN_CELLS]
+    return [replace(c, plan="shakedown", arms=SHAKEDOWN_ARMS[c.id], diag=c.id in SHAKEDOWN_DIAG,
+                    diag_arms=SHAKEDOWN_DIAG.get(c.id, ()))
+            for c in smoke_cells(cs) if c.id in SHAKEDOWN_CELLS]
 
 
 # The cells this process generates and runs: the plan's own variants
@@ -505,11 +509,12 @@ def est_minutes(c: Cell, arm: str) -> float:
 
 def runs_per_arm(c: Cell) -> int:
     warm = 1 if c.mode in ("ramp", "capacity", "drain", "snapshot", "idle") and not SMOKE else 0
-    return c.rounds + warm + (1 if c.diag else 0)
+    return c.rounds + warm + (1 if c.diag and (not c.diag_arms) else 0)
 
 
 def cell_minutes(c: Cell) -> float:
     m = sum(est_minutes(c, a) * runs_per_arm(c) for a in c.arms)
+    m += sum(est_minutes(c, a) for a in c.diag_arms)
     if c.mode == "drain":
         m += c.backlog_bytes / (150 * 2**20) / 60  # one fill per cell at ~150 MB/s (pilot measures it)
     return m
@@ -1385,6 +1390,7 @@ def cell_meta(c: Cell) -> dict:
     return {
         "id": c.id, "family": c.family, "source": c.source, "dests": list(c.dests), "mode": c.mode,
         "par": c.par, "payload": c.payload, "rounds": c.rounds, "diag": c.diag, "instances": c.instances,
+        "diag_arms": list(c.diag_arms or (c.arms if c.diag else ())),
         "plan": c.plan, "reference": c.reference, "plugin": c.plugin, "transform": c.transform,
         "workload": {"txn": c.txn, "insert_frac": c.insert_frac, "update_frac": c.update_frac, "shape": c.shape,
                      "skew": c.skew, "alter_at": c.alter_at, "sink_delay_ms": c.sink_delay_ms},
