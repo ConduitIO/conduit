@@ -50,6 +50,7 @@ def main():
     lines = {
         "harness_hash": cells.harness_hash(),
         "kit_commit": read(os.path.join(here, "KIT_COMMIT")),
+        "debezium_image_pins": read(os.path.join(here, "images", "PINS.json")),
         "loader_sha256": loader_sha,
         "thp": read("/sys/kernel/mm/transparent_hugepage/enabled"),
         "swappiness": read("/proc/sys/vm/swappiness"),

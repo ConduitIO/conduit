@@ -20,3 +20,6 @@ crash.log
 crash.*.log
 *.tfplan
 tfplan
+
+# Per-run image pins, written by aws/launch.sh into the kit.
+/matrix/images/PINS.json

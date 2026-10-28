@@ -56,7 +56,9 @@ IMG = {
     # Built by run-shard.sh: FROM quay.io/debezium/server:3.7.0.Final@sha256:9117f3fa...
     # plus the Apicurio Avro converter (images/dbzserver.Dockerfile).
     "dbzserver": "matrix-dbzserver:3.7.0",
-    "dbzserver-native": "quay.io/debezium/server-native:3.7.0.Final@sha256:6654a571bbb28a120f3d5f4fd8140620c730231f995d2b46e3d0570e4bd9de17",
+    # Digest resolved per run (images/pin.py -> images/PINS.json): quay.io
+    # deletes superseded 3.7.0.Final manifests, so no repository pin survives.
+    "dbzserver-native": "quay.io/debezium/server-native:3.7.0.Final",
     # Built by run-shard.sh from the repository Dockerfile at CONDUIT_SHA; the
     # -http image adds the conduitio-labs HTTP connector, the -diag image the
     # pprof build tag (diag runs only).
@@ -64,6 +66,11 @@ IMG = {
     "conduit-http": "matrix-conduit:bench-http",
     "conduit-diag": "matrix-conduit:bench-diag",
 }
+_PINS = os.path.join(HERE, "images", "PINS.json")
+if os.path.exists(_PINS):
+    with open(_PINS) as _f:
+        IMG["dbzserver-native"] = json.load(_f).get("dbzserver-native", IMG["dbzserver-native"])
+
 JOLOKIA = ("https://repo1.maven.org/maven2/org/jolokia/jolokia-agent-jvm/2.2.9/jolokia-agent-jvm-2.2.9-javaagent.jar",
            "b15dc43047fc476d4ec6e12e769812bc71de1016")  # sha1, as Maven Central publishes it
 

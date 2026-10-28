@@ -40,6 +40,8 @@ trap 'rm -rf "$WORK"' EXIT
 git -C "$KIT" archive --prefix=v021-cdc-parity/ HEAD -- . | tar -x -C "$WORK"
 cp "$WORK/loader" "$WORK/v021-cdc-parity/loader/loader"
 git -C "$KIT" rev-parse HEAD > "$WORK/v021-cdc-parity/matrix/KIT_COMMIT"
+# Per-run image pins (quay.io deletes superseded Debezium manifests).
+python3 "$HERE/../images/pin.py" "$WORK/v021-cdc-parity/matrix/images/PINS.json"
 echo "$HASH" > "$WORK/v021-cdc-parity/matrix/HARNESS_HASH"
 # No macOS metadata (AppleDouble ._* files, xattrs) in the tarball.
 if tar --version 2>/dev/null | grep -qi bsdtar; then

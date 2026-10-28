@@ -61,10 +61,11 @@ fi
 log "building images"
 # Builds download from Maven Central, Confluent Hub and GitHub: retried, and
 # each build's output kept (and uploaded when it fails).
-build() { # tag dockerfile context
+build() { # tag dockerfile context [docker build args...]
   local tag=$1 f=$2 ctx=$3 logf="$OUT/build-${1//[:\/]/_}.log" n
+  shift 3
   for n in 1 2 3; do
-    docker build --progress=plain -t "$tag" -f "$f" "$ctx" > "$logf" 2>&1 && return 0
+    docker build --progress=plain "$@" -t "$tag" -f "$f" "$ctx" > "$logf" 2>&1 && return 0
     log "build $tag attempt $n failed: $(tail -3 "$logf" | tr '\n' ' ' | cut -c1-300)"
     sleep 20
   done
@@ -79,8 +80,10 @@ python3 "$HERE/images/diag-dockerfile.py" "$ROOT/Dockerfile" "$ROOT/Makefile" > 
 build matrix-conduit:bench-diag "$ROOT/.matrix-diag.Dockerfile" "$ROOT" || { log "conduit-diag image build failed"; exit 1; }
 rm -f "$ROOT/.matrix-diag.Dockerfile"
 build matrix-conduit:bench-http "$HERE/images/conduit-http.Dockerfile" "$HERE/images" || log "conduit-http image build failed (HTTP cells will fail)"
-build matrix-connect:3.7.0 "$HERE/images/connect.Dockerfile" "$HERE/images" || { log "connect image build failed"; exit 1; }
-build matrix-dbzserver:3.7.0 "$HERE/images/dbzserver.Dockerfile" "$HERE/images" || { log "dbzserver image build failed"; exit 1; }
+pin() { python3 -c "import json; print(json.load(open('$HERE/images/PINS.json'))['$1'])"; }
+[ -f "$HERE/images/PINS.json" ] || { log "images/PINS.json missing (launch.sh writes it)"; exit 1; }
+build matrix-connect:3.7.0 "$HERE/images/connect.Dockerfile" "$HERE/images" --build-arg "BASE=$(pin connect)" || { log "connect image build failed"; exit 1; }
+build matrix-dbzserver:3.7.0 "$HERE/images/dbzserver.Dockerfile" "$HERE/images" --build-arg "BASE=$(pin dbzserver)" || { log "dbzserver image build failed"; exit 1; }
 for img in $(python3 -c "import sys; sys.path.insert(0,'$HERE'); import cells; print(' '.join(v for v in cells.IMG.values() if '@sha256:' in v))"); do
   docker pull -q "$img" >/dev/null || { log "pull failed: $img"; exit 1; }
 done

@@ -5,7 +5,9 @@
 # (debezium/container-images connect-base/3.7: apicurio-registry-distro-
 # connect-converter 3.2.5, same MD5, Jackson jars removed because they
 # conflict with the runtime's), placed on run.sh's classpath (lib/*).
-FROM quay.io/debezium/server:3.7.0.Final@sha256:9117f3fac0f0ebcc76b364b81d4b914243c65836bc1391a41d23a81d28a15a65
+# BASE: quay.io/debezium/server:3.7.0.Final@<digest>, resolved per run (images/pin.py).
+ARG BASE=quay.io/debezium/server:3.7.0.Final
+FROM ${BASE}
 USER root
 RUN set -e; \
     curl -fsSL -o /tmp/conv.tgz https://repo1.maven.org/maven2/io/apicurio/apicurio-registry-distro-connect-converter/3.2.5/apicurio-registry-distro-connect-converter-3.2.5.tar.gz; \

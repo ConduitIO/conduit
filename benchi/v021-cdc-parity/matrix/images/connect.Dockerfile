@@ -8,7 +8,10 @@
 #   - Confluent JDBC sink 10.9.6 + PostgreSQL JDBC 42.7.11 (Confluent
 #     Community License: free to use, source-available, not OSI open source).
 #   - Confluent S3 sink 12.1.11 (Confluent Community License).
-FROM quay.io/debezium/connect:3.7.0.Final@sha256:8dc50babf4f92744459f955504b54b5589836939263fa2fbc58cb67a115eda3b
+# BASE: quay.io/debezium/connect:3.7.0.Final@<digest>, resolved per run
+# (images/pin.py: quay deletes superseded 3.7.0.Final manifests).
+ARG BASE=quay.io/debezium/connect:3.7.0.Final
+FROM ${BASE}
 
 USER root
 RUN set -e; \
