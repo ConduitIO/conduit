@@ -783,6 +783,9 @@ func (w *Worker) doTaskAttempt(
 		if !taskNode.HasNext() || !b.HasActiveRecords() {
 			// Either this is the last task (the batch has made it end-to-end),
 			// or the batch has only filtered records. Let's ack!
+			if !taskNode.hasBatchingBelow() {
+				return acker.Ack(ctx, b) // hot path: no closure, no destination walk
+			}
 			return w.ackInOrder(ctx, taskNode, func(ctx context.Context) error {
 				return acker.Ack(ctx, b)
 			})
@@ -834,9 +837,14 @@ func (w *Worker) doTaskAttempt(
 				// or the batch has only filtered records. Let's ack!
 				// We need to ack all the records in the batch, not only active
 				// ones, filtered ones should also be acked.
-				err := w.ackInOrder(ctx, taskNode, func(ctx context.Context) error {
-					return acker.Ack(ctx, subBatch)
-				})
+				var err error
+				if taskNode.hasBatchingBelow() {
+					err = w.ackInOrder(ctx, taskNode, func(ctx context.Context) error {
+						return acker.Ack(ctx, subBatch)
+					})
+				} else {
+					err = acker.Ack(ctx, subBatch)
+				}
 				if err != nil {
 					return err
 				}
@@ -848,9 +856,14 @@ func (w *Worker) doTaskAttempt(
 				return err
 			}
 		case RecordFlagNack:
-			err := w.ackInOrder(ctx, taskNode, func(ctx context.Context) error {
-				return acker.Nack(ctx, subBatch, t.ID())
-			})
+			var err error
+			if taskNode.hasBatchingBelow() {
+				err = w.ackInOrder(ctx, taskNode, func(ctx context.Context) error {
+					return acker.Nack(ctx, subBatch, t.ID())
+				})
+			} else {
+				err = acker.Nack(ctx, subBatch, t.ID())
+			}
 			if err != nil {
 				return err
 			}
@@ -1140,6 +1153,26 @@ func poisonBatchingDestinations(n *TaskNode, err error) {
 	}
 }
 
+// hasBatchingBelow reports whether any batching destination task is strictly
+// below n. The answer is fixed once the task tree is built, so it is computed on
+// first use and cached: the worker asks it for every batch that is acked at a
+// node, and walking the tree and allocating a closure there is measurable on the
+// in-process engine benchmark.
+func (n *TaskNode) hasBatchingBelow() bool {
+	switch n.batchingBelowState.Load() {
+	case 1:
+		return false
+	case 2:
+		return true
+	}
+	if len(batchingDestinations(n)) > 0 {
+		n.batchingBelowState.Store(2)
+		return true
+	}
+	n.batchingBelowState.Store(1)
+	return false
+}
+
 // batchingDestinations returns the batching destination tasks strictly below n.
 func batchingDestinations(n *TaskNode) []*DestinationTask {
 	var out []*DestinationTask
@@ -1321,6 +1354,8 @@ type TaskNode struct {
 	// right after a drain released sharedMu. Tests use it to interleave a sibling
 	// at that instant; nil in production.
 	testAfterDrain func()
+	// batchingBelowState caches hasBatchingBelow: 0 unknown, 1 none, 2 some.
+	batchingBelowState atomic.Int32
 	// poisoned is only meaningful if sharedBoundary is true. H2 (adversarial
 	// review of #2734): set, under sharedMu, by doTask when a pass through
 	// this shared subtree returns an error - which may have left the shared
