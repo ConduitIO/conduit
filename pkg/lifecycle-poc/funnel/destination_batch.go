@@ -493,7 +493,18 @@ func (t *DestinationTask) startFlusher(ctx context.Context) {
 // their acks. On a flush error the flusher records it, exits, and leaves any
 // still-queued flushes un-acked so they replay on restart (Invariant 3).
 func (t *DestinationTask) runFlusher(ctx context.Context) {
-	defer close(t.flusherDone)
+	// On every exit that leaves work behind (cause != ""), close flusherDone FIRST
+	// and drain flushCh AFTER it. A sender that wins the send select just as we
+	// exit then either lands before the drain (we drop and count it) or after
+	// flusherDone is closed (enqueueFlush sees that and reclaims it itself), so
+	// no batch is left in the channel with nobody to complete or count it.
+	cause := ""
+	defer func() {
+		close(t.flusherDone)
+		if cause != "" {
+			t.dropQueued(ctx, cause)
+		}
+	}()
 	for {
 		select {
 		case <-ctx.Done():
@@ -501,7 +512,7 @@ func (t *DestinationTask) runFlusher(ctx context.Context) {
 			// In-flight and queued records are un-acked and replay on restart.
 			// Fail closed so nothing queues behind a flusher that is gone.
 			t.setFlushErr(cerrors.Errorf("destination %s flusher stopped: %w", t.id, ctx.Err()))
-			t.dropQueued(ctx, "run context ended")
+			cause = "run context ended"
 			return
 		case pending, ok := <-t.flushCh:
 			if !ok {
@@ -514,14 +525,14 @@ func (t *DestinationTask) runFlusher(ctx context.Context) {
 			// source past batches that were left unacknowledged. It replays.
 			// Checked under mu (flushError), where the flush error is recorded.
 			if t.flushError() != nil {
-				t.finishFlush(nil) // release the slot only
-				t.logger.Warn(ctx).Int("dropped_batches", 1+t.dropQueuedCount(ctx)).Msg("queued batches not flushed after a flush error (they replay on restart)")
+				t.finishFlush(nil) // release this item's slot only
+				cause = "flush error already set"
 				return
 			}
 			err := t.flushPending(ctx, pending)
 			t.finishFlush(err)
 			if err != nil {
-				t.dropQueued(ctx, "flush failed")
+				cause = "flush failed"
 				return
 			}
 		}
@@ -612,12 +623,37 @@ func (t *DestinationTask) stopFlusher(ctx context.Context) error {
 func (t *DestinationTask) enqueueFlush(ctx context.Context, pending []pendingBatch) error {
 	var err error
 	select {
-	case t.flushCh <- pending:
-		return errBuffered
 	case <-t.flusherDone:
 		err = cerrors.Errorf("destination %s flusher stopped before flushing %d buffered batches", t.id, len(pending))
-	case <-ctx.Done():
-		err = cerrors.Errorf("destination %s: enqueue of %d buffered batches abandoned: %w", t.id, len(pending), ctx.Err())
+	default:
+		if t.testBeforeEnqueueSend != nil {
+			t.testBeforeEnqueueSend()
+		}
+		select {
+		case t.flushCh <- pending:
+			select {
+			case <-t.flusherDone:
+				// The flusher exited around our send (both select cases can be
+				// ready). Our batch may be sitting in the channel with nobody left
+				// to write it: reclaim whatever is queued, releasing a slot for
+				// each (the flusher's own exit drain may already have taken ours),
+				// and fail closed. It was never acknowledged and replays.
+				t.dropQueued(ctx, "flusher exited during enqueue")
+				t.mu.Lock()
+				if t.flushErr == nil {
+					t.flushErr = cerrors.Errorf("destination %s flusher stopped while %d batches were being queued", t.id, len(pending))
+				}
+				ferr := t.flushErr
+				t.mu.Unlock()
+				return ferr
+			default:
+				return errBuffered
+			}
+		case <-t.flusherDone:
+			err = cerrors.Errorf("destination %s flusher stopped before flushing %d buffered batches", t.id, len(pending))
+		case <-ctx.Done():
+			err = cerrors.Errorf("destination %s: enqueue of %d buffered batches abandoned: %w", t.id, len(pending), ctx.Err())
+		}
 	}
 	// Invariant 3 (enforcement site): the taken batches are dropped (never
 	// written or acked, they replay). Release the slot and fail closed in one

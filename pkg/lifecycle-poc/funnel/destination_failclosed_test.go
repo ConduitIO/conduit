@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
@@ -111,4 +112,72 @@ func TestDeferOrdered_RefusesAfterClose(t *testing.T) {
 	})
 	is.True(err != nil)
 	is.True(!ran)
+}
+
+// blockingCanceledDestination fails Write with a bare context.Canceled, as a
+// plugin's own transport can, while the run itself is still alive.
+type blockingCanceledDestination struct{ *fakeDestination }
+
+func (blockingCanceledDestination) Write(context.Context, []opencdc.Record) error {
+	return context.Canceled
+}
+
+// TestClose_PluginCanceledIsNotAStopCancellation: a bare context.Canceled coming
+// from the destination plugin while the run is alive is a real failure; Close
+// must still report the unwritten records. Only the run's own cancellation (a
+// forced stop) is the expected replay case.
+func TestClose_PluginCanceledIsNotAStopCancellation(t *testing.T) {
+	is := is.New(t)
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	defer cancelRun()
+	task := NewBatchingDestinationTask("d", blockingCanceledDestination{newFakeDestination("d")}, log.Test(t), NoOpConnectorMetrics{}, 10, 0)
+	is.NoErr(task.Open(runCtx))
+	is.True(isBuffered(task.doBuffered(runCtx, NewBatch(randomRecords(1)), newRecordingAckNacker(&eventLog{}))))
+
+	err := task.Close(context.Background()) // run ctx still alive
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code.Reason(), CodeFlushOnCloseFailed.Reason())
+}
+
+// TestClose_RunCancellationIsNotReportedAsFailure: when the run's own context was
+// cancelled (force stop), the unwritten records replay and Close stays quiet.
+func TestClose_RunCancellationIsNotReportedAsFailure(t *testing.T) {
+	is := is.New(t)
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	task := NewBatchingDestinationTask("d", blockingCanceledDestination{newFakeDestination("d")}, log.Test(t), NoOpConnectorMetrics{}, 10, 0)
+	is.NoErr(task.Open(runCtx))
+	is.True(isBuffered(task.doBuffered(runCtx, NewBatch(randomRecords(1)), newRecordingAckNacker(&eventLog{}))))
+
+	cancelRun() // the run is force-stopped
+	is.NoErr(task.Close(context.Background()))
+}
+
+// TestEnqueueFlush_SendRacingFlusherExitLeavesNothingStranded: a sender can win the
+// send select just as the flusher exits (both cases ready). The batch must not be
+// left in flushCh with nobody to complete or count it: the sender must notice the
+// flusher is gone, reclaim it, and fail closed. Looped because the select is random.
+func TestEnqueueFlush_SendRacingFlusherExitLeavesNothingStranded(t *testing.T) {
+	for i := 0; i < 40; i++ {
+		is := is.New(t)
+		runCtx, cancelRun := context.WithCancel(context.Background())
+		task := NewBatchingDestinationTask("d", newFakeDestination("d"), log.Test(t), NoOpConnectorMetrics{}, 2, 0)
+		task.SetPipelined()
+		is.NoErr(task.Open(runCtx))
+
+		task.testBeforeEnqueueSend = func() {
+			task.testBeforeEnqueueSend = nil
+			cancelRun() // the flusher exits (ctx.Done) ...
+			<-task.flusherDone
+			time.Sleep(time.Millisecond) // ... and has finished its exit drain
+		}
+		is.True(isBuffered(task.doBuffered(context.Background(), NewBatch(randomRecords(1)), newRecordingAckNacker(&eventLog{}))))
+		err := task.doBuffered(context.Background(), NewBatch(randomRecords(1)), newRecordingAckNacker(&eventLog{})) // triggers the flush
+		is.True(err != nil)                                                                                          // fails closed, never "buffered" into a dead flusher
+		is.Equal(len(task.flushCh), 0)
+		task.mu.Lock()
+		is.Equal(task.outstanding, 0)
+		task.mu.Unlock()
+		cancelRun()
+	}
 }
