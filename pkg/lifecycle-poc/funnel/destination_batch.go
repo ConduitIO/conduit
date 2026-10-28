@@ -501,6 +501,9 @@ func (t *DestinationTask) runFlusher(ctx context.Context) {
 	cause := ""
 	defer func() {
 		close(t.flusherDone)
+		if t.testMidFlusherExit != nil {
+			t.testMidFlusherExit()
+		}
 		if cause != "" {
 			t.dropQueued(ctx, cause)
 		}
