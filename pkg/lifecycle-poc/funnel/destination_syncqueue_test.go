@@ -87,3 +87,56 @@ func TestDestinationTask_Sync_AckQueuedDuringFlushIsReleased(t *testing.T) {
 	waitForCondition(t, time.Second, func() bool { return len(alog.snapshot()) == 3 })
 	is.Equal(alog.snapshot(), []string{"acker.ack", "acker.ack", "action"})
 }
+
+// TestDestinationTask_Sync_QueuedAckDoesNotOvertakeTakenBatch: on the synchronous
+// path doBuffered took the pending buffer and only afterwards acquired syncMu. In
+// that gap a sibling's processor-side ack, queued behind the (already counted)
+// flush, could win syncMu in releaseSync and run BEFORE the batch the first
+// worker had already taken: that batch may hold the sibling's own earlier
+// records, so a crash then skips them. Take and flush must be one unit with
+// respect to releaseSync.
+func TestDestinationTask_Sync_QueuedAckDoesNotOvertakeTakenBatch(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	task := NewBatchingDestinationTask("d", newFakeDestination("d"), log.Test(t), NoOpConnectorMetrics{}, 2, 0)
+	recs := randomRecords(2)
+	ev := &eventLog{}
+
+	var once sync.Once
+	task.testAfterTake = func() {
+		once.Do(func() {
+			is.NoErr(task.deferOrdered(ctx, func(context.Context) error {
+				ev.append("sibling.action")
+				return nil
+			}))
+		})
+	}
+	is.True(isBuffered(task.doBuffered(ctx, NewBatch(recs[:1]), newRecordingAckNacker(ev))))
+	is.NoErr(task.doBuffered(ctx, NewBatch(recs[1:]), newRecordingAckNacker(ev))) // takes pending, hook fires
+
+	is.Equal(ev.snapshot(), []string{"acker.ack", "acker.ack", "sibling.action"})
+}
+
+// TestDestinationTask_Sync_FlushNotOvertakenByQueuedAck: same for flush() (Close
+// and Drain), through the same hook point.
+func TestDestinationTask_Sync_FlushNotOvertakenByQueuedAck(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	task := NewBatchingDestinationTask("d", newFakeDestination("d"), log.Test(t), NoOpConnectorMetrics{}, 5, 0)
+	recs := randomRecords(1)
+	ev := &eventLog{}
+
+	var once sync.Once
+	task.testAfterTake = func() {
+		once.Do(func() {
+			is.NoErr(task.deferOrdered(ctx, func(context.Context) error {
+				ev.append("sibling.action")
+				return nil
+			}))
+		})
+	}
+	is.True(isBuffered(task.doBuffered(ctx, NewBatch(recs), newRecordingAckNacker(ev))))
+	is.NoErr(task.flush(ctx))
+
+	is.Equal(ev.snapshot(), []string{"acker.ack", "sibling.action"})
+}

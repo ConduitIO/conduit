@@ -160,7 +160,61 @@ func (t *DestinationTask) doBuffered(ctx context.Context, batch *Batch, acker ac
 		t.enqueueMu.Lock()
 		defer t.enqueueMu.Unlock()
 	}
+	// Synchronous path: the same unit, with syncMu in the role of enqueueMu, and
+	// taken BEFORE pending is taken. Taken afterwards, a sibling's queued ack
+	// could win syncMu in releaseSync in the gap and run ahead of the batch this
+	// call already took (which may hold that sibling's earlier records).
+	// Lock order: sharedMu, then syncMu, then mu.
+	syncHeld := false
+	if t.flushCh == nil {
+		t.syncMu.Lock()
+		syncHeld = true
+		defer func() {
+			if syncHeld {
+				t.syncMu.Unlock()
+			}
+		}()
+	}
 
+	toFlush, shouldFlush, err := t.bufferBatch(batch, acker, len(records))
+	if err != nil {
+		return err
+	}
+	if !shouldFlush {
+		if syncHeld {
+			// Acks queued while syncMu was held could not flush (TryLock); this
+			// is the re-check that releases them.
+			syncHeld = false
+			t.syncMu.Unlock()
+			if err := t.releaseSync(ctx); err != nil {
+				return err
+			}
+		}
+		return errBuffered
+	}
+	if t.testAfterTake != nil {
+		t.testAfterTake()
+	}
+	if t.flushCh == nil {
+		// Pipelining not running (fan-out, or Open not called): flush
+		// synchronously on the worker, the pre-pipelining behavior.
+		err := t.flushTaken(ctx, toFlush) // syncMu is held
+		syncHeld = false
+		t.syncMu.Unlock()
+		if err != nil {
+			return err
+		}
+		// Acks other workers queued behind this flush are released now by the
+		// worker that holds the shared lock, instead of waiting for the next
+		// unfiltered record.
+		return t.releaseSync(ctx)
+	}
+	return t.enqueueFlush(ctx, toFlush)
+}
+
+// bufferBatch appends batch to the pending buffer under mu and, if the buffer is
+// now due, takes it for flushing (counting it in outstanding).
+func (t *DestinationTask) bufferBatch(batch *Batch, acker ackNacker, n int) (toFlush []pendingBatch, shouldFlush bool, err error) {
 	t.mu.Lock()
 	// Invariant 3: re-check under the lock that decides. The early check above
 	// is only a fast path; a flush can fail between it and here, and buffering
@@ -168,11 +222,11 @@ func (t *DestinationTask) doBuffered(ctx context.Context, batch *Batch, acker ac
 	// batches that flush dropped.
 	if err := t.flushErr; err != nil {
 		t.mu.Unlock()
-		return err
+		return nil, false, err
 	}
 	if t.closed {
 		t.mu.Unlock()
-		return cerrors.Errorf("destination %s is closed", t.id)
+		return nil, false, cerrors.Errorf("destination %s is closed", t.id)
 	}
 	now := time.Now()
 	if t.bufferedCount == 0 && t.batchDelay > 0 {
@@ -182,15 +236,14 @@ func (t *DestinationTask) doBuffered(ctx context.Context, batch *Batch, acker ac
 		t.flushDeadline = now.Add(t.batchDelay)
 	}
 	t.pending = append(t.pending, pendingBatch{batch: batch, acker: acker})
-	t.bufferedCount += len(records)
+	t.bufferedCount += n
 
 	// len(pending) counts queued source acks too: each pins a *Batch and the
 	// source position, so a long run of them must not wait for more records.
-	shouldFlush := t.bufferedCount >= t.effectiveBatchSize() || len(t.pending) >= t.effectiveBatchSize()
+	shouldFlush = t.bufferedCount >= t.effectiveBatchSize() || len(t.pending) >= t.effectiveBatchSize()
 	if !shouldFlush && t.batchDelay > 0 && !t.flushDeadline.IsZero() && now.After(t.flushDeadline) {
 		shouldFlush = true
 	}
-	var toFlush []pendingBatch
 	if shouldFlush {
 		toFlush = t.pending
 		t.pending = nil
@@ -203,25 +256,7 @@ func (t *DestinationTask) doBuffered(ctx context.Context, batch *Batch, acker ac
 		t.outstanding++
 	}
 	t.mu.Unlock()
-
-	if !shouldFlush {
-		return errBuffered
-	}
-	if t.testAfterTake != nil {
-		t.testAfterTake()
-	}
-	if t.flushCh == nil {
-		// Pipelining not running (fan-out, or Open not called): flush
-		// synchronously on the worker, the pre-pipelining behavior.
-		if err := t.syncFlush(ctx, toFlush); err != nil {
-			return err
-		}
-		// Acks other workers queued behind this flush are released now by the
-		// worker that holds the shared lock, instead of waiting for the next
-		// unfiltered record.
-		return t.releaseSync(ctx)
-	}
-	return t.enqueueFlush(ctx, toFlush)
+	return toFlush, shouldFlush, nil
 }
 
 // deferOrdered runs ack (a source ack or nack for records that bypass this
@@ -311,13 +346,12 @@ func (t *DestinationTask) releasableLocked() bool {
 		(t.batchDelay > 0 && !t.flushDeadline.IsZero() && time.Now().After(t.flushDeadline))
 }
 
-// syncFlush is flushPending for the synchronous path. syncMu serialises every
-// synchronous flush of this task: besides the worker that holds the shared lock,
+// flushTaken is flushPending for the synchronous path; the caller holds syncMu,
+// having taken it before it took pending. syncMu serialises every synchronous
+// flush of this task: besides the worker that holds the shared lock,
 // releaseSync may flush from a source-scoped processor that does not, and both
 // would otherwise interleave Write/Ack on the one destination stream.
-func (t *DestinationTask) syncFlush(ctx context.Context, pending []pendingBatch) error {
-	t.syncMu.Lock()
-	defer t.syncMu.Unlock()
+func (t *DestinationTask) flushTaken(ctx context.Context, pending []pendingBatch) error {
 	err := t.flushPending(ctx, pending)
 	t.finishFlush(err) // releases the slot and fails closed in one step
 	return err
@@ -370,6 +404,8 @@ func (t *DestinationTask) releaseSync(ctx context.Context) error {
 // the synchronous path used when pipelining is not running (fan-out) and by
 // Close; see flushPending for the write/ack work itself.
 func (t *DestinationTask) flush(ctx context.Context) error {
+	// syncMu before pending, as in doBuffered: take and flush are one unit.
+	t.syncMu.Lock()
 	t.mu.Lock()
 	// Invariant 3: after a failed flush what is still pending (records and source
 	// acks queued behind the batch that failed) must not run: those acks would
@@ -377,6 +413,7 @@ func (t *DestinationTask) flush(ctx context.Context) error {
 	// unacknowledged and replays on restart.
 	if err := t.flushErr; err != nil {
 		t.mu.Unlock()
+		t.syncMu.Unlock()
 		return err
 	}
 	pending := t.pending
@@ -385,7 +422,12 @@ func (t *DestinationTask) flush(ctx context.Context) error {
 	t.flushDeadline = time.Time{}
 	t.outstanding++
 	t.mu.Unlock()
-	if err := t.syncFlush(ctx, pending); err != nil {
+	if t.testAfterTake != nil {
+		t.testAfterTake()
+	}
+	err := t.flushTaken(ctx, pending)
+	t.syncMu.Unlock()
+	if err != nil {
 		return err
 	}
 	return t.releaseSync(ctx)

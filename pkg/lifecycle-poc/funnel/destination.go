@@ -79,7 +79,7 @@ type DestinationTask struct {
 	// deferOrdered on the pipelined path. Lock order: enqueueMu, then mu. The
 	// flusher never takes it.
 	enqueueMu sync.Mutex
-	// syncMu serialises synchronous (non-pipelined) flushes; see syncFlush.
+	// syncMu serialises synchronous (non-pipelined) flushes; see flushTaken. Lock order: sharedMu, syncMu, mu.
 	syncMu sync.Mutex
 
 	// testAfterTake, if set, is called by doBuffered after it took the pending
