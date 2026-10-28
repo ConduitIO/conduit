@@ -68,6 +68,7 @@ docker build -q -t matrix-conduit:bench-diag -f "$ROOT/.matrix-diag.Dockerfile" 
 rm -f "$ROOT/.matrix-diag.Dockerfile"
 docker build -q -t matrix-conduit:bench-http -f "$HERE/images/conduit-http.Dockerfile" "$HERE/images" >/dev/null || log "conduit-http image build failed (HTTP cells will fail)"
 docker build -q -t matrix-connect:3.7.0 -f "$HERE/images/connect.Dockerfile" "$HERE/images" >/dev/null || { log "connect image build failed"; exit 1; }
+docker build -q -t matrix-dbzserver:3.7.0 -f "$HERE/images/dbzserver.Dockerfile" "$HERE/images" >/dev/null || { log "dbzserver image build failed"; exit 1; }
 for img in $(python3 -c "import sys; sys.path.insert(0,'$HERE'); import cells; print(' '.join(v for v in cells.IMG.values() if '@sha256:' in v))"); do
   docker pull -q "$img" >/dev/null || { log "pull failed: $img"; exit 1; }
 done

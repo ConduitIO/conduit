@@ -79,7 +79,7 @@ def main():
         "conduit_connectors": sh("sh", "-c", f"grep -E 'conduit-connector-(postgres|s3|file|kafka|sdk) ' {root}/go.mod"),
         "images": {k: v for k, v in cells.IMG.items()},
         "built_images": {t: sh("docker", "image", "inspect", "-f", "{{.Id}}", t)
-                         for t in ("matrix-conduit:bench", "matrix-conduit:bench-diag", "matrix-conduit:bench-http", "matrix-connect:3.7.0")},
+                         for t in ("matrix-conduit:bench", "matrix-conduit:bench-diag", "matrix-conduit:bench-http", "matrix-connect:3.7.0", "matrix-dbzserver:3.7.0")},
         "kafka_broker": "apache/kafka 4.0.0 (pinned digest), heap 4 GiB, RF 1, one broker",
         "connect_runtime": sh("docker", "run", "--rm", "--entrypoint", "sh", "matrix-connect:3.7.0", "-c",
                               "ls /kafka/libs | grep -E '^connect-runtime-'"),

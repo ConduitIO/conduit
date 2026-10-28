@@ -53,7 +53,9 @@ IMG = {
     # Built by run-shard.sh: FROM quay.io/debezium/connect:3.7.0.Final@sha256:8dc50bab...
     # plus the file connectors and the Confluent JDBC and S3 sinks (images/connect.Dockerfile).
     "connect": "matrix-connect:3.7.0",
-    "dbzserver": "quay.io/debezium/server:3.7.0.Final@sha256:9117f3fac0f0ebcc76b364b81d4b914243c65836bc1391a41d23a81d28a15a65",
+    # Built by run-shard.sh: FROM quay.io/debezium/server:3.7.0.Final@sha256:9117f3fa...
+    # plus the Apicurio Avro converter (images/dbzserver.Dockerfile).
+    "dbzserver": "matrix-dbzserver:3.7.0",
     "dbzserver-native": "quay.io/debezium/server-native:3.7.0.Final@sha256:6654a571bbb28a120f3d5f4fd8140620c730231f995d2b46e3d0570e4bd9de17",
     # Built by run-shard.sh from the repository Dockerfile at CONDUIT_SHA; the
     # -http image adds the conduitio-labs HTTP connector, the -diag image the
@@ -1236,6 +1238,7 @@ def dbzserver_service(c: Cell, arm: str) -> dict:
     }
     if side != "dbzserver-native":
         s["environment"] = {"JAVA_OPTS": opts + " ${JVM_DIAG_OPTS:-}"}
+        s["pull_policy"] = "never"  # built locally (images/dbzserver.Dockerfile)
     if side == "dbzserver-avro-xn":
         # One Debezium Server process per table, all in this one container
         # (same cpuset and memory limit as every other side). Heap per process:
