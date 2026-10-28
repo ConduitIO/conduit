@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -248,4 +249,126 @@ func TestCtxMutex(t *testing.T) {
 	}
 	m.Unlock()
 	<-acquired
+}
+
+// chunkHookDestination runs onWrite(n) at the start of its n-th Write (1-based)
+// and fails every Write from failFrom on.
+type chunkHookDestination struct {
+	*fakeDestination
+	mu       sync.Mutex
+	n        int
+	failFrom int
+	onWrite  func(n int)
+}
+
+func (d *chunkHookDestination) Write(ctx context.Context, recs []opencdc.Record) error {
+	d.mu.Lock()
+	d.n++
+	n := d.n
+	d.mu.Unlock()
+	if d.onWrite != nil {
+		d.onWrite(n)
+	}
+	if d.failFrom > 0 && n >= d.failFrom {
+		return fmt.Errorf("chunk %d rejected", n)
+	}
+	return d.fakeDestination.Write(ctx, recs)
+}
+
+// TestChunkedFlush_SecondChunkFailsWhileSiblingAckQueued: wire-size chunking
+// (several Writes per flush) composed with the ordered-ack machinery. A sibling's
+// filtered batch is queued while chunk 1 is in flight; chunk 2 then fails. The
+// slot stays outstanding for the whole chunked flush (so the ack cannot run
+// inline), the failure is recorded in the same step that releases it, and the
+// queued ack must never run: the records of the failed chunk are unwritten and a
+// later flush (Close) must not release anything past them.
+func TestChunkedFlush_SecondChunkFailsWhileSiblingAckQueued(t *testing.T) {
+	for name, pipelined := range map[string]bool{"synchronous": false, "pipelined": true} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+			var ran atomic.Bool
+			var task *DestinationTask
+			dest := &chunkHookDestination{fakeDestination: newFakeDestination("d"), failFrom: 2}
+			dest.onWrite = func(n int) {
+				if n == 1 {
+					// A sibling's whole-batch filter lands while chunk 1 is in flight.
+					err := task.deferOrdered(ctx, func(context.Context) error {
+						ran.Store(true)
+						return nil
+					})
+					if err != nil {
+						t.Errorf("deferOrdered while chunk 1 in flight: %v", err)
+					}
+				}
+			}
+			task = NewBatchingDestinationTask("d", dest, log.Test(t), NoOpConnectorMetrics{}, 100, 0)
+			task.SetMaxReceiveRecordSize(testMaxReceive) // ~2 records of 1 KB per chunk
+			if pipelined {
+				task.SetPipelined()
+			}
+			runCtx, cancelRun := context.WithCancel(ctx)
+			defer cancelRun()
+			is.NoErr(task.Open(runCtx))
+
+			recs := bigRecords(5, 1000) // 3 chunks
+			alog := &eventLog{}
+			err := task.doBuffered(ctx, NewBatch(recs), newRecordingAckNacker(alog))
+			if pipelined {
+				is.True(isBuffered(err))
+			} else {
+				is.True(err != nil) // the synchronous flush surfaces chunk 2's failure
+			}
+
+			if pipelined {
+				waitForCondition(t, 2*time.Second, func() bool { return task.flushError() != nil })
+			} else {
+				is.True(task.flushError() != nil) // the failed flush recorded it before returning
+			}
+			is.True(!ran.Load()) // the queued ack did not run
+			task.mu.Lock()
+			is.Equal(task.outstanding, 0) // the slot was released exactly once
+			task.mu.Unlock()
+
+			_ = task.Close(ctx) // must not flush the queued ack either
+			is.True(!ran.Load())
+			is.Equal(len(alog.snapshot()), 0)          // and the failed batch was never acked
+			is.Equal(len(dest.receivedPositions()), 2) // only chunk 1 reached the destination
+		})
+	}
+}
+
+// TestDeferOrdered_ReleaseResetsBufferedBytes: composition of the byte cap with
+// the ordered-ack queue. When deferOrdered hands the buffer to the flusher it must
+// clear the buffered byte count too; a stale count makes the next small batch
+// flush early.
+func TestDeferOrdered_ReleaseResetsBufferedBytes(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	dest := newFakeDestination("d")
+	task := NewBatchingDestinationTask("d", dest, log.Test(t), NoOpConnectorMetrics{}, 100, 0)
+	task.SetMaxReceiveRecordSize(testMaxReceive)
+	task.SetPipelined()
+	runCtx, cancelRun := context.WithCancel(ctx)
+	defer cancelRun()
+	is.NoErr(task.Open(runCtx))
+	t.Cleanup(func() { cancelRun(); <-task.flusherExited })
+
+	recs := bigRecords(2, 1000)
+	is.True(isBuffered(task.doBuffered(ctx, NewBatch(recs[:1]), newRecordingAckNacker(&eventLog{}))))
+	task.mu.Lock()
+	is.True(task.bufferedBytes > 0)
+	task.mu.Unlock()
+
+	// A queued ack with a deadline-free full queue: force the release path.
+	task.mu.Lock()
+	task.batchDelay = time.Millisecond
+	task.flushDeadline = time.Now().Add(-time.Second)
+	task.mu.Unlock()
+	is.NoErr(task.deferOrdered(ctx, func(context.Context) error { return nil }))
+
+	task.mu.Lock()
+	defer task.mu.Unlock()
+	is.Equal(task.bufferedCount, 0)
+	is.Equal(task.bufferedBytes, 0)
 }
