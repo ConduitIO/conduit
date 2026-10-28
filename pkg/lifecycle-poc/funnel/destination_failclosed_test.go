@@ -385,7 +385,7 @@ func TestCtxMutex_LockCtxAbandonedWaiterReleases(t *testing.T) {
 	is.True(m.LockCtx(ctx) != nil) // gave up while the lock was held
 	m.Unlock()                     // the abandoned helper now acquires and must release
 	done := make(chan struct{})
-	go func() { m.Lock(); m.Unlock(); close(done) }()
+	go func() { m.Lock(); close(done); m.Unlock() }()
 	select {
 	case <-done:
 	case <-time.After(time.Second):
@@ -415,7 +415,7 @@ func TestCtxMutex_AbandonedHelperExitsOnRelease(t *testing.T) {
 	waitForCondition(t, 2*time.Second, func() bool { return runtime.NumGoroutine() <= before })
 
 	done := make(chan struct{})
-	go func() { m.Lock(); m.Unlock(); close(done) }()
+	go func() { m.Lock(); close(done); m.Unlock() }()
 	select {
 	case <-done:
 	case <-time.After(time.Second):
