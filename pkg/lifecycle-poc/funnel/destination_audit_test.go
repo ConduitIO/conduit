@@ -93,7 +93,7 @@ func TestDrain_HonoursCtxWhileWaitingForEnqueueMu(t *testing.T) {
 	t.Cleanup(func() {
 		unblock()
 		cancelRun()
-		<-task.flusherDone
+		<-task.flusherExited
 		<-sibling
 	})
 	for i := 0; i < 3; i++ {
@@ -137,7 +137,7 @@ func TestDrain_DoesNotTakePendingAfterFlushError(t *testing.T) {
 	if err := task.Open(runCtx); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { cancelRun(); <-task.flusherDone })
+	t.Cleanup(func() { cancelRun(); <-task.flusherExited })
 	if !isBuffered(task.doBuffered(runCtx, NewBatch(randomRecords(1)), newRecordingAckNacker(&eventLog{}))) {
 		t.Fatal("expected buffered")
 	}
