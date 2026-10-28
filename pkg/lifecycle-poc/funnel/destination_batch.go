@@ -479,6 +479,7 @@ func isBuffered(err error) bool {
 func (t *DestinationTask) startFlusher(ctx context.Context) {
 	t.flushCh = make(chan []pendingBatch, maxInFlightFlushes)
 	t.flusherDone = make(chan struct{})
+	t.flusherExited = make(chan struct{})
 	go t.runFlusher(ctx)
 }
 
@@ -493,6 +494,7 @@ func (t *DestinationTask) startFlusher(ctx context.Context) {
 // their acks. On a flush error the flusher records it, exits, and leaves any
 // still-queued flushes un-acked so they replay on restart (Invariant 3).
 func (t *DestinationTask) runFlusher(ctx context.Context) {
+	defer close(t.flusherExited) // runs last, after the exit drain below
 	// On every exit that leaves work behind (cause != ""), close flusherDone FIRST
 	// and drain flushCh AFTER it. A sender that wins the send select just as we
 	// exit then either lands before the drain (we drop and count it) or after
@@ -613,7 +615,7 @@ func (t *DestinationTask) stopFlusher(ctx context.Context) error {
 		}
 	}
 	close(t.flushCh)
-	<-t.flusherDone
+	<-t.flusherExited // fully returned, exit drain included
 	return t.flushError()
 }
 
