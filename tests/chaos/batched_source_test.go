@@ -411,14 +411,14 @@ func TestSIGKILL_BatchedSource_AfterWriteBeforePersist(t *testing.T) {
 // not send were dropped unacked and nothing sent was left unpersisted.
 func TestSIGTERM_BatchedSource_GracefulDrain(t *testing.T) {
 	conduitBin, _ := buildStandaloneBinaries(t)
-	const total = 400000
+	const total = 1000000
 	for _, eng := range batchedEngines {
 		t.Run(eng.name, func(t *testing.T) {
 			dir := batchedDir(t, total)
 
 			first := startConduit(t, conduitBin, dir, "never", eng.flags...)
 			requireBatchedSource(t, first)
-			waitDelivered(t, first, dir, 20000)
+			waitDelivered(t, first, dir, 10000)
 			first.sigterm(t)
 			mid, midTotal := delivered(t, dir)
 			if midTotal >= total {
