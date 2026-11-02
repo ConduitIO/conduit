@@ -90,12 +90,14 @@ resource "aws_security_group" "bench" {
 }
 
 resource "aws_instance" "bench" {
-  count                                = var.instances
-  ami                                  = data.aws_ssm_parameter.ubuntu.value
-  instance_type                        = var.instance_type
-  vpc_security_group_ids               = [aws_security_group.bench.id]
-  iam_instance_profile                 = aws_iam_instance_profile.bench.name
-  instance_initiated_shutdown_behavior = "terminate"
+  count                  = var.instances
+  ami                    = data.aws_ssm_parameter.ubuntu.value
+  instance_type          = var.instance_type
+  vpc_security_group_ids = [aws_security_group.bench.id]
+  iam_instance_profile   = aws_iam_instance_profile.bench.name
+  # EC2 rejects this attribute on spot instances; a one-time spot instance
+  # that shuts itself down is terminated anyway.
+  instance_initiated_shutdown_behavior = var.market == "spot" ? null : "terminate"
 
   # Spot by default (var.market); launch.sh falls back to on-demand only after
   # two spot capacity failures, and records which market each launch used. An
