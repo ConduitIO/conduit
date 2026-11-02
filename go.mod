@@ -8,17 +8,17 @@ require (
 	github.com/alexeyco/simpletable v1.0.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.12
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.12
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.3
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.5
 	github.com/cohere-ai/cohere-go/v2 v2.14.1
 	github.com/conduitio/conduit-commons v0.13.0
-	github.com/conduitio/conduit-connector-file v0.11.0
-	github.com/conduitio/conduit-connector-generator v0.10.8
-	github.com/conduitio/conduit-connector-kafka v0.16.0
-	github.com/conduitio/conduit-connector-log v0.8.0
-	github.com/conduitio/conduit-connector-postgres v0.18.0
-	github.com/conduitio/conduit-connector-protocol v0.11.1
-	github.com/conduitio/conduit-connector-s3 v0.12.0
-	github.com/conduitio/conduit-connector-sdk v0.17.2
+	github.com/conduitio/conduit-connector-file v0.12.0
+	github.com/conduitio/conduit-connector-generator v0.11.0
+	github.com/conduitio/conduit-connector-kafka v0.17.0
+	github.com/conduitio/conduit-connector-log v0.9.0
+	github.com/conduitio/conduit-connector-postgres v0.19.0
+	github.com/conduitio/conduit-connector-protocol v0.12.0
+	github.com/conduitio/conduit-connector-s3 v0.13.0
+	github.com/conduitio/conduit-connector-sdk v0.18.1
 	github.com/conduitio/conduit-processor-sdk v0.9.2
 	github.com/conduitio/conduit-schema-registry v0.2.7
 	github.com/conduitio/ecdysis v0.6.0
@@ -39,7 +39,7 @@ require (
 	github.com/in-toto/attestation v1.2.0
 	github.com/iskorotkov/avro/v2 v2.34.0
 	github.com/jackc/pgx/v5 v5.11.0
-	github.com/jpillora/backoff v1.0.0
+	github.com/jpillora/backoff v1.1.0
 	github.com/klauspost/compress v1.20.3
 	github.com/matryer/is v1.4.1
 	github.com/mattn/go-isatty v0.0.24
@@ -87,15 +87,15 @@ require (
 	github.com/apache/thrift v0.24.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.47.5 // indirect
-	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.22 // indirect
+	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.24 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.5 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.8 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.8 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.8 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.23 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.11.7 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.11.8 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.8 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.20.6 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.20.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.12.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.39.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.44.0 // indirect
