@@ -344,7 +344,9 @@ func (b *Batch) SplitRecord(i int, recs []opencdc.Record) {
 	// on every split after the first. See splitRun's doc comment for why this
 	// must be able to grow after some sibling members have already gone
 	// terminal.
+	run.mu.Lock()
 	run.total += len(recs) - 1
+	run.mu.Unlock()
 
 	b.records = append(b.records[:i], append(recs, b.records[i+1:]...)...)
 
@@ -594,8 +596,14 @@ func cloneRuns(runs []*splitRun) []*splitRun {
 		}
 		cloned, ok := seen[r]
 		if !ok {
-			copied := *r
-			cloned = &copied
+			r.mu.Lock()
+			cloned = &splitRun{
+				origPos: r.origPos, origRecord: r.origRecord,
+				total: r.total, terminalCount: r.terminalCount,
+				nacked: r.nacked, nackErr: r.nackErr, nackTaskID: r.nackTaskID,
+				released: r.released,
+			}
+			r.mu.Unlock()
 			seen[r] = cloned
 		}
 		out[i] = cloned

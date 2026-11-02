@@ -237,6 +237,41 @@ func TestDestinationTask_DoBuffered_AllFilteredAcksImmediately(t *testing.T) {
 	is.Equal(log.snapshot(), []string{"acker.ack"}) // acked, nothing written
 }
 
+// TestDestinationTask_DoBuffered_FilteredBehindBuffered_AcksInOrder: an
+// all-filtered batch that arrives while an earlier batch is still buffered must
+// not ack the source ahead of it (Invariant 1/2/3). It is released, in source
+// order, by the flush that writes the earlier batch.
+func TestDestinationTask_DoBuffered_FilteredBehindBuffered_AcksInOrder(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	log := &eventLog{}
+	ctrl := gomock.NewController(t)
+	dest := NewMockDestination(ctrl)
+
+	recs := randomRecords(2)
+	task := newBatchingTask(t, dest, 3, 0)
+
+	is.True(isBuffered(task.doBuffered(ctx, NewBatch(recs[:1]), newRecordingAckNacker(log))))
+
+	filtered := NewBatch(recs[1:])
+	filtered.Filter(0)
+	is.NoErr(task.doBuffered(ctx, filtered, newRecordingAckNacker(log)))
+	is.Equal(len(log.snapshot()), 0) // nothing acked: recs[0] is not written yet
+
+	dest.EXPECT().Write(ctx, recs[:1]).DoAndReturn(func(context.Context, []opencdc.Record) error {
+		log.append("dest.write")
+		return nil
+	})
+	dest.EXPECT().Ack(ctx).DoAndReturn(func(context.Context) ([]connector.DestinationAck, error) {
+		log.append("dest.ack")
+		return toDestinationAcks(recs[:1], nil), nil
+	})
+	dest.EXPECT().Teardown(ctx).Return(nil)
+	is.NoErr(task.Close(ctx))
+
+	is.Equal(log.snapshot(), []string{"dest.write", "dest.ack", "acker.ack", "acker.ack"})
+}
+
 // TestDestinationTask_DoBuffered_NackMarksBatch: a destination ack error nacks
 // the owning source batch after the write.
 func TestDestinationTask_DoBuffered_NackMarksBatch(t *testing.T) {

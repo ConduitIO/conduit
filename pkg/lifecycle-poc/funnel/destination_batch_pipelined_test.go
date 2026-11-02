@@ -22,6 +22,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
@@ -178,8 +179,11 @@ func TestDestinationTask_DoBuffered_Pipelined_FlusherErrorPropagates(t *testing.
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr))
 
-	// Close still tears down (the flush error is logged, not returned).
-	is.NoErr(task.Close(ctx))
+	// Close still tears down, and reports the flush failure with a stable code so
+	// the stop is not mistaken for a clean one.
+	ce, ok := conduiterr.Get(task.Close(ctx))
+	is.True(ok)
+	is.Equal(ce.Code.Reason(), CodeFlushOnCloseFailed.Reason())
 }
 
 // TestDestinationTask_DoBuffered_Pipelined_CloseFlushesTrailing proves Close
