@@ -413,19 +413,21 @@ def smoke_cells(cs: list) -> list:
 # to flush wiring bugs before the gated smoke. Never results, never a gate.
 # Pass 3: only the paths not yet proven (B-kafka-pg and Conduit's
 # multi-table paths passed in pass 2).
-SHAKEDOWN_CELLS = ["A2-pg-kafka-p1-b64", "A2-pg-pg-p4-b64", "G-pg-kafka-kill9"]
+SHAKEDOWN_CELLS = ["A2-pg-kafka-p1-b64"]
 # One arm per wiring path (each side, JSON and Avro, the multi-table and
 # scale-out paths, one tuned Conduit arm), to stay under the $5 cap; the
 # other tuned arms are first exercised by the smoke run. Pass 3 keeps only
 # the paths passes 1 and 2 did not prove (connect-avro-s stays on
-# A2-pg-kafka because its diag run is the async-profiler check).
+# A2-pg-kafka because its diag run is the async-profiler check). Pass 4
+# (wire check) runs every side once on A2-pg-kafka to sample the records
+# each one puts on the broker.
 SHAKEDOWN_ARMS = {
-    "A2-pg-kafka-p1-b64": ("connect-avro-s", "dbzserver-avro-s"),
+    "A2-pg-kafka-p1-b64": ("conduit-avro-s", "connect-avro-s", "dbzserver-avro-s"),
     "A2-pg-pg-p4-b64": ("connect-avro-s", "dbzserver-avro-s", "dbzserver-avro-xn-s"),
     "B-kafka-pg-p1-b64": ("conduit-s", "connect-s"),
     "G-pg-kafka-kill9": ("conduit-avro-s", "connect-avro-s", "dbzserver-avro-s"),
 }
-SHAKEDOWN_DIAG = {"A2-pg-kafka-p1-b64": ("connect-avro-s",)}
+SHAKEDOWN_DIAG = {}
 
 
 def shakedown_cells(cs: list) -> list:
@@ -1336,7 +1338,13 @@ def collectors(c: Cell) -> list:
                     "/opt/kafka/bin/kafka-dump-log.sh --files $(ls $f/*.log | head -1) 2>/dev/null | head -20000; done | "
                     "awk '/baseOffset/{n++; for(i=1;i<=NF;i++){if($i==\"count:\")r+=$(i+1); if($i==\"compresscodec:\")k[$(i+1)]++; "
                     "if($i==\"size:\")b+=$(i+1)}} END{printf \"BROKER_BATCH_COUNT=%d\\nBROKER_RECORD_COUNT=%d\\nBROKER_BYTES_COUNT=%d\\n\", n, r, b; "
-                    "for(x in k) printf \"BROKER_CODEC_%s_COUNT=%d\\n\", x, k[x]}'"})
+                    "for(x in k) printf \"BROKER_CODEC_%s_COUNT=%d\\n\", toupper(x), k[x]}'"})
+        # Equal content is checked on the wire, not assumed: the first records
+        # of one topic with their key, value and header sizes and header keys.
+        out.append({"name": "broker-sample", "container": "cdcparity-kafka", "run":
+                    "f=$(ls -d /var/lib/kafka/data/cdcparity.* 2>/dev/null | head -1); "
+                    "[ -n \"$f\" ] && /opt/kafka/bin/kafka-dump-log.sh --files $(ls $f/*.log | head -1) "
+                    "--deep-iteration --print-data-log 2>/dev/null | head -40 | sed 's/^/BROKER_SAMPLE /' | cut -c1-2000; true"})
     if "s3" in c.dests and c.mode in ("ramp", "capacity", "drain"):
         out.append({"name": "s3-index", "container": "cdcparity-counter", "run": f"{L} s3-index -bucket bench -out /out/s3-index.jsonl"})
     if "pg" in c.dests and c.mode == "ramp":
