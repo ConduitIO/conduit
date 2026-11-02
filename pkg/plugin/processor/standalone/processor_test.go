@@ -55,7 +55,7 @@ func TestWASMProcessor_Specification_Error(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Test(t)
 
-	underTest, err := newWASMProcessor(ctx, TestRuntime, SpecifyErrorModule, CompiledHostModule, schema.NewInMemoryService(), egress.DenyAll(), "test-processor", logger)
+	underTest, err := newWASMProcessor(ctx, TestRuntime, compileForTest(t, SpecifyErrorBinary), CompiledHostModule, schema.NewInMemoryService(), egress.DenyAll(), "test-processor", logger)
 	is.NoErr(err)
 
 	_, err = underTest.Specification()
@@ -339,7 +339,7 @@ func TestWASMProcessor_AbandonedCommand_TeardownReturns(t *testing.T) {
 
 	// log.Nop: the guest outlives the test body by a few seconds and its
 	// goroutine logs when it stops; a t-bound logger would panic after the test.
-	underTest, err := newWASMProcessor(context.Background(), TestRuntime, StallModule, CompiledHostModule, schema.NewInMemoryService(), egress.DenyAll(), "test-processor", log.Nop())
+	underTest, err := newWASMProcessor(context.Background(), TestRuntime, compileForTest(t, StallBinary), CompiledHostModule, schema.NewInMemoryService(), egress.DenyAll(), "test-processor", log.Nop())
 	is.NoErr(err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -373,7 +373,7 @@ func TestWASMProcessor_SpinningModule_TeardownKills(t *testing.T) {
 	is := is.New(t)
 	setStopTimeouts(t, 200*time.Millisecond, time.Minute)
 
-	underTest, err := newWASMProcessor(context.Background(), TestRuntime, SpinModule, CompiledHostModule, schema.NewInMemoryService(), egress.DenyAll(), "test-processor", log.Nop())
+	underTest, err := newWASMProcessor(context.Background(), TestRuntime, compileForTest(t, SpinBinary), CompiledHostModule, schema.NewInMemoryService(), egress.DenyAll(), "test-processor", log.Nop())
 	is.NoErr(err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -435,7 +435,7 @@ func TestWASMProcessor_CallerContextCancel_DoesNotKillGuest(t *testing.T) {
 func TestWASMProcessor_Specification_HonorsCallerContext(t *testing.T) {
 	is := is.New(t)
 
-	underTest, err := newWASMProcessor(context.Background(), TestRuntime, StallModule, CompiledHostModule, schema.NewInMemoryService(), egress.DenyAll(), "test-processor", log.Nop())
+	underTest, err := newWASMProcessor(context.Background(), TestRuntime, compileForTest(t, StallBinary), CompiledHostModule, schema.NewInMemoryService(), egress.DenyAll(), "test-processor", log.Nop())
 	is.NoErr(err)
 
 	ctx, cancel := context.WithCancel(context.Background())
