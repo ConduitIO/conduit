@@ -24,9 +24,17 @@ RUN set -e; \
     echo "e626cb15d5f48e3678d98b54055fedf3  /conv/debezium-connect-plugins-3.7.0.Final.jar" | md5sum -c -; \
     ls /conv/*.jar >/dev/null
 FROM ${BASE}
-COPY --from=conv /conv/*.jar /debezium/lib/
-# Diagnostic (the shakedown's Server arms could not load ExtractNewRecordState):
-# which jars on run.sh's classpath hold Debezium's transforms.
+COPY --from=conv /conv/ /tmp/conv/
+# Only jars the server does not already ship (by artifact name, any version):
+# the converter bundle carries its own vertx, and lib/* is ordered by the
+# directory listing, so a second vertx-core won in a copied directory and the
+# server failed with NoSuchMethodError (shakedown pass 6, scale-out arm).
+# MATRIX-JARS.txt lists what was added and skipped. Diagnostic
+# (MATRIX-CLASSES.txt): which jars hold Debezium's transforms.
 USER root
-RUN (cd /debezium && grep -l -a 'io/debezium/transforms/ExtractNewRecordState' lib/*.jar *.jar lib_opt/*.jar 2>/dev/null || echo none) > /debezium/MATRIX-CLASSES.txt
+RUN set -e; cd /tmp/conv; for j in *.jar; do \
+      b=$(echo "$j" | sed -E 's/-[0-9].*\.jar$//'); \
+      if ls /debezium/lib/"$b"-[0-9]*.jar >/dev/null 2>&1; then echo "skip $j"; else cp "$j" /debezium/lib/; echo "add $j"; fi; \
+    done > /debezium/MATRIX-JARS.txt; rm -rf /tmp/conv; \
+    (cd /debezium && grep -l -a 'io/debezium/transforms/ExtractNewRecordState' lib/*.jar *.jar lib_opt/*.jar 2>/dev/null || echo none) > /debezium/MATRIX-CLASSES.txt
 USER jboss

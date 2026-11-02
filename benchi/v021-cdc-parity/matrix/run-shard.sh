@@ -84,6 +84,7 @@ pin() { python3 -c "import json; print(json.load(open('$HERE/images/PINS.json'))
 [ -f "$HERE/images/PINS.json" ] || { log "images/PINS.json missing (launch.sh writes it)"; exit 1; }
 build matrix-connect:3.7.0 "$HERE/images/connect.Dockerfile" "$HERE/images" --build-arg "BASE=$(pin connect)" || { log "connect image build failed"; exit 1; }
 build matrix-dbzserver:3.7.0 "$HERE/images/dbzserver.Dockerfile" "$HERE/images" --build-arg "BASE=$(pin dbzserver)" || { log "dbzserver image build failed"; exit 1; }
+docker run --rm --entrypoint cat matrix-dbzserver:3.7.0 /debezium/MATRIX-JARS.txt > "$OUT/dbzserver-jars.txt" 2>&1 || true
 for img in $(python3 -c "import sys; sys.path.insert(0,'$HERE'); import cells; print(' '.join(v for v in cells.IMG.values() if '@sha256:' in v))"); do
   docker pull -q "$img" >/dev/null || { log "pull failed: $img"; exit 1; }
 done

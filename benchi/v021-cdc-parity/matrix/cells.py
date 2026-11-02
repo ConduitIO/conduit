@@ -1309,11 +1309,12 @@ def dbzserver_service(c: Cell, arm: str) -> dict:
         "networks": ["benchi"],
     }
     if side != "dbzserver-native":
-        # The image starts an OpenTelemetry Java agent (2.27.0), which adds a
-        # traceparent header to every Kafka record and traces every call; no
-        # other side traces, so it is off (removes Debezium Server overhead:
-        # conservative against Conduit).
-        s["environment"] = {"JAVA_OPTS": opts + " ${JVM_DIAG_OPTS:-}", "OTEL_JAVAAGENT_ENABLED": "false"}
+        # The image attaches an OpenTelemetry Java agent (2.27.0;
+        # lib_metrics/enable_otel_agent.sh, when OTEL_ENABLED=true), which adds
+        # a traceparent header to every Kafka record; no other side traces, so
+        # it is not attached (removes Debezium Server overhead: conservative
+        # against Conduit).
+        s["environment"] = {"JAVA_OPTS": opts + " ${JVM_DIAG_OPTS:-}", "OTEL_ENABLED": "false"}
         s["pull_policy"] = "never"  # built locally (images/dbzserver.Dockerfile)
     if side == "dbzserver-avro-xn":
         # One Debezium Server process per table, all in this one container
