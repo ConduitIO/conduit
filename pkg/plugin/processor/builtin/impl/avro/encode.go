@@ -19,6 +19,8 @@ package avro
 
 import (
 	"context"
+	"maps"
+	"strings"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -109,6 +111,11 @@ It provides two strategies for determining the schema:
   checks need to be disabled for this schema to prevent failures. If the schema subject does not exist before running
   this processor, it will automatically set the correct compatibility settings in the schema registry.
 
+When the encoded field is the whole key or the whole payload (` + "`.Key`, `.Payload.After`, `.Payload.Before`" + `),
+the record's schema metadata for that part (` + "`opencdc.key.schema.*`" + ` or ` + "`opencdc.payload.schema.*`" + `) is removed, because
+it described the value that was replaced. The encoded bytes carry the schema ID in the registry wire format.
+A destination's schema extraction therefore does not decode them a second time.
+
 This processor is the counterpart to [` + "`avro.decode`" + `](/docs/using/processors/builtin/avro.decode).`,
 		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
@@ -167,7 +174,47 @@ func (p *EncodeProcessor) processRecord(ctx context.Context, rec opencdc.Record)
 	if err != nil {
 		return nil, cerrors.Errorf("failed setting encoded value into the record: %w", err)
 	}
+	rec.Metadata = p.dropStaleSchemaMetadata(rec.Metadata)
 	return sdk.SingleRecord(rec), nil
+}
+
+// dropStaleSchemaMetadata removes the schema subject and version metadata that
+// described the field before it was encoded.
+//
+// Invariant 6: when the processor replaces a whole payload part or the key with
+// Avro bytes in the registry wire format, the subject and version the source
+// attached describe the value that was just replaced, not these bytes. Left in
+// place, a downstream SDK schema-extraction middleware (Kafka and other
+// destinations) would decode the already-encoded bytes a second time with the
+// source schema, failing every record or, worse, reading them as the wrong
+// type. The wire format is self-describing (it carries the schema ID), so a
+// destination that wants the schema reads it from there. Writing the encoded
+// schema into the metadata instead would not help: the middleware unmarshals
+// plain Avro and does not understand the wire-format header.
+//
+// Only a field that is the whole key or the whole of payload.before/after is
+// affected. A nested field (.Payload.After.foo) leaves the record structured
+// and the SDK schema-encode middleware keeps managing its schema.
+func (p *EncodeProcessor) dropStaleSchemaMetadata(md opencdc.Metadata) opencdc.Metadata {
+	var keys [2]string
+	switch strings.TrimSpace(p.cfg.Field) {
+	case ".Key":
+		keys = [2]string{opencdc.MetadataKeySchemaSubject, opencdc.MetadataKeySchemaVersion}
+	case ".Payload.After", ".Payload.Before":
+		keys = [2]string{opencdc.MetadataPayloadSchemaSubject, opencdc.MetadataPayloadSchemaVersion}
+	default:
+		return md
+	}
+	_, hasSubject := md[keys[0]]
+	_, hasVersion := md[keys[1]]
+	if !hasSubject && !hasVersion {
+		return md
+	}
+	// The map is shared with the input record; do not mutate it.
+	md = maps.Clone(md)
+	delete(md, keys[0])
+	delete(md, keys[1])
+	return md
 }
 
 func (p *EncodeProcessor) Teardown(context.Context) error {

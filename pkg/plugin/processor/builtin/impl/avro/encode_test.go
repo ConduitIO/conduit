@@ -16,6 +16,7 @@ package avro
 
 import (
 	"context"
+	"maps"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/config"
@@ -244,6 +245,88 @@ func TestEncodeProcessor_Process_EmptyPayloadField(t *testing.T) {
 			got := underTest.Process(ctx, []opencdc.Record{tc.input})
 			is.Equal(1, len(got))
 			is.Equal("", cmp.Diff(want, got[0], internal.CmpProcessedRecordOpts...))
+		})
+	}
+}
+
+// Invariant 6: schema metadata that described a field must not outlive the
+// field being replaced by Avro bytes, or a destination decodes it again.
+func TestEncodeProcessor_Process_SchemaMetadata(t *testing.T) {
+	allSchemaKeys := func() opencdc.Metadata {
+		return opencdc.Metadata{
+			"keep":                               "me",
+			opencdc.MetadataPayloadSchemaSubject: "p",
+			opencdc.MetadataPayloadSchemaVersion: "2",
+			opencdc.MetadataKeySchemaSubject:     "k",
+			opencdc.MetadataKeySchemaVersion:     "3",
+		}
+	}
+	testCases := []struct {
+		name     string
+		field    string
+		input    opencdc.Record
+		wantGone []string
+	}{
+		{
+			name:  "payload after",
+			field: ".Payload.After",
+			input: opencdc.Record{Metadata: allSchemaKeys(), Payload: opencdc.Change{After: opencdc.StructuredData{"a": 1}}},
+			wantGone: []string{
+				opencdc.MetadataPayloadSchemaSubject, opencdc.MetadataPayloadSchemaVersion,
+			},
+		},
+		{
+			name:  "payload before",
+			field: ".Payload.Before",
+			input: opencdc.Record{Metadata: allSchemaKeys(), Payload: opencdc.Change{Before: opencdc.StructuredData{"a": 1}}},
+			wantGone: []string{
+				opencdc.MetadataPayloadSchemaSubject, opencdc.MetadataPayloadSchemaVersion,
+			},
+		},
+		{
+			name:  "key",
+			field: ".Key",
+			input: opencdc.Record{Metadata: allSchemaKeys(), Key: opencdc.StructuredData{"a": 1}},
+			wantGone: []string{
+				opencdc.MetadataKeySchemaSubject, opencdc.MetadataKeySchemaVersion,
+			},
+		},
+		{
+			// the record stays structured; the SDK schema middleware owns its schema
+			name:  "nested field keeps schema metadata",
+			field: ".Payload.After.nested",
+			input: opencdc.Record{Metadata: allSchemaKeys(), Payload: opencdc.Change{After: opencdc.StructuredData{"nested": `{"a": 1}`}}},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+
+			underTest := NewEncodeProcessor(log.Nop())
+			is.NoErr(underTest.Configure(ctx, config.Config{
+				"field":                       tc.field,
+				"schema.strategy":             "autoRegister",
+				"schema.autoRegister.subject": "testsubject",
+			}))
+			mockEncoder := NewMockEncoder(gomock.NewController(t))
+			mockEncoder.EXPECT().Encode(ctx, gomock.Any()).Return(opencdc.RawData("encoded"), nil)
+			underTest.encoder = mockEncoder
+
+			before := maps.Clone(tc.input.Metadata)
+			got := underTest.Process(ctx, []opencdc.Record{tc.input})
+			is.Equal(1, len(got))
+			out, ok := got[0].(sdk.SingleRecord)
+			is.True(ok)
+
+			want := maps.Clone(before)
+			for _, k := range tc.wantGone {
+				delete(want, k)
+			}
+			is.Equal("", cmp.Diff(map[string]string(want), map[string]string(out.Metadata)))
+			is.Equal(out.Metadata["keep"], "me")
+			// the input record's metadata map is shared with the caller: untouched
+			is.Equal("", cmp.Diff(map[string]string(before), map[string]string(tc.input.Metadata)))
 		})
 	}
 }
