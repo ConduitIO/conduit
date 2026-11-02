@@ -125,8 +125,8 @@ func TestPersister_NewTransactionErrorReachesEveryCallback(t *testing.T) {
 
 	cb1, err1 := collectCallback(t)
 	cb2, err2 := collectCallback(t)
-	is.NoErr(persister.Persist(ctx, &Instance{ID: "c1", Type: TypeSource}, cb1))
-	is.NoErr(persister.Persist(ctx, &Instance{ID: "c2", Type: TypeDestination}, cb2))
+	is.NoErr(persister.Persist(ctx, &Instance{ID: "c1", Type: TypeSource}, 1, cb1))
+	is.NoErr(persister.Persist(ctx, &Instance{ID: "c2", Type: TypeDestination}, 1, cb2))
 
 	persister.Flush(ctx)
 	// Must not hang: callbacksDone has to close on this path too.
@@ -151,14 +151,14 @@ func TestPersister_StoreErrorThenRecovery(t *testing.T) {
 
 	conn := &Instance{ID: "c1", Type: TypeSource, State: SourceState{Position: opencdc.Position("p1")}}
 	cb, errFn := collectCallback(t)
-	is.NoErr(persister.Persist(ctx, conn, cb))
+	is.NoErr(persister.Persist(ctx, conn, 1, cb))
 	persister.Flush(ctx)
 	is.True(errFn() != nil)
 
 	db.setArmed.Store(false)
 	conn.State = SourceState{Position: opencdc.Position("p2")}
 	cb, errFn = collectCallback(t)
-	is.NoErr(persister.Persist(ctx, conn, cb))
+	is.NoErr(persister.Persist(ctx, conn, 1, cb))
 	persister.Flush(ctx)
 	is.NoErr(errFn())
 
@@ -202,7 +202,7 @@ func TestSource_Ack_OwnStoreErrorDoesNotReleasePluginAck(t *testing.T) {
 	db.setArmed.Store(true)
 
 	otherCb, otherErr := collectCallback(t)
-	is.NoErr(persister.Persist(ctx, &Instance{ID: "other-conn", Type: TypeDestination}, otherCb))
+	is.NoErr(persister.Persist(ctx, &Instance{ID: "other-conn", Type: TypeDestination}, 1, otherCb))
 	is.NoErr(src.Ack(ctx, []opencdc.Position{opencdc.Position("never-durable")}))
 
 	recv := make(chan pconnector.SourceRunRequest, 1)

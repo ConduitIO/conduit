@@ -17,6 +17,7 @@ package connector
 import (
 	"bytes"
 	"context"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -320,6 +321,51 @@ func TestSource_Ack_DeferredUntilDurablyFlushed(t *testing.T) {
 		is.NoErr(recvErr)
 	case <-time.After(5 * time.Second):
 		t.Fatal("plugin never observed the ack after the flush completed")
+	}
+}
+
+// TestSource_Ack_BatchCountsPositionsTowardPersistThreshold pins that a source
+// ack covering a whole batch counts len(positions) toward the persister's
+// bundle-count threshold, not 1. The fake clock is never advanced, so only the
+// count can trigger the flush that releases the deferred ack. If Ack went back
+// to counting one per call, 100 positions would sit below the threshold of 100
+// until the 1s timer and this test would time out.
+func TestSource_Ack_BatchCountsPositionsTowardPersistThreshold(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	persister := NewPersister(log.Nop(), &inmemory.DB{}, time.Hour, 100)
+	persister.clock = newFakeClock()
+
+	src, sourceMock := newTestSourceWithPersister(ctx, t, ctrl, persister)
+	stream := expectSourceOpen(src, sourceMock)
+	sourceMock.EXPECT().LifecycleOnCreated(
+		gomock.Any(),
+		pconnector.SourceLifecycleOnCreatedRequest{Config: src.Instance.Config.Settings},
+	).Return(pconnector.SourceLifecycleOnCreatedResponse{}, nil)
+	is.NoErr(src.Open(ctx))
+
+	positions := make([]opencdc.Position, 100)
+	for i := range positions {
+		positions[i] = opencdc.Position("pos-" + strconv.Itoa(i))
+	}
+	is.NoErr(src.Ack(ctx, positions))
+
+	serverStream := stream.Server()
+	recvDone := make(chan struct{})
+	var resp pconnector.SourceRunRequest
+	var recvErr error
+	go func() {
+		defer close(recvDone)
+		resp, recvErr = serverStream.Recv()
+	}()
+	select {
+	case <-recvDone:
+		is.NoErr(recvErr)
+		is.Equal(resp.AckPositions, positions)
+	case <-time.After(5 * time.Second):
+		t.Fatal("a 100-position ack did not reach the persister threshold of 100")
 	}
 }
 

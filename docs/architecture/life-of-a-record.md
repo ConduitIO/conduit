@@ -61,7 +61,8 @@ write order. A destination ack is the moment a record counts as durably handled 
 
 **The checkpoint (ack back to the source).** `connector.Source.Ack` records the new position and hands
 it to the persister (`pkg/connector/persister.go`), which batches writes and debounces them at 1 s or
-10,000 positions. The plugin is told about the ack **only after** that write has flushed durably
+10,000 positions. The count is positions, not calls: a source ack passes the number of positions in the
+acked batch, and the threshold is crossed with `>=` because batch sizes do not divide it evenly. The plugin is told about the ack **only after** that write has flushed durably
 (`Source.onPersistFlushed`, then the per-source delivery goroutine `deliverDeferredAcks`), so a plugin
 that frees upstream data on ack (a Postgres slot advancing its LSN) can never get ahead of Conduit's
 own checkpoint. This is invariant 1 at the source end, and the persist-then-rename/transaction write is
@@ -144,8 +145,11 @@ flowchart LR
 
 One pass of `Worker.Do`:
 
-1. `SourceTask.Do` calls `Source.Read` and gets a batch: the plugin's `sdk.batch.size`, which defaults to 0
-   and so reads batches of one (effectively 1).
+1. `SourceTask.Do` calls `Source.Read` and gets a batch: up to the plugin's `sdk.batch.size`. Since SDK
+   v0.18 the default is 100 with `sdk.batch.delay` 0 (adaptive drain: the SDK blocks for the first record and
+   returns whatever else it has already queued, with no timer), so a busy source delivers up to 100 records
+   per pass and a sparse one delivers one. Postgres and S3 sources pin 0 and 0 and keep their own batching;
+   `sdk.batch.size: 0` with `sdk.batch.delay: 0` restores one record per read for any connector.
 2. Source processor tasks run on the batch. A processor may filter records or split one into several.
 3. The pass enters the shared sink under `sharedMu`, which is what serializes N sources onto one set of
    destinations. Pipeline processors run, then the batch fans out to each destination branch.
