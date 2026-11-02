@@ -98,7 +98,9 @@ Kafka therefore drops those five headers with Kafka's `DropHeaders` SMT, and
 Debezium Server runs with its bundled OpenTelemetry Java agent off (`OTEL_JAVAAGENT_ENABLED=false`, the source of `traceparent`). The equal-content
 definition now includes the headers: none on any side. The smoke gate checks
 it on every Avro Kafka cell (the first record's key size, value size within
-2 B, and header count must match across arms; `test_gate_fails_when_avro_arms_differ_on_the_wire`).
+2 B, and header count must match across arms; `test_gate_fails_when_avro_arms_differ_on_the_wire`). Rechecked in shakedown pass 5: no headers on any side; key 8 B on all,
+value 74 B (Conduit) and 75 B (both Debezium runtimes); on the broker, both
+Debezium runtimes now store about 93 B per record uncompressed.
 Compression is not part of content: in the shipped tier each side writes its
 default (Conduit's Kafka destination snappy, both Debezium producers none,
 seen on the broker); the tuned tier sets lz4 on every side.
@@ -710,6 +712,7 @@ kit commit, the harness hash and the analysis version are recorded in
 | Debezium 3.7 removed `snapshot.mode=never` | `no_data` |
 | Debezium Server JDBC: `${topic}` expanded by Quarkus config | escaped; and Debezium Server copies the already-expanded sink values into its offset-storage and schema-history namespaces, where `${topic}` is expanded again and fails startup: one inert key in each namespace stops the copy |
 | Debezium Server scale-out arm: each process started in a subshell, so `wait` had nothing to wait for and the container exited at once | each process is a direct background child; one GC log per JVM |
+| the broker-sample collector printed the whole first segment (a JVM tool keeps writing into a closed pipe), so the Debezium runs timed out | `--max-bytes` |
 | Connect JDBC sink on a `topics.regex`: it saw the CDC topics only at its 5-minute metadata refresh, after every run's first-record timeout | the topics are named |
 | the scale-out arm's entrypoint `$` interpolated by compose | `$$` |
 | Conduit: `avro.encode` leaves the source schema metadata; the destination re-decodes the Avro bytes and fails every record | `sdk.schema.extract.payload.enabled=false` on that destination; reported as a Conduit defect |

@@ -1382,14 +1382,16 @@ def collectors(c: Cell) -> list:
                     "for(x in k) printf \"BROKER_CODEC_%s_COUNT=%d\\n\", toupper(x), k[x]}'"})
         # Equal content is checked on the wire, not assumed: the first records
         # of one topic with their key, value and header sizes and header keys.
+        # --max-bytes: the JVM tool ignores the closed pipe and would print the
+        # whole segment (shakedown pass 5: the Debezium runs hit their timeout).
         out.append({"name": "broker-sample", "container": "cdcparity-kafka", "run":
                     "f=$(ls -d /var/lib/kafka/data/cdcparity.* 2>/dev/null | head -1); "
                     "[ -n \"$f\" ] && /opt/kafka/bin/kafka-dump-log.sh --files $(ls $f/*.log | head -1) "
-                    "--deep-iteration --print-data-log 2>/dev/null | head -40 | sed 's/^/BROKER_SAMPLE /' | cut -c1-2000; "
+                    "--deep-iteration --print-data-log --max-bytes 262144 2>/dev/null | head -40 | sed 's/^/BROKER_SAMPLE /' | cut -c1-2000; "
                     # The first record's key, value and header count, for the
                     # smoke gate's equal-content check (analyze.py).
                     "[ -n \"$f\" ] && /opt/kafka/bin/kafka-dump-log.sh --files $(ls $f/*.log | head -1) "
-                    "--deep-iteration --print-data-log 2>/dev/null | grep -m1 '| offset:' | "
+                    "--deep-iteration --print-data-log --max-bytes 262144 2>/dev/null | grep -m1 '| offset:' | "
                     "awk '{for(i=1;i<=NF;i++){if($i==\"keySize:\")k=$(i+1); if($i==\"valueSize:\")v=$(i+1); "
                     "if($i==\"headerKeys:\"){h=$(i+1); n=(h==\"[]\")?0:gsub(/,/,\",\",h)+1}}} "
                     "END{printf \"WIRE_KEY_BYTES_COUNT=%d\\nWIRE_VALUE_BYTES_COUNT=%d\\nWIRE_HEADERS_COUNT=%d\\n\", k, v, n}'; true"})
