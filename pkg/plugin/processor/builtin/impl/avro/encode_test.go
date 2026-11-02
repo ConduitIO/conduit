@@ -276,6 +276,38 @@ func TestEncodeProcessor_Process_SchemaMetadata(t *testing.T) {
 			},
 		},
 		{
+			name:  "payload after, bracket spelling",
+			field: `.Payload["After"]`,
+			input: opencdc.Record{Metadata: allSchemaKeys(), Payload: opencdc.Change{After: opencdc.StructuredData{"a": 1}}},
+			wantGone: []string{
+				opencdc.MetadataPayloadSchemaSubject, opencdc.MetadataPayloadSchemaVersion,
+			},
+		},
+		{
+			name:  "payload after, lowercase spelling",
+			field: ".Payload.after",
+			input: opencdc.Record{Metadata: allSchemaKeys(), Payload: opencdc.Change{After: opencdc.StructuredData{"a": 1}}},
+			wantGone: []string{
+				opencdc.MetadataPayloadSchemaSubject, opencdc.MetadataPayloadSchemaVersion,
+			},
+		},
+		{
+			name:  "payload before, bracket spelling",
+			field: `.Payload["Before"]`,
+			input: opencdc.Record{Metadata: allSchemaKeys(), Payload: opencdc.Change{Before: opencdc.StructuredData{"a": 1}}},
+			wantGone: []string{
+				opencdc.MetadataPayloadSchemaSubject, opencdc.MetadataPayloadSchemaVersion,
+			},
+		},
+		{
+			name:  "key, lowercase spelling",
+			field: ".key",
+			input: opencdc.Record{Metadata: allSchemaKeys(), Key: opencdc.StructuredData{"a": 1}},
+			wantGone: []string{
+				opencdc.MetadataKeySchemaSubject, opencdc.MetadataKeySchemaVersion,
+			},
+		},
+		{
 			name:  "payload before",
 			field: ".Payload.Before",
 			input: opencdc.Record{Metadata: allSchemaKeys(), Payload: opencdc.Change{Before: opencdc.StructuredData{"a": 1}}},

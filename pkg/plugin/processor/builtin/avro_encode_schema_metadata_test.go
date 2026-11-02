@@ -154,3 +154,74 @@ func TestAvroEncode_DecodeRoundTrip(t *testing.T) {
 	is.Equal(got["s"], "x")
 	is.Equal(fmt.Sprint(got["n"]), "7")
 }
+
+// TestAvroEncode_OtherPayloadPart pins what happens to the part avro.encode did
+// not touch. Before and After share the payload schema metadata, so encoding
+// one removes the schema association of the other: it reaches the destination
+// intact but as schema-less structured data, and the destination does not fail.
+func TestAvroEncode_OtherPayloadPart(t *testing.T) {
+	const avsc = `{"type":"record","name":"Row","namespace":"conduit.test","fields":[` +
+		`{"name":"n","type":"int"},{"name":"s","type":"string"}]}`
+
+	for field, tc := range map[string]struct{ encoded, other string }{
+		".Payload.After":  {"After", "Before"},
+		".Payload.Before": {"Before", "After"},
+	} {
+		t.Run(field, func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+			sr, err := schemaregistry.NewSchemaRegistry(&inmemory.DB{})
+			is.NoErr(err)
+			reg := NewRegistry(log.Nop(), DefaultBuiltinProcessors, sr)
+			ctx = contextWithSchemaService(ctx, reg.schemaService)
+			p, err := reg.NewProcessor(ctx, plugin.FullName("builtin:avro.encode"), "enc", egress.Policy{})
+			is.NoErr(err)
+			is.NoErr(p.Configure(ctx, config.Config{
+				"field":                       field,
+				"schema.strategy":             "autoRegister",
+				"schema.autoRegister.subject": "avro-encode-part-" + tc.encoded,
+			}))
+			is.NoErr(p.Open(ctx))
+
+			subject := "avro-encode-part-in-" + tc.encoded
+			sch, err := sdkschema.Create(ctx, schema.TypeAvro, subject, []byte(avsc))
+			is.NoErr(err)
+			raw, err := sch.Marshal(opencdc.StructuredData{"n": 1, "s": "x"})
+			is.NoErr(err)
+			rec := opencdc.Record{Metadata: opencdc.Metadata{}, Payload: opencdc.Change{
+				Before: opencdc.RawData(raw), After: opencdc.RawData(raw),
+			}}
+			schema.AttachPayloadSchemaToRecord(rec, sch)
+
+			out := p.Process(ctx, []opencdc.Record{rec})
+			is.Equal(len(out), 1)
+			sr1, ok := out[0].(sdkproc.SingleRecord)
+			if !ok {
+				t.Fatalf("expected SingleRecord, got %T: %+v", out[0], out[0])
+			}
+
+			dctx := context.Background()
+			_, err = connschema.Create(dctx, schema.TypeAvro, subject, []byte(avsc))
+			is.NoErr(err)
+			dest := &captureDestination{}
+			mw := (&sdk.DestinationWithSchemaExtraction{PayloadEnabled: lang.Ptr(true), KeyEnabled: lang.Ptr(false)}).Wrap(dest)
+			_, err = mw.Write(dctx, []opencdc.Record{opencdc.Record(sr1)})
+			is.NoErr(err)
+			is.Equal(len(dest.got), 1)
+
+			part := func(r opencdc.Record, name string) opencdc.Data {
+				if name == "Before" {
+					return r.Payload.Before
+				}
+				return r.Payload.After
+			}
+			_, encIsRaw := part(dest.got[0], tc.encoded).(opencdc.RawData)
+			is.True(encIsRaw) // the encoded part is the wire-format bytes
+			other, otherIsStructured := part(dest.got[0], tc.other).(opencdc.StructuredData)
+			is.True(otherIsStructured) // the other part is delivered intact, without a schema link
+			is.Equal(other["s"], "x")
+			_, hasSubject := dest.got[0].Metadata.GetPayloadSchemaSubject()
+			is.True(hasSubject != nil) // no schema association remains
+		})
+	}
+}
