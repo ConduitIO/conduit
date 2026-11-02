@@ -163,12 +163,32 @@ func TestSIGKILL_MidFanout_DeepClone(t *testing.T) {
 		archV2 bool
 	}{{"classic", false}, {"arch-v2", true}} {
 		t.Run(engine.name, func(t *testing.T) {
-			runFanoutDeepCase(t, engine.archV2)
+			// The case needs the kill to land while some record a destination
+			// already holds is not yet covered by the persisted source position
+			// (otherwise the restart has nothing to redeliver and the
+			// at-least-once check below would be vacuous). The persister flushes
+			// on a 1s debounce, so a stall of the child (a loaded runner) can put
+			// a flush right before the kill. That is a property of the timing,
+			// not a bug, and the position cannot be sampled while the child is
+			// alive (badger's exclusive lock): so a run whose kill left no window
+			// is discarded and repeated on a fresh directory, up to a bound. The
+			// post-restart redelivery check still fails a run in which a window
+			// existed and the restart did not redeliver.
+			const maxAttempts = 6
+			for attempt := 1; attempt <= maxAttempts; attempt++ {
+				if !runFanoutDeepCase(t, engine.archV2) {
+					return
+				}
+				t.Logf("attempt %d/%d: the kill left no record beyond the persisted position; repeating", attempt, maxAttempts)
+			}
+			t.Fatalf("%d consecutive runs were killed with every held record already persisted: no redelivery window", maxAttempts)
 		})
 	}
 }
 
-func runFanoutDeepCase(t *testing.T, archV2 bool) {
+// runFanoutDeepCase runs one kill-and-restart round. It returns true, without
+// restarting, when the kill left no redelivery window (see TestSIGKILL_MidFanout_DeepClone).
+func runFanoutDeepCase(t *testing.T, archV2 bool) (noWindow bool) {
 	dir := t.TempDir()
 	dests := writeFanoutDeepPipeline(t, dir)
 	a, b, c := dests[0], dests[1], dests[2]
@@ -222,6 +242,15 @@ func runFanoutDeepCase(t *testing.T, archV2 bool) {
 	t.Logf("persisted source position %d: %d records acknowledged", persisted, acked)
 	if acked == 0 {
 		t.Fatalf("no source position was persisted before the kill: the invariant 1 check would be vacuous (raise fanoutDeepKillAfter)")
+	}
+	// A destination that holds no record beyond the persisted position has
+	// nothing to redeliver after the restart. Invariant 1 above was already
+	// judged on this run; discard it and let the caller repeat.
+	for _, d := range dests {
+		if len(pre[d.name]) <= acked {
+			t.Logf("destination %s holds %d records, all within the persisted position (%d): no redelivery window", d.name, len(pre[d.name]), acked)
+			return true
+		}
 	}
 	if acked >= fanoutDeepTotal {
 		t.Fatalf("every record was acknowledged before the kill: not a mid-stream kill")
@@ -281,6 +310,7 @@ func runFanoutDeepCase(t *testing.T, archV2 bool) {
 		}
 		t.Logf("destination %s: %d lines, %d distinct records (%d redelivered after the kill)", d.name, len(recs), len(seen), len(recs)-len(seen))
 	}
+	return false
 }
 
 // checkFanoutDeepResume checks what the restarted run appended to d's file
