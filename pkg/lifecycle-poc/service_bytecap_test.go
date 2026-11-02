@@ -91,3 +91,56 @@ func TestBuildDestinationTasks_ReceiveLimitOnlyForNonBuiltin(t *testing.T) {
 		})
 	}
 }
+
+// TestBuildDLQ_ReceiveLimitOnlyForNonBuiltin: the DLQ destination follows the same
+// rule as pipeline destinations.
+func TestBuildDLQ_ReceiveLimitOnlyForNonBuiltin(t *testing.T) {
+	const maxReceive = 4 << 20
+
+	for name, tc := range map[string]struct {
+		plugin    string
+		wantLimit bool
+	}{
+		"builtin":    {plugin: "builtin:test-dlq", wantLimit: false},
+		"standalone": {plugin: "standalone:test-dlq", wantLimit: true},
+		"unprefixed": {plugin: "test-dlq", wantLimit: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+			logger := log.New(zerolog.Nop())
+			db := &inmemory.DB{}
+			persister := connector.NewPersister(logger, db, time.Second, 3)
+			ps := pipeline.NewService(logger, db)
+			pl, err := ps.Create(ctx, uuid.NewString(), pipeline.Config{Name: "test pipeline"}, pipeline.ProvisionTypeAPI)
+			is.NoErr(err)
+
+			ctrl := gomock.NewController(t)
+			dlqInstance := dummyDestination(persister)
+			dlqInstance.Plugin = tc.plugin
+			dispenser := pmock.NewDispenser(ctrl)
+			dispenser.EXPECT().DispenseDestination().Return(pmock.NewDestinationPlugin(ctrl), nil).AnyTimes()
+			pl.DLQ.Plugin = tc.plugin
+
+			ls := NewService(
+				logger,
+				testErrRecoveryCfg(),
+				testConnectorService{testDLQID: dlqInstance},
+				newTestProcessorService(t, logger, db),
+				testConnectorPluginService{tc.plugin: dispenser},
+				ps,
+				false,
+			)
+			ls.SetMaxReceiveRecordSize(maxReceive)
+
+			dlq, err := ls.buildDLQ(ctx, pl, "source-id", logger)
+			is.NoErr(err)
+			if tc.wantLimit {
+				is.True(dlq.WriteLimit() > 0)
+				is.True(dlq.WriteLimit() < maxReceive)
+			} else {
+				is.Equal(dlq.WriteLimit(), 0)
+			}
+		})
+	}
+}

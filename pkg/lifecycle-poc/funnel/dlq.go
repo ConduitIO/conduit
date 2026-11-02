@@ -53,6 +53,20 @@ func NewDLQ(
 	}
 }
 
+// SetMaxReceiveRecordSize applies connectors.max-receive-record-size to the DLQ
+// destination, as DestinationTask.SetMaxReceiveRecordSize does for a pipeline
+// destination: a standalone DLQ connector rejects an over-limit request, so a
+// DLQ record that alone exceeds it fails with a coded error naming the limit
+// instead of an uncoded stream failure. Must be called before Open.
+func (d *DLQ) SetMaxReceiveRecordSize(n int) {
+	d.task.SetMaxReceiveRecordSize(n)
+}
+
+// WriteLimit returns the byte budget of one DLQ Write, 0 if unlimited.
+func (d *DLQ) WriteLimit() int {
+	return d.task.WriteLimit()
+}
+
 func (d *DLQ) ID() string {
 	return d.task.id
 }

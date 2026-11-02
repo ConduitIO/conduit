@@ -1832,14 +1832,21 @@ func (s *Service) buildDLQ(
 		return nil, err
 	}
 
-	return funnel.NewDLQ(
+	dlq := funnel.NewDLQ(
 		"dlq-"+sourceID,
 		dest.(*connector.Destination),
 		logger,
 		s.newDLQMetrics(pl.Config.Name, conn.Plugin),
 		pl.DLQ.WindowSize,
 		pl.DLQ.WindowNackThreshold,
-	), nil
+	)
+	// A standalone DLQ connector rejects a request over
+	// connectors.max-receive-record-size just like a destination does; built-ins
+	// have no such limit.
+	if plugin.FullName(conn.Plugin).PluginType() != plugin.PluginTypeBuiltin {
+		dlq.SetMaxReceiveRecordSize(s.maxReceiveRecordSize)
+	}
+	return dlq, nil
 }
 
 // runPipeline starts every worker in rp.workers plus one cleanup goroutine,
