@@ -140,6 +140,14 @@ class Rule(unittest.TestCase):
         self.assertFalse(g["pass"])
         self.assertTrue(any("connect-avro-s" in f for f in g["failures"]))
 
+    def test_gate_fails_when_avro_arms_differ_on_the_wire(self):
+        runs = [{"arm": "conduit-avro-s", "hooks": {"WIRE_KEY_BYTES_COUNT": 8, "WIRE_VALUE_BYTES_COUNT": 74, "WIRE_HEADERS_COUNT": 0}},
+                {"arm": "connect-avro-s", "hooks": {"WIRE_KEY_BYTES_COUNT": 8, "WIRE_VALUE_BYTES_COUNT": 75, "WIRE_HEADERS_COUNT": 0}},
+                {"arm": "conduit-s", "hooks": {"WIRE_KEY_BYTES_COUNT": 8, "WIRE_VALUE_BYTES_COUNT": 400, "WIRE_HEADERS_COUNT": 0}}]
+        self.assertEqual(analyze.wire_failures("x", [runs]), [])
+        runs.append({"arm": "dbzserver-avro-s", "hooks": {"WIRE_KEY_BYTES_COUNT": 8, "WIRE_VALUE_BYTES_COUNT": 75, "WIRE_HEADERS_COUNT": 5}})
+        self.assertEqual(len(analyze.wire_failures("x", [runs])), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

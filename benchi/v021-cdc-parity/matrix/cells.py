@@ -1017,6 +1017,14 @@ def debezium_source(c: Cell, tier: str, slot: str, tables: list, arm: str = "") 
     return s
 
 
+# Headers the Debezium sides add to every record by default (seen on the
+# broker in the wire check, PLAN.md section 2): the Debezium context headers
+# on both, and an OpenTelemetry traceparent on Debezium Server. Conduit writes
+# none, so the equal-content Avro arms drop them (Kafka's DropHeaders SMT).
+DBZ_HEADERS = ("__debezium.context.connectorLogicalName,__debezium.context.taskId,"
+               "__debezium.context.connectorName,__debezium.context.runId,traceparent")
+
+
 def unwrap_rename(c: Cell, pg_dest: bool, avro_kafka: bool = False) -> dict:
     """pg_dest: the JDBC sinks need the flattened row. avro_kafka: the
     EQUAL-CONTENT Avro definition (PLAN.md section 2): the flattened row plus
@@ -1029,6 +1037,10 @@ def unwrap_rename(c: Cell, pg_dest: bool, avro_kafka: bool = False) -> dict:
                   "transforms.unwrap.delete.tombstone.handling.mode": "tombstone"})
         if avro_kafka:
             t["transforms.unwrap.add.fields"] = "op"
+    if avro_kafka:
+        names.append("noheaders")
+        t.update({"transforms.noheaders.type": "org.apache.kafka.connect.transforms.DropHeaders",
+                  "transforms.noheaders.headers": DBZ_HEADERS})
     if c.transform:
         names.append("rename")
         t.update({"transforms.rename.type": "org.apache.kafka.connect.transforms.ReplaceField$Value",
@@ -1248,12 +1260,17 @@ def dbzserver_props(c: Cell, arm: str, tables=None, slot=None, offsets="data/off
     if d == "kafka" and (avro or c.transform):
         # Equal-content Avro (flattened row + __op, deletes as tombstones), and
         # the transform cell's flatten + rename.
-        names = ["unwrap"] + (["rename"] if c.transform else [])
+        names = ["unwrap"] + (["noheaders"] if avro else []) + (["rename"] if c.transform else [])
         p.update({"debezium.transforms": ",".join(names),
                   "debezium.transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
                   "debezium.transforms.unwrap.delete.tombstone.handling.mode": "tombstone"})
         if avro:
             p["debezium.transforms.unwrap.add.fields"] = "op"
+            p.update({"debezium.transforms.noheaders.type": "org.apache.kafka.connect.transforms.DropHeaders",
+                      "debezium.transforms.noheaders.headers": DBZ_HEADERS,
+                      # No tracing: no other side traces, and its traceparent
+                      # header is otherwise added to every record.
+                      "quarkus.otel.sdk.disabled": "true"})
         if c.transform:
             p.update({"debezium.transforms.rename.type": "org.apache.kafka.connect.transforms.ReplaceField$Value",
                       "debezium.transforms.rename.renames": "payload:body"})
@@ -1344,7 +1361,14 @@ def collectors(c: Cell) -> list:
         out.append({"name": "broker-sample", "container": "cdcparity-kafka", "run":
                     "f=$(ls -d /var/lib/kafka/data/cdcparity.* 2>/dev/null | head -1); "
                     "[ -n \"$f\" ] && /opt/kafka/bin/kafka-dump-log.sh --files $(ls $f/*.log | head -1) "
-                    "--deep-iteration --print-data-log 2>/dev/null | head -40 | sed 's/^/BROKER_SAMPLE /' | cut -c1-2000; true"})
+                    "--deep-iteration --print-data-log 2>/dev/null | head -40 | sed 's/^/BROKER_SAMPLE /' | cut -c1-2000; "
+                    # The first record's key, value and header count, for the
+                    # smoke gate's equal-content check (analyze.py).
+                    "[ -n \"$f\" ] && /opt/kafka/bin/kafka-dump-log.sh --files $(ls $f/*.log | head -1) "
+                    "--deep-iteration --print-data-log 2>/dev/null | grep -m1 '| offset:' | "
+                    "awk '{for(i=1;i<=NF;i++){if($i==\"keySize:\")k=$(i+1); if($i==\"valueSize:\")v=$(i+1); "
+                    "if($i==\"headerKeys:\"){h=$(i+1); n=(h==\"[]\")?0:gsub(/,/,\",\",h)+1}}} "
+                    "END{printf \"WIRE_KEY_BYTES_COUNT=%d\\nWIRE_VALUE_BYTES_COUNT=%d\\nWIRE_HEADERS_COUNT=%d\\n\", k, v, n}'; true"})
     if "s3" in c.dests and c.mode in ("ramp", "capacity", "drain"):
         out.append({"name": "s3-index", "container": "cdcparity-counter", "run": f"{L} s3-index -bucket bench -out /out/s3-index.jsonl"})
     if "pg" in c.dests and c.mode == "ramp":

@@ -683,7 +683,32 @@ def gate(out):
                     for sink, rep in v.items():
                         if rep.get("ok") is not True:
                             failures.append(f"{base} {r['run']} {sink}: {rep.get('summary', 'verify failed')}")
+        failures += wire_failures(base, c["runs"])
     return {"pass": not failures, "failures": failures, "harness_hash": out["harness_hash"]}
+
+
+def wire_failures(base, insts):
+    """Equal content on the wire (PLAN.md section 2): every Avro arm's first
+    record on the broker has the same key size and header count, and value
+    sizes within WIRE_VALUE_SLACK bytes (the Debezium schemas carry __op as an
+    optional union, one byte more than Conduit's required string)."""
+    out = []
+    for runs in insts:
+        wire = {}
+        for r in runs:
+            h = r.get("hooks") or {}
+            if cells.serialization(r.get("arm", "")) == "avro" and "WIRE_VALUE_BYTES_COUNT" in h:
+                wire[r["arm"]] = (h.get("WIRE_KEY_BYTES_COUNT"), h["WIRE_VALUE_BYTES_COUNT"], h.get("WIRE_HEADERS_COUNT"))
+        if len(wire) < 2:
+            continue
+        keys, vals, hdrs = ({w[i] for w in wire.values()} for i in range(3))
+        if len(keys) > 1 or len(hdrs) > 1 or max(vals) - min(vals) > WIRE_VALUE_SLACK:
+            out.append(f"{base}: Avro arms differ on the wire (key bytes, value bytes, headers): "
+                       + ", ".join(f"{a}={w}" for a, w in sorted(wire.items())))
+    return out
+
+
+WIRE_VALUE_SLACK = 2
 
 
 if __name__ == "__main__":

@@ -86,6 +86,23 @@ record); its cost is part of the measurement, which is conservative against
 Conduit. The full-envelope comparison (Debezium envelope vs OpenCDC record)
 remains, as the exploratory JSON columns. Test: `test_avro_arms_carry_equal_content`.
 
+**Equal content on the wire (amendment 4).** The shakedown wire check
+(2026-11-02, every side once on A2-pg-kafka) dumped the first broker
+records. Keys are equal (`{"id":N}`, 8 B); values are the same Apicurio
+Avro row, 74 B for Conduit and 75 B for both Debezium runtimes (their
+schema carries `__op` as an optional union, Conduit's as a required string:
+one byte). Headers were not equal: both Debezium runtimes add four
+`__debezium.context.*` headers to every record and Debezium Server adds an
+OpenTelemetry `traceparent`; Conduit adds none. Every Debezium Avro arm into
+Kafka therefore drops those five headers with Kafka's `DropHeaders` SMT, and
+Debezium Server runs with `quarkus.otel.sdk.disabled=true`. The equal-content
+definition now includes the headers: none on any side. The smoke gate checks
+it on every Avro Kafka cell (the first record's key size, value size within
+2 B, and header count must match across arms; `test_gate_fails_when_avro_arms_differ_on_the_wire`).
+Compression is not part of content: in the shipped tier each side writes its
+default (Conduit's Kafka destination snappy, both Debezium producers none,
+seen on the broker); the tuned tier sets lz4 on every side.
+
 **Destinations without an equivalent are left out:**
 
 - Debezium Server 3.7.0.Final has no file or S3 sink. Its JDBC sink is in the
@@ -610,6 +627,7 @@ replaces the column. The 32-vCPU quota allows 2 x c6i.4xlarge at a time.
 | 2026-10-27 | amended after the adversarial methodology review (`bench-methodology-review.md`); every item and its resolution below | review | no |
 | 2026-10-27 | amended after review round 2 (conditional no-go); tag matrix-plan-v3; items below | review | no |
 | 2026-10-28 | amendment 3: trim, spot, sequencing (below) | budget and Conduit release sequencing, decided by DeVaris | no (shakedown runs only: wiring, no results) |
+| 2026-11-02 | amendment 4: headers are part of equal content; the Debezium sides drop their default headers; the smoke gate checks the wire (section 2) | shakedown wire check | no (shakedown runs only: wiring, no results) |
 
 ### Review items and resolutions
 
@@ -694,3 +712,8 @@ kit commit, the harness hash and the analysis version are recorded in
 | the scale-out arm's entrypoint `$` interpolated by compose | `$$` |
 | Conduit: `avro.encode` leaves the source schema metadata; the destination re-decodes the Avro bytes and fails every record | `sdk.schema.extract.payload.enabled=false` on that destination; reported as a Conduit defect |
 | recovery runs without a first record waited out every timeout | aborted at once, recorded as failed |
+| per-run diag API tokens were synced to the bucket | every sync excludes them |
+| async-profiler was given `jps`, which the JVM images do not ship | the JVM's PID from /proc |
+| EC2 rejects `instanceInitiatedShutdownBehavior` on spot instances | set only on on-demand; a one-time spot instance terminates on shutdown |
+| the broker codec counts used lowercase keys the run parser drops: no codec was ever recorded | upper-cased |
+| Debezium sides put 4-5 headers on every record; Conduit none (Debezium Server stored 580 B per record on the broker, Connect 276 B, Conduit 41 B snappy; key and value bytes are equal, so the difference is headers, batch overhead and compression) | dropped on the Avro arms; checked by the smoke gate (amendment 4) |
