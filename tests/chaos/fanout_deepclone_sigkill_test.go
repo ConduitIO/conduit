@@ -243,15 +243,6 @@ func runFanoutDeepCase(t *testing.T, archV2 bool) (noWindow bool) {
 	if acked == 0 {
 		t.Fatalf("no source position was persisted before the kill: the invariant 1 check would be vacuous (raise fanoutDeepKillAfter)")
 	}
-	// A destination that holds no record beyond the persisted position has
-	// nothing to redeliver after the restart. Invariant 1 above was already
-	// judged on this run; discard it and let the caller repeat.
-	for _, d := range dests {
-		if len(pre[d.name]) <= acked {
-			t.Logf("destination %s holds %d records, all within the persisted position (%d): no redelivery window", d.name, len(pre[d.name]), acked)
-			return true
-		}
-	}
 	if acked >= fanoutDeepTotal {
 		t.Fatalf("every record was acknowledged before the kill: not a mid-stream kill")
 	}
@@ -260,6 +251,18 @@ func runFanoutDeepCase(t *testing.T, archV2 bool) (noWindow bool) {
 			if !pre[d.name][seq] {
 				t.Fatalf("invariant 1: record %d is acknowledged by the source (persisted position %d) but destination %s did not durably hold it before the kill", seq, persisted, d.name)
 			}
+		}
+	}
+
+	// Invariant 1 was judged above for every destination, so pre[d] holds
+	// 1..acked. A destination whose length equals acked holds nothing beyond
+	// the persisted position, so there is nothing to redeliver after the
+	// restart: discard this run and let the caller repeat. Equality, not <=:
+	// a shorter pre[d] is an early ack and has already failed above.
+	for _, d := range dests {
+		if len(pre[d.name]) == acked {
+			t.Logf("destination %s holds %d records, all within the persisted position (%d): no redelivery window", d.name, len(pre[d.name]), acked)
+			return true
 		}
 	}
 
