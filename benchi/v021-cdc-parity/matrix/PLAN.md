@@ -118,6 +118,26 @@ time includes any restart. Every run records its restart count
 were restarted and the total restarts, with this failure mode stated under
 the table. Docker does not restart a container the harness kills, so the
 kill -9 recovery runs are unchanged.
+
+**Conduit failure found by the smoke run: real data loss (amendment 4).**
+Smoke run `smoke-20261102` (Conduit a1d66c02, conduit-connector-postgres
+v0.18.0) found every Conduit Postgres snapshot arm one row short: F-pg-kafka-snapshot
+`conduit-avro-s-aa` and `conduit-avro-t` delivered 499,999 of 500,000 rows and
+then nothing for 40 minutes; G-pg-kafka-kill9-snapshot `conduit-avro-s`
+verified "missing 1". Every Kafka Connect and Debezium Server arm on the same
+cells delivered every row. Root cause (found outside this harness): the
+connector's fresh-snapshot query (`source/snapshot/fetch_worker.go`,
+createCursor) starts at `key > 0`, so a row whose key is 0 or below is never
+read. The loader keys rows from 0, as many real tables do. These cells are
+recorded as **Conduit failure: real data-loss bug (postgres snapshot skips
+key <= 0), fix pending.** The loader is not changed: re-keying from 1 would hide
+the bug. The snapshot cells (F-pg-kafka-snapshot, F-pg-pg-snapshot,
+G-pg-kafka-kill9-snapshot) run again, unchanged, once Conduit ships the fixed
+connector, before any pilot or flagship snapshot result is reported. The
+remaining Conduit snapshot arms in this smoke run could not be skipped: the
+instances have no ingress by design and a kit change would change the harness
+hash of every cell already run, so they run out their 40-minute timeout
+(about $0.35 each at spot).
 Compression is not part of content: in the shipped tier each side writes its
 default (Conduit's Kafka destination snappy, both Debezium producers none,
 seen on the broker); the tuned tier sets lz4 on every side.
@@ -646,7 +666,7 @@ replaces the column. The 32-vCPU quota allows 2 x c6i.4xlarge at a time.
 | 2026-10-27 | amended after the adversarial methodology review (`bench-methodology-review.md`); every item and its resolution below | review | no |
 | 2026-10-27 | amended after review round 2 (conditional no-go); tag matrix-plan-v3; items below | review | no |
 | 2026-10-28 | amendment 3: trim, spot, sequencing (below) | budget and Conduit release sequencing, decided by DeVaris | no (shakedown runs only: wiring, no results) |
-| 2026-11-02 | amendment 4: headers are part of equal content; the Debezium sides drop their default headers; the smoke gate checks the wire; one restart-on-failure policy on every side, restart counts in every result table (section 2) | shakedown wire check; Debezium Server/Apicurio registration race | no (shakedown runs only: wiring, no results) |
+| 2026-11-02 | amendment 4: headers are part of equal content; the Debezium sides drop their default headers; the smoke gate checks the wire; one restart-on-failure policy on every side, restart counts in every result table; the smoke run's Conduit snapshot failure recorded as a real data-loss bug, snapshot cells to rerun on the fixed connector (section 2) | shakedown wire check; Debezium Server/Apicurio registration race | no (shakedown runs only: wiring, no results) |
 
 ### Review items and resolutions
 
