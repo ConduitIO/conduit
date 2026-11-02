@@ -95,7 +95,7 @@ one byte). Headers were not equal: both Debezium runtimes add four
 `__debezium.context.*` headers to every record and Debezium Server adds an
 OpenTelemetry `traceparent`; Conduit adds none. Every Debezium Avro arm into
 Kafka therefore drops those five headers with Kafka's `DropHeaders` SMT, and
-Debezium Server runs with `quarkus.otel.sdk.disabled=true`. The equal-content
+Debezium Server runs with its bundled OpenTelemetry Java agent off (`OTEL_JAVAAGENT_ENABLED=false`, the source of `traceparent`). The equal-content
 definition now includes the headers: none on any side. The smoke gate checks
 it on every Avro Kafka cell (the first record's key size, value size within
 2 B, and header count must match across arms; `test_gate_fails_when_avro_arms_differ_on_the_wire`).
@@ -708,7 +708,9 @@ kit commit, the harness hash and the analysis version are recorded in
 | Debezium Server image: no Apicurio converter, no `debezium-connect-plugins` (ExtractNewRecordState) | added to the matrix image (section 14) |
 | quay.io deleted the pinned Debezium manifests within a day | per-run pins (section 14) |
 | Debezium 3.7 removed `snapshot.mode=never` | `no_data` |
-| Debezium Server JDBC: `${topic}` expanded by Quarkus config | escaped |
+| Debezium Server JDBC: `${topic}` expanded by Quarkus config | escaped; and Debezium Server copies the already-expanded sink values into its offset-storage and schema-history namespaces, where `${topic}` is expanded again and fails startup: one inert key in each namespace stops the copy |
+| Debezium Server scale-out arm: each process started in a subshell, so `wait` had nothing to wait for and the container exited at once | each process is a direct background child; one GC log per JVM |
+| Connect JDBC sink on a `topics.regex`: it saw the CDC topics only at its 5-minute metadata refresh, after every run's first-record timeout | the topics are named |
 | the scale-out arm's entrypoint `$` interpolated by compose | `$$` |
 | Conduit: `avro.encode` leaves the source schema metadata; the destination re-decodes the Avro bytes and fails every record | `sdk.schema.extract.payload.enabled=false` on that destination; reported as a Conduit defect |
 | recovery runs without a first record waited out every timeout | aborted at once, recorded as failed |

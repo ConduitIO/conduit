@@ -413,14 +413,15 @@ def smoke_cells(cs: list) -> list:
 # to flush wiring bugs before the gated smoke. Never results, never a gate.
 # Pass 3: only the paths not yet proven (B-kafka-pg and Conduit's
 # multi-table paths passed in pass 2).
-SHAKEDOWN_CELLS = ["A2-pg-kafka-p1-b64"]
+SHAKEDOWN_CELLS = ["A2-pg-kafka-p1-b64", "A2-pg-pg-p4-b64"]
 # One arm per wiring path (each side, JSON and Avro, the multi-table and
 # scale-out paths, one tuned Conduit arm), to stay under the $5 cap; the
 # other tuned arms are first exercised by the smoke run. Pass 3 keeps only
 # the paths passes 1 and 2 did not prove (connect-avro-s stays on
 # A2-pg-kafka because its diag run is the async-profiler check). Pass 4
 # (wire check) runs every side once on A2-pg-kafka to sample the records
-# each one puts on the broker.
+# each one puts on the broker; pass 5 repeats it with the headers dropped and
+# reruns the pg-pg arms that failed in pass 3.
 SHAKEDOWN_ARMS = {
     "A2-pg-kafka-p1-b64": ("conduit-avro-s", "connect-avro-s", "dbzserver-avro-s"),
     "A2-pg-pg-p4-b64": ("connect-avro-s", "dbzserver-avro-s", "dbzserver-avro-xn-s"),
@@ -1142,8 +1143,15 @@ def connect_connectors(c: Cell, arm: str) -> list:
 
 
 def connect_sink(c: Cell, d: str, tier: str, variant: str, topic, i: int, arm: str) -> dict:
-    """topic None: one sink over every table's topic (topics.regex)."""
-    sel = {"topics": topic} if topic else {"topics.regex": r"cdcparity\.public\.bench_source_[0-9]+"}
+    """topic None: one sink over every table's topic. Named, not a
+    topics.regex: a regex subscription only sees topics that exist at its
+    metadata refresh (metadata.max.age.ms, 5 min), and the CDC topics are
+    created by the source's first records after the sink starts (shakedown
+    pass 3: the sink picked them up exactly 5 min in). A named subscription
+    retries a missing topic within seconds."""
+    names = ",".join(f"cdcparity.public.bench_source_{k}" for k in range(n_tables(c)))
+    sel = {"topics": topic} if topic else (
+        {"topics": names} if names else {"topics.regex": r"cdcparity\.public\.bench_source_[0-9]+"})
     if d == "file":
         # The source wrote JSON bytes; StringConverter passes them through, so
         # the line is that JSON (a JSON converter here would print a Java Map).
@@ -1250,6 +1258,16 @@ def dbzserver_props(c: Cell, arm: str, tables=None, slot=None, offsets="data/off
         # \${...}: Quarkus config expands ${...} itself; the JDBC sink needs the
         # literal ${topic} (shakedown: "collection.name.format is required").
         p["debezium.sink.jdbc.collection.name.format"] = r"\\${topic}"
+        # Debezium Server copies every debezium.sink.jdbc.* value, already
+        # expanded, into the offset-storage and schema-history namespaces
+        # unless those are configured (DebeziumServerConfigSourceFactory), and
+        # the copied ${topic} is then expanded again and fails startup
+        # (shakedown pass 3: SRCFG00011 on
+        # quarkus.debezium.offset.storage.jdbc.collection.name.format). One
+        # inert key in each namespace stops the copy; this run's offsets are
+        # file-backed and Postgres has no schema history.
+        p["debezium.source.offset.storage.jdbc.matrix.unused"] = "1"
+        p["debezium.source.schema.history.internal.jdbc.matrix.unused"] = "1"
         if tier == "t":
             # Debezium JDBC sink: batch.size (default 500), use.reduction.buffer
             # (collapses changes to one key within a batch). Both documented.
@@ -1267,10 +1285,7 @@ def dbzserver_props(c: Cell, arm: str, tables=None, slot=None, offsets="data/off
         if avro:
             p["debezium.transforms.unwrap.add.fields"] = "op"
             p.update({"debezium.transforms.noheaders.type": "org.apache.kafka.connect.transforms.DropHeaders",
-                      "debezium.transforms.noheaders.headers": DBZ_HEADERS,
-                      # No tracing: no other side traces, and its traceparent
-                      # header is otherwise added to every record.
-                      "quarkus.otel.sdk.disabled": "true"})
+                      "debezium.transforms.noheaders.headers": DBZ_HEADERS})
         if c.transform:
             p.update({"debezium.transforms.rename.type": "org.apache.kafka.connect.transforms.ReplaceField$Value",
                       "debezium.transforms.rename.renames": "payload:body"})
@@ -1294,7 +1309,11 @@ def dbzserver_service(c: Cell, arm: str) -> dict:
         "networks": ["benchi"],
     }
     if side != "dbzserver-native":
-        s["environment"] = {"JAVA_OPTS": opts + " ${JVM_DIAG_OPTS:-}"}
+        # The image starts an OpenTelemetry Java agent (2.27.0), which adds a
+        # traceparent header to every Kafka record and traces every call; no
+        # other side traces, so it is off (removes Debezium Server overhead:
+        # conservative against Conduit).
+        s["environment"] = {"JAVA_OPTS": opts + " ${JVM_DIAG_OPTS:-}", "OTEL_JAVAAGENT_ENABLED": "false"}
         s["pull_policy"] = "never"  # built locally (images/dbzserver.Dockerfile)
     if side == "dbzserver-avro-xn":
         # One Debezium Server process per table, all in this one container
@@ -1303,10 +1322,15 @@ def dbzserver_service(c: Cell, arm: str) -> dict:
         # process gets its own working copy, config and offsets file.
         n = n_tables(c)
         s["volumes"][0] = "../dbzserver:/cfg:ro"
-        # $$: compose interpolates $name in the file; the shell gets $.
+        # $$: compose interpolates $name in the file; the shell gets $. Each
+        # process is a background child of this shell (not of a subshell), so
+        # `wait` holds the container up until every process exits (shakedown
+        # pass 3: `(... &)` left nothing to wait for and the container exited
+        # at once). Each JVM writes its own GC log.
         script = ("for i in $(seq 0 %d); do d=/tmp/dbz$i; mkdir -p $d && cp -r /debezium/. $d/ && "
                   "cp /cfg/p$i/application.properties $d/config/application.properties && "
-                  "(cd $d && JAVA_OPTS=\"-Xmx%dm $JAVA_OPTS\" DBZ_PROC=$i ./run.sh > /prof/dbz$i.log 2>&1 &); done; wait"
+                  "o=$(printf %%s \"$JAVA_OPTS\" | sed \"s#/prof/gc.log#/prof/gc$i.log#\") && "
+                  "(cd $d && JAVA_OPTS=\"-Xmx%dm $o\" exec ./run.sh > /prof/dbz$i.log 2>&1) & done; wait"
                   % (n - 1, max(96, 1536 // n)))
         s["entrypoint"] = ["sh", "-c", script.replace("$", "$$")]
     return s
