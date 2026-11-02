@@ -247,13 +247,14 @@ func TestResolveEnv_LiteralDollar(t *testing.T) {
 func TestResolveEnv_TemplateText(t *testing.T) {
 	t.Setenv("x", "LEAKED")
 	t.Setenv("SECRET", "s3cr3t")
-	t.Setenv("ALLOWED", "ok")
+	t.Setenv("ALLOWED", "okay")
 	a := mustAllow(t, "ALLOWED")
 
 	for _, in := range []string{
 		`{{ $x := .Key }}{{ $x }}`,
 		`http://h/?k=$SECRET`,
 		`http://h/?k=${SECRET}`,
+		`{{ ${x} }}`,
 		`postgres://u:$SECRET@h/db`,
 		`/data/$SECRET/file`,
 	} {
@@ -269,8 +270,8 @@ func TestResolveEnv_TemplateText(t *testing.T) {
 	for in, want := range map[string]string{
 		`{{ $$x := .Payload.After.name }}{{ $$x }}`:        `{{ $x := .Payload.After.name }}{{ $x }}`,
 		`{{ range $$i, $$e := .Items }}{{ $$i }}{{ end }}`: `{{ range $i, $e := .Items }}{{ $i }}{{ end }}`,
-		`{{ $$x }} ${ALLOWED}`:                             `{{ $x }} ok`,
-		`$$SECRET and $$${ALLOWED}`:                        `$SECRET and $ok`,
+		`{{ $$x }} ${ALLOWED}`:                             `{{ $x }} okay`,
+		`$$SECRET and $$${ALLOWED}`:                        `$SECRET and $okay`,
 	} {
 		t.Run("escaped/"+in, func(t *testing.T) {
 			is := is.New(t)
@@ -278,7 +279,11 @@ func TestResolveEnv_TemplateText(t *testing.T) {
 			is.NoErr(err)
 			is.Equal(got, want)
 			// an escaped dollar is not a reference: nothing to redact
-			is.Equal(len(Expansions(a, map[string]string{"k": in})) <= 1, true)
+			wantExps := 0
+			if strings.Contains(in, "${ALLOWED}") {
+				wantExps = 1
+			}
+			is.Equal(len(Expansions(a, map[string]string{"k": in})), wantExps)
 		})
 	}
 
@@ -287,4 +292,25 @@ func TestResolveEnv_TemplateText(t *testing.T) {
 		ce := wantCode(t, err, CodeEnvVarNotAllowed)
 		is.New(t).Equal(ce.ConfigPath, "settings.template")
 	})
+}
+
+func TestCollapseEscapes(t *testing.T) {
+	for in, want := range map[string]string{
+		"":                   "",
+		"plain":              "plain",
+		"$$x":                "$x",
+		"$$$$x":              "$$x",
+		"$$${A}":             "$${A}",
+		"${A} $x price$":     "${A} $x price$",
+		"{{ $$i }}{{ $$e }}": "{{ $i }}{{ $e }}",
+	} {
+		if got := CollapseEscapes(in); got != want {
+			t.Errorf("CollapseEscapes(%q) = %q, want %q", in, got, want)
+		}
+	}
+	// the escape resolves identically in ResolveEnv
+	got, err := ResolveEnv(nil, "{{ $$i }} $$$$x")
+	if err != nil || got != CollapseEscapes("{{ $$i }} $$$$x") {
+		t.Errorf("ResolveEnv and CollapseEscapes disagree: %q, %v", got, err)
+	}
 }

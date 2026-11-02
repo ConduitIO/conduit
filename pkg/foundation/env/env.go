@@ -185,7 +185,7 @@ func ResolveEnv(allow *Allowlist, s string) (string, error) {
 				"environment variable "+name+" is not in the operator allowlist (env.allow)")
 			ce.ConfigPath = AllowConfigPath
 			ce.Suggestion = "an operator must add " + name + " to " + AllowConfigPath +
-				" in conduit.yaml (or pass --" + AllowConfigPath + " " + name + ") and restart; this cannot be changed through the API (see " + DocsPath + ")"
+				" in conduit.yaml (or pass --" + AllowConfigPath + " " + name + ") and restart; this cannot be changed through the API. If this is not an environment reference (a Go template variable such as $" + name + "), write $$" + name + " for a literal $ (see " + DocsPath + ")"
 			return "", ce
 		}
 		v, ok := os.LookupEnv(name)
@@ -198,6 +198,38 @@ func ResolveEnv(allow *Allowlist, s string) (string, error) {
 		i = next
 	}
 	return b.String(), nil
+}
+
+// CollapseEscapes replaces every "$$" in s with "$" and touches nothing else.
+// It is what ResolveEnv does to the escape, without expanding any reference or
+// reading the environment. Validation requests use it so a plugin validates the
+// text it will get at runtime (a Go template written with "$$x" validates as
+// "$x") while a validation call still never resolves a variable.
+func CollapseEscapes(s string) string {
+	if !strings.Contains(s, "$$") {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		b.WriteByte(s[i])
+		if s[i] == '$' && i+1 < len(s) && s[i+1] == '$' {
+			i++
+		}
+	}
+	return b.String()
+}
+
+// CollapseSettingEscapes returns a copy of settings with CollapseEscapes
+// applied to every value.
+func CollapseSettingEscapes(settings map[string]string) map[string]string {
+	if settings == nil {
+		return nil
+	}
+	out := make(map[string]string, len(settings))
+	for k, v := range settings {
+		out[k] = CollapseEscapes(v)
+	}
+	return out
 }
 
 // literalDollar reports whether the "$" at s[i] is just a dollar sign: at the

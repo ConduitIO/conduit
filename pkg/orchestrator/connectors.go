@@ -22,6 +22,7 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/foundation/env"
 	"github.com/conduitio/conduit/pkg/inspector"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/google/uuid"
@@ -263,12 +264,17 @@ func (c *ConnectorOrchestrator) Validate(
 	plugin string,
 	config connector.Config,
 ) error {
+	// The plugin validates the text it will get at runtime, where the "$$"
+	// escape is already a literal "$" (a Go template written {{ $$x }} is
+	// {{ $x }} by then). References are not expanded here: validation must not
+	// read the environment. The stored settings keep the escape.
+	settings := env.CollapseSettingEscapes(config.Settings)
 	var err error
 	switch t {
 	case connector.TypeSource:
-		err = c.connectorPlugins.ValidateSourceConfig(ctx, plugin, config.Settings)
+		err = c.connectorPlugins.ValidateSourceConfig(ctx, plugin, settings)
 	case connector.TypeDestination:
-		err = c.connectorPlugins.ValidateDestinationConfig(ctx, plugin, config.Settings)
+		err = c.connectorPlugins.ValidateDestinationConfig(ctx, plugin, settings)
 	default:
 		return cerrors.New("invalid connector type")
 	}
