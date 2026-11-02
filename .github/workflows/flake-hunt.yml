@@ -47,7 +47,15 @@ jobs:
         # 2.25x slower cold compile of the same guest), with no test hung. 30m
         # is 10m per iteration. TestFlakeHuntTimeoutCoversEveryIteration
         # (flakehunt_timeout_test.go) keeps the two in step.
-        run: make test-integration GOTEST_FLAGS="-v -count=3 -shuffle=on -timeout 30m"
+        run: |
+          # Resource sampler (same as test.yml): a runner killed for memory
+          # ends with "The runner has received a shutdown signal" and exit 143
+          # and no FAIL line, so the samples are the only evidence of why.
+          ( while sleep 10; do echo "MEMSAMPLE $(date -u +%T) $(free -m | awk 'NR==2{print "used="$3" avail="$7} NR==3{print "swap="$3}' | tr '\n' ' ') top: $(ps -eo rss,args --sort=-rss | sed -n 2,4p | awk '{printf "%dMB:%s ", $1/1024, $2}' | sed 's#/home/runner/work/conduit/conduit/##g')"; done ) &
+          SAMPLER=$!
+          make test-integration GOTEST_FLAGS="-v -count=3 -shuffle=on -timeout 30m"; ret=$?
+          kill "$SAMPLER" 2>/dev/null || true
+          exit $ret
 
       - name: Report outcome
         if: failure()
