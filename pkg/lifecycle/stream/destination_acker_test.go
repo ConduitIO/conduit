@@ -25,7 +25,9 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/lifecycle-poc/funnel"
 	"github.com/conduitio/conduit/pkg/lifecycle/stream/mock"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
@@ -490,4 +492,93 @@ func TestDestinationAckerNode_UnexpectedPosition_ReasonHasPositionHashOnly(t *te
 		is.True(!strings.Contains(reason, secretB))
 	}
 	<-nodeDone
+}
+
+// TestDestinationAckerNode_EmptyAckResponse: a destination may answer with a
+// response that carries no acks (the connector protocol allows it). The acker
+// read acks[0] without a length check and panicked its worker goroutine, taking
+// the process down. It must wait for the next response instead.
+func TestDestinationAckerNode_EmptyAckResponse(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	dest := mock.NewDestination(ctrl)
+
+	node := &DestinationAckerNode{
+		Name:        "destination-acker-node",
+		Destination: dest,
+	}
+
+	in := make(chan *Message)
+	node.Sub(in)
+
+	nodeDone := make(chan struct{})
+	go func() {
+		defer close(nodeDone)
+		is.NoErr(node.Run(ctx))
+	}()
+
+	msg := &Message{
+		Record: opencdc.Record{Position: opencdc.Position("test-position")},
+	}
+	gomock.InOrder(
+		dest.EXPECT().Ack(gomock.Any()).Return(nil, nil), // empty response
+		dest.EXPECT().Ack(gomock.Any()).Return([]connector.DestinationAck{{Position: msg.Record.Position}}, nil),
+	)
+	ackHandlerDone := make(chan struct{})
+	msg.RegisterAckHandler(func(got *Message) error {
+		defer close(ackHandlerDone)
+		is.Equal(msg, got)
+		return nil
+	})
+	in <- msg
+
+	select {
+	case <-time.After(time.Second):
+		is.Fail() // expected ack handler to be called
+	case <-ackHandlerDone:
+	}
+	close(in)
+	select {
+	case <-time.After(time.Second):
+		is.Fail()
+	case <-nodeDone:
+	}
+}
+
+// TestDestinationAckerNode_EmptyAckFlood: an endless run of empty responses is
+// an error, not a spin. The message is not acked.
+func TestDestinationAckerNode_EmptyAckFlood(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	dest := mock.NewDestination(ctrl)
+
+	node := &DestinationAckerNode{
+		Name:        "destination-acker-node",
+		Destination: dest,
+	}
+	in := make(chan *Message)
+	node.Sub(in)
+
+	runErr := make(chan error, 1)
+	go func() { runErr <- node.Run(ctx) }()
+
+	dest.EXPECT().Ack(gomock.Any()).Return(nil, nil).MinTimes(1)
+	msg := &Message{Record: opencdc.Record{Position: opencdc.Position("test-position")}}
+	msg.RegisterAckHandler(func(*Message) error {
+		t.Error("message must not be acked")
+		return nil
+	})
+	msg.RegisterNackHandler(func(*Message, NackMetadata) error { return nil })
+	in <- msg
+
+	select {
+	case <-time.After(5 * time.Second):
+		t.Fatal("acker kept polling an endless run of empty ack responses")
+	case err := <-runErr:
+		ce, ok := conduiterr.Get(err)
+		is.True(ok)
+		is.Equal(ce.Code.Reason(), funnel.CodeDestinationEmptyAckFlood.Reason())
+	}
 }

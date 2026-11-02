@@ -233,3 +233,28 @@ func TestDestinationTask_DoBuffered_OversizeRecordIsNackedNotSent(t *testing.T) 
 	assertOversizeNacked(is, batch.recordStatuses[1].Error, recs[1].Position)
 	is.Equal(alog.snapshot(), []string{"acker.ack", "acker.nack", "acker.ack"}) // tainted batch: split by flag, in order
 }
+
+// TestDLQ_OversizeRecordFailsWithCode: the DLQ destination gets the same size cap.
+// A DLQ record (the failed record plus nack metadata) that alone exceeds the
+// connector's receive limit used to be sent and fail the stream with no code; it
+// must fail with the coded error naming connectors.max-receive-record-size, and
+// never reach the destination.
+func TestDLQ_OversizeRecordFailsWithCode(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	dest := &writeRecordingDestination{fakeDestination: newFakeDestination("dlq")}
+	dlq := NewDLQ("dlq", dest, log.Test(t), NoOpConnectorMetrics{}, 10, 10)
+	dlq.SetMaxReceiveRecordSize(testMaxReceive)
+
+	rec := bigRecords(1, 2*testMaxReceive)[0]
+	batch := NewBatch([]opencdc.Record{rec})
+	batch.Nack(0, fmt.Errorf("processor failed"))
+
+	n, err := dlq.Nack(ctx, batch, "task")
+	is.True(err != nil)
+	is.Equal(n, 0)
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code.Reason(), CodeRecordExceedsMaxReceiveSize.Reason())
+	is.Equal(len(dest.receivedPositions()), 0)
+}
