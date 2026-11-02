@@ -148,6 +148,13 @@ var (
 	// returning this error from doTask.
 	CodeSharedDestinationPoisoned = conduiterr.Register("pipeline.shared_destination_poisoned", codes.Aborted)
 
+	// CodeFlushOnCloseFailed is returned when a destination task is closed with
+	// buffered or queued work it could not write and acknowledge. Close still tears
+	// the destination down, but reports this so a stop that left records unwritten
+	// is not mistaken for a clean one. Nothing is lost (invariant 3): the records
+	// were never acknowledged upstream and replay on restart.
+	CodeFlushOnCloseFailed = conduiterr.Register("pipeline.flush_on_close_failed", codes.Aborted)
+
 	// CodeDestinationEmptyAckFlood is returned when a destination sends more than
 	// maxConsecutiveEmptyAcks consecutive ack responses that each carry no ack
 	// while the engine is waiting for acks.

@@ -39,7 +39,7 @@ import (
 //     ledger covers every position 1..total at least once — in-flight batches
 //     are replayed, never lost.
 //
-// The restart runs without destination batching; see pipelinedFlusherRestart.
+// The restart keeps destination batching on; see pipelinedFlusherRestart.
 func TestSIGKILL_PipelinedFlusher_CrashMidWindow(t *testing.T) {
 	is := is.New(t)
 	dir := t.TempDir()
@@ -98,9 +98,9 @@ func TestSIGKILL_PipelinedFlusher_CrashMidWindow(t *testing.T) {
 // upstream and the graceful child's "acked through total" gate times out.
 //
 // Here the first child runs unbatched with production capped at 22, so the
-// resume position is exactly 22 on every run. A restart batched at 8 (what the
-// crash test's restart used to do) times out here deterministically, since the
-// resume is pinned at 22.
+// resume position is exactly 22 on every run, and the restart is batched at 8.
+// It used to time out deterministically (#3231); Worker.Stop now drains the
+// trailing partial batch before tearing the source down.
 func TestSIGKILL_PipelinedFlusher_RestartFromUnalignedPosition(t *testing.T) {
 	is := is.New(t)
 	dir := t.TempDir()
@@ -124,7 +124,9 @@ func TestSIGKILL_PipelinedFlusher_RestartFromUnalignedPosition(t *testing.T) {
 	first.sigkill(t)
 	is.Equal(assertRecoveryInvariantsAtKill(t, cfg), uint64(resumeAt))
 
-	second := spawnLCChild(t, pipelinedFlusherRestart(cfg))
+	restart := pipelinedFlusherRestart(cfg)
+	restart.destBatchSize = 8 // batched restart from an unaligned resume: needs Stop's drain (#3231)
+	second := spawnLCChild(t, restart)
 	second.waitExit(t, parentWaitExit)
 	_, done := second.line(markerLCDone)
 	is.True(done)
@@ -135,20 +137,12 @@ func TestSIGKILL_PipelinedFlusher_RestartFromUnalignedPosition(t *testing.T) {
 // pipelinedFlusherRestart returns the graceful restart config for a crashed
 // pipelined-flusher child: same directories and total, run to completion.
 //
-// It deliberately turns destination batching OFF. The restart proves invariant
-// 3 (every position 1..total delivered, the upstream ledger at exactly total),
-// and its exit gate needs the source acked through total during normal
-// processing. A batched restart cannot guarantee that: when the resume position
-// is not batch-aligned, the trailing partial batch waits for an arrival that
-// never comes and is only flushed on Close, after the source is torn down (see
-// TestSIGKILL_PipelinedFlusher_RestartFromUnalignedPosition). The crash window
-// under test is the first child's; replaying its in-flight batches is the
-// source re-reading from the persisted position, which does not depend on the
-// restart's batch size.
-//
-// This is a workaround for #3231 (a partial batch has no flush timer and is
-// not acked on graceful stop). Restore destBatchSize: cfg.destBatchSize here
-// once #3231 lands, so the restart exercises batching again.
+// Destination batching stays ON, as in the crashed child: the restart resumes
+// from an arbitrary position, so it ends with a trailing partial batch that has
+// no flush timer. Worker.Stop drains that batch and acks it while the source is
+// still running (#3231), which is exactly what this restart now exercises; the
+// child therefore waits for production, not for the ack, before stopping (see
+// runChildLifecycle).
 func pipelinedFlusherRestart(cfg lcChildConfig) lcChildConfig {
 	return lcChildConfig{
 		dbDir:         cfg.dbDir,
@@ -158,7 +152,7 @@ func pipelinedFlusherRestart(cfg lcChildConfig) lcChildConfig {
 		total:         cfg.total,
 		paceMS:        cfg.paceMS,
 		failAt:        0,
-		destBatchSize: 0,
+		destBatchSize: cfg.destBatchSize,
 		minDelayMS:    10,
 		maxDelayMS:    10,
 		graceful:      true,
