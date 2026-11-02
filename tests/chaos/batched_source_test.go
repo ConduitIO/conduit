@@ -465,8 +465,8 @@ func TestSIGKILL_BatchedSource_WhileCollecting(t *testing.T) {
 func TestSIGKILL_BatchedSource_AfterWriteBeforePersist(t *testing.T) {
 	conduitBin, _ := buildStandaloneBinaries(t)
 	const (
-		total  = 400000
-		killAt = 4 * persisterWindow
+		total  = 100000
+		killAt = 25000 // 2.5 persister windows: well over window + credit (12,000)
 	)
 	for _, eng := range batchedEngines {
 		t.Run(eng.name, func(t *testing.T) {
@@ -549,6 +549,55 @@ func (r *fifoReader) drain(quiet time.Duration) {
 			return
 		}
 		time.Sleep(2 * time.Millisecond)
+	}
+}
+
+// waitAll keeps draining the pipe until every record of want arrived. It fails
+// with a loss verdict only when nothing arrived for batchedQuiet.
+func (r *fifoReader) waitAll(t *testing.T, p *conduitProcess, want []int, context string) {
+	t.Helper()
+	done := make(chan struct{})
+	stop := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			r.drain(100 * time.Millisecond)
+		}
+	}()
+	defer func() { close(stop); <-done }()
+	deadline := time.Now().Add(batchedOverall)
+	quietSince, last := time.Now(), -1
+	for {
+		seq := r.snapshot()
+		counts := countsOf(seq)
+		missing := 0
+		for _, w := range want {
+			if counts[w] == 0 {
+				missing++
+			}
+		}
+		if missing == 0 {
+			return
+		}
+		if len(seq) != last {
+			last, quietSince = len(seq), time.Now()
+		}
+		if time.Since(quietSince) >= batchedQuiet {
+			t.Fatalf("DATA LOSS%s: the destination went quiet for %s with %d of %d records never delivered (invariants 1 and 3)", context, batchedQuiet, missing, len(want))
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("TIMEOUT (not a data-loss verdict)")
+		}
+		select {
+		case <-p.exited:
+			t.Fatalf("conduit exited (%v) before delivering everything\n%s", p.err, p.output())
+		case <-time.After(50 * time.Millisecond):
+		}
 	}
 }
 
@@ -644,7 +693,7 @@ func TestSIGKILL_BatchedSource_StalledDestination_NoLoss(t *testing.T) {
 // each source's order holds, and the replay is bounded.
 func TestSIGKILL_BatchedSource_NSource(t *testing.T) {
 	conduitBin, _ := buildStandaloneBinaries(t)
-	const lines = 150000
+	const lines = 40000
 	for _, eng := range batchedEngines {
 		t.Run(eng.name, func(t *testing.T) {
 			dir := batchedDir(t, batchedOpts{lines: lines, sources: 2})
@@ -652,7 +701,7 @@ func TestSIGKILL_BatchedSource_NSource(t *testing.T) {
 
 			first := startConduit(t, conduitBin, dir, "never", eng.flags...)
 			requireBatchedSource(t, first)
-			waitDelivered(t, first, dir, 30000)
+			waitDelivered(t, first, dir, 15000)
 			first.sigkill(t)
 			if lineCount(dir) >= 2*lines {
 				t.Fatalf("the whole input was delivered before the kill landed; raise lines")
@@ -672,39 +721,62 @@ func TestSIGKILL_BatchedSource_NSource(t *testing.T) {
 	}
 }
 
-// TestSIGTERM_BatchedSource_GracefulDrain stops Conduit with SIGTERM while a
-// batched source is mid-stream (invariant 7): the pipeline drains what is in
-// flight, checkpoints and exits cleanly. Resuming must then deliver the rest
-// with no loss, no duplicates and no reordering, because records the SDK read
-// ahead but did not send were dropped unacked and nothing sent was left
-// unpersisted.
+// TestSIGTERM_BatchedSource_GracefulDrain stops Conduit with SIGTERM while
+// records are provably in flight (invariant 7): the destination is a named
+// pipe nobody reads, so its Write is blocked and the source is ahead of it
+// when the signal lands. Only then does the test start draining the pipe, so
+// the pipeline can finish what it has in flight, checkpoint and exit 0. A
+// restart must deliver the rest with no loss, no duplicates and no
+// reordering: records the SDK read ahead but did not send were dropped
+// unacked, and nothing sent was left unpersisted. The result does not depend
+// on throughput.
 func TestSIGTERM_BatchedSource_GracefulDrain(t *testing.T) {
 	conduitBin, _ := buildStandaloneBinaries(t)
-	const total = 1000000
+	const total = 5000
 	for _, eng := range batchedEngines {
 		t.Run(eng.name, func(t *testing.T) {
-			dir := batchedDir(t, batchedOpts{lines: total})
+			dir := batchedDir(t, batchedOpts{lines: total, fifo: true})
+			pipe := openFIFO(t, fifoPath(dir))
 
 			first := startConduit(t, conduitBin, dir, "never", eng.flags...)
-			requireBatchedSource(t, first)
-			waitDelivered(t, first, dir, 10000)
-			first.sigterm(t)
-			midTotal := lineCount(dir)
-			if midTotal >= total {
-				t.Fatalf("the whole input was delivered before SIGTERM landed; raise total")
+			opened := requireBatchedSource(t, first)
+			time.Sleep(1500*time.Millisecond - time.Since(opened)) // destination is blocked on the full pipe
+			if n := len(pipe.snapshot()); n != 0 {
+				t.Fatalf("the test read %d records before the stall", n)
 			}
-			if d := duplicates(countsOf(sequence(t, dir))); d != 0 {
+			// SIGTERM now, then let the destination drain while the process
+			// shuts down.
+			stopDone := make(chan struct{})
+			go func() {
+				defer close(stopDone)
+				for {
+					pipe.drain(100 * time.Millisecond)
+					select {
+					case <-first.exited:
+						pipe.drain(100 * time.Millisecond)
+						return
+					default:
+					}
+				}
+			}()
+			first.sigterm(t)
+			<-stopDone
+			midTotal := len(pipe.snapshot())
+			if midTotal == 0 || midTotal >= total {
+				t.Fatalf("SIGTERM did not land mid-stream (%d of %d written)", midTotal, total)
+			}
+			if d := duplicates(countsOf(pipe.snapshot())); d != 0 {
 				t.Fatalf("%d duplicates before any restart", d)
 			}
 
 			second := startConduit(t, conduitBin, dir, "never", eng.flags...)
 			requireBatchedSource(t, second)
-			waitComplete(t, second, dir, rangeOf(1, total))
+			pipe.waitAll(t, second, rangeOf(1, total), "")
 			second.sigterm(t)
 
-			seq := sequence(t, dir)
+			seq := pipe.snapshot()
 			requireOrder(t, seq, 1, total, 0)
-			t.Logf("%s: %d delivered before SIGTERM, %d records in total", eng.name, midTotal, len(seq))
+			t.Logf("%s: %d written before the stop completed, %d in total", eng.name, midTotal, len(seq))
 			if d := duplicates(countsOf(seq)); d != 0 {
 				t.Fatalf("%d records were delivered twice across a graceful stop and restart (invariants 3 and 7)", d)
 			}
