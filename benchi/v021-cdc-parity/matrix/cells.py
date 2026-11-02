@@ -416,14 +416,16 @@ def smoke_cells(cs: list) -> list:
 SHAKEDOWN_CELLS = ["A2-pg-kafka-p1-b64", "A2-pg-pg-p4-b64", "G-pg-kafka-kill9"]
 # One arm per wiring path (each side, JSON and Avro, the multi-table and
 # scale-out paths, one tuned Conduit arm), to stay under the $5 cap; the
-# other tuned arms are first exercised by the smoke run.
+# other tuned arms are first exercised by the smoke run. Pass 3 keeps only
+# the paths passes 1 and 2 did not prove (connect-avro-s stays on
+# A2-pg-kafka because its diag run is the async-profiler check).
 SHAKEDOWN_ARMS = {
-    "A2-pg-kafka-p1-b64": ("conduit-avro-s", "connect-avro-s", "dbzserver-avro-s"),
+    "A2-pg-kafka-p1-b64": ("connect-avro-s", "dbzserver-avro-s"),
     "A2-pg-pg-p4-b64": ("connect-avro-s", "dbzserver-avro-s", "dbzserver-avro-xn-s"),
     "B-kafka-pg-p1-b64": ("conduit-s", "connect-s"),
     "G-pg-kafka-kill9": ("conduit-avro-s", "connect-avro-s", "dbzserver-avro-s"),
 }
-SHAKEDOWN_DIAG = {"A2-pg-kafka-p1-b64": ("conduit-avro-s", "connect-avro-s")}
+SHAKEDOWN_DIAG = {"A2-pg-kafka-p1-b64": ("connect-avro-s",)}
 
 
 def shakedown_cells(cs: list) -> list:
