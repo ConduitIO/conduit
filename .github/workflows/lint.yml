@@ -38,7 +38,7 @@ jobs:
       # commit. Measured cost: about 20-35s per run (#3077). The Go build
       # and module caches from setup-go are unaffected.
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: ${{ steps.golangci-lint-version.outputs.v }}
           skip-cache: true
