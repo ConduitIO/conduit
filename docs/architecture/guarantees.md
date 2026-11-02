@@ -63,7 +63,7 @@ not deduplicated. The replay window after a crash is bounded in practice — the
 1 s or 10,000 positions (`DefaultPersisterDelayThreshold` / `DefaultPersisterBundleCountThreshold`),
 counting positions rather than ack calls and triggering on `>=`, so with default source batching the
 window is about 10,000 positions plus one in-flight batch (plus whatever destination batching holds) —
-but no test asserts that bound end to end (the persister's count trigger is unit-tested). The engine tests drive fake connectors with no process boundary,
+and the bound is asserted: the persister's count trigger is unit-tested, and `tests/chaos` kills a batched pipeline on both engines and checks the replay stays within the window (`TestSIGKILL_BatchedSource_AfterWriteBeforePersist`). The engine tests drive fake connectors with no process boundary,
 so the no-gap and persist-before-ack claims are carried by `pkg/connector` and `tests/chaos`, not by
 the engine tests alone.
 

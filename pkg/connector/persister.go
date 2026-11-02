@@ -200,7 +200,7 @@ func (p *Persister) Persist(ctx context.Context, conn *Instance, count int, call
 	}
 	p.bundleCount += count
 
-	// Invariant 2: the flush trigger must fire once the threshold is crossed,
+	// Invariant 3 (at-least-once, bounded replay): the flush trigger must fire once the threshold is crossed,
 	// so the replay window after a crash stays bounded by the threshold plus
 	// one in-flight batch.
 	if p.bundleCount >= p.bundleCountThreshold {

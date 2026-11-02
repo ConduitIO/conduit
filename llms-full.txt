@@ -68,6 +68,8 @@ v1 pipeline configs key `pipelines`, `connectors`, and `processors` by map (`pip
 
 ## 2. Built-in connectors (6)
 
+Source batching: a source that leaves `sdk.batch.size` and `sdk.batch.delay` unset reads up to 100 records at a time (adaptive drain: it returns what is already queued, with no timer), for the built-in file, generator and kafka sources; postgres and s3 default to 0 and 0. To read one record at a time, set both `sdk.batch.size: "0"` and `sdk.batch.delay: "0"` on the source connector. Runbook: docs/operations/source-batching.md.
+
 ### file (v0.12.0)
 
 A file source and destination plugin for Conduit.

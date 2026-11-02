@@ -67,6 +67,16 @@ func filterTools(tools []mcp.ToolInfo, mutates bool) []mcp.ToolInfo {
 // one blockquote summary immediately after, then ## sections of links and
 // counts. Every list here is derived from d; the full detail lives in
 // llms-full.txt, which every section links to.
+// sourceBatchingNote is the one-paragraph statement of the default source
+// batching (conduit-connector-sdk v0.18, design 20261027-default-source-batching.md)
+// and its opt-out, shared by llms.txt and llms-full.txt. The per-connector
+// defaults are in each connector's sdk.batch.* parameters.
+const sourceBatchingNote = "Source batching: a source that leaves `sdk.batch.size` and `sdk.batch.delay` unset " +
+	"reads up to 100 records at a time (adaptive drain: it returns what is already queued, with no timer), " +
+	"for the built-in file, generator and kafka sources; postgres and s3 default to 0 and 0. " +
+	"To read one record at a time, set both `sdk.batch.size: \"0\"` and `sdk.batch.delay: \"0\"` on the source connector. " +
+	"Runbook: docs/operations/source-batching.md."
+
 func renderLLMSTxt(d generatedData) string {
 	var b strings.Builder
 
@@ -83,7 +93,8 @@ func renderLLMSTxt(d generatedData) string {
 	for _, c := range d.Connectors {
 		fmt.Fprintf(&b, "- %s — %s\n", c.Name, c.Summary)
 	}
-	fmt.Fprintf(&b, "(%d built-in connectors; full parameters in llms-full.txt)\n\n", len(d.Connectors))
+	fmt.Fprintf(&b, "(%d built-in connectors; full parameters in llms-full.txt)\n", len(d.Connectors))
+	b.WriteString("- " + sourceBatchingNote + "\n\n")
 
 	b.WriteString("## Error codes\n")
 	fmt.Fprintf(&b, "- %d stable error codes, dotted `domain.name` reasons, each with a gRPC status "+
@@ -270,6 +281,7 @@ func atxHeadingToBold(line string) (string, bool) {
 
 func renderConnectorsSection(b *strings.Builder, connectors []connectorInfo) {
 	fmt.Fprintf(b, "## 2. Built-in connectors (%d)\n\n", len(connectors))
+	b.WriteString(sourceBatchingNote + "\n\n")
 
 	for _, c := range connectors {
 		fmt.Fprintf(b, "### %s (%s)\n\n", c.Name, c.Version)
