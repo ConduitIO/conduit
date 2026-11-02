@@ -111,10 +111,16 @@ def main():
         procs.append(bg(["docker", "exec", COUNTER, "/loader/loader", "poll", "-url", "http://cdcparity-sut:8778/jolokia/",
                          "-body", "/out/prof/jolokia.json", "-every", "10s", "-out", "/out/poll-jolokia.jsonl"]))
         half = max(30, window // 2 - 10)
+        # The JVM images ship neither jps nor pgrep, so asprof cannot be given
+        # "jps": find the java process through /proc instead.
+        pid = subprocess.run(["docker", "exec", SUT, "sh", "-c",
+                              "for p in /proc/[0-9]*; do [ \"$(cat $p/comm 2>/dev/null)\" = java ] && "
+                              "{ basename $p; break; }; done"],
+                             capture_output=True, text=True, timeout=30).stdout.strip() or "1"
         for event, name in (("itimer", "cpu-window.collapsed"), ("wall", "wall-window.collapsed")):
             with open(os.path.join(rd, f"asprof-{event}.log"), "w") as log:
                 subprocess.run(["docker", "exec", SUT, "/opt/async-profiler/bin/asprof", "-d", str(half), "-e", event,
-                                "-o", "collapsed", "-f", f"/prof/{name}", "jps"],
+                                "-o", "collapsed", "-f", f"/prof/{name}", pid],
                                stdout=log, stderr=subprocess.STDOUT, timeout=half + 120)
     time.sleep(max(0, window - (time.time() - t_start)))
     for p in procs:

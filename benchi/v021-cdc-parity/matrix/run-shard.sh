@@ -119,8 +119,8 @@ for u in "${UNITS[@]}"; do
   rm -rf "$d"
   bash "$HERE/run-cell.sh" "$cell" "$OUT" "$rep"
   log "cell $cell done"
-  [ -n "${MATRIX_S3:-}" ] && aws s3 sync --quiet "$d" "$MATRIX_S3/shard-$I/$(basename "$d")"
+  [ -n "${MATRIX_S3:-}" ] && aws s3 sync --quiet --exclude '*/token' "$d" "$MATRIX_S3/shard-$I/$(basename "$d")"
 done
 python3 "$HERE/envspec.py" "$ROOT" "$LOADER_BIN" > "$OUT/environment-end.txt"
 log "shard $I finished"
-[ -n "${MATRIX_S3:-}" ] && aws s3 sync --quiet "$OUT" "$MATRIX_S3/shard-$I" && aws s3 cp --quiet - "$MATRIX_S3/shard-$I/FINISHED" <<<"$(date -u +%FT%TZ)"
+[ -n "${MATRIX_S3:-}" ] && aws s3 sync --quiet --exclude '*/token' "$OUT" "$MATRIX_S3/shard-$I" && aws s3 cp --quiet - "$MATRIX_S3/shard-$I/FINISHED" <<<"$(date -u +%FT%TZ)"

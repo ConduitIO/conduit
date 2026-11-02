@@ -49,7 +49,7 @@ publish_run() { # label rc t0
   echo "$(date -u +%FT%TZ) run $CELL/$label exit $rc $(( ($(date +%s%3N) - t0) / 1000 ))s record=$first" >> "$OUT/shard.log"
   if [ -n "${MATRIX_S3:-}" ]; then
     aws s3 cp --quiet "$OUT/shard.log" "$MATRIX_S3/shard-${MATRIX_SHARD:-0}/shard.log" || true
-    aws s3 sync --quiet --exclude 'prof/*.pprof' "$rd" "$MATRIX_S3/shard-${MATRIX_SHARD:-0}/$(basename "$DIR")/$label" || true
+    aws s3 sync --quiet --exclude 'prof/*.pprof' --exclude '*/token' --exclude 'prof/token' "$rd" "$MATRIX_S3/shard-${MATRIX_SHARD:-0}/$(basename "$DIR")/$label" || true
   fi
 }
 
