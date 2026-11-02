@@ -101,6 +101,23 @@ it on every Avro Kafka cell (the first record's key size, value size within
 2 B, and header count must match across arms; `test_gate_fails_when_avro_arms_differ_on_the_wire`). Rechecked in shakedown pass 5: no headers on any side; key 8 B on all,
 value 74 B (Conduit) and 75 B (both Debezium runtimes); on the broker, both
 Debezium runtimes now store about 93 B per record uncompressed.
+
+**Restart policy (amendment 4).** Every system under test (Conduit, Kafka
+Connect, Debezium Server, the scale-out arm's processes) runs with the same
+supervisor policy: restarted on failure, up to 3 times (compose
+`restart: on-failure:3`; a retry loop per process in the scale-out arm).
+Observed failure mode, disclosed and not counted as a result for any side:
+Debezium Server converts records on several threads, and when two of them
+register a table's first schema at once, Apicurio Registry 3.3.3 answers one
+"already exists"; the Apicurio serde does not retry a conflict, so Debezium
+Server exits (`RuleViolationError`, "Cache load failed after 0 retries"). It
+is nondeterministic (shakedown pass 6 passed, pass 7 failed, same arm). On
+restart the schema exists and it resumes from its offsets. Measured startup
+time includes any restart. Every run records its restart count
+(`SUT_RESTART_COUNT`), and every result table shows, per arm, how many runs
+were restarted and the total restarts, with this failure mode stated under
+the table. Docker does not restart a container the harness kills, so the
+kill -9 recovery runs are unchanged.
 Compression is not part of content: in the shipped tier each side writes its
 default (Conduit's Kafka destination snappy, both Debezium producers none,
 seen on the broker); the tuned tier sets lz4 on every side.
@@ -629,7 +646,7 @@ replaces the column. The 32-vCPU quota allows 2 x c6i.4xlarge at a time.
 | 2026-10-27 | amended after the adversarial methodology review (`bench-methodology-review.md`); every item and its resolution below | review | no |
 | 2026-10-27 | amended after review round 2 (conditional no-go); tag matrix-plan-v3; items below | review | no |
 | 2026-10-28 | amendment 3: trim, spot, sequencing (below) | budget and Conduit release sequencing, decided by DeVaris | no (shakedown runs only: wiring, no results) |
-| 2026-11-02 | amendment 4: headers are part of equal content; the Debezium sides drop their default headers; the smoke gate checks the wire (section 2) | shakedown wire check | no (shakedown runs only: wiring, no results) |
+| 2026-11-02 | amendment 4: headers are part of equal content; the Debezium sides drop their default headers; the smoke gate checks the wire; one restart-on-failure policy on every side, restart counts in every result table (section 2) | shakedown wire check; Debezium Server/Apicurio registration race | no (shakedown runs only: wiring, no results) |
 
 ### Review items and resolutions
 
@@ -714,7 +731,7 @@ kit commit, the harness hash and the analysis version are recorded in
 | Debezium Server scale-out arm: each process started in a subshell, so `wait` had nothing to wait for and the container exited at once | each process is a direct background child; one GC log per JVM |
 | Debezium Server image: the converter bundle's own vertx-core shadowed the server's in a copied directory (classpath order is the directory listing): NoSuchMethodError at startup of the scale-out arm | only jars the server does not already ship are added (by artifact name); the list is kept in the image |
 | Debezium Server's scale-out arm: all four processes bound HTTP port 8080; three failed to start | one port per process |
-| Debezium Server converts on several threads; two registering a table's first schema at once both get "already exists" from Apicurio 3.3.3, the serde does not retry a conflict, and the server exits (`RuleViolationError`). Nondeterministic: pass 6 passed, pass 7 failed. A Debezium Server and Apicurio defect, not a harness one | the harness restarts it on failure, as a supervisor would (compose `restart: on-failure:3`; a retry loop per process in the scale-out arm); the restart is inside its measured startup time and every run records `SUT_RESTART_COUNT`. Docker does not restart a container it was told to kill, so kill -9 runs are unchanged |
+| Debezium Server converts on several threads; two registering a table's first schema at once both get "already exists" from Apicurio 3.3.3, the serde does not retry a conflict, and the server exits (`RuleViolationError`). Nondeterministic: pass 6 passed, pass 7 failed. A Debezium Server and Apicurio defect, not a harness one | every side is restarted on failure, as a supervisor would (compose `restart: on-failure:3`; a retry loop per process in the scale-out arm); the restart is inside measured startup time, every run records `SUT_RESTART_COUNT`, and every result table shows it (section 2, amendment 4). Docker does not restart a container it was told to kill, so kill -9 runs are unchanged |
 | the broker-sample collector printed the whole first segment (a JVM tool keeps writing into a closed pipe), so the Debezium runs timed out | `--max-bytes` |
 | Connect JDBC sink on a `topics.regex`: it saw the CDC topics only at its 5-minute metadata refresh, after every run's first-record timeout | the topics are named |
 | the scale-out arm's entrypoint `$` interpolated by compose | `$$` |

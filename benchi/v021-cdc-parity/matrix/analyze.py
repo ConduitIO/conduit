@@ -281,6 +281,7 @@ def analyze_run(rd, meta):
     r = {"run": os.path.basename(rd), "arm": arm, "exit_code": info.get("exit_code"), "hooks": hooks}
     fm = first_ms(sinks)
     r["first_record"] = fm is not None
+    r["restarts"] = hooks.get("SUT_RESTART_COUNT")
     if hooks.get("TOOL_START_MS") and fm:
         r["startup_s"] = (fm - hooks["TOOL_START_MS"]) / 1000
     mode = meta["mode"]
@@ -635,8 +636,9 @@ def per_arm_table(inst, meta):
     runs = [r for r in inst["runs"] if re.match(r"r\d+-", r.get("run", ""))]
     fmt = lambda v, p=0: "-" if v is None else f"{v:,.{p}f}"
     md = [f"\n{inst['dir']}:\n",
-          "| arm | metric median | min - max | valid | CPU-s/M ev (SUT / footprint / dest) | peak RSS MB | startup s | bytes/rec | bottleneck (median run) | stationary |",
-          "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+          "| arm | metric median | min - max | valid | CPU-s/M ev (SUT / footprint / dest) | peak RSS MB | startup s (incl. restarts) | restarts (runs restarted / total restarts) | bytes/rec | bottleneck (median run) | stationary |",
+          "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    restarted = False
     for arm in meta["arms"]:
         rs = [r for r in runs if r.get("arm") == arm]
         vals = [r.get("v") for r in rs if r.get("v") is not None]
@@ -648,10 +650,19 @@ def per_arm_table(inst, meta):
         bn = [r.get("bottleneck") for r in rs if r.get("bottleneck")]
         st = [r.get("stationarity", {}).get("stationary") for r in rs if r.get("stationarity")]
         val = f"{len(vals)}/{len(rs)}" + (f", >= {fmt(min(lb))} (kept up)" if lb else "")
+        rc = [r.get("restarts") or 0 for r in rs]
+        restarted = restarted or any(rc)
+        rcol = f"{sum(1 for x in rc if x)} / {sum(rc)}" if any(r.get("restarts") is not None for r in rs) else "-"
         md.append(f"| {arm} | {fmt(med, 2 if meta['mode'] == 'snapshot' else 0)} | {fmt(min(vals) if vals else None)} - {fmt(max(vals) if vals else None)} | "
                   f"{val} | {fmt(g('cpu_s_per_m_events'), 1)} / {fmt(g('cpu_s_per_m_events_footprint'), 1)} / {fmt(g('destination_cpu_s_per_m_events'), 1)} | "
-                  f"{fmt(statistics.median(rss) if rss else None)} | {fmt(g('startup_s'), 1)} | {fmt(g('bytes_per_record'))} | "
+                  f"{fmt(statistics.median(rss) if rss else None)} | {fmt(g('startup_s'), 1)} | {rcol} | {fmt(g('bytes_per_record'))} | "
                   f"{bn[len(bn)//2] if bn else '-'} | {sum(1 for x in st if x)}/{len(st)} |")
+    md.append("\nEvery system under test runs with the same restart policy (`on-failure:3`); startup time includes any restart. "
+              "Observed failure mode: Debezium Server with Apicurio 3.3.3 exits when two of its conversion threads register "
+              "a table's first schema at once (\"already exists\", not retried by the serde); it is restarted and resumes. "
+              "It is a disclosed failure mode, not a throughput result for any side (PLAN.md amendment 4).")
+    if restarted:
+        md.append("**At least one run in this table was restarted (restarts column).**")
     return md
 
 

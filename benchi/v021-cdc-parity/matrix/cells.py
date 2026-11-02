@@ -1293,6 +1293,19 @@ def dbzserver_props(c: Cell, arm: str, tables=None, slot=None, offsets="data/off
     return "".join(f"{k}={v}\n" for k, v in p.items())
 
 
+# Every system under test is restarted on failure, as any supervisor would
+# (the same policy on every side). Observed failure mode: Debezium Server
+# converts records on several threads; two threads registering a table's
+# first schema at once both get "already exists" from Apicurio 3.3.3, the
+# serde does not retry a conflict, and the server exits (shakedown pass 7:
+# RuleViolationError, "Cache load failed after 0 retries"). On restart the
+# schema exists. Measured startup time includes any restart; every run
+# records SUT_RESTART_COUNT (run-cell.sh) and every result table shows it.
+# kill -9 runs are unaffected: Docker does not restart a container it was
+# told to kill.
+SUT_RESTART = "on-failure:3"
+
+
 def dbzserver_service(c: Cell, arm: str) -> dict:
     side, tier, _, _ = parse_arm(arm)
     opts = "-Xlog:gc*:file=/prof/gc${DBZ_PROC:-}.log:time,uptime,level,tags"
@@ -1317,15 +1330,6 @@ def dbzserver_service(c: Cell, arm: str) -> dict:
         # against Conduit).
         s["environment"] = {"JAVA_OPTS": opts + " ${JVM_DIAG_OPTS:-}", "OTEL_ENABLED": "false"}
         s["pull_policy"] = "never"  # built locally (images/dbzserver.Dockerfile)
-    # Restarted on failure, as any supervisor would. Debezium Server converts
-    # records on several threads; two threads registering a table's first
-    # schema at once both get "already exists" from Apicurio 3.3.3, the serde
-    # does not retry a conflict, and the server exits (shakedown pass 7:
-    # RuleViolationError, "Cache load failed after 0 retries"). On restart the
-    # schema exists. The restart counts in its startup time; run-cell.sh
-    # records the restart count (SUT_RESTART_COUNT). kill -9 runs are
-    # unaffected: Docker does not restart a container it was told to kill.
-    s["restart"] = "on-failure:3"
     if side == "dbzserver-avro-xn":
         # One Debezium Server process per table, all in this one container
         # (same cpuset and memory limit as every other side). Heap per process:
@@ -1486,6 +1490,7 @@ def gen_arm(c: Cell, arm: str, out: str) -> None:
                       + f"quarkus.http.port={8080 + i}\n")
         else:
             write(os.path.join(out, "dbzserver", "application.properties"), dbzserver_props(c, arm))
+    svc_["restart"] = SUT_RESTART
     dump(os.path.join(out, "tools", "tool.yml"), {"services": {"sut": svc_}, "volumes": {"cdcparity-sink": {"external": True}},
                                                  "networks": {"benchi": {"external": True}}})
     # bench.yml names ./tool.yml; compose resolves relative paths from the
