@@ -136,8 +136,13 @@ stop_res() {
 # tail, and the run directory synced to S3, so a run that hangs is visible
 # while it hangs.
 start_watch() { # run_dir label
-  ( while true; do
-      sleep 60
+  ( n=0; while true; do
+      sleep 5; n=$((n + 1))
+      # Restarts of the system under test (Debezium Server is restarted on
+      # failure, cells.py): the highest count seen, for run.json.
+      r=$(docker inspect -f '{{.RestartCount}}' "$SUT_NAME" 2>/dev/null) &&
+        [ "$r" -gt "$(cat "$1/sut-restarts" 2>/dev/null || echo 0)" ] && echo "$r" > "$1/sut-restarts"
+      [ $((n % 12)) = 0 ] || continue
       mkdir -p "$1/live"
       docker ps -a --filter name=cdcparity --format '{{.Names}} {{.Status}}' > "$1/live/ps.txt" 2>&1
       ps -eo pid,pgid,tpgid,stat,etime,args | grep -E 'benchi|script|timeout|docker compose' | grep -v grep > "$1/live/procs.txt" 2>&1
@@ -148,7 +153,13 @@ start_watch() { # run_dir label
     done ) &
   WATCH_PID=$!
 }
-stop_watch() { kill "${WATCH_PID:-}" 2>/dev/null; wait "${WATCH_PID:-}" 2>/dev/null; WATCH_PID=""; }
+stop_watch() { # [run_dir]
+  kill "${WATCH_PID:-}" 2>/dev/null; wait "${WATCH_PID:-}" 2>/dev/null; WATCH_PID=""
+  if [ -n "${1:-}" ]; then
+    local x; x=$(cat "$1"/prof/dbz*.restarts 2>/dev/null | wc -l)  # the scale-out arm's per-process restarts
+    echo "SUT_RESTART_COUNT=$(( $(cat "$1/sut-restarts" 2>/dev/null || echo 0) + x ))" >> "$1/hooks.txt"
+  fi
+}
 start_diag() { python3 "$HERE/diag.py" "$1" "$2" "$META" & DIAG_PID=$!; }
 stop_diag() { kill "${DIAG_PID:-}" 2>/dev/null; wait "${DIAG_PID:-}" 2>/dev/null; DIAG_PID=""; }
 
@@ -171,7 +182,7 @@ run_benchi() { # label arm diag
   # (the shakedown's runs hung exactly so).
   (cd "$rd/cfg" && with_tty "$rd/benchi-tty.log" timeout --foreground -k 60 "$cap" "$BENCHI" -config bench.yml -tool "$arm" -out "$rd/benchi" </dev/null >"$rd/benchi-stdout.log" 2>&1)
   local rc=$?
-  stop_watch
+  stop_watch "$rd"
   # Whatever benchi left behind (a killed cleanup) must not leak into the next run.
   docker ps -aq --filter network=benchi | xargs -r docker rm -f >/dev/null 2>&1 || true
   [ "$diag" = 1 ] && stop_diag
@@ -223,7 +234,7 @@ run_recover() { # label arm
   if [ "$ok" = 0 ]; then
     echo "RECOVER_ABORTED=1 (no first record or kill threshold)" >> "$rd/hooks.txt"
     for c in $(docker ps -a --filter name=cdcparity --format '{{.Names}}'); do docker logs "$c" > "$rd/$c.log" 2>&1; done
-    stop_watch; stop_res
+    stop_watch "$rd"; stop_res
     (cd "$cfg" && docker compose -p "$P-sut" -f tools/tool.yml down -v; docker compose -p "$P" -f infra.yml down -v) >> "$rd/compose.log" 2>&1
     docker network rm benchi >/dev/null 2>&1 || true
     python3 "$HERE/runinfo.py" "$rd" "$arm" "$label" 1 "$t0" > "$rd/run.json"
@@ -246,7 +257,7 @@ run_recover() { # label arm
       -out "/out/verify-${spec%%:*}.json" > /dev/null 2>> "$rd/hooks.txt"
   done
   docker logs "$SUT_NAME" > "$rd/sut-after-restart.log" 2>&1
-  stop_watch
+  stop_watch "$rd"
   stop_res
   (cd "$cfg" && docker compose -p "$P-sut" -f tools/tool.yml down -v; docker compose -p "$P" -f infra.yml down -v) >> "$rd/compose.log" 2>&1
   docker network rm benchi >/dev/null 2>&1 || true

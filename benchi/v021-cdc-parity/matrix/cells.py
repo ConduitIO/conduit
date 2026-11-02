@@ -413,7 +413,7 @@ def smoke_cells(cs: list) -> list:
 # to flush wiring bugs before the gated smoke. Never results, never a gate.
 # Pass 3: only the paths not yet proven (B-kafka-pg and Conduit's
 # multi-table paths passed in pass 2).
-SHAKEDOWN_CELLS = ["A2-pg-kafka-p1-b64", "A2-pg-pg-p4-b64"]
+SHAKEDOWN_CELLS = ["A2-pg-pg-p4-b64", "G-pg-kafka-kill9"]
 # One arm per wiring path (each side, JSON and Avro, the multi-table and
 # scale-out paths, one tuned Conduit arm), to stay under the $5 cap; the
 # other tuned arms are first exercised by the smoke run. Pass 3 keeps only
@@ -421,12 +421,13 @@ SHAKEDOWN_CELLS = ["A2-pg-kafka-p1-b64", "A2-pg-pg-p4-b64"]
 # A2-pg-kafka because its diag run is the async-profiler check). Pass 4
 # (wire check) runs every side once on A2-pg-kafka to sample the records
 # each one puts on the broker; pass 5 repeats it with the headers dropped and
-# reruns the pg-pg arms that failed in pass 3.
+# reruns the pg-pg arms that failed in pass 3. Pass 8: the Debezium Server
+# arms on pg-pg, and its kill -9 recovery under the new restart policy.
 SHAKEDOWN_ARMS = {
     "A2-pg-kafka-p1-b64": ("conduit-avro-s", "connect-avro-s", "dbzserver-avro-s"),
-    "A2-pg-pg-p4-b64": ("connect-avro-s", "dbzserver-avro-s", "dbzserver-avro-xn-s"),
+    "A2-pg-pg-p4-b64": ("dbzserver-avro-s", "dbzserver-avro-xn-s"),
     "B-kafka-pg-p1-b64": ("conduit-s", "connect-s"),
-    "G-pg-kafka-kill9": ("conduit-avro-s", "connect-avro-s", "dbzserver-avro-s"),
+    "G-pg-kafka-kill9": ("dbzserver-avro-s",),
 }
 SHAKEDOWN_DIAG = {}
 
@@ -1316,6 +1317,15 @@ def dbzserver_service(c: Cell, arm: str) -> dict:
         # against Conduit).
         s["environment"] = {"JAVA_OPTS": opts + " ${JVM_DIAG_OPTS:-}", "OTEL_ENABLED": "false"}
         s["pull_policy"] = "never"  # built locally (images/dbzserver.Dockerfile)
+    # Restarted on failure, as any supervisor would. Debezium Server converts
+    # records on several threads; two threads registering a table's first
+    # schema at once both get "already exists" from Apicurio 3.3.3, the serde
+    # does not retry a conflict, and the server exits (shakedown pass 7:
+    # RuleViolationError, "Cache load failed after 0 retries"). On restart the
+    # schema exists. The restart counts in its startup time; run-cell.sh
+    # records the restart count (SUT_RESTART_COUNT). kill -9 runs are
+    # unaffected: Docker does not restart a container it was told to kill.
+    s["restart"] = "on-failure:3"
     if side == "dbzserver-avro-xn":
         # One Debezium Server process per table, all in this one container
         # (same cpuset and memory limit as every other side). Heap per process:
@@ -1331,7 +1341,8 @@ def dbzserver_service(c: Cell, arm: str) -> dict:
         script = ("for i in $(seq 0 %d); do d=/tmp/dbz$i; mkdir -p $d && cp -r /debezium/. $d/ && "
                   "cp /cfg/p$i/application.properties $d/config/application.properties && "
                   "o=$(printf %%s \"$JAVA_OPTS\" | sed \"s#/prof/gc.log#/prof/gc$i.log#\") && "
-                  "(cd $d && JAVA_OPTS=\"-Xmx%dm $o\" exec ./run.sh > /prof/dbz$i.log 2>&1) & done; wait"
+                  "(cd $d && for t in 1 2 3 4; do JAVA_OPTS=\"-Xmx%dm $o\" ./run.sh >> /prof/dbz$i.log 2>&1 && break; "
+                  "echo restart >> /prof/dbz$i.restarts; done) & done; wait"
                   % (n - 1, max(96, 1536 // n)))
         s["entrypoint"] = ["sh", "-c", script.replace("$", "$$")]
     return s
@@ -1468,8 +1479,11 @@ def gen_arm(c: Cell, arm: str, out: str) -> None:
         svc_ = dbzserver_service(c, arm)
         if side == "dbzserver-avro-xn":
             for i, t in enumerate(tables_list(c)):
+                # Each process has its own HTTP port (all four bound 8080 and
+                # three failed to start; shakedown pass 7).
                 write(os.path.join(out, "dbzserver", f"p{i}", "application.properties"),
-                      dbzserver_props(c, arm, tables=[t], slot=slot_names(c, arm)[i]))
+                      dbzserver_props(c, arm, tables=[t], slot=slot_names(c, arm)[i])
+                      + f"quarkus.http.port={8080 + i}\n")
         else:
             write(os.path.join(out, "dbzserver", "application.properties"), dbzserver_props(c, arm))
     dump(os.path.join(out, "tools", "tool.yml"), {"services": {"sut": svc_}, "volumes": {"cdcparity-sink": {"external": True}},
