@@ -158,3 +158,17 @@ func TestFriendlyType(t *testing.T) {
 	is.Equal(friendlyType(reflect.TypeOf("")), "string")
 	is.Equal(friendlyType(reflect.TypeOf(0)), "int")
 }
+
+func TestSourceBatchingNote_DerivedFromSpecs(t *testing.T) {
+	is := is.New(t)
+	is.Equal(sourceBatchingNote([]connectorInfo{{Name: "x"}}), "") // no sdk.batch.size: no note
+
+	note := sourceBatchingNote([]connectorInfo{
+		{Name: "fast", SourceParams: []paramInfo{{Key: "sdk.batch.size", Default: "100"}}},
+		{Name: "slow", SourceParams: []paramInfo{{Key: "sdk.batch.size", Default: "0"}}},
+		{Name: "sink-only"},
+	})
+	is.True(strings.Contains(note, "fast (100)"))
+	is.True(strings.Contains(note, "not batched by default: slow"))
+	is.True(!strings.Contains(note, "sink-only"))
+}

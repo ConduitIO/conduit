@@ -6,7 +6,8 @@ behaves differently after the upgrade, and what the `sdk.batch.*` codes mean. Po
 `sdk.batch.size: 0` and `sdk.batch.delay: 0` and are not affected by the default.
 
 To switch a source back to one record per read, set both `sdk.batch.size: "0"` and `sdk.batch.delay: "0"` in
-the source connector's settings. Check the plugin's default with `conduit connector-plugins describe <plugin>`, and the effective values in the
+the source connector's settings. Check the plugin's default with `conduit connector-plugins describe
+<plugin>`, and the effective values in the
 connector's startup log line (the SDK logs size, delay, mode and read path at open).
 
 ## Latency panels or alerts moved after the upgrade

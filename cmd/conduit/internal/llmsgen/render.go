@@ -63,20 +63,45 @@ func filterTools(tools []mcp.ToolInfo, mutates bool) []mcp.ToolInfo {
 	return out
 }
 
+// sdkBatchSizeKey is the SDK source batching parameter whose default sourceBatchingNote reports.
+const sdkBatchSizeKey = "sdk.batch.size"
+
+// sourceBatchingNote states the default source batching (conduit-connector-sdk
+// v0.18, design 20261027-default-source-batching.md) and its opt-out. The
+// connector lists are derived from each connector's source sdk.batch.size
+// default, so they cannot drift from the specs. It returns "" when no
+// connector has the parameter.
+func sourceBatchingNote(connectors []connectorInfo) string {
+	var batched, off []string
+	for _, c := range connectors {
+		for _, p := range c.SourceParams {
+			if p.Key != sdkBatchSizeKey {
+				continue
+			}
+			if p.Default == "" || p.Default == "0" {
+				off = append(off, c.Name)
+			} else {
+				batched = append(batched, fmt.Sprintf("%s (%s)", c.Name, p.Default))
+			}
+		}
+	}
+	if len(batched) == 0 && len(off) == 0 {
+		return ""
+	}
+	note := "Source batching: a source that leaves `sdk.batch.size` and `sdk.batch.delay` unset reads in batches " +
+		"(adaptive drain: it returns what is already queued, with no timer). Default sdk.batch.size of built-in sources: "
+	note += strings.Join(batched, ", ")
+	if len(off) > 0 {
+		note += "; not batched by default: " + strings.Join(off, ", ")
+	}
+	return note + ". To read one record at a time, set both `sdk.batch.size: \"0\"` and `sdk.batch.delay: \"0\"` " +
+		"on the source connector. Runbook: docs/operations/source-batching.md."
+}
+
 // renderLLMSTxt renders the concise, llmstxt.org-conformant index: one H1,
 // one blockquote summary immediately after, then ## sections of links and
 // counts. Every list here is derived from d; the full detail lives in
 // llms-full.txt, which every section links to.
-// sourceBatchingNote is the one-paragraph statement of the default source
-// batching (conduit-connector-sdk v0.18, design 20261027-default-source-batching.md)
-// and its opt-out, shared by llms.txt and llms-full.txt. The per-connector
-// defaults are in each connector's sdk.batch.* parameters.
-const sourceBatchingNote = "Source batching: a source that leaves `sdk.batch.size` and `sdk.batch.delay` unset " +
-	"reads up to 100 records at a time (adaptive drain: it returns what is already queued, with no timer), " +
-	"for the built-in file, generator and kafka sources; postgres and s3 default to 0 and 0. " +
-	"To read one record at a time, set both `sdk.batch.size: \"0\"` and `sdk.batch.delay: \"0\"` on the source connector. " +
-	"Runbook: docs/operations/source-batching.md."
-
 func renderLLMSTxt(d generatedData) string {
 	var b strings.Builder
 
@@ -94,7 +119,10 @@ func renderLLMSTxt(d generatedData) string {
 		fmt.Fprintf(&b, "- %s — %s\n", c.Name, c.Summary)
 	}
 	fmt.Fprintf(&b, "(%d built-in connectors; full parameters in llms-full.txt)\n", len(d.Connectors))
-	b.WriteString("- " + sourceBatchingNote + "\n\n")
+	if note := sourceBatchingNote(d.Connectors); note != "" {
+		b.WriteString("- " + note + "\n")
+	}
+	b.WriteString("\n")
 
 	b.WriteString("## Error codes\n")
 	fmt.Fprintf(&b, "- %d stable error codes, dotted `domain.name` reasons, each with a gRPC status "+
@@ -281,7 +309,9 @@ func atxHeadingToBold(line string) (string, bool) {
 
 func renderConnectorsSection(b *strings.Builder, connectors []connectorInfo) {
 	fmt.Fprintf(b, "## 2. Built-in connectors (%d)\n\n", len(connectors))
-	b.WriteString(sourceBatchingNote + "\n\n")
+	if note := sourceBatchingNote(connectors); note != "" {
+		b.WriteString(note + "\n\n")
+	}
 
 	for _, c := range connectors {
 		fmt.Fprintf(b, "### %s (%s)\n\n", c.Name, c.Version)

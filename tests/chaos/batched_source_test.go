@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build unix
+//go:build linux || darwin
 
 package chaos
 
@@ -146,7 +146,9 @@ func batchedDir(t *testing.T, o batchedOpts) string {
 	var p strings.Builder
 	p.WriteString("version: \"2.2\"\npipelines:\n  - id: batched\n    status: running\n    connectors:\n")
 	for k := 0; k < o.sources; k++ {
-		appendLines(t, inputPath(dir, k), k*sourceStride+1, k*sourceStride+o.lines)
+		if err := appendLines(inputPath(dir, k), k*sourceStride+1, k*sourceStride+o.lines); err != nil {
+			t.Fatal(err)
+		}
 		fmt.Fprintf(&p, "      - id: src%d\n        type: source\n        plugin: builtin:file\n        settings:\n          path: %q\n", k, inputPath(dir, k))
 	}
 	fmt.Fprintf(&p, "      - id: dst\n        type: destination\n        plugin: builtin:file\n        settings:\n          path: %q\n", dest)
@@ -156,21 +158,19 @@ func batchedDir(t *testing.T, o batchedOpts) string {
 	return dir
 }
 
-// appendLines appends the numbered lines [from, to] to path.
-func appendLines(t testing.TB, path string, from, to int) {
-	t.Helper()
+// appendLines appends the numbered lines [from, to] to path. It returns the
+// error instead of failing the test so a goroutine can use it.
+func appendLines(path string, from, to int) error {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
-		t.Fatal(err)
+		return err
 	}
 	defer f.Close()
 	w := bufio.NewWriter(f)
 	for i := from; i <= to; i++ {
 		fmt.Fprintf(w, "%d\n", i)
 	}
-	if err := w.Flush(); err != nil {
-		t.Fatal(err)
-	}
+	return w.Flush()
 }
 
 // parseRecord returns the number a destination line carries, or false for a
@@ -232,12 +232,44 @@ func lineCount(dir string) int {
 	return bytes.Count(b, []byte{'\n'})
 }
 
+// lineCounter counts newlines in the destination file incrementally: it keeps
+// an offset and reads only what was appended, so polling every millisecond
+// costs the same however large the file is and the kill point does not
+// overshoot.
+type lineCounter struct {
+	path   string
+	offset int64
+	n      int
+	buf    []byte
+}
+
+func newLineCounter(dir string) *lineCounter {
+	return &lineCounter{path: filepath.Join(dir, batchedOutputName), buf: make([]byte, 1<<20)}
+}
+
+func (c *lineCounter) count() int {
+	f, err := os.Open(c.path)
+	if err != nil {
+		return c.n
+	}
+	defer f.Close()
+	for {
+		k, err := f.ReadAt(c.buf, c.offset)
+		c.n += bytes.Count(c.buf[:k], []byte{'\n'})
+		c.offset += int64(k)
+		if err != nil || k == 0 {
+			return c.n
+		}
+	}
+}
+
 // waitDelivered polls the destination file until it holds at least n records.
 func waitDelivered(t *testing.T, p *conduitProcess, dir string, n int) int {
 	t.Helper()
 	deadline := time.After(batchedProcessTimeout)
+	counter := newLineCounter(dir)
 	for {
-		if total := lineCount(dir); total >= n {
+		if total := counter.count(); total >= n {
 			return total
 		}
 		select {
@@ -409,18 +441,24 @@ func TestSIGKILL_BatchedSource_WhileCollecting(t *testing.T) {
 		t.Run(eng.name, func(t *testing.T) {
 			dir := batchedDir(t, batchedOpts{})
 			input := inputPath(dir, 0)
-			var wg sync.WaitGroup
-			wg.Add(1)
+			writerErr := make(chan error, 1)
 			go func() { // the writer outlives the first process
-				defer wg.Done()
 				for w := 0; w < total; {
 					next := min(w+37, total)
-					appendLines(t, input, w+1, next)
+					if err := appendLines(input, w+1, next); err != nil {
+						writerErr <- err
+						return
+					}
 					w = next
 					time.Sleep(2 * time.Millisecond)
 				}
+				writerErr <- nil
 			}()
-			defer wg.Wait()
+			defer func() {
+				if err := <-writerErr; err != nil {
+					t.Errorf("input writer: %v", err)
+				}
+			}()
 
 			first := startConduit(t, conduitBin, dir, "never", eng.flags...)
 			opened := requireBatchedSource(t, first)
@@ -465,8 +503,12 @@ func TestSIGKILL_BatchedSource_WhileCollecting(t *testing.T) {
 func TestSIGKILL_BatchedSource_AfterWriteBeforePersist(t *testing.T) {
 	conduitBin, _ := buildStandaloneBinaries(t)
 	const (
-		total  = 100000
-		killAt = 25000 // 2.5 persister windows: well over window + credit (12,000)
+		// killAt is 2.5 persister windows, about twice the replay bound (12,000).
+		// total leaves 8x headroom over killAt: the poll is incremental, so the
+		// kill overshoots by milliseconds of delivery, but a loaded runner can
+		// deschedule the test for much longer than that.
+		total  = 200000
+		killAt = 25000
 	)
 	for _, eng := range batchedEngines {
 		t.Run(eng.name, func(t *testing.T) {
@@ -743,6 +785,17 @@ func TestSIGTERM_BatchedSource_GracefulDrain(t *testing.T) {
 			time.Sleep(1500*time.Millisecond - time.Since(opened)) // destination is blocked on the full pipe
 			if n := len(pipe.snapshot()); n != 0 {
 				t.Fatalf("the test read %d records before the stall", n)
+			}
+			// Real in-flight evidence: the pipe holds bytes the destination
+			// wrote and nobody read, and the amount is not changing, so the
+			// destination is blocked with the source ahead of it.
+			if pending, ok := pipePending(pipe.fd); ok {
+				time.Sleep(300 * time.Millisecond)
+				if again, _ := pipePending(pipe.fd); pending == 0 || pending != again {
+					t.Fatalf("the destination is not stalled on a full pipe (%d then %d bytes pending)", pending, again)
+				}
+			} else {
+				t.Log("FIONREAD is not available on this platform; the in-flight check is skipped")
 			}
 			// SIGTERM now, then let the destination drain while the process
 			// shuts down.
