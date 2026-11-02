@@ -336,6 +336,7 @@ func parseLCChildEnv() lcChildEnv {
 
 	cfg.graceful = os.Getenv(envLCGraceful) == envValueTrue
 	parseLCEngineEnv(&cfg)
+	lcSettleHeartbeat.Store(cfg.graceful && cfg.destBatchSize > 0)
 
 	if cfg.dbDir == "" || cfg.upstreamDir == "" || cfg.mainDir == "" || cfg.dlqDir == "" {
 		fmt.Fprintf(os.Stderr, "%s: %s, %s, %s and %s are required\n", markerFatal, envLCDBDir, envLCUpstream, envLCMainDir, envLCDLQDir)
@@ -618,6 +619,11 @@ func (p *recoverySourcePlugin) produceLoop(inmemStream *builtin.InMemorySourceRu
 		printProgress("READ", pos)
 
 		if p.total > 0 && pos >= p.total {
+			if lcSettleHeartbeat.Load() {
+				if err := server.Send(pconnector.SourceRunResponse{}); err == nil {
+					lcSettled.Store(true)
+				}
+			}
 			return
 		}
 		// The production ceiling. Checked after the send (so holdAt is the
@@ -1118,6 +1124,40 @@ func waitForLCTotalAcked(instance *connector.Instance, total uint64, timeout tim
 	os.Exit(exitOpenOtherError)
 }
 
+// lcSettleHeartbeat makes the source plugin follow its last record with an empty
+// response and flag lcSettled once the engine has taken it. The graceful child
+// sets it when destination batching is on: the trailing partial batch is acked
+// by Worker.Stop's drain (#3231), so the child cannot wait for the ack before
+// stopping, but it must not stop while the worker still holds an unprocessed
+// read (Stop discards a batch read after it armed, and those records would
+// replay). The response is delivered over an unbuffered stream and a receive is
+// only posted by a Read call, which the worker makes only after the previous
+// pass is complete; so once the empty response is taken, the last record has
+// been processed.
+//
+// This relies on funnel.SourceTask.Do making exactly one source Read per pass and
+// on Source.Read starting a receive only when called (a receive carries over only
+// from a cancelled Read). If either changes, the heartbeat stops proving the
+// previous pass finished; TestSIGKILL_PipelinedFlusher_RestartFromUnalignedPosition
+// would then fail, never pass wrongly (committed < total).
+var lcSettleHeartbeat atomic.Bool
+
+// lcSettled is set once the heartbeat above has been taken by the engine.
+var lcSettled atomic.Bool
+
+// waitForLCSettled blocks until lcSettled, or exits the process on timeout.
+func waitForLCSettled(timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if lcSettled.Load() {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	fmt.Fprintf(os.Stderr, "%s: timed out waiting for the engine to take the last read\n", markerFatal)
+	os.Exit(exitOpenOtherError)
+}
+
 // lcEngine is the part of the two lifecycle services (pkg/lifecycle and
 // pkg/lifecycle-poc) runChildLifecycle drives.
 type lcEngine interface {
@@ -1215,7 +1255,14 @@ func runChildLifecycle() {
 	// that proves the pipeline finishes end-to-end (invariant 3,
 	// at-least-once) despite the earlier kill. Resumes from whatever position
 	// was durably persisted by the killed process and runs to cfg.total.
-	waitForLCTotalAcked(built.sourceInstance, cfg.total, 30*time.Second)
+	if cfg.destBatchSize > 0 {
+		// Batched: the trailing partial batch is acked by Stop's drain, so wait
+		// for the engine to have taken the last read (lcSettleHeartbeat), not
+		// for the ack. waitForUpstreamCommitted below is the real check.
+		waitForLCSettled(30 * time.Second)
+	} else {
+		waitForLCTotalAcked(built.sourceInstance, cfg.total, 30*time.Second)
+	}
 
 	if err := ls.Stop(ctx, built.pipelineID, false); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: stop failed: %v\n", markerFatal, err)
