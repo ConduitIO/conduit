@@ -237,3 +237,54 @@ func TestResolveEnv_LiteralDollar(t *testing.T) {
 		t.Errorf("expanded value was scanned again: %q", got)
 	}
 }
+
+// TestResolveEnv_TemplateText: setting text is never partly interpreted. A
+// reference to a name that is not allowed is refused whether it is written
+// $NAME or ${NAME}, in every kind of setting (URLs, paths, connection
+// strings, templates), because a literal that survives here could be expanded
+// by a consumer that does its own environment expansion. A Go template that
+// needs a literal "$" writes "$$" (see docs/operations/env-allowlist.md).
+func TestResolveEnv_TemplateText(t *testing.T) {
+	t.Setenv("x", "LEAKED")
+	t.Setenv("SECRET", "s3cr3t")
+	t.Setenv("ALLOWED", "ok")
+	a := mustAllow(t, "ALLOWED")
+
+	for _, in := range []string{
+		`{{ $x := .Key }}{{ $x }}`,
+		`http://h/?k=$SECRET`,
+		`http://h/?k=${SECRET}`,
+		`postgres://u:$SECRET@h/db`,
+		`/data/$SECRET/file`,
+	} {
+		t.Run("refused/"+in, func(t *testing.T) {
+			got, err := ResolveEnv(a, in)
+			_ = wantCode(t, err, CodeEnvVarNotAllowed)
+			if got != "" {
+				t.Fatalf("got %q on refusal, want empty", got)
+			}
+		})
+	}
+
+	for in, want := range map[string]string{
+		`{{ $$x := .Payload.After.name }}{{ $$x }}`:        `{{ $x := .Payload.After.name }}{{ $x }}`,
+		`{{ range $$i, $$e := .Items }}{{ $$i }}{{ end }}`: `{{ range $i, $e := .Items }}{{ $i }}{{ end }}`,
+		`{{ $$x }} ${ALLOWED}`:                             `{{ $x }} ok`,
+		`$$SECRET and $$${ALLOWED}`:                        `$SECRET and $ok`,
+	} {
+		t.Run("escaped/"+in, func(t *testing.T) {
+			is := is.New(t)
+			got, err := ResolveEnv(a, in)
+			is.NoErr(err)
+			is.Equal(got, want)
+			// an escaped dollar is not a reference: nothing to redact
+			is.Equal(len(Expansions(a, map[string]string{"k": in})) <= 1, true)
+		})
+	}
+
+	t.Run("ResolveSettings refuses the unescaped template", func(t *testing.T) {
+		_, err := ResolveSettings(nil, map[string]string{"template": `{{ $x := .Key }}`})
+		ce := wantCode(t, err, CodeEnvVarNotAllowed)
+		is.New(t).Equal(ce.ConfigPath, "settings.template")
+	})
+}
