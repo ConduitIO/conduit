@@ -1506,20 +1506,32 @@ type ackNacker interface {
 //
 //  1. Ack-only-when-unanimous (invariant 1): a position is acked to the
 //     parent only once ALL M branches have voted ack for it.
-//  2. Nack-wins (invariant 3): if ANY branch nacks a position, it is routed
-//     to the parent's DLQ exactly once, regardless of how the other
-//     branches voted. A record written durably to destination 1 but failed
-//     on destination 2 is NOT a partial success — the whole record goes to
-//     the DLQ, then is acked to the source (the DLQ write is itself the
-//     durable handling that earns the source ack). A partially-written
-//     record is never acked to the source as if it were a full success.
-//  3. Idempotent, race-free: branches run concurrently and call Ack/Nack
-//     from separate goroutines; once a position reaches a terminal decision
-//     (acked-by-all or nacked-by-one), any further vote for it (a slow
-//     branch's ack arriving after a sibling already nacked the same
-//     position) is a no-op. This assumes each branch votes exactly once per
+//
+//  2. Nack-wins, decided after every vote (invariant 3): if ANY branch nacks
+//     a position, it is routed to the parent's DLQ exactly once, regardless
+//     of how the other branches voted. A record written durably to
+//     destination 1 but failed on destination 2 is NOT a partial success —
+//     the whole record goes to the DLQ, then is acked to the source (the DLQ
+//     write is itself the durable handling that earns the source ack). A
+//     partially-written record is never acked to the source as if it were a
+//     full success. The nack decides the OUTCOME at once, but the position
+//     becomes terminal (releasable) only once all M branches have voted,
+//     exactly like an ack. Releasing on the first nack let a nacked position
+//     reach Worker.Nack (DLQ write, then Source.Ack) while a sibling
+//     batching destination still buffered an EARLIER batch unwritten:
+//     Source.Ack persists the last position it is given, so a crash then
+//     resumed past the buffered records and that destination lost them
+//     (#3323). Waiting for every vote restores cross-batch order: see
+//     requirement 4.
+//
+//  3. Exactly one vote per branch per position: branches run concurrently
+//     and call Ack/Nack from separate goroutines, each voting once per
 //     position (ack xor nack) — the same assumption the rest of the batch
-//     pipeline already makes (see Batch's tainted-splitting in doTask).
+//     pipeline already makes (see Batch's tainted-splitting in doTask). A
+//     vote for a position that already has all M votes can only be a branch
+//     voting twice, a task-graph bug; it is refused with a (bug) error
+//     rather than ignored, so it cannot flip a decided outcome.
+//
 //  4. In-source-order release (invariant 4): positions are released to the
 //     parent in ascending source order, never in branch-completion order —
 //     a branch that finishes record 10 before another branch finishes
@@ -1529,6 +1541,18 @@ type ackNacker interface {
 //     Contiguous runs of ack decisions are batched into a single parent.Ack
 //     call to preserve the parent's batch semantics; nacks are released one
 //     position at a time (see the comment on releaseLocked for why).
+//
+//     The same order holds ACROSS fan-out batches, each of which has its own
+//     multiAckNacker. Every branch votes in source order: the fan-out is
+//     synchronous (doNextTask waits for every branch before the worker reads
+//     the next batch) and a batching destination votes for its buffered
+//     batches in pending order (ackPending). Because a position is released
+//     only by its LAST vote, and each branch's vote for batch N returns
+//     (release included) before that branch votes for batch N+1, every
+//     position of batch N is released before any position of batch N+1.
+//     This holds for nacks only because of requirement 2's "after every
+//     vote".
+//
 //  5. Fatal-error propagation: if the parent's Nack returns a fatal error
 //     (e.g. the DLQ nack-threshold was exceeded), that error is returned to
 //     the caller so the branch pool errors out and the worker tombs with it
@@ -1554,25 +1578,26 @@ type multiAckNacker struct {
 	posIndex map[string]int
 
 	mu sync.Mutex
-	// ackVotes[i] counts how many of the M branches have voted ack for
-	// positions[i] so far. Only meaningful while !terminal[i].
-	ackVotes []int
-	// terminal[i] is true once positions[i] has reached a final decision
-	// (ack'd by all branches, or nack'd by any one of them) — further votes
-	// for it are no-ops (requirement 3 above).
+	// votes[i] counts how many of the M branches have voted (ack or nack)
+	// for positions[i] so far.
+	votes []int
+	// terminal[i] is true once all M branches have voted for positions[i]
+	// (requirement 2): only then may it be released. A further vote is a
+	// bug (requirement 3).
 	terminal []bool
-	// acked[i] is only meaningful once terminal[i] is true: true means the
-	// terminal decision was "ack", false means "nack".
-	acked []bool
+	// nacked[i] is true once any branch has nacked positions[i]. Nack wins:
+	// it never goes back to false, and a terminal position with nacked[i]
+	// false was acked by every branch.
+	nacked []bool
 	// record[i] holds a record to represent positions[i] in the eventual
 	// parent Ack/Nack call. For an ack it can come from any branch (only the
 	// position matters for Source.Ack; content is used only for metrics/DLQ-
 	// window bookkeeping). For a nack it MUST be the record and error from
-	// the branch that actually nacked it, so the DLQ entry reflects the real
-	// failure.
+	// the first branch that nacked it, so the DLQ entry reflects the real
+	// failure; once nacked[i] is set, ack votes no longer overwrite it.
 	record []opencdc.Record
-	// nackErr[i] and nackTaskID[i] are set alongside acked[i]=false: the
-	// error and originating task ID of the branch that nacked positions[i],
+	// nackErr[i] and nackTaskID[i] are set with nacked[i]: the error and
+	// originating task ID of the first branch that nacked positions[i],
 	// needed to reconstruct the single-record batch passed to parent.Nack.
 	nackErr    []error
 	nackTaskID []string
@@ -1631,9 +1656,9 @@ func newMultiAckNacker(parent ackNacker, branches int, positions []opencdc.Posit
 		branches:   branches,
 		positions:  positions,
 		posIndex:   posIndex,
-		ackVotes:   make([]int, n),
+		votes:      make([]int, n),
 		terminal:   make([]bool, n),
-		acked:      make([]bool, n),
+		nacked:     make([]bool, n),
 		record:     make([]opencdc.Record, n),
 		nackErr:    make([]error, n),
 		nackTaskID: make([]string, n),
@@ -1660,7 +1685,7 @@ func (m *multiAckNacker) indexOf(pos opencdc.Position) (int, error) {
 // branch votes on — see the doc comment on the type for why this matters.
 //
 // Invariant 1 (enforcement site): a position is only ever forwarded to
-// parent.Ack once ALL m.branches have voted ack for it.
+// parent.Ack once ALL m.branches have voted, and none of them nacked it.
 func (m *multiAckNacker) Ack(ctx context.Context, batch *Batch) error {
 	ob := batch.originalBatch()
 
@@ -1673,22 +1698,15 @@ func (m *multiAckNacker) Ack(ctx context.Context, batch *Batch) error {
 			return err
 		}
 
-		// guard: funnel-multiack-ack-after-terminal-noop tests=^TestMultiAckNacker_DuplicateAckAfterNack_DoesNotFlipToAck$
+		// guard: funnel-multiack-ack-after-all-voted-refused tests=^TestMultiAckNacker_AckAfterAllBranchesVoted_IsRefused$
 		if m.terminal[idx] {
-			// Requirement 3: this position already reached a terminal
-			// decision. The only way to get here is a sibling branch having
-			// nacked it already (an ack can only ever be the LAST vote to
-			// arrive, since it takes exactly m.branches acks to go
-			// terminal) — nack wins, this vote is a no-op.
-			continue
+			return m.extraVoteErr("ack", idx)
 		}
 
-		m.record[idx] = ob.records[i]
-		m.ackVotes[idx]++
-		if m.ackVotes[idx] == m.branches {
-			m.terminal[idx] = true
-			m.acked[idx] = true
+		if !m.nacked[idx] {
+			m.record[idx] = ob.records[i]
 		}
+		m.voteLocked(idx)
 	}
 
 	return m.releaseLocked(ctx)
@@ -1698,10 +1716,17 @@ func (m *multiAckNacker) Ack(ctx context.Context, batch *Batch) error {
 // position in batch. Like Ack, batch.originalBatch() is applied first.
 //
 // Invariant 3 (enforcement site): nack wins. The first nack vote for a
-// position is terminal — it is routed to the parent's DLQ exactly once, and
-// any later vote (ack or nack) for the same position from another branch is
-// a no-op. A record durably written by some but not all branches is treated
-// as a failure of the whole record, never partially acked.
+// position decides its outcome and its DLQ attribution, and the position is
+// routed to the parent's DLQ exactly once. A record durably written by some
+// but not all branches is treated as a failure of the whole record, never
+// partially acked.
+//
+// Invariant 1/3 (enforcement site, #3323): the nack is NOT released on the
+// first vote. It is released, like an ack, only once every branch has voted
+// for the position. parent.Nack writes the DLQ and then acks the source, and
+// Source.Ack persists the last position it is given; releasing before a
+// sibling batching destination has voted would ack the source past an earlier
+// batch that sibling still buffers unwritten, and a crash would lose it.
 func (m *multiAckNacker) Nack(ctx context.Context, batch *Batch, taskID string) error {
 	ob := batch.originalBatch()
 
@@ -1714,23 +1739,41 @@ func (m *multiAckNacker) Nack(ctx context.Context, batch *Batch, taskID string) 
 			return err
 		}
 
-		// guard: funnel-multiack-nack-after-terminal-noop tests=^TestMultiAckNacker_SecondNackForTerminalPosition_IsIgnored$
+		// guard: funnel-multiack-nack-after-all-voted-refused tests=^TestMultiAckNacker_NackAfterAllBranchesVoted_IsRefused$
 		if m.terminal[idx] {
-			// Already resolved (either a sibling nack got here first, which
-			// is idempotent, or - should never happen given the one-vote-
-			// per-branch-per-position invariant - an ack already went
-			// terminal). Either way, nothing to do.
-			continue
+			return m.extraVoteErr("nack", idx)
 		}
 
-		m.terminal[idx] = true
-		m.acked[idx] = false
-		m.record[idx] = ob.records[i]
-		m.nackErr[idx] = ob.recordStatuses[i].Error
-		m.nackTaskID[idx] = taskID
+		if !m.nacked[idx] {
+			// The first nack's record, error and task ID stand for the DLQ
+			// entry; a second branch's nack only counts as a vote.
+			m.nacked[idx] = true
+			m.record[idx] = ob.records[i]
+			m.nackErr[idx] = ob.recordStatuses[i].Error
+			m.nackTaskID[idx] = taskID
+		}
+		m.voteLocked(idx)
 	}
 
 	return m.releaseLocked(ctx)
+}
+
+// voteLocked counts one branch's vote for positions[idx] and makes it terminal
+// (releasable) once all m.branches have voted. Must be called with m.mu held.
+func (m *multiAckNacker) voteLocked(idx int) {
+	m.votes[idx]++
+	if m.votes[idx] == m.branches {
+		m.terminal[idx] = true
+	}
+}
+
+// extraVoteErr reports a vote for a position that already has a vote from
+// every branch: some branch voted twice. That breaks requirement 3, and a
+// silently counted extra vote could have made an earlier position terminal
+// without a sibling's vote, so it fails the pipeline instead of being ignored.
+func (m *multiAckNacker) extraVoteErr(kind string, idx int) error {
+	return cerrors.Errorf("(bug) multiAckNacker: %s vote for position (hash %s) after all %d branches already voted",
+		kind, log.KeyHash(m.positions[idx]), m.branches)
 }
 
 // releaseLocked walks the positions starting at m.released and forwards
@@ -1759,10 +1802,10 @@ func (m *multiAckNacker) releaseLocked(ctx context.Context) error {
 			return nil
 		}
 
-		if m.acked[m.released] {
+		if !m.nacked[m.released] {
 			from := m.released
 			to := from
-			for to < len(m.positions) && m.terminal[to] && m.acked[to] {
+			for to < len(m.positions) && m.terminal[to] && !m.nacked[to] {
 				to++
 			}
 

@@ -14,8 +14,8 @@ funnel-drain-ctx-aware-shared-lock
 funnel-drain-failure-fails-closed
 funnel-eof-drains-before-teardown
 funnel-fanout-whole-runs-only
-funnel-multiack-ack-after-terminal-noop
-funnel-multiack-nack-after-terminal-noop
+funnel-multiack-ack-after-all-voted-refused
+funnel-multiack-nack-after-all-voted-refused
 funnel-nack-rejects-empty-position
 funnel-ordered-source-ack
 funnel-stop-drains-before-teardown

@@ -169,7 +169,7 @@ func TestMultiAckNacker_AnyNack_DLQsOnceRegardlessOfOrder(t *testing.T) {
 		is.Equal(nacks[0].taskID, "destB-task")
 	})
 
-	t.Run("nack then ack (late ack vote is a no-op)", func(t *testing.T) {
+	t.Run("nack then ack (the nack waits for the ack vote)", func(t *testing.T) {
 		is := is.New(t)
 		ctx := context.Background()
 		records := randomRecords(1)
@@ -179,6 +179,7 @@ func TestMultiAckNacker_AnyNack_DLQsOnceRegardlessOfOrder(t *testing.T) {
 		m := mustNewMultiAckNacker(t, parent, 2, positions)
 
 		is.NoErr(m.Nack(ctx, nackBatchFor(records, positions[0], nackErr), "destB-task")) // branch B nacks first
+		is.Equal(len(parent.nackCalls()), 0)                                              // #3323: not released before A votes
 		is.NoErr(m.Ack(ctx, ackBatchFor(records, positions...)))                          // branch A's ack arrives late
 
 		is.Equal(len(parent.ackCalls()), 0) // still never acked
@@ -296,6 +297,9 @@ func TestMultiAckNacker_FatalDLQError_Propagates(t *testing.T) {
 	parent := &fakeParentAckNacker{nackErr: fatalErr}
 	m := mustNewMultiAckNacker(t, parent, 2, []opencdc.Position{pos})
 
+	// The sibling's ack vote first: the nack is released (and the parent's
+	// fatal error surfaces) only once every branch has voted (#3323).
+	is.NoErr(m.Ack(ctx, ackBatchFor(records, pos)))
 	err := m.Nack(ctx, nackBatchFor(records, pos, cerrors.New("write failed")), "destA-task")
 	is.True(err != nil)
 	is.True(cerrors.Is(err, fatalErr))
@@ -349,9 +353,9 @@ func TestMultiAckNacker_ThreeBranches_UnanimousRequiresAllThree(t *testing.T) {
 	is.NoErr(m.Ack(ctx, ackBatchFor(records, pNacked)))
 	is.NoErr(m.Nack(ctx, nackBatchFor(records, pNacked, cerrors.New("branch 3 failed")), "destC-task"))
 
-	// pAcked's 3rd (final) vote arrives after pNacked was already resolved -
-	// order across DIFFERENT positions doesn't matter, only per-position
-	// unanimity does.
+	// pAcked's 3rd (final) vote arrives after pNacked already has all of its
+	// votes - order across DIFFERENT positions doesn't matter, only
+	// per-position unanimity does.
 	is.NoErr(m.Ack(ctx, ackBatchFor(records, pAcked)))
 
 	// Release order still respects source order: pAcked (index 0) before
