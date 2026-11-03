@@ -16,6 +16,6 @@
 
 package chaos
 
-// pipePending is not available on macOS: FIONREAD reports 0 for a FIFO there,
-// so callers skip the check.
-func pipePending(int) (int, bool) { return 0, false }
+// pipeFill is not available on macOS: FIONREAD reports 0 for a FIFO there, so
+// callers skip the check (supported is false).
+func pipeFill(int) (pending, capacity int, supported bool, err error) { return 0, 0, false, nil }

@@ -789,10 +789,19 @@ func TestSIGTERM_BatchedSource_GracefulDrain(t *testing.T) {
 			// Real in-flight evidence: the pipe holds bytes the destination
 			// wrote and nobody read, and the amount is not changing, so the
 			// destination is blocked with the source ahead of it.
-			if pending, ok := pipePending(pipe.fd); ok {
+			pending, capacity, supported, err := pipeFill(pipe.fd)
+			if err != nil {
+				t.Fatalf("pipe probe: %v", err)
+			}
+			if supported {
 				time.Sleep(300 * time.Millisecond)
-				if again, _ := pipePending(pipe.fd); pending == 0 || pending != again {
-					t.Fatalf("the destination is not stalled on a full pipe (%d then %d bytes pending)", pending, again)
+				again, _, _, err := pipeFill(pipe.fd)
+				if err != nil {
+					t.Fatalf("pipe probe: %v", err)
+				}
+				// near full and not moving: the destination is blocked in Write
+				if pending < capacity/2 || pending != again {
+					t.Fatalf("the destination is not stalled on a full pipe (%d then %d of %d bytes)", pending, again, capacity)
 				}
 			} else {
 				t.Log("FIONREAD is not available on this platform; the in-flight check is skipped")
