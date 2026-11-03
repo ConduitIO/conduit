@@ -30,7 +30,9 @@ import (
 // position is terminal only once all M branches have voted, so a further vote
 // can only be a branch voting twice, and it is refused with a (bug) error. Each
 // test puts the position BEHIND a pending one, so it stays unreleased while the
-// extra vote arrives and a mutant that counts the vote is observable.
+// extra vote arrives and a mutant that counts the vote is observable. The same
+// refusal before every branch has voted is covered by
+// TestMultiAckNacker_DoubleVoteBeforeAllVoted_IsRefused.
 
 // TestMultiAckNacker_AckAfterAllBranchesVoted_IsRefused: an extra ack for a
 // nacked position must be refused, and must not turn the position into an
@@ -46,18 +48,18 @@ func TestMultiAckNacker_AckAfterAllBranchesVoted_IsRefused(t *testing.T) {
 
 	// Position 1: branch B nacks, branch A acks. Both have voted; position 0
 	// is still pending, so nothing is released yet.
-	is.NoErr(m.Nack(ctx, nackBatchFor(records, positions[1], cerrors.New("dest B failed")), "destB"))
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, positions[1])))
+	is.NoErr(m.branch(1).Nack(ctx, nackBatchFor(records, positions[1], cerrors.New("dest B failed")), "destB"))
+	is.NoErr(m.branch(0).Ack(ctx, ackBatchFor(records, positions[1])))
 	// Branch A (a bug in a branch) acks position 1 again.
-	err := m.Ack(ctx, ackBatchFor(records, positions[1]))
+	err := m.branch(0).Ack(ctx, ackBatchFor(records, positions[1]))
 	is.True(err != nil)
 	is.True(strings.Contains(err.Error(), "(bug)"))
 	is.Equal(len(parent.ackCalls()), 0)
 	is.Equal(len(parent.nackCalls()), 0)
 
 	// Position 0 completes and releases the prefix: position 1 is still a nack.
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, positions[0])))
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, positions[0])))
+	is.NoErr(m.branch(0).Ack(ctx, ackBatchFor(records, positions[0])))
+	is.NoErr(m.branch(1).Ack(ctx, ackBatchFor(records, positions[0])))
 
 	nacks := parent.nackCalls()
 	is.Equal(len(nacks), 1)
@@ -84,14 +86,14 @@ func TestMultiAckNacker_NackAfterAllBranchesVoted_IsRefused(t *testing.T) {
 		parent := &fakeParentAckNacker{}
 		m := mustNewMultiAckNacker(t, parent, 2, positions)
 
-		is.NoErr(m.Ack(ctx, ackBatchFor(records, positions[1])))
-		is.NoErr(m.Ack(ctx, ackBatchFor(records, positions[1])))
-		err := m.Nack(ctx, nackBatchFor(records, positions[1], cerrors.New("late")), "late-task")
+		is.NoErr(m.branch(0).Ack(ctx, ackBatchFor(records, positions[1])))
+		is.NoErr(m.branch(1).Ack(ctx, ackBatchFor(records, positions[1])))
+		err := m.branch(0).Nack(ctx, nackBatchFor(records, positions[1], cerrors.New("late")), "late-task")
 		is.True(err != nil)
 		is.True(strings.Contains(err.Error(), "(bug)"))
 
-		is.NoErr(m.Ack(ctx, ackBatchFor(records, positions[0])))
-		is.NoErr(m.Ack(ctx, ackBatchFor(records, positions[0])))
+		is.NoErr(m.branch(0).Ack(ctx, ackBatchFor(records, positions[0])))
+		is.NoErr(m.branch(1).Ack(ctx, ackBatchFor(records, positions[0])))
 
 		is.Equal(len(parent.nackCalls()), 0)
 		acks := parent.ackCalls()
@@ -108,10 +110,10 @@ func TestMultiAckNacker_NackAfterAllBranchesVoted_IsRefused(t *testing.T) {
 		parent := &fakeParentAckNacker{}
 		m := mustNewMultiAckNacker(t, parent, 2, positions)
 
-		is.NoErr(m.Nack(ctx, nackBatchFor(records, positions[1], cerrors.New("first")), "first-task"))
-		is.NoErr(m.Nack(ctx, nackBatchFor(records, positions[1], cerrors.New("second")), "second-task"))
-		is.NoErr(m.Ack(ctx, ackBatchFor(records, positions[0])))
-		is.NoErr(m.Ack(ctx, ackBatchFor(records, positions[0])))
+		is.NoErr(m.branch(0).Nack(ctx, nackBatchFor(records, positions[1], cerrors.New("first")), "first-task"))
+		is.NoErr(m.branch(1).Nack(ctx, nackBatchFor(records, positions[1], cerrors.New("second")), "second-task"))
+		is.NoErr(m.branch(0).Ack(ctx, ackBatchFor(records, positions[0])))
+		is.NoErr(m.branch(1).Ack(ctx, ackBatchFor(records, positions[0])))
 
 		nacks := parent.nackCalls()
 		is.Equal(len(nacks), 1)

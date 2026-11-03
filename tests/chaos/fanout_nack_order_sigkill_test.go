@@ -61,7 +61,20 @@ func TestSIGKILL_FanoutSiblingNack_BatchingDestinationGapless(t *testing.T) {
 	cp.sigkill(t)
 
 	cp2 := spawnChildWithEnv(t, cfg.env())
-	cp2.waitForMarker(t, markerFanoutDone, 45*time.Second)
+	// The restart must run to total. A run that stops short exits without the
+	// done marker; fail on it as a harness failure, so a gap reported below is
+	// never one the run simply did not reach.
+	for deadline := time.Now().Add(45 * time.Second); ; time.Sleep(time.Millisecond) {
+		if _, ok := cp2.line(markerFanoutDone); ok {
+			break
+		}
+		if line, ok := cp2.line(markerFanoutShortCommit); ok {
+			t.Fatalf("restart run stopped short (harness failure, not a delivery result): %s\n%s", line, cp2.diagnostics())
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for marker %q\n%s", markerFanoutDone, cp2.diagnostics())
+		}
+	}
 	cp2.waitExit(t, 10*time.Second)
 
 	logA, err := openDeliveryLog(cfg.destADir)

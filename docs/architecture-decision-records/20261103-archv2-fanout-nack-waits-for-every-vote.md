@@ -26,9 +26,15 @@ for any position of batch N+1 comes after the last vote for every position of ba
 ## Decision
 
 Count ack and nack votes together. A position becomes terminal when it has M votes. Its outcome is nack if
-any vote was a nack, and the first nack's record, error and task ID are used for the DLQ entry. A vote for a
-position that already has M votes can only mean a branch voted twice; it is refused with a `(bug)` error
-instead of being ignored.
+any vote was a nack, and the first nack's record, error and task ID are used for the DLQ entry.
+
+Each branch votes through its own view of the tally, which records which branches have voted for each
+position. A second vote from the same branch is refused with a `(bug)` error and not counted, whether or not
+the other branches have voted yet: counting it could release a position without a sibling's vote.
+
+A release to the parent that fails is final. Every later vote returns that error (wrapped, so the fatal
+classification holds) and the parent is not called again, so a sibling still running cannot retry a
+`parent.Nack` that may already have written the DLQ entry.
 
 ## Alternatives considered
 
@@ -46,16 +52,19 @@ instead of being ignored.
   or the drain on stop). Its source ack waits the same way, which is the point.
 - With the default DLQ (window 1, threshold 0) the pipeline still fails on the first nack and moves no
   position past it, but the failure surfaces when the last branch votes rather than when the nack happens.
-  Records after it may be written to the destinations in between; none of them is acked, so they replay.
+  With `sdk.batch.size` and no `sdk.batch.delay` on a quiet source, that wait has no bound until #3231 adds
+  a flush timer; the pipeline reports running meanwhile. Records after it may be written to the
+  destinations in between; none of them is acked, so they replay.
 - If a branch never votes (its flush fails, the worker errors, the drain times out), the nacked position is
   never released: it is not in the DLQ and replays on restart. At-least-once, no early DLQ copy.
 - The guardmut guards `funnel-multiack-{ack,nack}-after-terminal-noop` become
-  `funnel-multiack-{ack,nack}-after-all-voted-refused`.
+  `funnel-multiack-{ack,nack}-double-vote-refused`, and
+  `funnel-multiack-{ack,nack}-after-failed-release-refused` are added.
 
 ## Related
 
 - [`20260731-archv2-fanout-ack-model`](20260731-archv2-fanout-ack-model.md) (partly superseded here)
 - [`docs/design-documents/20261019-funnel-read-ahead-pipelining.md`](../design-documents/20261019-funnel-read-ahead-pipelining.md),
   "Fan-out stays synchronous"
-- #3323, #3294, #3300, #3201
+- #3323, #3324, #3294, #3300, #3201, #3231
 - `pkg/lifecycle-poc/funnel/worker.go`: `multiAckNacker`

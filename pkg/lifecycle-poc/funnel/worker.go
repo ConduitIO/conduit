@@ -1045,7 +1045,7 @@ func (w *Worker) doNextTask(ctx context.Context, taskNode *TaskNode, b *Batch, a
 		}
 
 		p := pool.New().WithErrors()
-		for _, nextTask := range taskNode.Next {
+		for branch, nextTask := range taskNode.Next {
 			// #2910: deep-copying every record for every branch made fan-out
 			// superlinear (2 destinations cost 5.2x one). A branch that can
 			// modify a record in place (anything with a processor in it) still
@@ -1073,7 +1073,9 @@ func (w *Worker) doNextTask(ctx context.Context, taskNode *TaskNode, b *Batch, a
 			// independently from here on (split further, retry, filter), so
 			// each needs its own run-completion ledger; multiAckNacker itself
 			// stays purely about per-position unanimity ACROSS branches (its
-			// existing job), unaware of any run structure. A branch votes for
+			// existing job), unaware of any run structure. Each branch votes
+			// through its own multiAcker.branch(i) view, so a branch that
+			// votes twice for a position is refused. A branch votes for
 			// a run's original position AT MOST once - when runAckNacker
 			// forwards it - which satisfies multiAckNacker's
 			// one-vote-per-branch-per-position assumption. "At most", not
@@ -1082,7 +1084,7 @@ func (w *Worker) doNextTask(ctx context.Context, taskNode *TaskNode, b *Batch, a
 			// and every later one in multiAckNacker's prefix scan. That shape
 			// is refused up front by validateRunsWholeBeforeFanOut above.
 			p.Go(func() error {
-				return w.doTask(ctx, nextTask, branchBatch, newRunAckNacker(multiAcker))
+				return w.doTask(ctx, nextTask, branchBatch, newRunAckNacker(multiAcker.branch(branch)))
 			})
 		}
 		if err := p.Wait(); err != nil {
@@ -1527,10 +1529,13 @@ type ackNacker interface {
 //  3. Exactly one vote per branch per position: branches run concurrently
 //     and call Ack/Nack from separate goroutines, each voting once per
 //     position (ack xor nack) — the same assumption the rest of the batch
-//     pipeline already makes (see Batch's tainted-splitting in doTask). A
-//     vote for a position that already has all M votes can only be a branch
-//     voting twice, a task-graph bug; it is refused with a (bug) error
-//     rather than ignored, so it cannot flip a decided outcome.
+//     pipeline already makes (see Batch's tainted-splitting in doTask). Each
+//     branch votes through its own view (branch(i)), and the tally records
+//     WHICH branches voted for each position, not only how many. A second
+//     vote from the same branch is a task-graph bug; it is refused with a
+//     (bug) error (errDoubleVote) and not counted, whether or not the
+//     siblings have voted yet. Counting it would let one branch's two votes
+//     make a position terminal without a sibling's vote, an early ack.
 //
 //  4. In-source-order release (invariant 4): positions are released to the
 //     parent in ascending source order, never in branch-completion order —
@@ -1558,6 +1563,15 @@ type ackNacker interface {
 //     the caller so the branch pool errors out and the worker tombs with it
 //     — identical to what happens on the single-destination path.
 //
+//  6. A failed release is final. Once parent.Ack or parent.Nack returns an
+//     error, every later vote returns that error (wrapped, so cerrors.Is and
+//     the fatal classification still hold) and never calls the parent again.
+//     The branch pool does not cancel siblings when one branch fails, so a
+//     sibling still running can vote on a later position; without this its
+//     release would start again at the failed position and call parent.Nack
+//     a second time: a second DLQ entry (if the DLQ write had succeeded and
+//     Source.Ack then failed) and a second count in the DLQ nack window.
+//
 // This is intentionally a mutex-guarded per-position tally rather than a
 // lock-free or channel-based design: it is Tier-1, highest-data-loss-risk
 // code, and boring-and-obviously-correct beats clever here. See
@@ -1581,9 +1595,11 @@ type multiAckNacker struct {
 	// votes[i] counts how many of the M branches have voted (ack or nack)
 	// for positions[i] so far.
 	votes []int
+	// voted[i*branches+b] is true once branch b has voted for positions[i].
+	// A second vote from the same branch is refused (requirement 3).
+	voted []bool
 	// terminal[i] is true once all M branches have voted for positions[i]
-	// (requirement 2): only then may it be released. A further vote is a
-	// bug (requirement 3).
+	// (requirement 2): only then may it be released.
 	terminal []bool
 	// nacked[i] is true once any branch has nacked positions[i]. Nack wins:
 	// it never goes back to false, and a terminal position with nacked[i]
@@ -1607,6 +1623,33 @@ type multiAckNacker struct {
 	// released in order, released..len(positions), never out of order
 	// (invariant 4).
 	released int
+	// err is the error of the first failed release to the parent. Once set,
+	// every vote returns it and the parent is never called again
+	// (requirement 6).
+	err error
+}
+
+// errDoubleVote marks a vote refused because the same branch already voted
+// for the position (requirement 3). It is a task-graph bug, never a data
+// condition.
+var errDoubleVote = cerrors.New("(bug) multiAckNacker: a branch voted twice for the same position")
+
+// multiAckBranch is the ackNacker one fan-out branch votes through: it tags
+// every vote with the branch's index so multiAckNacker can refuse a second
+// vote from the same branch. See multiAckNacker.branch.
+type multiAckBranch struct {
+	m      *multiAckNacker
+	branch int
+}
+
+// Ack records an ack vote from this branch. See multiAckNacker.ack.
+func (b multiAckBranch) Ack(ctx context.Context, batch *Batch) error {
+	return b.m.ack(ctx, b.branch, batch)
+}
+
+// Nack records a nack vote from this branch. See multiAckNacker.nack.
+func (b multiAckBranch) Nack(ctx context.Context, batch *Batch, taskID string) error {
+	return b.m.nack(ctx, b.branch, batch, taskID)
 }
 
 // newMultiAckNacker creates a multiAckNacker for a fan-out of a batch whose
@@ -1657,6 +1700,7 @@ func newMultiAckNacker(parent ackNacker, branches int, positions []opencdc.Posit
 		positions:  positions,
 		posIndex:   posIndex,
 		votes:      make([]int, n),
+		voted:      make([]bool, n*branches),
 		terminal:   make([]bool, n),
 		nacked:     make([]bool, n),
 		record:     make([]opencdc.Record, n),
@@ -1679,18 +1723,30 @@ func (m *multiAckNacker) indexOf(pos opencdc.Position) (int, error) {
 	return idx, nil
 }
 
-// Ack records an ack vote from one branch for every position in batch.
+// branch returns the ackNacker that fan-out branch b (0 <= b < m.branches)
+// votes through. Every branch must use its own view: the tally refuses a
+// second vote from the same branch (requirement 3).
+func (m *multiAckNacker) branch(b int) ackNacker {
+	return multiAckBranch{m: m, branch: b}
+}
+
+// ack records an ack vote from branch for every position in batch.
 // batch.originalBatch() is applied first, so a branch that split records
 // internally still votes using the same original positions every other
 // branch votes on — see the doc comment on the type for why this matters.
 //
 // Invariant 1 (enforcement site): a position is only ever forwarded to
 // parent.Ack once ALL m.branches have voted, and none of them nacked it.
-func (m *multiAckNacker) Ack(ctx context.Context, batch *Batch) error {
+func (m *multiAckNacker) ack(ctx context.Context, branch int, batch *Batch) error {
 	ob := batch.originalBatch()
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// guard: funnel-multiack-ack-after-failed-release-refused tests=^TestMultiAckNacker_FailedRelease_IsFinal$
+	if m.err != nil {
+		return m.releaseFailedErr()
+	}
 
 	for i, pos := range ob.positions {
 		idx, err := m.indexOf(pos)
@@ -1698,22 +1754,22 @@ func (m *multiAckNacker) Ack(ctx context.Context, batch *Batch) error {
 			return err
 		}
 
-		// guard: funnel-multiack-ack-after-all-voted-refused tests=^TestMultiAckNacker_AckAfterAllBranchesVoted_IsRefused$
-		if m.terminal[idx] {
-			return m.extraVoteErr("ack", idx)
+		// guard: funnel-multiack-ack-double-vote-refused tests=^TestMultiAckNacker_(AckAfterAllBranchesVoted_IsRefused|DoubleVoteBeforeAllVoted_IsRefused)$
+		if m.voted[idx*m.branches+branch] {
+			return m.doubleVoteErr("ack", branch, idx)
 		}
 
 		if !m.nacked[idx] {
 			m.record[idx] = ob.records[i]
 		}
-		m.voteLocked(idx)
+		m.voteLocked(branch, idx)
 	}
 
 	return m.releaseLocked(ctx)
 }
 
-// Nack records a nack vote from one branch (identified by taskID) for every
-// position in batch. Like Ack, batch.originalBatch() is applied first.
+// nack records a nack vote from branch (whose task is taskID) for every
+// position in batch. Like ack, batch.originalBatch() is applied first.
 //
 // Invariant 3 (enforcement site): nack wins. The first nack vote for a
 // position decides its outcome and its DLQ attribution, and the position is
@@ -1727,11 +1783,16 @@ func (m *multiAckNacker) Ack(ctx context.Context, batch *Batch) error {
 // Source.Ack persists the last position it is given; releasing before a
 // sibling batching destination has voted would ack the source past an earlier
 // batch that sibling still buffers unwritten, and a crash would lose it.
-func (m *multiAckNacker) Nack(ctx context.Context, batch *Batch, taskID string) error {
+func (m *multiAckNacker) nack(ctx context.Context, branch int, batch *Batch, taskID string) error {
 	ob := batch.originalBatch()
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// guard: funnel-multiack-nack-after-failed-release-refused tests=^TestMultiAckNacker_FailedRelease_IsFinal$
+	if m.err != nil {
+		return m.releaseFailedErr()
+	}
 
 	for i, pos := range ob.positions {
 		idx, err := m.indexOf(pos)
@@ -1739,9 +1800,9 @@ func (m *multiAckNacker) Nack(ctx context.Context, batch *Batch, taskID string) 
 			return err
 		}
 
-		// guard: funnel-multiack-nack-after-all-voted-refused tests=^TestMultiAckNacker_NackAfterAllBranchesVoted_IsRefused$
-		if m.terminal[idx] {
-			return m.extraVoteErr("nack", idx)
+		// guard: funnel-multiack-nack-double-vote-refused tests=^TestMultiAckNacker_(NackAfterAllBranchesVoted_IsRefused|DoubleVoteBeforeAllVoted_IsRefused)$
+		if m.voted[idx*m.branches+branch] {
+			return m.doubleVoteErr("nack", branch, idx)
 		}
 
 		if !m.nacked[idx] {
@@ -1752,28 +1813,36 @@ func (m *multiAckNacker) Nack(ctx context.Context, batch *Batch, taskID string) 
 			m.nackErr[idx] = ob.recordStatuses[i].Error
 			m.nackTaskID[idx] = taskID
 		}
-		m.voteLocked(idx)
+		m.voteLocked(branch, idx)
 	}
 
 	return m.releaseLocked(ctx)
 }
 
-// voteLocked counts one branch's vote for positions[idx] and makes it terminal
+// voteLocked counts branch's vote for positions[idx] and makes it terminal
 // (releasable) once all m.branches have voted. Must be called with m.mu held.
-func (m *multiAckNacker) voteLocked(idx int) {
+func (m *multiAckNacker) voteLocked(branch, idx int) {
+	m.voted[idx*m.branches+branch] = true
 	m.votes[idx]++
 	if m.votes[idx] == m.branches {
 		m.terminal[idx] = true
 	}
 }
 
-// extraVoteErr reports a vote for a position that already has a vote from
-// every branch: some branch voted twice. That breaks requirement 3, and a
-// silently counted extra vote could have made an earlier position terminal
-// without a sibling's vote, so it fails the pipeline instead of being ignored.
-func (m *multiAckNacker) extraVoteErr(kind string, idx int) error {
-	return cerrors.Errorf("(bug) multiAckNacker: %s vote for position (hash %s) after all %d branches already voted",
-		kind, log.KeyHash(m.positions[idx]), m.branches)
+// doubleVoteErr reports a second vote from branch for positions[idx]. That
+// breaks requirement 3: counting it could make the position terminal without
+// a sibling's vote (an early ack) or flip a decided outcome, so it fails the
+// pipeline instead of being ignored. The vote is not counted.
+func (m *multiAckNacker) doubleVoteErr(kind string, branch, idx int) error {
+	return cerrors.Errorf("%s vote from branch %d of %d for position (hash %s): %w",
+		kind, branch, m.branches, log.KeyHash(m.positions[idx]), errDoubleVote)
+}
+
+// releaseFailedErr is what every vote returns after a release to the parent
+// failed (requirement 6). It wraps m.err, so cerrors.Is and
+// cerrors.IsFatalError see the original error. Must be called with m.mu held.
+func (m *multiAckNacker) releaseFailedErr() error {
+	return cerrors.Errorf("fan-out: an earlier release of this batch to the source failed, refusing the vote: %w", m.err)
 }
 
 // releaseLocked walks the positions starting at m.released and forwards
@@ -1810,6 +1879,8 @@ func (m *multiAckNacker) releaseLocked(ctx context.Context) error {
 			}
 
 			if err := m.parent.Ack(ctx, m.ackBatch(from, to)); err != nil {
+				// Requirement 6: final. A later vote must not retry it.
+				m.err = err
 				return err
 			}
 			m.released = to
@@ -1821,6 +1892,10 @@ func (m *multiAckNacker) releaseLocked(ctx context.Context) error {
 			// Requirement 5: a fatal DLQ error (nack threshold exceeded)
 			// must surface exactly like it does on the single-destination
 			// path, so the branch pool errors out and the worker tombs.
+			// Requirement 6: final. A later vote must not call parent.Nack
+			// for this position again (a second DLQ entry, a second count
+			// in the nack window).
+			m.err = err
 			return err
 		}
 		m.released = idx + 1

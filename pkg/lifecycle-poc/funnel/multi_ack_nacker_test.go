@@ -129,13 +129,13 @@ func TestMultiAckNacker_UnanimousAck_ReleasesOnce(t *testing.T) {
 	m := mustNewMultiAckNacker(t, parent, 2, positions)
 
 	// Branch 1 acks all three - not yet unanimous, nothing released.
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, positions...)))
+	is.NoErr(m.branch(0).Ack(ctx, ackBatchFor(records, positions...)))
 	is.Equal(len(parent.ackCalls()), 0)
 	is.Equal(len(parent.nackCalls()), 0)
 
 	// Branch 2 acks all three too - now unanimous for every position, and
 	// they're released as ONE coalesced call (invariant 4's batching).
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, positions...)))
+	is.NoErr(m.branch(1).Ack(ctx, ackBatchFor(records, positions...)))
 
 	acks := parent.ackCalls()
 	is.Equal(len(acks), 1)
@@ -159,8 +159,8 @@ func TestMultiAckNacker_AnyNack_DLQsOnceRegardlessOfOrder(t *testing.T) {
 		parent := &fakeParentAckNacker{}
 		m := mustNewMultiAckNacker(t, parent, 2, positions)
 
-		is.NoErr(m.Ack(ctx, ackBatchFor(records, positions...)))                          // branch A acks
-		is.NoErr(m.Nack(ctx, nackBatchFor(records, positions[0], nackErr), "destB-task")) // branch B nacks
+		is.NoErr(m.branch(0).Ack(ctx, ackBatchFor(records, positions...)))                          // branch A acks
+		is.NoErr(m.branch(1).Nack(ctx, nackBatchFor(records, positions[0], nackErr), "destB-task")) // branch B nacks
 
 		is.Equal(len(parent.ackCalls()), 0) // never acked - nack won
 		nacks := parent.nackCalls()
@@ -178,9 +178,9 @@ func TestMultiAckNacker_AnyNack_DLQsOnceRegardlessOfOrder(t *testing.T) {
 		parent := &fakeParentAckNacker{}
 		m := mustNewMultiAckNacker(t, parent, 2, positions)
 
-		is.NoErr(m.Nack(ctx, nackBatchFor(records, positions[0], nackErr), "destB-task")) // branch B nacks first
-		is.Equal(len(parent.nackCalls()), 0)                                              // #3323: not released before A votes
-		is.NoErr(m.Ack(ctx, ackBatchFor(records, positions...)))                          // branch A's ack arrives late
+		is.NoErr(m.branch(1).Nack(ctx, nackBatchFor(records, positions[0], nackErr), "destB-task")) // branch B nacks first
+		is.Equal(len(parent.nackCalls()), 0)                                                        // #3323: not released before A votes
+		is.NoErr(m.branch(0).Ack(ctx, ackBatchFor(records, positions...)))                          // branch A's ack arrives late
 
 		is.Equal(len(parent.ackCalls()), 0) // still never acked
 		nacks := parent.nackCalls()
@@ -213,15 +213,15 @@ func TestMultiAckNacker_PartialPerRecordDivergence(t *testing.T) {
 
 	// Destination A: clean batch, acks all 5 in one call (worker.go's
 	// !b.tainted shortcut path).
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, positions...)))
+	is.NoErr(m.branch(0).Ack(ctx, ackBatchFor(records, positions...)))
 
 	// Destination B: records[2] failed, so its batch is tainted and split
 	// into three sub-batches by doTask's subBatchByFlag - ack(0,1), nack(2),
 	// ack(3,4).
 	nackErr := cerrors.New("dest B: write failed for record 2")
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, positions[0], positions[1])))
-	is.NoErr(m.Nack(ctx, nackBatchFor(records, positions[2], nackErr), "destB-task"))
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, positions[3], positions[4])))
+	is.NoErr(m.branch(1).Ack(ctx, ackBatchFor(records, positions[0], positions[1])))
+	is.NoErr(m.branch(1).Nack(ctx, nackBatchFor(records, positions[2], nackErr), "destB-task"))
+	is.NoErr(m.branch(1).Ack(ctx, ackBatchFor(records, positions[3], positions[4])))
 
 	acks := parent.ackCalls()
 	is.Equal(len(acks), 2)
@@ -253,15 +253,15 @@ func TestMultiAckNacker_OutOfOrderCompletion_ReleasesInSourceOrder(t *testing.T)
 
 	// Branch B races ahead and votes for p2 FIRST - only 1 of 2 votes, so it
 	// cannot go terminal yet regardless.
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, p2)))
+	is.NoErr(m.branch(1).Ack(ctx, ackBatchFor(records, p2)))
 	is.Equal(len(parent.ackCalls()), 0)
 
 	// Branch A votes for p0 - still only 1 of 2 votes for p0.
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, p0)))
+	is.NoErr(m.branch(0).Ack(ctx, ackBatchFor(records, p0)))
 	is.Equal(len(parent.ackCalls()), 0)
 
 	// Branch B now votes for p0 too - p0 is unanimous and releases...
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, p0)))
+	is.NoErr(m.branch(1).Ack(ctx, ackBatchFor(records, p0)))
 	acks := parent.ackCalls()
 	is.Equal(len(acks), 1)
 	is.Equal(acks[0].positions, []opencdc.Position{p0})
@@ -269,14 +269,14 @@ func TestMultiAckNacker_OutOfOrderCompletion_ReleasesInSourceOrder(t *testing.T)
 	// ...but p1 has zero votes and p2 (despite already being fully voted on
 	// branch B's side) still needs branch A's vote, and even once it gets
 	// it, p2 must NOT release until p1 does too.
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, p1, p2))) // branch A votes p1 and p2
+	is.NoErr(m.branch(0).Ack(ctx, ackBatchFor(records, p1, p2))) // branch A votes p1 and p2
 	// p1 only just got its first (of two) votes here - still not terminal -
 	// so nothing new can release yet even though p2's tally is now 2/2.
 	is.Equal(len(parent.ackCalls()), 1) // unchanged
 
 	// Branch B finally votes p1 - NOW both p1 and p2 are terminal, and they
 	// release together as one contiguous run (never p2 without p1 first).
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, p1)))
+	is.NoErr(m.branch(1).Ack(ctx, ackBatchFor(records, p1)))
 	acks = parent.ackCalls()
 	is.Equal(len(acks), 2)
 	is.Equal(acks[1].positions, []opencdc.Position{p1, p2})
@@ -299,8 +299,8 @@ func TestMultiAckNacker_FatalDLQError_Propagates(t *testing.T) {
 
 	// The sibling's ack vote first: the nack is released (and the parent's
 	// fatal error surfaces) only once every branch has voted (#3323).
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, pos)))
-	err := m.Nack(ctx, nackBatchFor(records, pos, cerrors.New("write failed")), "destA-task")
+	is.NoErr(m.branch(1).Ack(ctx, ackBatchFor(records, pos)))
+	err := m.branch(0).Nack(ctx, nackBatchFor(records, pos, cerrors.New("write failed")), "destA-task")
 	is.True(err != nil)
 	is.True(cerrors.Is(err, fatalErr))
 	is.True(cerrors.IsFatalError(err))
@@ -325,7 +325,7 @@ func TestMultiAckNacker_UnknownPosition_ReturnsBugError(t *testing.T) {
 	parent := &fakeParentAckNacker{}
 	m := mustNewMultiAckNacker(t, parent, 2, []opencdc.Position{known})
 
-	err := m.Ack(ctx, ackBatchFor(records, records[1].Position)) // records[1].Position was never registered
+	err := m.branch(0).Ack(ctx, ackBatchFor(records, records[1].Position)) // records[1].Position was never registered
 	is.True(err != nil)
 }
 
@@ -343,20 +343,20 @@ func TestMultiAckNacker_ThreeBranches_UnanimousRequiresAllThree(t *testing.T) {
 	m := mustNewMultiAckNacker(t, parent, 3, []opencdc.Position{pAcked, pNacked})
 
 	// pAcked: all 3 branches ack it.
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, pAcked)))
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, pAcked)))
+	is.NoErr(m.branch(0).Ack(ctx, ackBatchFor(records, pAcked)))
+	is.NoErr(m.branch(1).Ack(ctx, ackBatchFor(records, pAcked)))
 	is.Equal(len(parent.ackCalls()), 0) // only 2/3 so far
 
 	// pNacked: 2 branches ack, but the 3rd nacks - nack wins even though it
 	// arrives last.
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, pNacked)))
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, pNacked)))
-	is.NoErr(m.Nack(ctx, nackBatchFor(records, pNacked, cerrors.New("branch 3 failed")), "destC-task"))
+	is.NoErr(m.branch(0).Ack(ctx, ackBatchFor(records, pNacked)))
+	is.NoErr(m.branch(1).Ack(ctx, ackBatchFor(records, pNacked)))
+	is.NoErr(m.branch(2).Nack(ctx, nackBatchFor(records, pNacked, cerrors.New("branch 3 failed")), "destC-task"))
 
 	// pAcked's 3rd (final) vote arrives after pNacked already has all of its
 	// votes - order across DIFFERENT positions doesn't matter, only
 	// per-position unanimity does.
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, pAcked)))
+	is.NoErr(m.branch(2).Ack(ctx, ackBatchFor(records, pAcked)))
 
 	// Release order still respects source order: pAcked (index 0) before
 	// pNacked (index 1).

@@ -66,6 +66,10 @@ const (
 	// that is allowed to finish (the first run is always SIGKILLed, which by
 	// definition never prints anything more).
 	markerFanoutDone = "FANOUT_DONE"
+	// markerFanoutShortCommit is printed instead of markerFanoutDone when a
+	// batching-destA run stops with fewer than total positions committed: the
+	// run itself failed, so its ledgers prove nothing about loss.
+	markerFanoutShortCommit = "FANOUT_SHORT_COMMIT"
 )
 
 // fanoutChildConfig is the parent-side (harness) counterpart to
@@ -235,6 +239,16 @@ type fanoutDestination struct {
 
 	mu      sync.Mutex
 	pending []connector.DestinationAck
+	// highest is the highest position Write has been handed, written or
+	// failed. See waitFanoutDestinationSaw.
+	highest uint64
+}
+
+// Highest returns the highest position Write has been handed so far.
+func (d *fanoutDestination) Highest() uint64 {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.highest
 }
 
 func (d *fanoutDestination) ID() string                     { return d.id }
@@ -254,6 +268,7 @@ func (d *fanoutDestination) Write(_ context.Context, recs []opencdc.Record) erro
 		if err != nil {
 			return fmt.Errorf("fanoutDestination %s: decode position %s: %w", d.id, r.Position, err)
 		}
+		d.highest = max(d.highest, pos)
 		if d.nackEvery > 0 && pos%d.nackEvery == 0 {
 			d.pending = append(d.pending, connector.DestinationAck{
 				Position: r.Position,
@@ -385,12 +400,15 @@ func runChildFanout() {
 	// Do goroutine ever exits with an error while waiting.
 	// A batching destA flushes only when its buffer fills, so up to
 	// destABatch-1 trailing records stay buffered (and uncommitted) until
-	// Stop drains them; wait for the rest, then check the drain committed all.
-	waitFor := cfg.total
-	if cfg.destABatch > 1 && waitFor > uint64(cfg.destABatch) {
-		waitFor -= uint64(cfg.destABatch)
+	// Stop drains them. Waiting for the commit would never finish; wait
+	// instead until the unbatched destB has been handed the last position,
+	// which means the worker has read every record, then Stop, and require
+	// the drain to commit all of them (below).
+	if cfg.destABatch > 1 {
+		waitFanoutDestinationSaw(destB, cfg.total, doErr)
+	} else {
+		waitFanoutUpstreamCommitted(built.upstream, cfg.total, doErr)
 	}
-	waitFanoutUpstreamCommitted(built.upstream, waitFor, doErr)
 
 	if err := worker.Stop(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: stop worker: %v\n", markerFatal, err)
@@ -406,24 +424,48 @@ func runChildFanout() {
 	}
 	built.persister.WaitPendingWrites()
 	if cfg.destABatch > 1 {
-		// The commit that follows the drain's Source.Ack is asynchronous. A
-		// short commit is reported but not fatal: the parent's ledger checks
-		// say whether anything was lost, and a fatal exit here would hide
-		// which records.
+		// The commit that follows the drain's Source.Ack is asynchronous, so
+		// poll for it. A run that stops short is a failed run, not a result:
+		// the worker read every record (see above), so a short commit means
+		// the drain did not ack them, and the parent must not go on to read
+		// the ledgers and report the gap as data loss. Exit without the done
+		// marker, with markerFanoutShortCommit so the parent names the cause.
 		for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(time.Millisecond) {
 			committed, err := built.upstream.Committed()
 			if err == nil && committed >= cfg.total {
 				break
 			}
 			if time.Now().After(deadline) {
-				fmt.Fprintf(os.Stderr, "WARN: after stop, upstream committed %d of %d (err=%v)\n", committed, cfg.total, err)
-				break
+				fmt.Fprintf(os.Stderr, "%s: after stop, upstream committed %d of %d (err=%v)\n",
+					markerFanoutShortCommit, committed, cfg.total, err)
+				fmt.Printf("%s: committed %d of %d\n", markerFanoutShortCommit, committed, cfg.total)
+				os.Exit(exitOpenOtherError)
 			}
 		}
 	}
 
 	fmt.Println(markerFanoutDone)
 	os.Exit(exitOK)
+}
+
+// waitFanoutDestinationSaw blocks until d has been handed position total (the
+// worker has read every record), with the same timeout and early-exit
+// reporting as waitFanoutUpstreamCommitted.
+func waitFanoutDestinationSaw(d *fanoutDestination, total uint64, doErr <-chan error) {
+	const timeout = 25 * time.Second
+	for deadline := time.Now().Add(timeout); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+		if d.Highest() >= total {
+			return
+		}
+		select {
+		case doneErr := <-doErr:
+			fmt.Fprintf(os.Stderr, "%s: worker.Do exited early (err=%v) before %s saw position %d\n", markerFatal, doneErr, d.id, total)
+			os.Exit(exitOpenOtherError)
+		default:
+		}
+	}
+	fmt.Fprintf(os.Stderr, "%s: timed out after %s waiting for %s to see position %d\n", markerFatal, timeout, d.id, total)
+	os.Exit(exitOpenOtherError)
 }
 
 // waitFanoutUpstreamCommitted polls until the upstream store reports total
