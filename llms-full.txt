@@ -663,7 +663,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-### postgres (v0.19.0)
+### postgres (v0.20.0)
 
 Conduit connector for PostgreSQL
 
@@ -727,6 +727,39 @@ switches into CDC mode.
 
 This behavior is enabled by default, but can be turned off by adding
 `"snapshotMode": "never"` to the Source configuration.
+
+**Rows keyed 0 or below (v0.14.0 to v0.19.0)**
+
+The initial snapshot of v0.14.0 to v0.14.6 and v0.15.0 to v0.19.0 skipped every
+row whose primary key was 0 or negative: it read the table from `key > 0`. The
+slot only holds changes made after the snapshot, so those rows were delivered
+only if they changed later. No error was logged. A table is affected if it had
+rows keyed 0 or below when its snapshot ran; tables keyed from 1 (the bigserial
+default) are not.
+
+Fixed in v0.20.0. v0.20.0 and later read them:
+
+- A new snapshot reads every key.
+- A snapshot that was in progress on an affected version resumes and first reads
+  the rows keyed 0 or below that it skipped, then continues where it stopped. A
+  crash during that catch-up resumes it.
+- A pipeline that finished its snapshot on an affected version cannot be repaired
+  by the connector. On its first start it checks each table and logs a warning
+  with the code `postgres.source.snapshot_low_keys_skipped` for every table that has
+  rows keyed 0 or below. The warning is shown until the first record of that run
+  is acknowledged. It can be a false positive: a pipeline that never ran a
+  snapshot, or whose rows changed since, lost nothing.
+  The check waits at most 5 seconds per table. If a table is locked, or the
+  connector's role cannot SELECT from it, it logs a warning with the same code and
+  the pipeline starts anyway; the check runs again on the next start.
+
+To recover the rows of a table the warning names, do one of the following:
+
+- Run its snapshot again: create a new pipeline, or reset the pipeline's position.
+- Touch the rows, so the stream delivers them as updates, which destinations that
+  upsert by key apply as inserts: `UPDATE <table> SET <key> = <key> WHERE <key> <= 0`.
+
+To check a table yourself: `SELECT count(*) FROM <table> WHERE <key> <= 0`.
 
 **Change Data Capture**
 
