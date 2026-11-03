@@ -114,6 +114,8 @@ type DestinationTask struct {
 	// deferOrdered on the pipelined path. Lock order: enqueueMu, then mu. The
 	// flusher never takes it.
 	enqueueMu ctxMutex
+	// syncMu serialises synchronous (non-pipelined) flushes; see flushTaken. Lock order: sharedMu, syncMu, mu.
+	syncMu sync.Mutex
 
 	// testAfterTake, if set, is called by doBuffered after it took the pending
 	// buffer to flush and before it hands it to the flusher. Tests use it to
@@ -273,11 +275,12 @@ func (t *DestinationTask) runCancelled(err error) bool {
 func (t *DestinationTask) Close(ctx context.Context) error {
 	// Invariant 7: flush any buffered records before tearing down the
 	// destination so a graceful stop writes them durably instead of dropping
-	// them. The shared sink is closed only after every worker has exited, so
-	// the source is already torn down here and the deferred source acks fail:
-	// the records were written durably but replay on restart — at-least-once,
-	// never a loss. A flush error is therefore logged, not returned, so
-	// teardown still runs.
+	// them. On a graceful stop Worker.Stop has already drained this task
+	// (Drain) while the source was still running, so there is normally nothing
+	// left here. After a force-stop or error the source may already be torn down
+	// and the deferred source acks fail: the records were written durably but
+	// replay on restart — at-least-once, never a loss. A flush error is
+	// therefore logged, not returned, so teardown still runs.
 	//
 	// On the pipelined path this also drains the flusher goroutine: the
 	// trailing partial batch is enqueued, the channel is closed, and Close
