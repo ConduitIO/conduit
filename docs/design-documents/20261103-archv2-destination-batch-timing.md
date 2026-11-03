@@ -196,10 +196,10 @@ already runs under the same lock.
 
 - **Lost:** under fan-out it gives each of M destinations its own goroutine that reaches
   `Worker.Ack`/`Nack` → `Source.Ack` outside the worker's pass, which is what `service.go:1665-1676`
-  forbids. For the all-ack case an ordering argument exists (the last vote on batch N+1 is
-  program-ordered after the same destination's vote on N), but the nack case is suspect even without
-  a timer (see Related) and the timer would make it routine. Holding the processing lock costs one
-  lock and removes the question.
+  forbids. An ordering argument exists (the last vote on batch N+1 is program-ordered after the same
+  destination's vote on N; after #3324 it covers nacks too, see Decision), but a release that runs
+  concurrently with a pass and with another destination's flush would still race the pass's own
+  releases and the DLQ writes. Holding the processing lock costs one lock and removes the question.
 
 #### A3. The timer only signals the worker loop, which flushes
 
@@ -217,7 +217,13 @@ already runs under the same lock.
 
 - **Lost:** simplest, but a fan-out pipeline whose source goes quiet never delivers its tail, and
   `sdk.batch.delay` would mean different things depending on how many destinations a pipeline has.
-  It is the fallback if the fan-out timer is held back (Rollout, step 2).
+  After #3324 it costs more than latency. A nacked position is released only once every branch has
+  voted, and a batching destination votes when it flushes, so with arrival-only checks on fan-out a
+  record a sibling nacks on a quiet source never reaches the DLQ, and with the default DLQ (window 1,
+  threshold 0) the pipeline never fails: it reports running with a failed record. Both last until the
+  next record or a stop. That is a reason to prefer A, not a neutral fallback. It remains the fallback
+  only if the fan-out fire is held back (Rollout, step 2), and then only with the WARN naming this
+  cost.
 
 #### B. Deadline case in `runFlusher`'s `select`
 
@@ -341,8 +347,14 @@ deadline is "first record of this buffer + `batchDelay`", the SDK batcher's defi
   of B is the same flush, run between passes instead of during one. For the all-ack case ordering
   holds: each destination votes in source order on its one stream, and a batch is released to the
   source by the call that casts its last vote, synchronously. Batch N+1 needs A's vote on N+1, which
-  A casts after its vote on N, so N's `Source.Ack` returns before N+1 can be released. The nack case
-  is the suspected pre-existing issue under Related; this design does not change it.
+  A casts after its vote on N, so N's `Source.Ack` returns before N+1 can be released. Since #3324
+  (#3323, ADR `20261103-archv2-fanout-nack-waits-for-every-vote`) the same argument covers nacks: a nacked position is
+  released (DLQ write, then `Source.Ack`) only once every branch has voted for it, nack still winning.
+  So on fan-out the timer flush is the normal place where a sibling's nack is released: when B nacks
+  a record of N+1 while A buffers N, the DLQ write happens when A's timer flush casts A's vote, not
+  when B nacks. That release runs under the processing locks the timer holds, like every other
+  source ack. A release that fails is final for that batch: later votes return the same error and
+  never retry it (#3324).
 
 **Graceful stop (SIGTERM).** `Worker.Stop` drains first, under its processing lock
 (`worker.go:234-257`). On the synchronous path the timer needs the same lock, so it runs either
@@ -392,8 +404,30 @@ and only for an error that `Close` would report as `CodeFlushOnCloseFailed`
 **DLQ path.** A nack in a timer-triggered flush is routed by `ackPending` → `acker.Nack`, on the same
 goroutine that runs the flush (the flusher, or the timer under the processing locks), as today. The
 DLQ connector itself is not engine-batched and gets no timer; its in-plugin batching is handled in
-part 2. A DLQ write that fails returns a `deferredAckError`, fails the flush and is surfaced while
-idle by the error channel above.
+part 2. Two error shapes reach the flush, and only one is a `deferredAckError`:
+
+- A queued ordered action (a processor nack or filter above the destination, `ackPending`'s
+  `p.action` branch) that fails returns a `deferredAckError`.
+- A nack the destination itself returns, or a sibling's nack whose last vote this flush casts, goes
+  `ackPending` → `p.acker.Nack` (`destination_batch.go:643`) → `runAckNacker` → `multiAckNacker` →
+  `Worker.Nack`, which returns the raw error: `cerrors.FatalError` for a failed DLQ write or an
+  exceeded nack threshold, and the plain record error (wrapped as "failed to nack N records") for
+  the default DLQ (window 1, threshold 0). A failed `Source.Ack` after a successful DLQ write is a
+  plain error too.
+
+After #3324 the second shape is the one the fan-out timer meets routinely: a default-DLQ fan-out
+pipeline whose source is idle fails only through the timer flush that casts the batching
+destination's vote, while the worker is blocked in `Source.Read`. So the idle error channel must:
+
+- send it. These errors fail the flush and leave the records unacked, so `Close` would report them as
+  `CodeFlushOnCloseFailed`; none is on the not-sent list above. The filter must not special-case
+  them.
+- keep the fatal/non-fatal classification. The channel carries the error itself or wraps it with
+  `%w`, never a fresh error built from its text: `cerrors.IsFatalError` uses `As`, so the chain must
+  survive to the tomb. A threshold-exceeded or DLQ-write error that lost its fatal mark would land in
+  the bounded-backoff recovery arm (infinite retries by default), and the source would re-read,
+  re-nack and write the DLQ again on every restart: the loop `Worker.Nack`'s own comment warns about.
+  A default-DLQ record error stays non-fatal, as on the single-destination path.
 
 **What `sdk.batch.delay` means under arch-v2.** The longest a buffered record waits before its buffer
 is _taken_ for writing, counted from the first record of that buffer. Delivery adds the flush queue
@@ -409,7 +443,10 @@ the SDK. Specifically:
 
 Size-only batching keeps SDK parity: no timer. The engine logs a WARN at build time with a new code,
 `pipeline.archv2_destination_batch_unbounded_wait`, naming the connector and suggesting
-`sdk.batch.delay`. A bounded default is proposed for later under open question 1.
+`sdk.batch.delay`. On a fan-out the WARN also says that, after #3324, a sibling destination's nack is
+routed to the DLQ, and with the default DLQ fails the pipeline, only when this destination flushes,
+so on a quiet source those wait without bound too. A bounded default is proposed for later under
+open question 1.
 
 ### 2. Ownership of destination batching (#3321)
 
@@ -496,7 +533,8 @@ unchanged: an S3 destination arrives with an explicit size of 1000.
 | Source idle with a partial batch | Timer takes it after `delay`; written, then acked in order | 1, 2 |
 | Timer fires while `doBuffered` holds `enqueueMu`/`syncMu` | Callback waits; on entry finds a new generation (arrival took it) or takes it itself | 1, 4 |
 | Timer fires during a fan-out pass | Waits for the processing lock; runs after the pass, never during it | 1, 2 |
-| Two destinations' timers fire together (fan-out) | Serialised by the processing lock, acquired in worker order | 2 |
+| Two destinations' timers fire together (fan-out) | Serialised by the processing lock, acquired in worker order. The second timer's flush may cast the last vote for a position the first timer's destination did not nack, and so release a deferred nack from the first (#3324) | 2, 3 |
+| Timer flush releases a sibling's deferred nack (fan-out, #3324): DLQ write fails, nack threshold exceeded, or default DLQ | `Worker.Nack` returns the raw error (fatal for the first two, the plain record error for the default DLQ); the flush records `flushErr`; nothing behind it is acked; the idle error channel fails the run with the classification intact, so a fatal error does not enter the backoff restart loop | 1, 3 |
 | Timer fires after a size flush took the buffer | Generation mismatch, no-op | 4 |
 | Timer and `deferOrdered` race | Both take under the same lock; queued acks stay behind earlier records | 1, 2 |
 | Timer fires during `Drain` | Pipelined: `Drain` took the buffer, or the timer's flush is queued ahead of the barrier. Sync: serialised by the processing lock | 4, 7 |
@@ -559,12 +597,17 @@ every goroutine blocks durably. If a test needs a non-durable block, the fallbac
   `Write`) when the first destination's timer fires; assert the timer's flush starts only after the
   pass releases the processing lock, and every `Source.Ack` position is strictly increasing. New
   behaviour.
-- `TestWorker_FanOut_NackAheadOfBufferedSibling_AckMonotonic`: the reviewer's scenario. A and B with
-  different delays; batch N buffered on A; B nacks a record of N+1. Assert `Source.Ack` positions are
-  monotonic and N's position is not passed before A has written N. Written with sizes (no timer) it
-  exercises main; **expected to fail on main if the suspected issue under Related is confirmed**, and
-  it then belongs to that fix. The timer variant must pass before the synchronous timer is enabled
-  (Rollout, step 2).
+- `TestWorker_FanOut_TimerReleasesSiblingNack`: the timer variant of #3324's
+  `TestWorker_FanOutBatching_SiblingNackDoesNotAckPastBufferedBatch` and its siblings (the size-only
+  versions live in #3324). A has `sdk.batch.delay`, B is unbatched; batch N buffered on A; B nacks a
+  record of N+1; the source goes idle. Assert: the sibling-nacked record reaches the DLQ only when A's
+  timer flush casts A's vote, not when B nacks; the DLQ write and its `Source.Ack` both run while the
+  timer holds the processing locks; `Source.Ack` positions stay monotonic. New behaviour.
+- `TestWorker_FanOut_TimerReleasesSiblingNack_DefaultDLQFailsIdleRun`: the same with the default DLQ
+  and an idle source. Assert the run fails through the idle error channel within the delay, the error
+  is the record error and not fatal, and only positions before the nacked one are acked. A threshold
+  variant (window 2, threshold 1, two nacks) asserts the error reaching the run is still
+  `cerrors.IsFatalError`. New behaviour; both need #3324 and the idle error channel.
 - `TestDestinationTask_TimerRacesTake`: hooks (`testAfterTake`, `testBeforeEnqueueSend`) hold the
   arrival take open while the timer fires; assert one `Write`, no empty flush, acks in order. New
   behaviour.
@@ -660,7 +703,9 @@ No throughput or latency number is claimed until these runs are committed.
   pre-20261017 refusal of destination batching, which only applies to the DLQ now. New entries: tail
   held longer than the delay (check `flush_linger_seconds` and `flushes_total{trigger="deadline_timer"}`),
   a destination that is slow behind a 1-record source (check the neutralised counter; a plugin that
-  batches without declaring `sdk.batch.*`), and the two codes.
+  batches without declaring `sdk.batch.*`), and the two codes. #3324 adds the entry "Fan-out: a nack
+  waits for the batching destination"; this design updates it: with `sdk.batch.delay` the wait is
+  bounded by the timer, and with size-only batching the WARN above names it.
 
 ## Upgrade and rollback
 
@@ -681,10 +726,10 @@ Arch-v2 is preview in v0.21, so none of this blocks v0.21. The fixes land on `ma
 nightlies as three Tier 1 PRs, in this order:
 
 1. The idle error channel with its filter, and its tests. Pre-existing bug, own regression test.
-2. The timer (#3231), with its funnel, service and chaos tests. It depends on step 1. The synchronous
-   (fan-out) fire is enabled in this PR only if the suspected fan-out nack issue (Related) is ruled
-   out or fixed first; otherwise this PR ships the pipelined timer, keeps fan-out on arrival checks
-   with a WARN (Alternative A5), and the fan-out fire follows that fix.
+2. The timer (#3231), with its funnel, service and chaos tests. It depends on step 1. The fan-out
+   (synchronous) fire lands after #3324, which makes it the place a sibling's nack is released. If
+   #3324 has not merged, this PR ships the pipelined timer, keeps fan-out on arrival checks with the
+   WARN (Alternative A5, with the cost stated there), and the fan-out fire follows #3324.
 3. Spec-default resolution, the neutralisation (which also ends the double batching) and the DLQ
    guard extension (#3321), with its tests and the benchi cells. Rebases after #3309, which touches
    `pkg/connector/destination.go` and `pkg/plugin/connector/service.go`.
@@ -707,7 +752,9 @@ Each has a proposed resolution; DeVaris decides.
 1. **Size-only batching under arch-v2.** _Proposed:_ keep classic and SDK parity (no time bound) plus
    the startup WARN in v0.22. Then add a bounded default through the deprecation policy (announce,
    warn, change two minors later), as SDK v0.18.1 did for sources with `sdk.batch.unbounded_wait`.
-   The unbounded wait loses no data, but it pins the source position (WAL retention on Postgres).
+   The unbounded wait loses no data, but it pins the source position (WAL retention on Postgres),
+   and after #3324 it also delays, without bound, a fan-out sibling's DLQ routing and the default-DLQ
+   pipeline failure. That strengthens the case for the bounded default.
 2. **Adopting connector defaults.** _Proposed:_ adopt S3's 1000 / 1 s in the engine. Alternative E caps
    S3 near 650 records/s, a regression against classic, and adopting gives arch-v2 users the object
    layout classic users already have. The layout change goes in the v0.22 release notes.
@@ -726,14 +773,12 @@ Each has a proposed resolution; DeVaris decides.
 
 - Issues #3231, #3321. Smoke run root cause, sections 1d and 1e (cells H-kafka-s3 `conduit-s` and
   `conduit-t`).
-- **Suspected fan-out nack ordering issue (under investigation).** `multiAckNacker.Nack` makes a
-  position terminal on the first nack (`worker.go:1700-1735`). With fan-out to A and B, batch N
-  buffered on A, and B nacking a record of N+1 after flushing N and N+1, N+1 may be released (DLQ,
-  then `Source.Ack` with N+1's position) before A has written N; a crash would then resume past N.
-  Not reproduced; a separate investigation owns it. This design does not fix it and does not depend
-  on how it is fixed: the timer reaches the source only through the existing acker chain, under the
-  worker's processing lock, so a fix in `multiAckNacker` or `Worker.Ack`/`Nack` applies to timer
-  flushes unchanged. The fan-out timer is gated on it (Rollout, step 2).
+- #3323 (fan-out nack acked the source past a batch a sibling still buffered), fixed by #3324 and
+  ADR `20261103-archv2-fanout-nack-waits-for-every-vote`: a nacked position is released only after all M branches
+  have voted, nack still winning; a failed release is final. The timer reaches the source only
+  through the acker chain, under the processing locks, so the deferred nack release rides the timer
+  flush unchanged. The fan-out fire is gated on #3324 (Rollout, step 2). Postmortem:
+  `docs/postmortems/20261103-archv2-fanout-sibling-nack-acks-past-buffered-batch.md`.
 - `docs/design-documents/20261017-funnel-destination-batching.md` (Alternative C, superseded here for
   the timer).
 - `docs/design-documents/20261019-funnel-read-ahead-pipelining.md` (#3210, the flusher, and why fan-out
