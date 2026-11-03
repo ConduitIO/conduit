@@ -15,8 +15,10 @@ Invariants 1 and 3.
 
 - Engine: arch-v2 only (`--preview.pipeline-arch-v2`). The classic engine orders nack handling with a
   per-message semaphore and is not affected.
-- Releases: v0.21.0, v0.21.1, v0.21.2 (all tagged 2026-10-26) and every v0.22.0 nightly before the fix.
-  Exposure window: on `main` from 2026-10-18 (#3201), in releases from 2026-10-26, until #3324 merges.
+- Releases: v0.21.0, v0.21.1, v0.21.2 (all tagged 2026-10-26), every v0.21.0 nightly from `v0.21.0-nightly.20261020` (tagged
+  2026-10-19, the first to contain c73fb0cb from #3201) and every v0.22.0 nightly before the fix.
+  Exposure window: on `main` from 2026-10-18 (#3201), in published nightly artifacts from 2026-10-19, in
+  releases from 2026-10-26, until #3324 merged on 2026-11-03.
 - Needs all of: arch-v2, at least two destinations, batching enabled on a destination other than the one that
   nacks (it is off unless configured), and a DLQ that accepts nacks (`window-nack-threshold > 0` or
   `window-size 0`). With the default DLQ (window 1, threshold 0) the nack fails the pipeline without acking,
@@ -26,8 +28,8 @@ Invariants 1 and 3.
   - On `main`, Stop drains the destinations before it tears the source down (#3295, 2026-11-02), so the batch
     is written and acked.
   - On v0.21.0-v0.21.2, which do not have #3295, Stop tears the source down first and the drain runs in the
-    destination's `Close`. The batch is still written to the batching destination, but its acks are refused,
-    so those records are delivered again after the restart: duplicates, not loss.
+    destination's `Close`. The batch is still written to the batching destination, but its acks are refused;
+    records the source had not been acked past are delivered again after the restart (duplicates, not loss).
 - No user report. We know of no affected deployment.
 
 ## How it was detected
