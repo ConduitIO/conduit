@@ -237,3 +237,80 @@ func TestResolveEnv_LiteralDollar(t *testing.T) {
 		t.Errorf("expanded value was scanned again: %q", got)
 	}
 }
+
+// TestResolveEnv_TemplateText: setting text is never partly interpreted. A
+// reference to a name that is not allowed is refused whether it is written
+// $NAME or ${NAME}, in every kind of setting (URLs, paths, connection
+// strings, templates), because a literal that survives here could be expanded
+// by a consumer that does its own environment expansion. A Go template that
+// needs a literal "$" writes "$$" (see docs/operations/env-allowlist.md).
+func TestResolveEnv_TemplateText(t *testing.T) {
+	t.Setenv("x", "LEAKED")
+	t.Setenv("SECRET", "s3cr3t")
+	t.Setenv("ALLOWED", "okay")
+	a := mustAllow(t, "ALLOWED")
+
+	for _, in := range []string{
+		`{{ $x := .Key }}{{ $x }}`,
+		`http://h/?k=$SECRET`,
+		`http://h/?k=${SECRET}`,
+		`{{ ${x} }}`,
+		`postgres://u:$SECRET@h/db`,
+		`/data/$SECRET/file`,
+	} {
+		t.Run("refused/"+in, func(t *testing.T) {
+			got, err := ResolveEnv(a, in)
+			_ = wantCode(t, err, CodeEnvVarNotAllowed)
+			if got != "" {
+				t.Fatalf("got %q on refusal, want empty", got)
+			}
+		})
+	}
+
+	for in, want := range map[string]string{
+		`{{ $$x := .Payload.After.name }}{{ $$x }}`:        `{{ $x := .Payload.After.name }}{{ $x }}`,
+		`{{ range $$i, $$e := .Items }}{{ $$i }}{{ end }}`: `{{ range $i, $e := .Items }}{{ $i }}{{ end }}`,
+		`{{ $$x }} ${ALLOWED}`:                             `{{ $x }} okay`,
+		`$$SECRET and $$${ALLOWED}`:                        `$SECRET and $okay`,
+	} {
+		t.Run("escaped/"+in, func(t *testing.T) {
+			is := is.New(t)
+			got, err := ResolveEnv(a, in)
+			is.NoErr(err)
+			is.Equal(got, want)
+			// an escaped dollar is not a reference: nothing to redact
+			wantExps := 0
+			if strings.Contains(in, "${ALLOWED}") {
+				wantExps = 1
+			}
+			is.Equal(len(Expansions(a, map[string]string{"k": in})), wantExps)
+		})
+	}
+
+	t.Run("ResolveSettings refuses the unescaped template", func(t *testing.T) {
+		_, err := ResolveSettings(nil, map[string]string{"template": `{{ $x := .Key }}`})
+		ce := wantCode(t, err, CodeEnvVarNotAllowed)
+		is.New(t).Equal(ce.ConfigPath, "settings.template")
+	})
+}
+
+func TestCollapseEscapes(t *testing.T) {
+	for in, want := range map[string]string{
+		"":                   "",
+		"plain":              "plain",
+		"$$x":                "$x",
+		"$$$$x":              "$$x",
+		"$$${A}":             "$${A}",
+		"${A} $x price$":     "${A} $x price$",
+		"{{ $$i }}{{ $$e }}": "{{ $i }}{{ $e }}",
+	} {
+		if got := CollapseEscapes(in); got != want {
+			t.Errorf("CollapseEscapes(%q) = %q, want %q", in, got, want)
+		}
+	}
+	// the escape resolves identically in ResolveEnv
+	got, err := ResolveEnv(nil, "{{ $$i }} $$$$x")
+	if err != nil || got != CollapseEscapes("{{ $$i }} $$$$x") {
+		t.Errorf("ResolveEnv and CollapseEscapes disagree: %q, %v", got, err)
+	}
+}

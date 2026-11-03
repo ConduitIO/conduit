@@ -148,7 +148,9 @@ func renderLLMSTxt(d generatedData) string {
 		"Off by default.\n")
 	b.WriteString("- [Environment variables in settings](https://github.com/ConduitIO/conduit/blob/main/docs/operations/env-allowlist.md): " +
 		"`${VAR}` in a connector or processor setting expands only for names the operator lists in `env.allow`; " +
-		"otherwise `config.env_var_not_allowed`. Off by default; not settable over the API.\n")
+		"otherwise `config.env_var_not_allowed`. Off by default; not settable over the API. " +
+		"In a Go template inside a setting, write `$$x` for a literal `$x` (`{{ $$x := .Key }}`); a bare `$x` is read as a reference and refused. " +
+		"A processor `condition` is not resolved, so it uses `$x` as written.\n")
 	b.WriteString("- [Outbound HTTP from built-in processors](https://github.com/ConduitIO/conduit/blob/main/docs/operations/outbound-http-egress.md): " +
 		"`webhook.http`, `ollama.request`, `openai.*` and `cohere.*` refuse private, loopback, link-local and metadata addresses " +
 		"(`processor.egress_blocked`), on every redirect hop, and ignore proxy variables; the operator exempts exact destinations with " +
