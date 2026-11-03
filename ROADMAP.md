@@ -255,15 +255,13 @@ it and fixes pipelines using the default DLQ being refused at start.
       their rules land (v0.22)
 - [x] **Certified connectors** for the `migrate` targets (#3202): Postgres CDC with Debezium
       parity, MySQL CDC (beta), Elasticsearch, Kafka and the S3 sink, against acceptance suite v2
-- [x] **Debezium-compatible output** for Postgres: `debezium.encode` processor (#3183) and a
-      harness that diffs against real Debezium captures (#3075)
 - [x] **Protocol v3** and lossless structured values: int64, uint64, bytes and decimal cross the
       plugin boundary exactly (#3191)
 - [x] **Protobuf decode** for Confluent Schema Registry (`protobuf.decode`, #3179)
 - [x] **Secrets at rest**: `${VAR}` references are stored, not values, and resolved at provision
       time (#3180)
-- [x] **Processor batch API**, a `stateless` declaration and processor input isolation (#3178,
-      #3190)
+- [x] Processor input isolation, which keeps DLQ records faithful (#3190). The batch API and the
+      `stateless` declaration are designed (#3178); wiring them is #3184, still open
 - [x] **Engine**: arch-v2 destination-write batching and read-ahead (#3201, #3210), the benchi
       regression gate (#3187), and the guarantees page and life-of-a-record guide (#3194)
 - [x] Per-connector record and error counters (#3185), docker-compose quickstart and `deploy/`
@@ -299,14 +297,17 @@ and two green nightlies on the release branch.
       config it can't translate. Rules for Debezium Postgres, S3 sink and MirrorMaker 2
       (#3074, #3078, #3188, #3181, #3118). The remaining classes are in v0.22
 - [x] **Postgres CDC, Debezium parity** (connector v0.15.0), certified (#3202)
-- [x] **Debezium-compatible output mode for Postgres**: `debezium.encode` (#3183), with a harness
-      that diffs against real Debezium captures (#3075)
+- [ ] **Debezium-compatible output mode for Postgres**: not shipped. The diff harness and real
+      Debezium goldens exist (#3075), and `debezium.encode` exists (#3183) but is not registered as
+      a built-in, and the Postgres and Kafka connectors cannot carry its output yet
 - [x] **MySQL CDC beta**, certified from the labs `mysql` connector (#3202)
-- [x] **Elasticsearch** certified from labs, with OpenSearch (#3202)
-- [x] **Kafka→Kafka** certified (#3202), with MirrorMaker 2 translation (#3118). Not confirmed:
-      the Redpanda profile
+- [x] **Elasticsearch** certified from labs (#3202). OpenSearch is not certified yet
+- [ ] **Kafka→Kafka**, partial: the connector is certified (#3202) and MirrorMaker 2 configs
+      translate (#3118), but `migrate` does not yet preserve partition, headers and timestamp, and
+      the Redpanda profile is not confirmed
 - [x] **S3 sink** format and partitioning parity with the Kafka Connect S3 sink, and the AWS
-      default credential chain (`conduit-connector-s3`#1021, #1022; design #3083)
+      default credential chain (`conduit-connector-s3`#1021, #1022; design #3083). `migrate` still
+      blocks S3 sink migrations on `kc.output_shape_differs`
 - [x] Migration harness: corpus, report contract and CI job (#3071, #3072)
 
 #### Connector platform
@@ -325,7 +326,8 @@ and two green nightlies on the release branch.
       batching and read-ahead (#3201, #3210). The default flip and deletion of the v1 engine are
       v0.22
 - [x] Groundwork: a simulated-connector test kit, `make bench-engine`, and a per-PR benchmark comment
-- [x] Processor batch API, and a `stateless` declaration for processors (#3178)
+- [ ] Processor batch API, and a `stateless` declaration for processors: designed (#3178);
+      wiring is #3184, still open
 - [x] The guarantees page and the life-of-a-record guide (#3194)
 
 #### Formats and security
