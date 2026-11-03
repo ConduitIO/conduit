@@ -56,12 +56,20 @@ const (
 	envFanoutTotal        = "CONDUIT_CHAOS_FANOUT_TOTAL"
 	envFanoutPaceMS       = "CONDUIT_CHAOS_FANOUT_PACE_MS"
 	envFanoutDestBDelayMS = "CONDUIT_CHAOS_FANOUT_DEST_B_DELAY_MS"
+	// envFanoutDestABatch and envFanoutDestBNackEvery are optional (unset
+	// means 0, the original scenario); see fanoutChildConfig.
+	envFanoutDestABatch     = "CONDUIT_CHAOS_FANOUT_DEST_A_BATCH"
+	envFanoutDestBNackEvery = "CONDUIT_CHAOS_FANOUT_DEST_B_NACK_EVERY"
 
 	// markerFanoutDone is the graceful "ran to total and stopped cleanly"
 	// completion marker for this scenario - printed only by the restart run
 	// that is allowed to finish (the first run is always SIGKILLed, which by
 	// definition never prints anything more).
 	markerFanoutDone = "FANOUT_DONE"
+	// markerFanoutShortCommit is printed instead of markerFanoutDone when a
+	// batching-destA run stops with fewer than total positions committed: the
+	// run itself failed, so its ledgers prove nothing about loss.
+	markerFanoutShortCommit = "FANOUT_SHORT_COMMIT"
 )
 
 // fanoutChildConfig is the parent-side (harness) counterpart to
@@ -89,6 +97,17 @@ type fanoutChildConfig struct {
 	// the same instant and the scenario this test exists to exercise would
 	// rarely actually occur.
 	destBDelayMS int
+
+	// destABatch > 1 makes destA a batching destination (sdk.batch.size),
+	// so it holds earlier records unwritten while destB moves on.
+	// destBNackEvery > 0 makes destB fail (nack) every position divisible by
+	// it; the DLQ accepts every nack. Together they are the #3323 shape: a
+	// sibling nacks a later record while destA still buffers earlier ones.
+	destABatch     int
+	destBNackEvery int
+	// persistDelayMS overrides the persister debounce (0 = default), so a
+	// position acked past destA's buffer is durable before destA flushes.
+	persistDelayMS int
 }
 
 func (c fanoutChildConfig) env() []string {
@@ -103,6 +122,9 @@ func (c fanoutChildConfig) env() []string {
 		envFanoutTotal + "=" + strconv.FormatUint(c.total, 10),
 		envFanoutPaceMS + "=" + strconv.Itoa(c.paceMS),
 		envFanoutDestBDelayMS + "=" + strconv.Itoa(c.destBDelayMS),
+		envFanoutDestABatch + "=" + strconv.Itoa(c.destABatch),
+		envFanoutDestBNackEvery + "=" + strconv.Itoa(c.destBNackEvery),
+		envPersistDelayMS + "=" + strconv.Itoa(c.persistDelayMS),
 	}
 }
 
@@ -118,6 +140,10 @@ type fanoutChildEnv struct {
 	paceMS int
 
 	destBDelayMS int
+
+	destABatch     int
+	destBNackEvery uint64
+	persistDelayMS int
 }
 
 // parseFanoutChildEnv reads and validates this child's environment. Like
@@ -152,6 +178,33 @@ func parseFanoutChildEnv() fanoutChildEnv {
 	}
 	cfg.destBDelayMS = destBDelayMS
 
+	for _, v := range []struct {
+		env string
+		dst *int
+	}{
+		{envFanoutDestABatch, &cfg.destABatch},
+		{envPersistDelayMS, &cfg.persistDelayMS},
+	} {
+		raw := os.Getenv(v.env)
+		if raw == "" {
+			continue
+		}
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 0 {
+			fmt.Fprintf(os.Stderr, "%s: invalid %s: %q\n", markerFatal, v.env, raw)
+			os.Exit(exitBadArgs)
+		}
+		*v.dst = n
+	}
+	if raw := os.Getenv(envFanoutDestBNackEvery); raw != "" {
+		n, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s: invalid %s: %q\n", markerFatal, envFanoutDestBNackEvery, raw)
+			os.Exit(exitBadArgs)
+		}
+		cfg.destBNackEvery = n
+	}
+
 	if cfg.dbDir == "" || cfg.upstreamDir == "" || cfg.destADir == "" || cfg.destBDir == "" || cfg.dlqDir == "" {
 		fmt.Fprintf(os.Stderr, "%s: %s, %s, %s, %s and %s are required\n",
 			markerFatal, envFanoutDBDir, envFanoutUpstreamDir, envFanoutDestADir, envFanoutDestBDir, envFanoutDLQDir)
@@ -180,9 +233,22 @@ type fanoutDestination struct {
 	id    string
 	log   *deliveryLog
 	delay time.Duration
+	// nackEvery > 0 fails every position divisible by it: the record is not
+	// recorded in log and its ack carries an error, as a failed write would.
+	nackEvery uint64
 
 	mu      sync.Mutex
 	pending []connector.DestinationAck
+	// highest is the highest position Write has been handed, written or
+	// failed. See waitFanoutDestinationSaw.
+	highest uint64
+}
+
+// Highest returns the highest position Write has been handed so far.
+func (d *fanoutDestination) Highest() uint64 {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.highest
 }
 
 func (d *fanoutDestination) ID() string                     { return d.id }
@@ -201,6 +267,14 @@ func (d *fanoutDestination) Write(_ context.Context, recs []opencdc.Record) erro
 		pos, err := decodePosition(r.Position)
 		if err != nil {
 			return fmt.Errorf("fanoutDestination %s: decode position %s: %w", d.id, r.Position, err)
+		}
+		d.highest = max(d.highest, pos)
+		if d.nackEvery > 0 && pos%d.nackEvery == 0 {
+			d.pending = append(d.pending, connector.DestinationAck{
+				Position: r.Position,
+				Error:    fmt.Errorf("fanoutDestination %s: simulated write failure at position %d", d.id, pos),
+			})
+			continue
 		}
 		sourceID := r.Metadata[metadataSourceKey] // "" if this record carries no salt (see type doc)
 		if err := d.log.Record(sourceID, pos); err != nil {
@@ -237,6 +311,8 @@ func runChildFanout() {
 		upstreamDir: cfg.upstreamDir,
 		paceMS:      cfg.paceMS,
 		total:       cfg.total,
+		// 0 (unset) keeps connector.DefaultPersisterDelayThreshold.
+		persistDelayMS: cfg.persistDelayMS,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", markerFatal, err)
@@ -261,12 +337,18 @@ func runChildFanout() {
 	}
 
 	destA := &fanoutDestination{id: "fanout-dest-a", log: logA}
-	destB := &fanoutDestination{id: "fanout-dest-b", log: logB, delay: time.Duration(cfg.destBDelayMS) * time.Millisecond}
+	destB := &fanoutDestination{
+		id: "fanout-dest-b", log: logB, delay: time.Duration(cfg.destBDelayMS) * time.Millisecond,
+		nackEvery: cfg.destBNackEvery,
+	}
 	dlqDest := &fanoutDestination{id: "fanout-dlq-dest", log: dlqLog}
 
 	logger := built.logger
 	srcTask := funnel.NewSourceTask("fanout-source-task", built.src, logger, funnel.NoOpConnectorMetrics{})
 	destATask := funnel.NewDestinationTask("fanout-dest-a-task", destA, logger, funnel.NoOpConnectorMetrics{})
+	if cfg.destABatch > 1 {
+		destATask = funnel.NewBatchingDestinationTask("fanout-dest-a-task", destA, logger, funnel.NoOpConnectorMetrics{}, cfg.destABatch, 0)
+	}
 	destBTask := funnel.NewDestinationTask("fanout-dest-b-task", destB, logger, funnel.NoOpConnectorMetrics{})
 
 	destANode := &funnel.TaskNode{Task: destATask}
@@ -316,7 +398,17 @@ func runChildFanout() {
 	// before this fix). This loop's timeout is sized for this scenario
 	// instead, and also fails loudly (rather than hanging) if the worker's
 	// Do goroutine ever exits with an error while waiting.
-	waitFanoutUpstreamCommitted(built.upstream, cfg.total, doErr)
+	// A batching destA flushes only when its buffer fills, so up to
+	// destABatch-1 trailing records stay buffered (and uncommitted) until
+	// Stop drains them. Waiting for the commit would never finish; wait
+	// instead until the unbatched destB has been handed the last position,
+	// which means the worker has read every record, then Stop, and require
+	// the drain to commit all of them (below).
+	if cfg.destABatch > 1 {
+		waitFanoutDestinationSaw(destB, cfg.total, doErr)
+	} else {
+		waitFanoutUpstreamCommitted(built.upstream, cfg.total, doErr)
+	}
 
 	if err := worker.Stop(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: stop worker: %v\n", markerFatal, err)
@@ -331,9 +423,49 @@ func runChildFanout() {
 		os.Exit(exitOpenOtherError)
 	}
 	built.persister.WaitPendingWrites()
+	if cfg.destABatch > 1 {
+		// The commit that follows the drain's Source.Ack is asynchronous, so
+		// poll for it. A run that stops short is a failed run, not a result:
+		// the worker read every record (see above), so a short commit means
+		// the drain did not ack them, and the parent must not go on to read
+		// the ledgers and report the gap as data loss. Exit without the done
+		// marker, with markerFanoutShortCommit so the parent names the cause.
+		for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(time.Millisecond) {
+			committed, err := built.upstream.Committed()
+			if err == nil && committed >= cfg.total {
+				break
+			}
+			if time.Now().After(deadline) {
+				fmt.Fprintf(os.Stderr, "%s: after stop, upstream committed %d of %d (err=%v)\n",
+					markerFanoutShortCommit, committed, cfg.total, err)
+				fmt.Printf("%s: committed %d of %d\n", markerFanoutShortCommit, committed, cfg.total)
+				os.Exit(exitOpenOtherError)
+			}
+		}
+	}
 
 	fmt.Println(markerFanoutDone)
 	os.Exit(exitOK)
+}
+
+// waitFanoutDestinationSaw blocks until d has been handed position total (the
+// worker has read every record), with the same timeout and early-exit
+// reporting as waitFanoutUpstreamCommitted.
+func waitFanoutDestinationSaw(d *fanoutDestination, total uint64, doErr <-chan error) {
+	const timeout = 25 * time.Second
+	for deadline := time.Now().Add(timeout); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+		if d.Highest() >= total {
+			return
+		}
+		select {
+		case doneErr := <-doErr:
+			fmt.Fprintf(os.Stderr, "%s: worker.Do exited early (err=%v) before %s saw position %d\n", markerFatal, doneErr, d.id, total)
+			os.Exit(exitOpenOtherError)
+		default:
+		}
+	}
+	fmt.Fprintf(os.Stderr, "%s: timed out after %s waiting for %s to see position %d\n", markerFatal, timeout, d.id, total)
+	os.Exit(exitOpenOtherError)
 }
 
 // waitFanoutUpstreamCommitted polls until the upstream store reports total

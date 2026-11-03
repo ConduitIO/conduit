@@ -16,6 +16,7 @@ package funnel
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -23,17 +24,20 @@ import (
 	"github.com/matryer/is"
 )
 
-// Both tests below were written because guardmut found that deleting the
-// "already terminal" guards in multiAckNacker left every test green. The
-// existing "nack then ack" test uses one vote per branch, where the mutant
-// behaves the same. These put the position BEHIND a pending one, so it stays
-// unreleased while the extra votes arrive, and the extra vote is observable.
+// The tests below guard multiAckNacker's refusal of a vote for a position that
+// already has a vote from every branch. Before #3323 a nack was terminal on its
+// own, so a sibling's later ack was the normal case and was ignored. Now a
+// position is terminal only once all M branches have voted, so a further vote
+// can only be a branch voting twice, and it is refused with a (bug) error. Each
+// test puts the position BEHIND a pending one, so it stays unreleased while the
+// extra vote arrives and a mutant that counts the vote is observable. The same
+// refusal before every branch has voted is covered by
+// TestMultiAckNacker_DoubleVoteBeforeAllVoted_IsRefused.
 
-// A duplicate ack vote from one branch must not turn a nacked position into an
-// acked one (invariant 3: nack wins, a record is never partially acked). With
-// two branches, branch A's second ack would otherwise reach the branch count
-// and flip the position to acked before it is released.
-func TestMultiAckNacker_DuplicateAckAfterNack_DoesNotFlipToAck(t *testing.T) {
+// TestMultiAckNacker_AckAfterAllBranchesVoted_IsRefused: an extra ack for a
+// nacked position must be refused, and must not turn the position into an
+// acked one (invariant 3: nack wins, a record is never partially acked).
+func TestMultiAckNacker_AckAfterAllBranchesVoted_IsRefused(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	records := randomRecords(2)
@@ -42,17 +46,23 @@ func TestMultiAckNacker_DuplicateAckAfterNack_DoesNotFlipToAck(t *testing.T) {
 	parent := &fakeParentAckNacker{}
 	m := mustNewMultiAckNacker(t, parent, 2, positions)
 
-	// Position 1 is nacked by branch B while position 0 is still pending, so it is not released yet.
-	is.NoErr(m.Nack(ctx, nackBatchFor(records, positions[1], cerrors.New("dest B failed")), "destB"))
-	// Branch A acks position 1, then (a bug in a branch) acks it again.
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, positions[1])))
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, positions[1])))
-	// Position 0 completes and releases the prefix.
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, positions[0])))
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, positions[0])))
+	// Position 1: branch B nacks, branch A acks. Both have voted; position 0
+	// is still pending, so nothing is released yet.
+	is.NoErr(m.branch(1).Nack(ctx, nackBatchFor(records, positions[1], cerrors.New("dest B failed")), "destB"))
+	is.NoErr(m.branch(0).Ack(ctx, ackBatchFor(records, positions[1])))
+	// Branch A (a bug in a branch) acks position 1 again.
+	err := m.branch(0).Ack(ctx, ackBatchFor(records, positions[1]))
+	is.True(err != nil)
+	is.True(strings.Contains(err.Error(), "(bug)"))
+	is.Equal(len(parent.ackCalls()), 0)
+	is.Equal(len(parent.nackCalls()), 0)
+
+	// Position 0 completes and releases the prefix: position 1 is still a nack.
+	is.NoErr(m.branch(0).Ack(ctx, ackBatchFor(records, positions[0])))
+	is.NoErr(m.branch(1).Ack(ctx, ackBatchFor(records, positions[0])))
 
 	nacks := parent.nackCalls()
-	is.Equal(len(nacks), 1) // position 1 reached the DLQ path
+	is.Equal(len(nacks), 1)
 	is.Equal(nacks[0].positions, []opencdc.Position{positions[1]})
 	for _, a := range parent.ackCalls() {
 		for _, p := range a.positions {
@@ -61,24 +71,52 @@ func TestMultiAckNacker_DuplicateAckAfterNack_DoesNotFlipToAck(t *testing.T) {
 	}
 }
 
-// The first nack for a position is terminal: a second nack from another branch
-// must not replace the DLQ attribution (task id, error) of the first, and the
-// position is DLQ'd once.
-func TestMultiAckNacker_SecondNackForTerminalPosition_IsIgnored(t *testing.T) {
-	is := is.New(t)
-	ctx := context.Background()
-	records := randomRecords(2)
-	positions := []opencdc.Position{records[0].Position, records[1].Position}
+// TestMultiAckNacker_NackAfterAllBranchesVoted_IsRefused: an extra nack for a
+// position every branch acked must be refused and must not flip it to a nack.
+// With the refusal deleted it would be routed to the DLQ instead of acked. A
+// second nack from a different branch BEFORE every vote is in only counts as a
+// vote: the first nack's attribution stands.
+func TestMultiAckNacker_NackAfterAllBranchesVoted_IsRefused(t *testing.T) {
+	t.Run("extra nack after unanimous ack", func(t *testing.T) {
+		is := is.New(t)
+		ctx := context.Background()
+		records := randomRecords(2)
+		positions := []opencdc.Position{records[0].Position, records[1].Position}
 
-	parent := &fakeParentAckNacker{}
-	m := mustNewMultiAckNacker(t, parent, 2, positions)
+		parent := &fakeParentAckNacker{}
+		m := mustNewMultiAckNacker(t, parent, 2, positions)
 
-	is.NoErr(m.Nack(ctx, nackBatchFor(records, positions[1], cerrors.New("first")), "first-task"))
-	is.NoErr(m.Nack(ctx, nackBatchFor(records, positions[1], cerrors.New("second")), "second-task"))
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, positions[0])))
-	is.NoErr(m.Ack(ctx, ackBatchFor(records, positions[0])))
+		is.NoErr(m.branch(0).Ack(ctx, ackBatchFor(records, positions[1])))
+		is.NoErr(m.branch(1).Ack(ctx, ackBatchFor(records, positions[1])))
+		err := m.branch(0).Nack(ctx, nackBatchFor(records, positions[1], cerrors.New("late")), "late-task")
+		is.True(err != nil)
+		is.True(strings.Contains(err.Error(), "(bug)"))
 
-	nacks := parent.nackCalls()
-	is.Equal(len(nacks), 1)
-	is.Equal(nacks[0].taskID, "first-task") // the first nack's attribution stands
+		is.NoErr(m.branch(0).Ack(ctx, ackBatchFor(records, positions[0])))
+		is.NoErr(m.branch(1).Ack(ctx, ackBatchFor(records, positions[0])))
+
+		is.Equal(len(parent.nackCalls()), 0)
+		acks := parent.ackCalls()
+		is.Equal(len(acks), 1)
+		is.Equal(acks[0].positions, positions)
+	})
+
+	t.Run("two branches nack: first attribution stands", func(t *testing.T) {
+		is := is.New(t)
+		ctx := context.Background()
+		records := randomRecords(2)
+		positions := []opencdc.Position{records[0].Position, records[1].Position}
+
+		parent := &fakeParentAckNacker{}
+		m := mustNewMultiAckNacker(t, parent, 2, positions)
+
+		is.NoErr(m.branch(0).Nack(ctx, nackBatchFor(records, positions[1], cerrors.New("first")), "first-task"))
+		is.NoErr(m.branch(1).Nack(ctx, nackBatchFor(records, positions[1], cerrors.New("second")), "second-task"))
+		is.NoErr(m.branch(0).Ack(ctx, ackBatchFor(records, positions[0])))
+		is.NoErr(m.branch(1).Ack(ctx, ackBatchFor(records, positions[0])))
+
+		nacks := parent.nackCalls()
+		is.Equal(len(nacks), 1)
+		is.Equal(nacks[0].taskID, "first-task")
+	})
 }

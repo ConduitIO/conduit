@@ -160,8 +160,17 @@ One pass of `Worker.Do`:
    batch stalls v2 ([#2990](https://github.com/ConduitIO/conduit/issues/2990)).
 5. Votes go to `multiAckNacker`, which tracks ack/nack per original source position, not per batch
    (ADR [`20260731-archv2-fanout-ack-model`](../architecture-decision-records/20260731-archv2-fanout-ack-model.md)).
-   A position is acked when every branch acked it; the first nack wins (invariant 3). It releases the
-   leading run of terminal positions to the parent in source order (invariant 4).
+   A position is acked when every branch acked it; the first nack decides the outcome (invariant 3). A
+   position becomes terminal only once every branch has voted, for a nack as for an ack
+   (ADR [`20261103-archv2-fanout-nack-waits-for-every-vote`](../architecture-decision-records/20261103-archv2-fanout-nack-waits-for-every-vote.md)).
+   It releases the leading run of terminal positions to the parent in source order (invariant 4). Because
+   every branch votes in source order, this order also holds across batches while a batching destination
+   still holds an earlier one. The cost: a record a sibling nacks reaches the DLQ only when the batching
+   destination flushes, and with the default DLQ the pipeline fails only then. With `sdk.batch.size` and no
+   `sdk.batch.delay` on a quiet source that is unbounded until #3231; see
+   [the runbook](../operations/archv2-destination-batching.md#fan-out-a-nack-waits-for-the-batching-destination).
+   A release to the parent that fails is final: a later vote returns the same error and never retries it,
+   so a record is not written to the DLQ twice. A second vote from the same branch is refused as a bug.
 6. `runAckNacker` holds back the position of a record that a processor split until every piece is terminal
    (invariant 1 for split records).
 7. `Worker.Ack` calls `Source.Ack` with the released positions. `Worker.Nack` writes the nacked records that

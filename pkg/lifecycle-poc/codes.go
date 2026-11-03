@@ -71,6 +71,16 @@ var (
 // its acks and stall the stop-and-wait loop. The DLQ is not wired through that
 // path, so its SDK destination batching still withholds acks and is refused.
 //
+// With a fan-out (one source, several destinations), a record another
+// destination nacks is handled only once a batching destination has also
+// voted for it, that is when that destination's batch flushes (#3323): the
+// DLQ write, and with the default DLQ (window-size 1, window-nack-threshold 0)
+// the pipeline failure, wait for that flush. With sdk.batch.size and no
+// sdk.batch.delay on a quiet source that wait has no bound until the next
+// records fill the batch or the pipeline is stopped (#3231), and the pipeline
+// reports running meanwhile. Set sdk.batch.delay to bound it. See
+// docs/operations/archv2-destination-batching.md.
+//
 // The v2 destination task writes a batch and then waits for every ack of it
 // before the next read. With sdk.batch.size > 1 the SDK destination only
 // enqueues on Write and acks when its batch flushes: when it reaches
