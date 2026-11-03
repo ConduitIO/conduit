@@ -19,6 +19,7 @@ package avro
 
 import (
 	"context"
+	"maps"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -44,6 +45,8 @@ type encodeConfig struct {
 	Schema schemaConfig `json:"schema"`
 
 	fieldResolver sdk.ReferenceResolver
+	// part is the record part the field replaces as a whole (see classifyField).
+	part recordPart
 }
 
 func parseEncodeConfig(ctx context.Context, c config.Config) (encodeConfig, error) {
@@ -64,6 +67,7 @@ func parseEncodeConfig(ctx context.Context, c config.Config) (encodeConfig, erro
 		return encodeConfig{}, cerrors.Errorf("failed parsing target field: %w", err)
 	}
 	cfg.fieldResolver = rr
+	cfg.part = classifyField(rr)
 
 	return cfg, nil
 }
@@ -108,6 +112,13 @@ It provides two strategies for determining the schema:
   registers each inferred schema in the schema registry with the same subject, therefore the schema compatibility
   checks need to be disabled for this schema to prevent failures. If the schema subject does not exist before running
   this processor, it will automatically set the correct compatibility settings in the schema registry.
+
+When the encoded field is the whole key or the whole payload (` + "`.Key`, `.Payload.After`, `.Payload.Before`" + `),
+the record's schema metadata for that part (` + "`opencdc.key.schema.*`" + ` or ` + "`opencdc.payload.schema.*`" + `) is removed, because
+it described the value that was replaced. The encoded bytes carry the schema ID in the registry wire format.
+A destination's schema extraction therefore does not decode them a second time. Before and After share the payload
+schema metadata, so encoding one of them also removes the schema from the other; encode both or neither if the
+destination needs it.
 
 This processor is the counterpart to [` + "`avro.decode`" + `](/docs/using/processors/builtin/avro.decode).`,
 		Version:    "v0.1.0",
@@ -167,7 +178,81 @@ func (p *EncodeProcessor) processRecord(ctx context.Context, rec opencdc.Record)
 	if err != nil {
 		return nil, cerrors.Errorf("failed setting encoded value into the record: %w", err)
 	}
+	rec.Metadata = p.dropStaleSchemaMetadata(rec.Metadata)
 	return sdk.SingleRecord(rec), nil
+}
+
+// dropStaleSchemaMetadata removes the schema subject and version metadata that
+// described the field before it was encoded.
+//
+// Invariant 6: when the processor replaces a whole payload part or the key with
+// Avro bytes in the registry wire format, the subject and version the source
+// attached describe the value that was just replaced, not these bytes. Left in
+// place, a downstream SDK schema-extraction middleware (Kafka and other
+// destinations) would decode the already-encoded bytes a second time with the
+// source schema, failing every record or, worse, reading them as the wrong
+// type. The wire format is self-describing (it carries the schema ID), so a
+// destination that wants the schema reads it from there. Writing the encoded
+// schema into the metadata instead would not help: the middleware unmarshals
+// plain Avro and does not understand the wire-format header.
+//
+// Only a field that is the whole key or the whole of payload.before/after is
+// affected. A nested field (.Payload.After.foo) leaves the record structured
+// and the SDK schema-encode middleware keeps managing its schema.
+func (p *EncodeProcessor) dropStaleSchemaMetadata(md opencdc.Metadata) opencdc.Metadata {
+	var keys [2]string
+	switch p.cfg.part {
+	case partKey:
+		keys = [2]string{opencdc.MetadataKeySchemaSubject, opencdc.MetadataKeySchemaVersion}
+	case partPayload:
+		keys = [2]string{opencdc.MetadataPayloadSchemaSubject, opencdc.MetadataPayloadSchemaVersion}
+	case partNone:
+		return md
+	}
+	_, hasSubject := md[keys[0]]
+	_, hasVersion := md[keys[1]]
+	if !hasSubject && !hasVersion {
+		return md
+	}
+	// The map is shared with the input record; do not mutate it.
+	md = maps.Clone(md)
+	delete(md, keys[0])
+	delete(md, keys[1])
+	return md
+}
+
+// recordPart is the record part a field reference replaces as a whole.
+type recordPart int
+
+const (
+	partNone    recordPart = iota // a nested field, or anything else
+	partKey                       // the whole key
+	partPayload                   // the whole of payload.before or payload.after
+)
+
+// classifyField resolves the reference against a probe record whose key,
+// before and after hold distinct sentinels, and reports which whole part it
+// names. Classifying by what the reference resolves to, not by its spelling,
+// covers every equivalent form (.Payload.After, .Payload["After"],
+// .Payload.after, ...).
+func classifyField(rr sdk.ReferenceResolver) recordPart {
+	key, before, after := opencdc.RawData("key-sentinel"), opencdc.RawData("before-sentinel"), opencdc.RawData("after-sentinel")
+	probe := opencdc.Record{Key: key, Payload: opencdc.Change{Before: before, After: after}}
+	ref, err := rr.Resolve(&probe)
+	if err != nil {
+		return partNone
+	}
+	got, ok := ref.Get().(opencdc.RawData)
+	if !ok {
+		return partNone
+	}
+	switch string(got) {
+	case string(key):
+		return partKey
+	case string(before), string(after):
+		return partPayload
+	}
+	return partNone
 }
 
 func (p *EncodeProcessor) Teardown(context.Context) error {
