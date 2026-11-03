@@ -12,13 +12,13 @@ require (
 	github.com/cohere-ai/cohere-go/v2 v2.14.1
 	github.com/conduitio/conduit-commons v0.13.0
 	github.com/conduitio/conduit-connector-file v0.11.0
-	github.com/conduitio/conduit-connector-generator v0.10.8
+	github.com/conduitio/conduit-connector-generator v0.11.0
 	github.com/conduitio/conduit-connector-kafka v0.16.0
 	github.com/conduitio/conduit-connector-log v0.8.0
 	github.com/conduitio/conduit-connector-postgres v0.18.0
-	github.com/conduitio/conduit-connector-protocol v0.11.1
+	github.com/conduitio/conduit-connector-protocol v0.12.0
 	github.com/conduitio/conduit-connector-s3 v0.12.0
-	github.com/conduitio/conduit-connector-sdk v0.17.2
+	github.com/conduitio/conduit-connector-sdk v0.18.1
 	github.com/conduitio/conduit-processor-sdk v0.9.2
 	github.com/conduitio/conduit-schema-registry v0.2.7
 	github.com/conduitio/ecdysis v0.6.0
@@ -39,7 +39,7 @@ require (
 	github.com/in-toto/attestation v1.2.0
 	github.com/iskorotkov/avro/v2 v2.34.0
 	github.com/jackc/pgx/v5 v5.11.0
-	github.com/jpillora/backoff v1.0.0
+	github.com/jpillora/backoff v1.1.0
 	github.com/klauspost/compress v1.20.3
 	github.com/matryer/is v1.4.1
 	github.com/mattn/go-isatty v0.0.24
