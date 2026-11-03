@@ -206,4 +206,14 @@
 // nested data between branches shows as one branch writing another's edit,
 // and the persisted source position (invariant 1) and the restarted run's
 // coverage (invariant 3) are checked as in the cases above.
+//
+// Fan-out sibling nack (fanout_nack_order_sigkill_test.go, fanout_child.go,
+// #3323): arch-v2 funnel.Worker fanned out to a batching destination (size 50)
+// and a destination that fails every 5th position, with a DLQ that accepts
+// every nack and a 5ms persister debounce. SIGKILLed while the batching
+// destination holds a partial buffer, then restarted on the same state. The
+// batching destination must hold every position, and every position must be in
+// the other destination or the DLQ (invariants 1 and 3). Before the fix the
+// sibling's nack acked the source past the buffer and the restart resumed after
+// it: positions 101-120 were lost on 5 of 5 runs.
 package chaos

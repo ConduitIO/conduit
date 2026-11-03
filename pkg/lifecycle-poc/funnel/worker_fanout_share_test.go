@@ -141,13 +141,15 @@ func TestDoNextTask_FanOut_SharedRecords_DestinationBranchesShare(t *testing.T) 
 }
 
 // TestDoNextTask_FanOut_SharedRecords_NackToDLQLeavesSharedRecordIntact
-// covers the one path where a shared record leaves the fan-out while a
-// sibling may still be reading it: a nack. multiAckNacker releases a nacked
-// position as soon as it heads the queue, which can be before every other
-// branch has finished with that record, and the DLQ then builds its entry
-// from it. The DLQ must build a NEW record and leave the shared one as it
-// was; editing it (adding the nack error to its metadata, say) would be seen
-// by every sibling branch.
+// covers the one path where a shared record leaves the fan-out: a nack. The
+// DLQ builds its entry from the shared record, and must build a NEW record
+// and leave the shared one as it was; editing it (adding the nack error to its
+// metadata, say) would be seen by every sibling branch.
+//
+// Since #3323 multiAckNacker releases a nacked position only once every branch
+// has voted for it, so the DLQ is no longer written while a sibling still holds
+// the record: the test checks that too (the DLQ stays empty while destB is
+// blocked in Write), and then that the shared record came out intact.
 func TestDoNextTask_FanOut_SharedRecords_NackToDLQLeavesSharedRecordIntact(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
@@ -170,9 +172,8 @@ func TestDoNextTask_FanOut_SharedRecords_NackToDLQLeavesSharedRecordIntact(t *te
 	w, err := NewWorker(srcNode, dlq, logger, noop.Timer{})
 	is.NoErr(err)
 
-	// Hold destB inside its Write. A nack is terminal on its own and position
-	// 0 heads the queue, so destA's nack is released to the DLQ while destB
-	// is still holding the same record.
+	// Hold destB inside its Write. destA has nacked position 0, but destB has
+	// not voted for it yet, so it must not reach the DLQ (or the source).
 	blocked, unblock := destB.blockWrites(records[0].Position)
 	batch := NewBatch(append([]opencdc.Record(nil), records...))
 
@@ -180,7 +181,13 @@ func TestDoNextTask_FanOut_SharedRecords_NackToDLQLeavesSharedRecordIntact(t *te
 	go func() { done <- w.doTask(ctx, branchNode, batch, w) }()
 
 	<-blocked
-	waitForCondition(t, 5*time.Second, func() bool { return len(dlqDest.receivedPositions()) == 1 })
+	select {
+	case err := <-done:
+		t.Fatalf("fan-out returned while destB was blocked in Write: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	is.Equal(len(dlqDest.receivedPositions()), 0) // #3323: not released before destB's vote
+	is.Equal(len(src.ackedPositions()), 0)
 	unblock()
 	is.NoErr(<-done)
 
