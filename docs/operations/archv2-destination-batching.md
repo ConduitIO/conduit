@@ -68,7 +68,44 @@ Pick one:
 A pipeline that was running slowly with a non-zero delay now refuses to start with this error until one of the above
 is applied. No data is at risk: the pipeline never started, and its stored position is unchanged.
 
+## Fan-out: a nack waits for the batching destination
+
+Applies from the release that contains #3324. A pipeline with one source and several destinations, where one
+destination batches (`sdk.batch.size` above 1 or `sdk.batch.delay` above 0) and another nacks a record.
+
+### Symptom
+
+- The nacking destination logs the failed write, but the record reaches the DLQ later, and
+  `conduit_dlq_records_total` lags that log line.
+- With the default DLQ (`window-size: 1`, `window-nack-threshold: 0`) the pipeline does not fail when the
+  destination nacks. It keeps reporting **running** and fails later, when the batching destination flushes.
+- In the meantime the other destinations keep writing later records. When the pipeline fails they are not acked
+  to the source, so they are delivered again after a restart (duplicates, not loss).
+
+### Diagnosis
+
+A nacked position is handled (DLQ write, then source ack, or the pipeline failure with the default DLQ) only
+once every destination has voted for it. A batching destination votes when its batch flushes: when it is full,
+or `sdk.batch.delay` after its first record. Handling the nack earlier let the source position move past records
+the batching destination still held unwritten, and a crash then lost them (#3323, postmortem
+`docs/postmortems/20261103-archv2-fanout-sibling-nack-acks-past-buffered-batch.md`).
+
+With `sdk.batch.size` set and no `sdk.batch.delay`, on a source that goes quiet, the batch may not fill for a
+long time, and nothing bounds the wait until the source sends more records or the pipeline is stopped. #3231
+tracks a flush timer for this case.
+
+### Remediation
+
+- Set `sdk.batch.delay` on the batching destination (for example `1s`). The nack is then handled within that
+  delay.
+- Or stop the pipeline: a graceful stop flushes the batch and the nack is handled then.
+
+No data is at risk from the wait itself: nothing past the nacked record is acked to the source until it is
+handled.
+
 ## Related
 
 - Issue #2979
+- Issue #3323, PR #3324: a fan-out nack waits for every destination's vote
+- Issue #3231: flush timer for destination batches
 - Error code reference: `pipeline.archv2_destination_batching_unsupported` in `llms-full.txt`
