@@ -43,7 +43,25 @@ jobs:
         # fixed for #2534). -shuffle=on randomizes ordering on top of that;
         # go test prints the seed it used so a failure here is reproducible
         # locally with `-shuffle=<seed>`.
-        run: make test-integration GOTEST_FLAGS="-v -count=3 -shuffle=on"
+        #
+        # -timeout 30m: go test's timeout is per test binary and covers ALL
+        # -count iterations, so the 10m default left each iteration a third of
+        # the budget the PR `test` job (-count=1, 10m) gives it. The
+        # pkg/plugin/processor/standalone binary compiles and instantiates
+        # ~25 MB WASM guests under -race; it took 411-416s here on a fast
+        # runner and was killed at 10m on slow ones (same SHA, same tests,
+        # 2.25x slower cold compile of the same guest), with no test hung. 30m
+        # is 10m per iteration. TestFlakeHuntTimeoutCoversEveryIteration
+        # (flakehunt_timeout_test.go) keeps the two in step.
+        run: |
+          # Resource sampler (same as test.yml): a runner killed for memory
+          # ends with "The runner has received a shutdown signal" and exit 143
+          # and no FAIL line, so the samples are the only evidence of why.
+          ( while sleep 10; do echo "MEMSAMPLE $(date -u +%T) $(free -m | awk 'NR==2{print "used="$3" avail="$7} NR==3{print "swap="$3}' | tr '\n' ' ') top: $(ps -eo rss,args --sort=-rss | sed -n 2,4p | awk '{printf "%dMB:%s ", $1/1024, $2}' | sed 's#/home/runner/work/conduit/conduit/##g')"; done ) &
+          SAMPLER=$!
+          make test-integration GOTEST_FLAGS="-v -count=3 -shuffle=on -timeout 30m"; ret=$?
+          kill "$SAMPLER" 2>/dev/null || true
+          exit $ret
 
       - name: Report outcome
         if: failure()
