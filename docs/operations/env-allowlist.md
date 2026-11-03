@@ -54,7 +54,29 @@ characters is not replaced.
 
 `$$` is a literal `$` and expands nothing: `pa$$word` becomes `pa$word`, and `$${NAME}` becomes the
 text `${NAME}`. A `$` that cannot start a reference (at the end of a value, or followed by a space, a
-dot or punctuation, as in `price$` or `a$.`) is left as it is. Anything that looks like a reference
+dot or punctuation, as in `price$` or `a$.`) is left as it is.
+
+**Go templates.** Settings that hold a Go template (the `webhook.http` URL and body, the `error`
+message, a Kafka topic or Postgres table template) often use template variables
+such as `$x`. `$x` looks like a reference and is refused (`config.env_var_not_allowed`), exactly like
+`$SECRET` in a URL. Write `$$x` instead; it is stored and resolved to the literal `$x` before the
+template is parsed:
+
+```yaml
+settings:
+  tmpl: '{{ $$x := .Payload.After.name }}{{ $$x }}'
+```
+
+A processor `condition` is not a setting: it is never environment-resolved, so it takes `$x` exactly as
+written and `$$x` would break it. The escape is also applied when a connector is validated through the API
+or MCP (create and update), so the template validates as the text the connector will really get; the
+stored setting keeps the `$$`.
+
+The engine is the only place setting text is expanded. No connector or processor may run its own
+environment expansion (`os.ExpandEnv` and the like) on a setting; the `$$` escape relies on that.
+
+There is deliberately no per-setting exception. The same rule applies to every setting, so a URL, path
+or connection string can never carry a name that is not allowed. Anything that looks like a reference
 but is not a plain `${NAME}` / `$NAME` is refused as `config.env_ref_malformed`: `$1`, `$*`, `${A:-x}`,
 an unterminated `${`.
 

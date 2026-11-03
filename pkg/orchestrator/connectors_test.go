@@ -599,3 +599,64 @@ func TestConnectorOrchestrator_Update_Fail(t *testing.T) {
 	is.True(err != nil)
 	is.True(cerrors.Is(err, wantErr))
 }
+
+// The "$$" escape is a literal "$" at runtime, so validation (create and
+// update through the API) must see the collapsed text, while the stored
+// settings keep the escape.
+func TestConnectorOrchestrator_CreateUpdate_ValidateCollapsesDollarEscape(t *testing.T) {
+	const stored = `{{ $$x := index .Metadata "t" }}{{ $$x }} ${KEEP} $$${KEEP}`
+	const validated = `{{ $x := index .Metadata "t" }}{{ $x }} ${KEEP} $${KEEP}`
+
+	t.Run("create", func(t *testing.T) {
+		is := is.New(t)
+		ctx := context.Background()
+		plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+		lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).Times(1)
+		expectMutation(t, lifecycleMock, gomock.Any(), true)
+		pl := &pipeline.Instance{ID: uuid.NewString()}
+		pl.SetStatus(pipeline.StatusSystemStopped)
+		cfg := connector.Config{Name: "c", Settings: map[string]string{"topic": stored}}
+		want := &connector.Instance{ID: uuid.NewString(), Type: connector.TypeDestination, Plugin: "p", PipelineID: pl.ID, Config: cfg}
+
+		plsMock.EXPECT().Get(gomock.AssignableToTypeOf(ctxType), pl.ID).Return(pl, nil)
+		connPluginMock.EXPECT().
+			ValidateDestinationConfig(gomock.AssignableToTypeOf(ctxType), "p", map[string]string{"topic": validated}).
+			Return(nil)
+		consMock.EXPECT().
+			Create(gomock.AssignableToTypeOf(ctxType), gomock.AssignableToTypeOf(""), connector.TypeDestination, "p", pl.ID, cfg, connector.ProvisionTypeAPI).
+			Return(want, nil)
+		plsMock.EXPECT().AddConnector(gomock.AssignableToTypeOf(ctxType), pl.ID, want.ID).Return(pl, nil)
+
+		orc := NewOrchestrator(&inmemory.DB{}, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
+		_, err := orc.Connectors.Create(ctx, connector.TypeDestination, "p", pl.ID, cfg)
+		is.NoErr(err)
+		is.Equal(cfg.Settings["topic"], stored) // the caller's settings are not modified
+	})
+
+	t.Run("update", func(t *testing.T) {
+		is := is.New(t)
+		ctx := context.Background()
+		plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+		lifecycleMock.EXPECT().IsActive(gomock.Any()).Return(false).Times(1)
+		expectMutation(t, lifecycleMock, gomock.Any(), true)
+		pl := &pipeline.Instance{ID: uuid.NewString()}
+		pl.SetStatus(pipeline.StatusSystemStopped)
+		conn := &connector.Instance{
+			ID: uuid.NewString(), Plugin: "p", PipelineID: pl.ID, Type: connector.TypeDestination,
+			Config: connector.Config{Name: "c", Settings: map[string]string{"topic": "old"}},
+		}
+		newCfg := connector.Config{Name: "c", Settings: map[string]string{"topic": stored}}
+
+		consMock.EXPECT().Get(gomock.AssignableToTypeOf(ctxType), conn.ID).Return(conn, nil)
+		plsMock.EXPECT().Get(gomock.AssignableToTypeOf(ctxType), pl.ID).Return(pl, nil)
+		connPluginMock.EXPECT().
+			ValidateDestinationConfig(gomock.Any(), "p", map[string]string{"topic": validated}).
+			Return(nil)
+		consMock.EXPECT().Update(gomock.AssignableToTypeOf(ctxType), conn.ID, "p", newCfg).Return(conn, nil)
+
+		orc := NewOrchestrator(&inmemory.DB{}, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
+		_, err := orc.Connectors.Update(ctx, conn.ID, "p", newCfg)
+		is.NoErr(err)
+		is.Equal(newCfg.Settings["topic"], stored)
+	})
+}
