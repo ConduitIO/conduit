@@ -68,7 +68,9 @@ v1 pipeline configs key `pipelines`, `connectors`, and `processors` by map (`pip
 
 ## 2. Built-in connectors (6)
 
-### file (v0.11.0)
+Source batching: a source that leaves `sdk.batch.size` and `sdk.batch.delay` unset reads in batches (adaptive drain: it returns what is already queued, with no timer). Default sdk.batch.size of built-in sources: file (100), generator (100), kafka (100); not batched by default: postgres, s3. To read one record at a time, set both `sdk.batch.size: "0"` and `sdk.batch.delay: "0"` on the source connector. Runbook: docs/operations/source-batching.md.
+
+### file (v0.12.0)
 
 A file source and destination plugin for Conduit.
 
@@ -162,8 +164,8 @@ Author: Meroxa, Inc.
 | `rotatedPattern` | string |  | no | RotatedPattern is a glob that matches the rotated files of the path, for example "app.log.*" (relative to the directory of path unless it is absolute). Wildcards are only allowed in the last component, so the directory is literal; an embedding engine may refuse it (file.WithDirChecker). With it the source finds the rotation chain itself, orders it by modification time and reads every file in turn: the tail of the file it was reading, the files rotated in between from their first byte, then the current file. Without it the source stops with the error FILE_ROTATION_TAIL_UNREADABLE when it cannot account for a rotated file's unread tail. Compressed files are not read. |  |
 | `rotation.acceptLoss` | bool | false | no | RotationAcceptLoss makes the source continue, with a warning that names the code and the size of what is skipped, when the unread tail of a rotated file cannot be read, instead of stopping. |  |
 | `rotation.settle` | duration | 1s | no | RotationSettle is how long a rotated file's size must stay unchanged before the source leaves it for the next file. A writer that still holds the old file open (logrotate renames, then signals the program later) keeps appending to it, and those lines are read first. A file that grows again after the source left it is read again for a while. 0 switches at once. |  |
-| `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is read from the source. |  |
-| `sdk.batch.size` | int | 0 | no | Maximum size of batch before it gets read from the source. | greater-than(-1) |
+| `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is read from the source. 0 returns what is already queued without waiting. |  |
+| `sdk.batch.size` | int | 100 | no | Maximum size of batch before it gets read from the source. | greater-than(-1) |
 | `sdk.schema.context.enabled` | bool | true | no | Specifies whether to use a schema context name. If set to false, no schema context name will be used, and schemas will be saved with the subject name specified in the connector (not safe because of name conflicts). |  |
 | `sdk.schema.context.name` | string |  | no | Schema context name to be used. Used as a prefix for all schema subject names. If empty, defaults to the connector ID. |  |
 | `sdk.schema.extract.key.enabled` | bool | false | no | Whether to extract and encode the record key with a schema. |  |
@@ -186,7 +188,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-### generator (v0.10.8)
+### generator (v0.11.0)
 
 A plugin capable of generating dummy records (in different formats).
 
@@ -281,8 +283,8 @@ Author: Meroxa, Inc.
 | `rate` | float |  | no | The maximum rate in records per second, at which records are generated (0 means no rate limit). |  |
 | `readTime` | duration |  | no | The time it takes to 'read' a record.  Deprecated: use `rate` instead. |  |
 | `recordCount` | int |  | no | Number of records to be generated (0 means infinite). | greater-than(-1) |
-| `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is read from the source. |  |
-| `sdk.batch.size` | int | 0 | no | Maximum size of batch before it gets read from the source. | greater-than(-1) |
+| `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is read from the source. 0 returns what is already queued without waiting. |  |
+| `sdk.batch.size` | int | 100 | no | Maximum size of batch before it gets read from the source. | greater-than(-1) |
 | `sdk.schema.context.enabled` | bool | true | no | Specifies whether to use a schema context name. If set to false, no schema context name will be used, and schemas will be saved with the subject name specified in the connector (not safe because of name conflicts). |  |
 | `sdk.schema.context.name` | string |  | no | Schema context name to be used. Used as a prefix for all schema subject names. If empty, defaults to the connector ID. |  |
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and encode the record key with a schema. |  |
@@ -295,7 +297,7 @@ Author: Meroxa, Inc.
 
 (none)
 
-### kafka (v0.16.0)
+### kafka (v0.17.0)
 
 A Kafka source and destination plugin for Conduit, written in Go.
 
@@ -536,8 +538,8 @@ Author: Meroxa, Inc.
 | `saslMechanism` | string |  | no | Mechanism configures the connector to use SASL authentication. If empty, no authentication will be performed. | inclusion(PLAIN,SCRAM-SHA-256,SCRAM-SHA-512) |
 | `saslPassword` | string |  | no | Password sets up the password used with SASL authentication. |  |
 | `saslUsername` | string |  | no | Username sets up the username used with SASL authentication. |  |
-| `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is read from the source. |  |
-| `sdk.batch.size` | int | 0 | no | Maximum size of batch before it gets read from the source. | greater-than(-1) |
+| `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is read from the source. 0 returns what is already queued without waiting. |  |
+| `sdk.batch.size` | int | 100 | no | Maximum size of batch before it gets read from the source. | greater-than(-1) |
 | `sdk.schema.context.enabled` | bool | true | no | Specifies whether to use a schema context name. If set to false, no schema context name will be used, and schemas will be saved with the subject name specified in the connector (not safe because of name conflicts). |  |
 | `sdk.schema.context.name` | string |  | no | Schema context name to be used. Used as a prefix for all schema subject names. If empty, defaults to the connector ID. |  |
 | `sdk.schema.extract.key.enabled` | bool | false | no | Whether to extract and encode the record key with a schema. |  |
@@ -581,7 +583,7 @@ Author: Meroxa, Inc.
 | `tls.enabled` | bool |  | no | TLSEnabled defines whether TLS is needed to communicate with the Kafka cluster. |  |
 | `topic` | string | {{ index .Metadata "opencdc.collection" }} | no | Topic is the Kafka topic. It can contain a [Go template](https://pkg.go.dev/text/template) that will be executed for each record to determine the topic. By default, the topic is the value of the `opencdc.collection` metadata field. |  |
 
-### log (v0.8.0)
+### log (v0.9.0)
 
 A destination connector that logs all incoming records.
 
@@ -661,7 +663,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-### postgres (v0.18.0)
+### postgres (v0.20.0)
 
 Conduit connector for PostgreSQL
 
@@ -725,6 +727,39 @@ switches into CDC mode.
 
 This behavior is enabled by default, but can be turned off by adding
 `"snapshotMode": "never"` to the Source configuration.
+
+**Rows keyed 0 or below (v0.14.0 to v0.19.0)**
+
+The initial snapshot of v0.14.0 to v0.14.6 and v0.15.0 to v0.19.0 skipped every
+row whose primary key was 0 or negative: it read the table from `key > 0`. The
+slot only holds changes made after the snapshot, so those rows were delivered
+only if they changed later. No error was logged. A table is affected if it had
+rows keyed 0 or below when its snapshot ran; tables keyed from 1 (the bigserial
+default) are not.
+
+Fixed in v0.20.0. v0.20.0 and later read them:
+
+- A new snapshot reads every key.
+- A snapshot that was in progress on an affected version resumes and first reads
+  the rows keyed 0 or below that it skipped, then continues where it stopped. A
+  crash during that catch-up resumes it.
+- A pipeline that finished its snapshot on an affected version cannot be repaired
+  by the connector. On its first start it checks each table and logs a warning
+  with the code `postgres.source.snapshot_low_keys_skipped` for every table that has
+  rows keyed 0 or below. The warning is shown until the first record of that run
+  is acknowledged. It can be a false positive: a pipeline that never ran a
+  snapshot, or whose rows changed since, lost nothing.
+  The check waits at most 5 seconds per table. If a table is locked, or the
+  connector's role cannot SELECT from it, it logs a warning with the same code and
+  the pipeline starts anyway; the check runs again on the next start.
+
+To recover the rows of a table the warning names, do one of the following:
+
+- Run its snapshot again: create a new pipeline, or reset the pipeline's position.
+- Touch the rows, so the stream delivers them as updates, which destinations that
+  upsert by key apply as inserts: `UPDATE <table> SET <key> = <key> WHERE <key> <= 0`.
+
+To check a table yourself: `SELECT count(*) FROM <table> WHERE <key> <= 0`.
 
 **Change Data Capture**
 
@@ -1421,7 +1456,7 @@ Author: Meroxa, Inc.
 | `logrepl.slotIdentity.checkTimeout` | duration | 10m | no | LogreplSlotIdentityCheckTimeout bounds the replication slot identity check at start (#442), which reads the slot without consuming it to find the connector's identity beacon. It decodes from the slot's restart_lsn, so a long-running transaction that holds restart_lsn far back makes it slower; on Postgres 17+ it also waits for the standbys in synchronized_standby_slots. When it times out the start is refused with postgres.source.slot_identity_check_failed and retried. |  |
 | `logrepl.slotName` | string | conduitslot | no | LogreplSlotName determines the replication slot name in case the connector uses logical replication to listen to changes (see CDCMode). Can only contain lower-case letters, numbers, and the underscore character. | regex(^[a-z0-9_]+$) |
 | `logrepl.withAvroSchema` | bool | true | no | WithAvroSchema determines whether the connector should attach an avro schema on each record. |  |
-| `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is read from the source. |  |
+| `sdk.batch.delay` | duration | 0s | no | Maximum delay before an incomplete batch is read from the source. 0 returns what is already queued without waiting. |  |
 | `sdk.batch.size` | int | 0 | no | Maximum size of batch before it gets read from the source. | greater-than(-1) |
 | `sdk.schema.context.enabled` | bool | true | no | Specifies whether to use a schema context name. If set to false, no schema context name will be used, and schemas will be saved with the subject name specified in the connector (not safe because of name conflicts). |  |
 | `sdk.schema.context.name` | string |  | no | Schema context name to be used. Used as a prefix for all schema subject names. If empty, defaults to the connector ID. |  |
@@ -1430,7 +1465,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.payload.enabled` | bool | false | no | Whether to extract and encode the record payload with a schema. |  |
 | `sdk.schema.extract.payload.subject` | string | payload | no | The subject of the payload schema. If the record metadata contains the field "opencdc.collection" it is prepended to the subject name and separated with a dot. |  |
 | `sdk.schema.extract.type` | string | avro | no | The type of the payload schema. | inclusion(avro) |
-| `snapshot.fetchSize` | int | 50000 | no | Snapshot fetcher size determines the number of rows to retrieve at a time. |  |
+| `snapshot.fetchSize` | int | 50000 | no | Snapshot fetcher size determines the number of rows to retrieve at a time (the snapshot cursor page size). It must be greater than 0: Postgres answers a FETCH with a negative count with zero rows, which would end the snapshot of a table without emitting any record. This is now the only setting for the page size: `sdk.batch.size` no longer sets it. | greater-than(0) |
 | `snapshotMode` | string | initial | no | SnapshotMode is whether the plugin will take a snapshot of the entire table before starting cdc mode. | inclusion(initial,never) |
 | `tables` | string |  | yes | Tables is a List of table names to read from, separated by a comma, e.g.:"table1,table2". Use "*" if you'd like to listen to all tables. | required |
 | `url` | string |  | yes | URL is the connection string for the Postgres database. With TLS, SCRAM authentication does not use channel binding by default (`channel_binding=disable`); add `channel_binding=require` to the URL to require SCRAM-SHA-256-PLUS. | required |
@@ -1450,7 +1485,7 @@ Author: Meroxa, Inc.
 | `table` | string | {{ index .Metadata "opencdc.collection" }} | no | Table is used as the target table into which records are inserted. |  |
 | `url` | string |  | yes | URL is the connection string for the Postgres database. With TLS, SCRAM authentication does not use channel binding by default (`channel_binding=disable`); add `channel_binding=require` to the URL to require SCRAM-SHA-256-PLUS. The destination describes every statement before it runs it (`describe_exec`), so a column type change on a running pipeline takes effect on the next write. Set `default_query_exec_mode` (in the URL or in a service file) to `exec`, `simple_protocol`, `cache_statement` or `cache_describe` to override. The cached modes save a round trip per batch and check a per-table schema fingerprint, but they are safe only on a direct connection or behind a pooler that does not share prepared statements between clients. Behind PgBouncer (at any `max_prepared_statements`) or another statement-sharing pooler, keep `describe_exec`: a cached mode can convert values silently after a column type change. | required |
 
-### s3 (v0.12.0)
+### s3 (v0.13.0)
 
 An S3 source and destination plugin for Conduit, written in Go.
 
@@ -1765,7 +1800,7 @@ Author: Meroxa, Inc.
 | `lookbackPeriod` | duration | 5m | no | The late-visibility tolerance of change capture. An object is "settled" once it is older than this (by the store's clock); the source assumes that no object becomes visible in listings later than this after its LastModified (replication lag, a slow PUT and clock skew between store nodes must stay below it; multipart uploads are tracked separately). New objects are delivered at once while they fit cdc.maxEarlyObjects, the rest when they settle, so this is also the maximum extra latency on a busy bucket. Positions resume exactly whatever the value. 30s or more is supported; 1s to 29s is deprecated (a warning; rejected in a later release); 0 is accepted but lossy for late-visible objects; above 24h is rejected. |  |
 | `pollingPeriod` | duration | 1s | no | polling period for the CDC mode, formatted as a time.Duration string. |  |
 | `prefix` | string |  | no | the S3 key prefix. |  |
-| `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is read from the source. |  |
+| `sdk.batch.delay` | duration | 0s | no | Maximum delay before an incomplete batch is read from the source. 0 returns what is already queued without waiting. |  |
 | `sdk.batch.size` | int | 0 | no | Maximum size of batch before it gets read from the source. | greater-than(-1) |
 | `sdk.schema.context.enabled` | bool | true | no | Specifies whether to use a schema context name. If set to false, no schema context name will be used, and schemas will be saved with the subject name specified in the connector (not safe because of name conflicts). |  |
 | `sdk.schema.context.name` | string |  | no | Schema context name to be used. Used as a prefix for all schema subject names. If empty, defaults to the connector ID. |  |
@@ -1809,7 +1844,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (190)
+## 3. Error codes (193)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -1907,7 +1942,7 @@ Author: Meroxa, Inc.
 | `orchestrator.redacted_setting_plugin_changed` | InvalidArgument | CodeRedactedSettingPluginChanged is raised when an update sends "***" for a setting while changing the plugin (including only its version). A stored value, typically a credential, is never carried to a different plugin; the update must send real values. |
 | `orchestrator.redacted_setting_with_other_changes` | InvalidArgument | CodeRedactedSettingWithOtherChanges is raised when an update sends "***" (keep the stored value) for a setting while any other setting in the same update changes: a different value, an added key, or a removed key. A stored value is kept only by a pure round trip, so an update that repoints a host or URL cannot also ask Conduit to send the stored credential there. The update must send real values. |
 | `orchestrator.redacted_setting_without_stored_value` | InvalidArgument | CodeRedactedSettingWithoutStoredValue is raised when an update sends the redacted placeholder "***" for a setting that has no stored value. "***" in an update means "keep the stored value"; with nothing stored there is nothing to keep, and storing "***" itself would silently break the setting. |
-| `pipeline.archv2_destination_batching_unsupported` | FailedPrecondition | CodeArchV2DestinationBatchingUnsupported is returned by Start, and by the live-apply preflight (PreflightPipelineConfig), when a pipeline would run on the preview pipeline architecture v2 (--preview.pipeline-arch-v2) and the dead-letter-queue connector sets sdk.batch.size above 1 (#2979).  Regular destinations are no longer refused by this code: the funnel now batches destination writes itself using the destination's sdk.batch.size/sdk.batch.delay (see docs/design-documents/20261017-funnel-destination-batching.md) and strips the settings from the SDK plugin, so a destination batch can no longer withhold its acks and stall the stop-and-wait loop. The DLQ is not wired through that path, so its SDK destination batching still withholds acks and is refused.  The v2 destination task writes a batch and then waits for every ack of it before the next read. With sdk.batch.size > 1 the SDK destination only enqueues on Write and acks when its batch flushes: when it reaches sdk.batch.size, or sdk.batch.delay after its first record. When a destination batch is larger than the records per write, acks are withheld, and with the default sdk.batch.delay of 0 nothing flushes by time, so the pipeline stops delivering while still reporting Running. With a delay it delivers, but one flush per write (one measurement: 83 rec/s against 56.7k rec/s on the default engine, with one-record reads and a 10ms delay). The classic engine reads acks on their own goroutine and is not affected.  The guard is conservative: any sdk.batch.size above 1 is refused, even where a particular write size would happen to align with the batch. Size 0 or 1, or sdk.batch.delay on its own, is safe (the SDK flushes synchronously at the size). Refusing turns a silent liveness failure into an actionable error. It fires before any connector is opened, so nothing is read and nothing is acked (invariants 1 and 3). Values that do not parse as an integer are left to the plugin's own config validation. The SDK trims keys and values before reading them, so the guard does too.  The error names every offending connector; ConfigPath and Fix address the first one, as a JSON pointer into the pipeline config document (/dead-letter-queue/settings/sdk.batch.size). Remove sdk.batch.size (and sdk.batch.delay) from the dead-letter queue, or run without --preview.pipeline-arch-v2 if the pipeline does not need record fan-out. See docs/operations/archv2-destination-batching.md.  A pipeline created through the API has no config document, so for it the error carries no ConfigPath and no Fix; the message still names the connector id and name and the setting. |
+| `pipeline.archv2_destination_batching_unsupported` | FailedPrecondition | CodeArchV2DestinationBatchingUnsupported is returned by Start, and by the live-apply preflight (PreflightPipelineConfig), when a pipeline would run on the preview pipeline architecture v2 (--preview.pipeline-arch-v2) and the dead-letter-queue connector sets sdk.batch.size above 1 (#2979).  Regular destinations are no longer refused by this code: the funnel now batches destination writes itself using the destination's sdk.batch.size/sdk.batch.delay (see docs/design-documents/20261017-funnel-destination-batching.md) and strips the settings from the SDK plugin, so a destination batch can no longer withhold its acks and stall the stop-and-wait loop. The DLQ is not wired through that path, so its SDK destination batching still withholds acks and is refused.  With a fan-out (one source, several destinations), a record another destination nacks is handled only once a batching destination has also voted for it, that is when that destination's batch flushes (#3323): the DLQ write, and with the default DLQ (window-size 1, window-nack-threshold 0) the pipeline failure, wait for that flush. With sdk.batch.size and no sdk.batch.delay on a quiet source that wait has no bound until the next records fill the batch or the pipeline is stopped (#3231), and the pipeline reports running meanwhile. Set sdk.batch.delay to bound it. See docs/operations/archv2-destination-batching.md.  The v2 destination task writes a batch and then waits for every ack of it before the next read. With sdk.batch.size > 1 the SDK destination only enqueues on Write and acks when its batch flushes: when it reaches sdk.batch.size, or sdk.batch.delay after its first record. When a destination batch is larger than the records per write, acks are withheld, and with the default sdk.batch.delay of 0 nothing flushes by time, so the pipeline stops delivering while still reporting Running. With a delay it delivers, but one flush per write (one measurement: 83 rec/s against 56.7k rec/s on the default engine, with one-record reads and a 10ms delay). The classic engine reads acks on their own goroutine and is not affected.  The guard is conservative: any sdk.batch.size above 1 is refused, even where a particular write size would happen to align with the batch. Size 0 or 1, or sdk.batch.delay on its own, is safe (the SDK flushes synchronously at the size). Refusing turns a silent liveness failure into an actionable error. It fires before any connector is opened, so nothing is read and nothing is acked (invariants 1 and 3). Values that do not parse as an integer are left to the plugin's own config validation. The SDK trims keys and values before reading them, so the guard does too.  The error names every offending connector; ConfigPath and Fix address the first one, as a JSON pointer into the pipeline config document (/dead-letter-queue/settings/sdk.batch.size). Remove sdk.batch.size (and sdk.batch.delay) from the dead-letter queue, or run without --preview.pipeline-arch-v2 if the pipeline does not need record fan-out. See docs/operations/archv2-destination-batching.md.  A pipeline created through the API has no config document, so for it the error carries no ConfigPath and no Fix; the message still names the connector id and name and the setting. |
 | `pipeline.config_changing` | Unavailable | CodePipelineConfigChanging is raised when a pipeline start is refused because an update, delete or connector/processor change on that pipeline is writing its config. Starting inside that window would build the run from a half-applied config, or for a pipeline that is being deleted. The change is a short store write, never a node operation. Unavailable: retry the start shortly. |
 | `pipeline.config_persist_unknown` | Unavailable | CodeConfigPersistUnknown is raised when a pipeline create, update or delete could not be confirmed in the pipeline store: the write timed out, was retried once, and timed out again. The store may or may not hold the change, and until the next start this instance's view of the pipeline may differ from it; the next start loads what the store holds. Unavailable: check the database, then get the pipeline after the next start and repeat the change if it is missing. |
 | `pipeline.destination_empty_ack_flood` | Aborted | CodeDestinationEmptyAckFlood is returned when a destination sends more than maxConsecutiveEmptyAcks consecutive ack responses that each carry no ack while the engine is waiting for acks.  The connector protocol does not require a response to carry at least one ack, so an empty response is legal and the engine tolerates a bounded run of them. The bound is engine policy, not protocol enforcement: without it a destination that keeps answering with empty responses would keep the writer spinning on its receive loop forever. Nothing is acked upstream before this error is returned, so every unacked record is redelivered on restart (invariant 3). |
@@ -2003,6 +2038,9 @@ Author: Meroxa, Inc.
 | `scaffold.unsupported_language` | InvalidArgument | CodeUnsupportedLanguage is raised for --lang values other than "go" — today that's every value, since Go is the only ready target (see the design doc's feasibility verdict; Python is blocked on a connector SDK that does not exist yet). Maps to gRPC InvalidArgument -> exitcode.Validation (2). |
 | `scaffold.write_failed` | Internal | CodeWriteFailed is raised for internal I/O failures unpacking the embedded template snapshot into the staging directory, or performing the atomic rename into place. These are not user-fixable the way a bad flag or a missing toolchain is; they indicate something is wrong with the local filesystem itself. Maps to gRPC Internal -> exitcode.Runtime (1). |
 | `schema.avro.limit_exceeded` | ResourceExhausted | CodeAvroLimitExceeded is raised when an Avro payload declares an array or map with more elements than schema.avro.max-elements allows (default 1,000,000). The record is not decoded and nothing is truncated: it fails like any other decode error. With a DLQ enabled (threshold above 0) it is routed to the dead-letter queue; otherwise the pipeline is degraded (classic engine, avro.decode and processor paths) or recovering (classic engine destination path, and architecture v2), and a recovering pipeline re-reads the same record. Raise schema.avro.max-elements (0 removes the limit) if such records are legitimate. Applies to in-process decodes only. ResourceExhausted: the payload exceeds a configured limit. |
+| `sdk.batch.drain_semantics_pending` | InvalidArgument | CodeSDKBatchDrainSemanticsPending: an explicit sdk.batch.size above 0 with sdk.batch.delay 0 waits for a full batch today and will mean "return what is already queued" in a later SDK release. |
+| `sdk.batch.size_defaulted` | InvalidArgument | CodeSDKBatchSizeDefaulted: sdk.batch.delay was set while sdk.batch.size is 0, so the SDK substituted a bounded batch size. |
+| `sdk.batch.unbounded_wait` | InvalidArgument | CodeSDKBatchUnboundedWait: sdk.batch.size above 0 with sdk.batch.delay 0 waits for a full batch with no deadline, so a sparse source can hold records unsent and unacked indefinitely. |
 
 ## 4. MCP tool catalog (14)
 

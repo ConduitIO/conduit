@@ -60,7 +60,7 @@ func TestPersister_PersistFlushesAfterDelayThreshold(t *testing.T) {
 
 	conn := &Instance{ID: uuid.NewString(), Type: TypeDestination}
 	callbackCalled := make(chan struct{})
-	err := persister.Persist(ctx, conn, func(err error) {
+	err := persister.Persist(ctx, conn, 1, func(err error) {
 		if err != nil {
 			t.Errorf("expected nil error, got: %v", err)
 		}
@@ -112,12 +112,12 @@ func TestPersister_PersistFlushesAfterBundleCountThreshold(t *testing.T) {
 
 	for i := 0; i < bundleCountThreshold/2; i++ {
 		conn := &Instance{ID: uuid.NewString(), Type: TypeDestination}
-		err := persister.Persist(ctx, conn, func(err error) {
+		err := persister.Persist(ctx, conn, 1, func(err error) {
 			t.Fatal("expected callback to be overwritten!")
 		})
 		is.NoErr(err)
 		// second persist will overwrite first callback
-		err = persister.Persist(ctx, conn, func(err error) {
+		err = persister.Persist(ctx, conn, 1, func(err error) {
 			if err != nil {
 				t.Fatalf("expected nil error, got: %v", err)
 			}
@@ -151,7 +151,7 @@ func TestPersister_FlushStoresRightAway(t *testing.T) {
 	conn := &Instance{ID: uuid.NewString(), Type: TypeDestination}
 	callbackCalled := make(chan struct{})
 	timeAtPersist := time.Now()
-	err := persister.Persist(ctx, conn, func(err error) {
+	err := persister.Persist(ctx, conn, 1, func(err error) {
 		if err != nil {
 			t.Fatalf("expected nil error, got: %v", err)
 		}
@@ -225,7 +225,7 @@ func TestPersister_WaitsForOpenConnectorsAndFlush(t *testing.T) {
 		persister.ConnectorStopped()
 		// before the last stop we persist another change which should be
 		// flushed automatically when the last connector is stopped
-		persistErr = persister.Persist(ctx, conn, func(err error) {})
+		persistErr = persister.Persist(ctx, conn, 1, func(err error) {})
 		persister.ConnectorStopped()
 	}()
 
@@ -363,4 +363,106 @@ func (t *fakeTimer) fire() {
 	t.mu.Unlock()
 
 	t.fn()
+}
+
+// TestPersister_CountThresholdWithUnalignedBatches pins the >= trigger on the
+// bundle-count threshold. Arch-v2 acks whole batches, and batch sizes do not
+// line up with the threshold (100 from the default source batch, 37 from a
+// short read, 1000 from a Postgres CDC batch). With the old == check the
+// counter steps past the threshold, never fires, and the only flush trigger
+// left is the delay timer, which this test never advances. The test therefore
+// fails with == and passes with >=.
+func TestPersister_CountThresholdWithUnalignedBatches(t *testing.T) {
+	const threshold = 1000
+
+	// Each sequence crosses the threshold without ever landing on it exactly.
+	tests := []struct {
+		name   string
+		counts []int
+		// flushAt is the index of the call that must trigger the flush.
+		flushAt int
+	}{
+		{name: "37 and 100 alternating", counts: repeat(8, 37, 100), flushAt: 15}, // 7*137=959, +37=996, +100=1096
+		{name: "single batch over the threshold", counts: []int{1000, 1}, flushAt: 0},
+		{name: "1000 after 37", counts: []int{37, 1000}, flushAt: 1},
+		{name: "exact hit still flushes", counts: []int{900, 100}, flushAt: 1},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+
+			persister, _ := initPersisterTest(time.Hour, threshold)
+			persister.clock = newFakeClock() // never advanced: only the count can flush
+
+			flushed := make(chan int, len(tc.counts))
+			for i, n := range tc.counts {
+				is.NoErr(persister.Persist(ctx, &Instance{ID: "c1", Type: TypeSource}, n, func(err error) {
+					if err != nil {
+						t.Errorf("unexpected persist error: %v", err)
+					}
+					flushed <- i
+				}))
+				if i < tc.flushAt {
+					select {
+					case got := <-flushed:
+						t.Fatalf("flushed too early at call %d (callback for call %d)", i, got)
+					case <-time.After(20 * time.Millisecond):
+					}
+				}
+			}
+
+			select {
+			case got := <-flushed:
+				// The callback registered last for the connector is the one
+				// that runs, which is the call that crossed the threshold.
+				is.Equal(got, tc.flushAt)
+			case <-time.After(5 * time.Second):
+				t.Fatalf("threshold %d crossed by %v but no flush happened", threshold, tc.counts)
+			}
+		})
+	}
+}
+
+// TestPersister_CountResetsAfterFlush checks that crossing the threshold
+// resets the counter, so the overshoot does not carry into the next window.
+func TestPersister_CountResetsAfterFlush(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	persister, _ := initPersisterTest(time.Hour, 100)
+	persister.clock = newFakeClock()
+
+	flushed := make(chan struct{}, 4)
+	cb := func(error) { flushed <- struct{}{} }
+	conn := &Instance{ID: "c1", Type: TypeSource}
+
+	is.NoErr(persister.Persist(ctx, conn, 150, cb)) // overshoots, flushes
+	select {
+	case <-flushed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected a flush for the overshooting batch")
+	}
+
+	is.NoErr(persister.Persist(ctx, conn, 99, cb)) // below the threshold again: must not flush
+	select {
+	case <-flushed:
+		t.Fatal("counter carried the overshoot into the next window")
+	case <-time.After(50 * time.Millisecond):
+	}
+	is.NoErr(persister.Persist(ctx, conn, 1, cb)) // reaches 100: flushes
+	select {
+	case <-flushed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected a flush at the threshold")
+	}
+}
+
+func repeat(n int, vals ...int) []int {
+	var out []int
+	for i := 0; i < n; i++ {
+		out = append(out, vals...)
+	}
+	return out
 }

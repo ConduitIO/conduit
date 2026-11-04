@@ -79,7 +79,7 @@ func TestPersister_BatchErrorCarriesStableCode(t *testing.T) {
 	persister := newFailingWritePersister("other-conn", wantErr)
 
 	cb, errFn := collectCallback(t)
-	is.NoErr(persister.Persist(ctx, &Instance{ID: "other-conn", Type: TypeSource}, cb))
+	is.NoErr(persister.Persist(ctx, &Instance{ID: "other-conn", Type: TypeSource}, 1, cb))
 	persister.Flush(ctx)
 	err := errFn()
 
@@ -110,7 +110,7 @@ func TestDestination_PersistFailure_NobodyReadingErrs_DoesNotWedgePersister(t *t
 		Return(pconnector.DestinationTeardownResponse{}, nil)
 
 	is.NoErr(dest.Open(ctx)) // registers the lifecycle-event persist
-	is.NoErr(persister.Persist(ctx, &Instance{ID: "other-conn", Type: TypeSource}, func(error) {}))
+	is.NoErr(persister.Persist(ctx, &Instance{ID: "other-conn", Type: TypeSource}, 1, func(error) {}))
 	persister.Flush(ctx)
 
 	// Whether the callback reports before or after Teardown reads the pending
@@ -175,7 +175,7 @@ func TestConnector_OpenFailsAfterLifecyclePersist_DoesNotWedgePersister(t *testi
 		srcMock.EXPECT().Teardown(gomock.Any(), gomock.Any()).Return(pconnector.SourceTeardownResponse{}, nil)
 
 		is.True(cerrors.Is(src.Open(ctx), openErr))
-		is.NoErr(persister.Persist(ctx, &Instance{ID: "other-conn", Type: TypeSource}, func(error) {}))
+		is.NoErr(persister.Persist(ctx, &Instance{ID: "other-conn", Type: TypeSource}, 1, func(error) {}))
 		persister.Flush(ctx)
 		is.NoErr(persister.WaitPendingWritesContext(ctx, 2*time.Second))
 	})
@@ -193,7 +193,7 @@ func TestConnector_OpenFailsAfterLifecyclePersist_DoesNotWedgePersister(t *testi
 		destMock.EXPECT().Teardown(gomock.Any(), gomock.Any()).Return(pconnector.DestinationTeardownResponse{}, nil)
 
 		is.True(cerrors.Is(dest.Open(ctx), openErr))
-		is.NoErr(persister.Persist(ctx, &Instance{ID: "other-conn", Type: TypeSource}, func(error) {}))
+		is.NoErr(persister.Persist(ctx, &Instance{ID: "other-conn", Type: TypeSource}, 1, func(error) {}))
 		persister.Flush(ctx)
 		is.NoErr(persister.WaitPendingWritesContext(ctx, 2*time.Second))
 	})
@@ -283,7 +283,7 @@ func TestSource_Teardown_CanceledCtxDoesNotFailSharedBatch(t *testing.T) {
 	is.NoErr(persister.WaitPendingWritesContext(ctx, 2*time.Second))
 
 	otherCb, otherErr := collectCallback(t)
-	is.NoErr(persister.Persist(ctx, &Instance{ID: "other-conn", Type: TypeSource}, otherCb))
+	is.NoErr(persister.Persist(ctx, &Instance{ID: "other-conn", Type: TypeSource}, 1, otherCb))
 
 	canceled, cancel := context.WithCancel(ctx)
 	cancel()

@@ -237,7 +237,7 @@ func PersistConnectors(ctx context.Context, db database.DB, logger log.CtxLogger
 	p.ConnectorStarted()
 	errs := make(chan error, len(conns))
 	for _, c := range conns {
-		if err := p.Persist(ctx, c, func(err error) { errs <- err }); err != nil {
+		if err := p.Persist(ctx, c, 1, func(err error) { errs <- err }); err != nil {
 			return cerrors.Errorf("persist connector %q: %w", c.ID, err)
 		}
 	}

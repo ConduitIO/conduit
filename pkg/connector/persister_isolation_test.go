@@ -67,7 +67,7 @@ func TestPersister_StoreErrorFailsOnlyThatConnector(t *testing.T) {
 	for _, c := range conns {
 		cb, wait := collectCallback(t)
 		waits[c.ID] = wait
-		is.NoErr(persister.Persist(ctx, c, cb))
+		is.NoErr(persister.Persist(ctx, c, 1, cb))
 	}
 
 	persister.Flush(ctx)
@@ -172,7 +172,7 @@ func TestPersister_AbortingStore_OnlyFailingConnectorGetsError(t *testing.T) {
 				id := fmt.Sprintf("c%d", i)
 				cb, wait := collectCallback(t)
 				waits[id] = wait
-				is.NoErr(persister.Persist(ctx, &Instance{ID: id, Type: TypeSource, State: SourceState{Position: opencdc.Position(id)}}, cb))
+				is.NoErr(persister.Persist(ctx, &Instance{ID: id, Type: TypeSource, State: SourceState{Position: opencdc.Position(id)}}, 1, cb))
 			}
 			persister.Flush(ctx)
 			is.NoErr(persister.WaitPendingWritesContext(ctx, 5*time.Second))
@@ -216,7 +216,7 @@ func TestPersister_AllWritesFailEachGetsOwnError(t *testing.T) {
 	for i := range n {
 		cb, wait := collectCallback(t)
 		waits[i] = wait
-		is.NoErr(persister.Persist(ctx, &Instance{ID: fmt.Sprintf("c%d", i), Type: TypeSource}, cb))
+		is.NoErr(persister.Persist(ctx, &Instance{ID: fmt.Sprintf("c%d", i), Type: TypeSource}, 1, cb))
 	}
 	persister.Flush(ctx)
 	is.NoErr(persister.WaitPendingWritesContext(ctx, 5*time.Second))
@@ -246,8 +246,8 @@ func TestPersister_CommitErrorFailsEveryRemainingConnector(t *testing.T) {
 
 	cb1, err1 := collectCallback(t)
 	cb2, err2 := collectCallback(t)
-	is.NoErr(persister.Persist(ctx, &Instance{ID: "c1", Type: TypeSource}, cb1))
-	is.NoErr(persister.Persist(ctx, &Instance{ID: "c2", Type: TypeSource}, cb2))
+	is.NoErr(persister.Persist(ctx, &Instance{ID: "c1", Type: TypeSource}, 1, cb1))
+	is.NoErr(persister.Persist(ctx, &Instance{ID: "c2", Type: TypeSource}, 1, cb2))
 	persister.Flush(ctx)
 	is.NoErr(persister.WaitPendingWritesContext(ctx, 5*time.Second))
 
@@ -294,7 +294,7 @@ func TestPersister_Badger_TxnTooBigFailsOnlyOverflowConnectors(t *testing.T) {
 	for i := range conns {
 		cb, wait := collectCallback(t)
 		waits[i] = wait
-		is.NoErr(persister.Persist(ctx, &Instance{ID: fmt.Sprintf("big-%02d", i), Type: TypeSource, State: SourceState{Position: pos}}, cb))
+		is.NoErr(persister.Persist(ctx, &Instance{ID: fmt.Sprintf("big-%02d", i), Type: TypeSource, State: SourceState{Position: pos}}, 1, cb))
 	}
 	persister.Flush(ctx)
 	is.NoErr(persister.WaitPendingWritesContext(ctx, 30*time.Second))
@@ -348,7 +348,7 @@ func TestSource_Ack_OtherConnectorStoreErrorStillReleasesAck(t *testing.T) {
 	is.NoErr(persister.WaitPendingWritesContext(ctx, 5*time.Second))
 
 	otherCb, otherErr := collectCallback(t)
-	is.NoErr(persister.Persist(ctx, &Instance{ID: "other-conn", Type: TypeDestination}, otherCb))
+	is.NoErr(persister.Persist(ctx, &Instance{ID: "other-conn", Type: TypeDestination}, 1, otherCb))
 	is.NoErr(src.Ack(ctx, []opencdc.Position{opencdc.Position("durable-pos")}))
 
 	recv := make(chan pconnector.SourceRunRequest, 1)
@@ -411,7 +411,7 @@ func TestPersister_SQLite_FailedWriteFailsOnlyThatConnector(t *testing.T) {
 			for _, id := range []string{"a-good", "bad-conn", "z-good"} {
 				cb, wait := collectCallback(t)
 				waits[id] = wait
-				is.NoErr(persister.Persist(ctx, &Instance{ID: id, Type: TypeSource, State: SourceState{Position: opencdc.Position(id)}}, cb))
+				is.NoErr(persister.Persist(ctx, &Instance{ID: id, Type: TypeSource, State: SourceState{Position: opencdc.Position(id)}}, 1, cb))
 			}
 			persister.Flush(ctx)
 			is.NoErr(persister.WaitPendingWritesContext(ctx, 10*time.Second))
