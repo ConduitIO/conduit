@@ -391,8 +391,8 @@ Moved from v0.21 (not shipped in v0.21.0 – v0.21.2):
       resumes without a re-snapshot: the CLI surface and the fresh-slot strategy (design in
       `docs/design-documents/20261012-migrate-debezium-postgres-offset-import.md`; automated reset
       and rollback #3044)
-- [ ] _Moved from v0.21._ Adaptive source batching by default; design #3293, implementation PR
-      #3309 (open). No throughput claim without a committed benchi run
+- [x] _Moved from v0.21._ Adaptive source batching by default; design #3293, implemented in #3309
+      (merged 2026-11-03, ships in v0.22). No throughput claim without a committed benchi run
 - [ ] _Moved from v0.21._ Destination ack reader, bounded retries (#2997) and bounded stop
       (#2990), and stall reasons in `inspect`
 - [ ] _Moved from v0.21._ Connector observability beyond the v0.21 counters: source lag, CDC slot
