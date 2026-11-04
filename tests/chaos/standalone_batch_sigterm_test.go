@@ -261,7 +261,10 @@ func loggedPayloads(t *testing.T, out string) map[string]int {
 			} `json:"record"`
 		}
 		if err := json.Unmarshal([]byte(line), &l); err != nil {
-			continue // not a record line
+			// A line that carries a record but does not parse must fail the
+			// test, not be skipped: skipping it would report its record as
+			// never written, or hide a duplicate.
+			t.Fatalf("destination log line carries a record but does not parse: %v\n%.400s", err, line)
 		}
 		p, err := base64.StdEncoding.DecodeString(l.Record.Payload.After)
 		if err != nil {
