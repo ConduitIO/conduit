@@ -544,11 +544,26 @@ func TestSIGKILL_BatchedSource_AfterWriteBeforePersist(t *testing.T) {
 // pipe open read-write and non-blocking so the destination can open it, never
 // sees EOF, and a drain can end when the pipe stays empty. (A read deadline
 // does not work on a FIFO on every platform, so it polls the raw descriptor.)
+//
+// Because the reader holds the pipe open, bytes a killed process wrote stay in
+// the pipe across the restart. The file destination writes up to 64 KiB per
+// write(2), and on Linux a pipe write larger than PIPE_BUF can complete in
+// part, so a SIGKILL during a blocked Write can leave the start of a line
+// without its newline. That Write never returned, so its records were never
+// acked and replay. The test must call dropPartial after the post-kill drain:
+// otherwise the next process's first line is appended to the fragment, the
+// merged line fails to parse, and the first replayed record is silently
+// missing from the sequence. When the fragment was the start of that same
+// record, the test reported one record lost that the engine had replayed.
 type fifoReader struct {
 	fd  int
 	mu  sync.Mutex
 	buf []byte
 	seq []int
+	// torn holds every complete line that did not parse. With dropPartial at
+	// each kill, no torn line can form, so requireNoTornLines fails on any:
+	// a line the reader dropped must never pass as loss, or hide one.
+	torn []string
 }
 
 func openFIFO(t *testing.T, path string) *fifoReader {
@@ -578,6 +593,8 @@ func (r *fifoReader) drain(quiet time.Duration) {
 				}
 				if v, ok := parseRecord(r.buf[:i]); ok {
 					r.seq = append(r.seq, v)
+				} else {
+					r.torn = append(r.torn, fmt.Sprintf("after record %d of the sequence, %d bytes: %.160q", len(r.seq), i, r.buf[:i]))
 				}
 				r.buf = r.buf[i+1:]
 			}
@@ -630,7 +647,7 @@ func (r *fifoReader) waitAll(t *testing.T, p *conduitProcess, want []int, contex
 			last, quietSince = len(seq), time.Now()
 		}
 		if time.Since(quietSince) >= batchedQuiet {
-			t.Fatalf("DATA LOSS%s: the destination went quiet for %s with %d of %d records never delivered (invariants 1 and 3)", context, batchedQuiet, missing, len(want))
+			t.Fatalf("DATA LOSS%s: the destination went quiet for %s with %d of %d records never delivered (invariants 1 and 3); unparseable lines: %q", context, batchedQuiet, missing, len(want), r.tornLines())
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("TIMEOUT (not a data-loss verdict)")
@@ -640,6 +657,31 @@ func (r *fifoReader) waitAll(t *testing.T, p *conduitProcess, want []int, contex
 			t.Fatalf("conduit exited (%v) before delivering everything\n%s", p.err, p.output())
 		case <-time.After(50 * time.Millisecond):
 		}
+	}
+}
+
+// dropPartial discards and returns the bytes after the last newline. Call it
+// only once the writer has exited and the pipe was drained: those bytes are
+// what remains of a Write the killed process never completed.
+func (r *fifoReader) dropPartial() []byte {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	tail := r.buf
+	r.buf = nil
+	return tail
+}
+
+func (r *fifoReader) tornLines() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.torn...)
+}
+
+// requireNoTornLines fails if any complete line in the pipe did not parse.
+func (r *fifoReader) requireNoTornLines(t *testing.T) {
+	t.Helper()
+	if torn := r.tornLines(); len(torn) > 0 {
+		t.Fatalf("%d unparseable destination lines (the reader dropped them, so loss and replay counts are not trustworthy): %q", len(torn), torn)
 	}
 }
 
@@ -675,6 +717,13 @@ func TestSIGKILL_BatchedSource_StalledDestination_NoLoss(t *testing.T) {
 			time.Sleep(2500*time.Millisecond - time.Since(opened))
 			first.sigkill(t)
 			pipe.drain(500 * time.Millisecond)
+			// The killed destination was blocked in Write, so the pipe may end
+			// in part of a line. That Write never returned and its records
+			// replay; the fragment must not be glued to the restart's first line.
+			if tail := pipe.dropPartial(); len(tail) > 0 {
+				t.Logf("dropped %d bytes of a line the killed destination did not finish writing", len(tail))
+			}
+			pipe.requireNoTornLines(t)
 			stalled := pipe.snapshot()
 			if len(stalled) == 0 || len(stalled) > total/2 {
 				t.Fatalf("the destination did not stall as designed (%d of %d written)", len(stalled), total)
@@ -706,13 +755,14 @@ func TestSIGKILL_BatchedSource_StalledDestination_NoLoss(t *testing.T) {
 					last, quietSince = len(seq), time.Now()
 				}
 				if time.Since(quietSince) >= batchedQuiet {
-					missing := 0
+					var missing []int
 					for i := 1; i <= total; i++ {
 						if counts[i] == 0 {
-							missing++
+							missing = append(missing, i)
 						}
 					}
-					t.Fatalf("DATA LOSS: after %d records written while stalled, a persisted position covered records the destination never wrote; %d of %d never delivered (invariant 1)", len(stalled), missing, total)
+					t.Fatalf("DATA LOSS: after %d records written while stalled, a persisted position covered records the destination never wrote; %d of %d never delivered, first %v (invariant 1); unparseable lines: %q",
+						len(stalled), len(missing), total, missing[:min(len(missing), 10)], pipe.tornLines())
 				}
 				if time.Now().After(deadline) {
 					t.Fatalf("TIMEOUT (not a data-loss verdict)")
@@ -722,6 +772,7 @@ func TestSIGKILL_BatchedSource_StalledDestination_NoLoss(t *testing.T) {
 			second.sigterm(t)
 			<-done
 
+			pipe.requireNoTornLines(t)
 			seq := pipe.snapshot()
 			requireOrder(t, seq, 1, total, 1)
 			requireReplayBound(t, countsOf(seq))
@@ -823,6 +874,12 @@ func TestSIGTERM_BatchedSource_GracefulDrain(t *testing.T) {
 			}()
 			first.sigterm(t)
 			<-stopDone
+			// A graceful stop completes every Write, so nothing may be left
+			// half-written in the pipe.
+			if tail := pipe.dropPartial(); len(tail) > 0 {
+				t.Fatalf("a graceful stop left %d bytes of an unfinished line in the destination (invariant 7): %.160q", len(tail), tail)
+			}
+			pipe.requireNoTornLines(t)
 			midTotal := len(pipe.snapshot())
 			if midTotal == 0 || midTotal >= total {
 				t.Fatalf("SIGTERM did not land mid-stream (%d of %d written)", midTotal, total)
@@ -836,6 +893,7 @@ func TestSIGTERM_BatchedSource_GracefulDrain(t *testing.T) {
 			pipe.waitAll(t, second, rangeOf(1, total), "")
 			second.sigterm(t)
 
+			pipe.requireNoTornLines(t)
 			seq := pipe.snapshot()
 			requireOrder(t, seq, 1, total, 0)
 			t.Logf("%s: %d written before the stop completed, %d in total", eng.name, midTotal, len(seq))
