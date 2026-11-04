@@ -15,9 +15,10 @@ Invariants 1 and 3.
 
 - Engine: arch-v2 only (`--preview.pipeline-arch-v2`). The classic engine orders nack handling with a
   per-message semaphore and is not affected.
-- Releases: v0.21.0, v0.21.1, v0.21.2 (all tagged 2026-10-26), every v0.21.0 nightly from `v0.21.0-nightly.20261020` (tagged
-  2026-10-19, the first to contain c73fb0cb from #3201) and every v0.22.0 nightly before the fix.
-  Exposure window: on `main` from 2026-10-18 (#3201), in published nightly artifacts from 2026-10-19, in
+- Releases (dates UTC): v0.21.0 and v0.21.1 (tagged 2026-10-26), v0.21.2 (tagged 2026-10-27), every v0.21.0
+  nightly from `v0.21.0-nightly.20261020` (tagged 2026-10-20, the first to contain c73fb0cb from #3201) and every
+  v0.22.0 nightly before the fix.
+  Exposure window: on `main` from 2026-10-18 (#3201), in published nightly artifacts from 2026-10-20, in
   releases from 2026-10-26, until #3324 merged on 2026-11-03.
 - Needs all of: arch-v2, at least two destinations, batching enabled on a destination other than the one that
   nacks (it is off unless configured), and a DLQ that accepts nacks (`window-nack-threshold > 0` or
@@ -41,7 +42,9 @@ fails deterministically on `main` (0aeba0e5) and on v0.21.2.
 
 - 2026-10-18: #3201 (c73fb0cb) merges engine-level destination batching and introduces the bug. Fan-out keeps
   the synchronous flush (design doc 20261019, "Fan-out stays synchronous").
-- 2026-10-26: v0.21.0, v0.21.1 and v0.21.2 are tagged. v0.21.0 is the first release with the bug.
+- 2026-10-20: `v0.21.0-nightly.20261020` is tagged, the first published artifact with the bug.
+- 2026-10-26: v0.21.0 and v0.21.1 are tagged. v0.21.0 is the first release with the bug.
+- 2026-10-27: v0.21.2 is tagged.
 - 2026-11-02: #3294 and #3300 order source acks for records that bypass the destinations (filtered, or nacked
   above the fan-out). Destination-level nacks inside a branch are not covered. #3295 drains destinations
   before source teardown on stop.
