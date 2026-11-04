@@ -163,10 +163,20 @@ func (p *Persister) ConnectorStopped() {
 
 // Persist signals the persister that a connector state changed and it should be
 // persisted with the next batch. This function will collect all changed
-// connectors until either the number of detected changes reaches the configured
-// threshold or the configured delay is reached (whichever comes first), then
-// the connectors are flushed and a new batch starts to be collected.
-func (p *Persister) Persist(ctx context.Context, conn *Instance, callback PersistCallback) error {
+// connectors until either the number of persisted positions reaches the
+// configured threshold or the configured delay is reached (whichever comes
+// first), then the connectors are flushed and a new batch starts to be
+// collected.
+//
+// count is the number of positions this call covers: a source ack passes the
+// number of positions in the acked batch, a lifecycle-event persist passes 1.
+// The threshold is crossed with >=, not ==: batch sizes are not aligned to the
+// threshold (for example 100, 37 and 1000 in one run), so an equality check
+// would step past it, never fire, and quietly leave the 1s timer as the only
+// flush trigger. That would widen the crash replay window from the documented
+// threshold to a second of throughput (design document
+// 20261027-default-source-batching.md, "Crash replay").
+func (p *Persister) Persist(ctx context.Context, conn *Instance, count int, callback PersistCallback) error {
 	p.m.Lock()
 	defer p.m.Unlock()
 
@@ -185,9 +195,15 @@ func (p *Persister) Persist(ctx context.Context, conn *Instance, callback Persis
 		callback:  callback,
 		storeFunc: storeFunc,
 	}
-	p.bundleCount++
+	if count < 1 {
+		count = 1 // a call always covers at least its own position
+	}
+	p.bundleCount += count
 
-	if p.bundleCount == p.bundleCountThreshold {
+	// Invariant 3 (at-least-once, bounded replay): the flush trigger must fire once the threshold is crossed,
+	// so the replay window after a crash stays bounded by the threshold plus
+	// one in-flight batch.
+	if p.bundleCount >= p.bundleCountThreshold {
 		p.logger.Trace(ctx).Msg("reached bundle count threshold")
 		p.triggerFlush(context.Background()) // use a new context because action happens in background
 		return nil

@@ -106,6 +106,16 @@
 // the exact invariant assertions and an honest statement of what this
 // scenario does and does not prove about a hard crash.
 //
+// Batched-source chaos (batched_source_test.go) runs the real conduit binary on
+// both pipeline engines with the built-in file source at its SDK v0.18 default
+// (sdk.batch.size 100, sdk.batch.delay 0) and checks invariants 1, 3 and 7 for
+// default source batching: SIGKILL while the SDK holds read-ahead, SIGKILL after
+// destination writes but before the position persists (replay bounded by the
+// persister window), a SIGKILL timed just after the persister's first flush
+// with a slow destination (a position persisted ahead of the write would lose
+// records), and SIGTERM mid-stream with a no-loss, no-duplicate resume. Each
+// test asserts the resolved batch mode from the SDK's startup log line.
+//
 // # What this package tests, and why the real Debezium wrapper isn't here
 //
 // The workstream's motivating question is about
@@ -206,4 +216,14 @@
 // nested data between branches shows as one branch writing another's edit,
 // and the persisted source position (invariant 1) and the restarted run's
 // coverage (invariant 3) are checked as in the cases above.
+//
+// Fan-out sibling nack (fanout_nack_order_sigkill_test.go, fanout_child.go,
+// #3323): arch-v2 funnel.Worker fanned out to a batching destination (size 50)
+// and a destination that fails every 5th position, with a DLQ that accepts
+// every nack and a 5ms persister debounce. SIGKILLed while the batching
+// destination holds a partial buffer, then restarted on the same state. The
+// batching destination must hold every position, and every position must be in
+// the other destination or the DLQ (invariants 1 and 3). Before the fix the
+// sibling's nack acked the source past the buffer and the restart resumed after
+// it: positions 101-120 were lost on 5 of 5 runs.
 package chaos

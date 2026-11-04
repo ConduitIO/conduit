@@ -16,9 +16,10 @@
 - postgres — Conduit connector for PostgreSQL
 - s3 — An S3 source and destination plugin for Conduit, written in Go.
 (6 built-in connectors; full parameters in llms-full.txt)
+- Source batching: a source that leaves `sdk.batch.size` and `sdk.batch.delay` unset reads in batches (adaptive drain: it returns what is already queued, with no timer). Default sdk.batch.size of built-in sources: file (100), generator (100), kafka (100); not batched by default: postgres, s3. To read one record at a time, set both `sdk.batch.size: "0"` and `sdk.batch.delay: "0"` on the source connector. Runbook: docs/operations/source-batching.md.
 
 ## Error codes
-- 190 stable error codes, dotted `domain.name` reasons, each with a gRPC status class. Full list with descriptions in llms-full.txt.
+- 193 stable error codes, dotted `domain.name` reasons, each with a gRPC status class. Full list with descriptions in llms-full.txt.
 - CLI `--json`: a failing command prints one JSON object on stdout whose `error` carries `code`, `message`, `suggestion` and `configPath`; the exit code is 2 (validation), 3 (environment) or 1 (runtime).
 
 ## MCP tools

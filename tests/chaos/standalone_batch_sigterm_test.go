@@ -127,10 +127,10 @@ func (p *conduitProcess) output() string {
 	return strings.Join(p.lines, "\n")
 }
 
-func startConduit(t *testing.T, bin, dir, awaited string) *conduitProcess {
+func startConduit(t *testing.T, bin, dir, awaited string, extra ...string) *conduitProcess {
 	t.Helper()
-	cmd := exec.CommandContext(
-		context.Background(), bin, "run",
+	args := append([]string{
+		"run",
 		"--pipelines.path", filepath.Join(dir, "pipelines"),
 		"--connectors.path", filepath.Join(dir, "connectors"),
 		"--processors.path", filepath.Join(dir, "processors"),
@@ -140,7 +140,8 @@ func startConduit(t *testing.T, bin, dir, awaited string) *conduitProcess {
 		"--api.enabled=false",
 		"--log.format", "json",
 		"--log.level", "info",
-	)
+	}, extra...)
+	cmd := exec.CommandContext(context.Background(), bin, args...)
 	cmd.Dir = dir
 	// fixed environment: nothing from the test's environment leaks in
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + dir}

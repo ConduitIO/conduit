@@ -275,7 +275,7 @@ func (s *Source) Open(ctx context.Context) (err error) {
 		s.ackMu.Lock()
 		supersededAt := s.nextAckSeq + 1
 		s.ackMu.Unlock()
-		err = s.Instance.persister.Persist(ctx, s.Instance, func(err error) {
+		err = s.Instance.persister.Persist(ctx, s.Instance, 1, func(err error) {
 			if err != nil {
 				s.reportPersistError(supersededAt, err)
 			}
@@ -654,7 +654,9 @@ func (s *Source) Ack(ctx context.Context, p []opencdc.Position) error {
 	s.pendingAcks = append(s.pendingAcks, pendingAck{seq: seq, positions: p})
 	s.ackMu.Unlock()
 
-	err = s.Instance.persister.Persist(ctx, s.Instance, func(err error) {
+	// The call covers every position in the batch (len(p)), so the persister's
+	// count threshold bounds positions, not calls.
+	err = s.Instance.persister.Persist(ctx, s.Instance, len(p), func(err error) {
 		s.onPersistFlushed(seq, err)
 	})
 	if err != nil {
@@ -1113,7 +1115,7 @@ func (s *Source) configure(ctx context.Context) error {
 	}
 	_, err = s.plugin.Configure(ctx, pconnector.SourceConfigureRequest{Config: settings})
 	if err != nil {
-		return cerrors.Errorf("could not configure source connector plugin: %w", s.Instance.redactError(err))
+		return cerrors.Errorf("could not configure source connector plugin: %w", connectorPlugin.MapSDKCode(s.Instance.redactError(err)))
 	}
 	return nil
 }

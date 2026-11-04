@@ -63,7 +63,7 @@ func TestPersister_ConcurrentWaitAndPersist_DoesNotPanic(t *testing.T) {
 					return
 				default:
 				}
-				_ = p.Persist(context.Background(), conn, func(error) {})
+				_ = p.Persist(context.Background(), conn, 1, func(error) {})
 			}
 		}()
 	}
@@ -101,7 +101,7 @@ func TestPersister_WaitPendingWrites_WaitsForCallbacks(t *testing.T) {
 	var callbackDone bool
 	var mu sync.Mutex
 
-	err := p.Persist(context.Background(), conn, func(error) {
+	err := p.Persist(context.Background(), conn, 1, func(error) {
 		time.Sleep(50 * time.Millisecond) // callback with real work in it
 		mu.Lock()
 		callbackDone = true
