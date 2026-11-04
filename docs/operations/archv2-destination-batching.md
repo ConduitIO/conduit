@@ -103,6 +103,41 @@ tracks a flush timer for this case.
 No data is at risk from the wait itself: nothing past the nacked record is acked to the source until it is
 handled.
 
+## A batched write fails while the source is idle
+
+Applies from the release that contains the fix for this case (design
+`docs/design-documents/20261103-archv2-destination-batch-timing.md`, rollout step 1). A destination that the
+engine batches (`sdk.batch.size` above 1 or `sdk.batch.delay` above 0) and that is the only destination of its
+pipeline, so its writes run on a background flusher while the source reads ahead.
+
+### Symptom
+
+- The pipeline leaves **running** soon after the destination fails a write: it goes to recovering, or to
+  degraded when the error is fatal. Its error reads
+  `destination <connector-id> failed to flush buffered records: ...`, followed by the write, ack or DLQ error.
+- Before the fix the same failure left the pipeline reporting **running** while it wrote nothing, until the
+  source sent another record or the pipeline was stopped. The stop then reported
+  `pipeline.flush_on_close_failed`.
+
+### Diagnosis
+
+The worker hands a full batch to the flusher and goes back to the source. When the source has nothing more, the
+worker waits in the source read, and only a record arriving or a stop used to look at the flusher's error. The
+flusher now reports its own failure to the run, which ends the run and unblocks the read. The error keeps its
+classification: a failed DLQ write or an exceeded nack threshold is fatal and degrades the pipeline; a plain
+write error goes through recovery like any other transient failure. The cause is in the wrapped error and in the
+destination connector's logs.
+
+These do not fail the run, because they are the expected cases where the records replay: the run's own
+cancellation, a source that was already torn down when the flush acked it, and a graceful stop whose deadline ran
+out while it drained the destination.
+
+### Remediation
+
+Fix the destination (the wrapped error names the cause) and let recovery restart the pipeline, or restart it
+yourself. No data is at risk: the records in the failed flush, and everything queued behind it, were never
+acknowledged to the source and are delivered again after the restart.
+
 ## Related
 
 - Issue #2979
