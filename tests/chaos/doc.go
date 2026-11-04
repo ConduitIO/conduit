@@ -106,6 +106,16 @@
 // the exact invariant assertions and an honest statement of what this
 // scenario does and does not prove about a hard crash.
 //
+// Batched-source chaos (batched_source_test.go) runs the real conduit binary on
+// both pipeline engines with the built-in file source at its SDK v0.18 default
+// (sdk.batch.size 100, sdk.batch.delay 0) and checks invariants 1, 3 and 7 for
+// default source batching: SIGKILL while the SDK holds read-ahead, SIGKILL after
+// destination writes but before the position persists (replay bounded by the
+// persister window), a SIGKILL timed just after the persister's first flush
+// with a slow destination (a position persisted ahead of the write would lose
+// records), and SIGTERM mid-stream with a no-loss, no-duplicate resume. Each
+// test asserts the resolved batch mode from the SDK's startup log line.
+//
 // # What this package tests, and why the real Debezium wrapper isn't here
 //
 // The workstream's motivating question is about
