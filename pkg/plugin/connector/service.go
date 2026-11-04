@@ -172,7 +172,7 @@ func (s *PluginService) ValidateSourceConfig(ctx context.Context, name string, s
 
 	_, err = src.Configure(ctx, pconnector.SourceConfigureRequest{Config: settings})
 	if err != nil {
-		return &ValidationError{Err: err}
+		return &ValidationError{Err: MapSDKCode(err)}
 	}
 
 	return nil

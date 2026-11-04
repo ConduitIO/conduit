@@ -142,7 +142,7 @@ func (d *Destination) Open(ctx context.Context) (err error) {
 			// when a lifecycle event is successfully triggered we consider the config active
 			d.Instance.LastActiveConfig = d.Instance.Config
 			// persist connector in the next batch to store last active config
-			err = d.Instance.persister.Persist(ctx, d.Instance, func(err error) {
+			err = d.Instance.persister.Persist(ctx, d.Instance, 1, func(err error) {
 				if err != nil {
 					d.reportPersistError(err)
 				}
