@@ -170,7 +170,13 @@ func TestDestinationTask_DoBuffered_Pipelined_FlusherErrorPropagates(t *testing.
 
 	// The second record triggers the flush (handed to the flusher).
 	is.True(isBuffered(task.doBuffered(ctx, NewBatch([]opencdc.Record{recs[0]}), newRecordingAckNacker(&eventLog{}))))
-	is.True(isBuffered(task.doBuffered(ctx, NewBatch([]opencdc.Record{recs[1]}), newRecordingAckNacker(&eventLog{}))))
+	// The handing-off call may already see the failure: the mock Write fails at
+	// once, and the flusher can exit (closing flusherDone) before enqueueFlush's
+	// post-send check, which then fails closed with the flush error instead of
+	// reporting the batch as buffered. Both outcomes surface wantErr; neither acks.
+	if err := task.doBuffered(ctx, NewBatch([]opencdc.Record{recs[1]}), newRecordingAckNacker(&eventLog{})); !isBuffered(err) {
+		is.True(cerrors.Is(err, wantErr))
+	}
 
 	// Wait for the flusher to record the Write error, then the next doBuffered
 	// returns it.
