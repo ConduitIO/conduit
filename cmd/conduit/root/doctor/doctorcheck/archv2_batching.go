@@ -26,7 +26,8 @@ import (
 
 // archV2BatchingCheck reuses the offline validate engine (the same one
 // `conduit pipelines validate` shells over) to refuse a destination or
-// dead-letter-queue with sdk.batch.size above 1 when arch-v2 is enabled. It
+// dead-letter-queue with sdk.batch.size above 1 (or a dead-letter-queue with
+// sdk.batch.delay above 0) when arch-v2 is enabled. It
 // shares config.SDKBatchSizeAboveOne with the runtime engine guard, so doctor
 // never drifts from what `conduit run` refuses at start (#2979, #2985).
 type archV2BatchingCheck struct {
@@ -65,7 +66,7 @@ func (c archV2BatchingCheck) Run(ctx context.Context) check.CheckResult {
 		return check.CheckResult{
 			Status:   check.StatusPass,
 			Category: CategoryConfig,
-			Message:  "no destination or dead-letter-queue sets sdk.batch.size above 1",
+			Message:  "no destination or dead-letter-queue sets SDK batching that architecture v2 refuses",
 		}
 	}
 
@@ -75,6 +76,6 @@ func (c archV2BatchingCheck) Run(ctx context.Context) check.CheckResult {
 		Code:       "pipeline.archv2_destination_batching_unsupported",
 		ConfigPath: firstPath,
 		Message:    strings.Join(msgs, "; "),
-		Suggestion: "set sdk.batch.size to 1 or remove it, or disable preview.pipeline-arch-v2",
+		Suggestion: "remove the sdk.batch.size or sdk.batch.delay setting each finding names, or disable preview.pipeline-arch-v2",
 	}
 }

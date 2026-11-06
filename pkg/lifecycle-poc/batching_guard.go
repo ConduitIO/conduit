@@ -23,14 +23,17 @@ import (
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 )
 
-// batchingOffender is one DLQ whose sdk.batch.size the v2 engine cannot run.
-// Regular destinations are no longer refused: as of the funnel
-// destination-batching change they batch in the engine itself
-// (docs/design-documents/20261017-funnel-destination-batching.md). The DLQ is
-// not wired through that path, so its SDK destination batching still withholds
-// acks and stalls the stop-and-wait loop, and is refused.
+// batchingOffender is one DLQ batching setting the v2 engine cannot run.
+// Regular destinations are not refused: the funnel batches their writes itself
+// (docs/design-documents/20261017-funnel-destination-batching.md) and
+// configures their plugin not to (20261103-archv2-destination-batch-timing.md).
+// The DLQ is not wired through that path, so an explicit SDK batch on it
+// withholds acks and stalls the stop-and-wait loop, and is refused. That holds
+// for sdk.batch.size > 1 and for sdk.batch.delay > 0: the SDK batches on a
+// delay alone, with a size of its own (1000 in v0.17.2).
 type batchingOffender struct {
 	label      string
+	setting    string // config.SDKBatchSizeSetting or config.SDKBatchDelaySetting
 	configPath string // JSON pointer into the pipeline config document
 	value      string // the offending value, trimmed
 }
@@ -51,6 +54,16 @@ func batchingOffenders(dlq map[string]string) []batchingOffender {
 	if key, value, bad := config.SDKBatchSizeAboveOne(dlq); bad {
 		offenders = append(offenders, batchingOffender{
 			label:      "the dead letter queue",
+			setting:    config.SDKBatchSizeSetting,
+			configPath: dlqSettingPointer(key),
+			value:      value,
+		})
+	}
+	// #3321: a delay alone turns the SDK batcher on too.
+	if key, value, bad := config.SDKBatchDelayAboveZero(dlq); bad {
+		offenders = append(offenders, batchingOffender{
+			label:      "the dead letter queue",
+			setting:    config.SDKBatchDelaySetting,
 			configPath: dlqSettingPointer(key),
 			value:      value,
 		})
@@ -59,7 +72,7 @@ func batchingOffenders(dlq map[string]string) []batchingOffender {
 }
 
 // checkDLQBatching refuses a pipeline that would run on arch v2 with a DLQ
-// connector using sdk.batch.size > 1 (#2979). It only reads engine config, so
+// connector using sdk.batch.size > 1 (#2979) or sdk.batch.delay > 0 (#3321). It only reads engine config, so
 // Start calls it before any connector is built or opened: nothing is read from
 // the source and nothing is acked on the refusal path (invariants 1 and 3).
 func (s *Service) checkDLQBatching(pl *pipeline.Instance) error {
@@ -74,7 +87,7 @@ func (s *Service) checkDLQBatching(pl *pipeline.Instance) error {
 // PreflightPipelineConfig applies the same refusal to a DESIRED pipeline config
 // before it is applied. pkg/provisioning calls it (through an optional
 // interface) ahead of a live apply's StopAndWait, so an apply that adds
-// sdk.batch.size to a running pipeline's DLQ is refused with the coded error
+// sdk.batch.size or sdk.batch.delay to a running pipeline's DLQ is refused with the coded error
 // while the pipeline is still running and the stored config is untouched (#2979).
 func (s *Service) PreflightPipelineConfig(cfg config.Pipeline) error {
 	if offenders := batchingOffenders(cfg.DLQ.Settings); len(offenders) > 0 {
@@ -90,9 +103,9 @@ func errDLQBatchingUnsupported(pipelineID string, offenders []batchingOffender, 
 	parts := make([]string, len(offenders))
 	for i, o := range offenders {
 		if withDocument {
-			parts[i] = fmt.Sprintf("%s sets %s=%s (%s)", o.label, config.SDKBatchSizeSetting, o.value, o.configPath)
+			parts[i] = fmt.Sprintf("%s sets %s=%s (%s)", o.label, o.setting, o.value, o.configPath)
 		} else {
-			parts[i] = fmt.Sprintf("%s sets %s=%s", o.label, config.SDKBatchSizeSetting, o.value)
+			parts[i] = fmt.Sprintf("%s sets %s=%s", o.label, o.setting, o.value)
 		}
 	}
 	ce := conduiterr.New(

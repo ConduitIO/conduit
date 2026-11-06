@@ -99,13 +99,16 @@ func sourceBatchingNote(connectors []connectorInfo) string {
 }
 
 // destinationBatchingNote states how the preview engine batches a destination
-// and what bounds the wait of a partial batch (#3231, design
+// and what bounds the wait of a partial batch (#3231, #3321, design
 // 20261103-archv2-destination-batch-timing.md).
 const destinationBatchingNote = "Destination batching on `--preview.pipeline-arch-v2`: the engine batches a destination " +
-	"that sets `sdk.batch.size` above 1 or `sdk.batch.delay` itself, and writes a partial batch at the latest " +
-	"`sdk.batch.delay` after its first record, even when no further record arrives (a timer, as in the connector SDK). " +
-	"With `sdk.batch.size` alone a partial batch waits for more records or a stop, and the start logs " +
-	"`pipeline.archv2_destination_batch_unbounded_wait`. Runbook: docs/operations/archv2-destination-batching.md."
+	"itself with its effective `sdk.batch.size` and `sdk.batch.delay` (the pipeline config, else the connector's own " +
+	"defaults, so S3 is batched at 1000 records / 1s with nothing set) and hands the connector `0` for them, so the " +
+	"connector does not batch as well. It writes a partial batch at the latest `sdk.batch.delay` after its first record, " +
+	"even when no further record arrives (a timer, as in the connector SDK). With `sdk.batch.size` alone a partial batch " +
+	"waits for more records or a stop, and the start logs `pipeline.archv2_destination_batch_unbounded_wait`. A " +
+	"dead-letter queue with `sdk.batch.size` above 1 or `sdk.batch.delay` above 0 is refused with " +
+	"`pipeline.archv2_destination_batching_unsupported`. Runbook: docs/operations/archv2-destination-batching.md."
 
 // renderLLMSTxt renders the concise, llmstxt.org-conformant index: one H1,
 // one blockquote summary immediately after, then ## sections of links and

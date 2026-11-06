@@ -357,6 +357,18 @@ func archV2BatchingFindings(p config.Pipeline) []Finding {
 			fmt.Sprintf("the dead letter queue (sets %s=%s)", config.SDKBatchSizeSetting, value),
 		)
 	}
+	// #3321: the runtime guard refuses a DLQ delay above 0 too (the SDK
+	// batches on a delay alone); config.SDKBatchDelayAboveZero is shared.
+	if _, value, bad := config.SDKBatchDelayAboveZero(p.DLQ.Settings); bad {
+		findings = append(findings, Finding{
+			Severity:   SeverityError,
+			Code:       codeArchV2DestinationBatchingUnsupported,
+			Message:    fmt.Sprintf("architecture v2 does not support the dead letter queue (sets %s=%s)", config.SDKBatchDelaySetting, value),
+			ConfigPath: "/pipelines/dead-letter-queue/settings/" + config.SDKBatchDelaySetting,
+			Suggestion: "remove sdk.batch.delay from the dead letter queue, or run the pipeline without architecture v2",
+			Fix:        &conduiterr.Fix{ConfigPath: "/pipelines/dead-letter-queue/settings/" + config.SDKBatchDelaySetting, Op: "remove"},
+		})
+	}
 	return findings
 }
 

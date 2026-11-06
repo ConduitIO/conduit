@@ -196,6 +196,20 @@ var (
 		"Number of times an arch-v2 batching destination's buffer was taken for writing, by pipeline name, plugin, component ID and trigger.",
 		[]string{labelPipelineName, labelPlugin, labelComponentID, labelTrigger},
 	)
+	// FunnelDestinationPluginBatchingNeutralisedCounter counts arch-v2
+	// destination (and DLQ) builds where at least one sdk.batch.* key was
+	// configured "0" in the plugin because its effective value, from the
+	// pipeline config or the connector's spec default, would have turned the
+	// plugin's own batcher on (#3321). Destinations with nothing to neutralise
+	// (file, kafka, log, postgres at their defaults) are not counted. A
+	// destination that is slow behind a 1-record source and is not counted
+	// here may batch inside its plugin without declaring sdk.batch.*; see
+	// docs/operations/archv2-destination-batching.md.
+	FunnelDestinationPluginBatchingNeutralisedCounter = metrics.NewLabeledCounter(
+		"conduit_funnel_destination_plugin_batching_neutralised_total",
+		"Number of arch-v2 destination builds whose plugin was configured with sdk.batch.size or sdk.batch.delay 0 so it does not batch behind the engine, by pipeline name, plugin and component ID.",
+		[]string{labelPipelineName, labelPlugin, labelComponentID},
+	)
 	FunnelDestinationFlushLingerTimer = metrics.NewLabeledTimer(
 		"conduit_funnel_destination_flush_linger_seconds",
 		"Age of the oldest buffered record when an arch-v2 batching destination's buffer was taken for writing, by pipeline name, plugin and component ID.",

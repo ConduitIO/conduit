@@ -128,3 +128,53 @@ pipelines:
 		})
 	}
 }
+
+// TestArchV2BatchingFindings_DLQDelay (#3321): the runtime guard refuses a DLQ
+// sdk.batch.delay above 0 (the SDK batches on a delay alone), and the offline
+// check reports the same code for it, so validate and doctor agree with
+// `conduit run`.
+func TestArchV2BatchingFindings_DLQDelay(t *testing.T) {
+	for name, tc := range map[string]struct {
+		delay string
+		want  bool
+	}{
+		"1s":         {delay: "1s", want: true},
+		"0":          {delay: "0"},
+		"unparsable": {delay: "soon"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			doc := `version: 2.2
+pipelines:
+  - id: p
+    status: running
+    connectors:
+      - id: src
+        type: source
+        plugin: builtin:generator
+      - id: dst
+        type: destination
+        plugin: builtin:log
+    dead-letter-queue:
+      plugin: builtin:log
+      settings:
+        sdk.batch.delay: "` + tc.delay + `"
+`
+			report := RunBytes(context.Background(), "p.yaml", []byte(doc), Options{ArchV2: true})
+			is.Equal(len(report.Files), 1)
+			var got []Finding
+			for _, f := range report.Files[0].Findings {
+				if f.Code == codeArchV2DestinationBatchingUnsupported {
+					got = append(got, f)
+				}
+			}
+			if !tc.want {
+				is.Equal(len(got), 0)
+				return
+			}
+			is.Equal(len(got), 1)
+			is.Equal(got[0].ConfigPath, "/pipelines/dead-letter-queue/settings/sdk.batch.delay")
+			is.Equal(got[0].Fix.Op, "remove")
+		})
+	}
+}

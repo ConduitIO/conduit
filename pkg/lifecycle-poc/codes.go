@@ -61,15 +61,20 @@ var (
 // CodeArchV2DestinationBatchingUnsupported is returned by Start, and by the
 // live-apply preflight (PreflightPipelineConfig), when a pipeline would run on
 // the preview pipeline architecture v2 (--preview.pipeline-arch-v2) and the
-// dead-letter-queue connector sets sdk.batch.size above 1 (#2979).
+// dead-letter-queue connector sets sdk.batch.size above 1 (#2979) or
+// sdk.batch.delay above 0 (#3321).
 //
 // Regular destinations are no longer refused by this code: the funnel now
 // batches destination writes itself using the destination's
-// sdk.batch.size/sdk.batch.delay (see
-// docs/design-documents/20261017-funnel-destination-batching.md) and strips the
-// settings from the SDK plugin, so a destination batch can no longer withhold
-// its acks and stall the stop-and-wait loop. The DLQ is not wired through that
-// path, so its SDK destination batching still withholds acks and is refused.
+// effective sdk.batch.size/sdk.batch.delay, from the pipeline config or the
+// connector spec's default (see
+// docs/design-documents/20261017-funnel-destination-batching.md and
+// 20261103-archv2-destination-batch-timing.md), and configures the SDK plugin
+// with "0" for them, so a destination batch can no longer withhold its acks
+// and stall the stop-and-wait loop. The DLQ is not wired through that path, so
+// an explicit SDK batch on it still withholds acks and is refused. A DLQ
+// connector that batches only by its spec default (S3) is configured "0" and
+// writes each nack synchronously.
 //
 // With a fan-out (one source, several destinations), a record another
 // destination nacks is handled only once a batching destination has also
@@ -93,12 +98,13 @@ var (
 // reads acks on their own goroutine and is not affected.
 //
 // The guard is conservative: any sdk.batch.size above 1 is refused, even where
-// a particular write size would happen to align with the batch. Size 0 or 1, or
-// sdk.batch.delay on its own, is safe (the SDK flushes synchronously at the
-// size). Refusing turns a silent liveness failure into an actionable error. It
+// a particular write size would happen to align with the batch, and so is any
+// sdk.batch.delay above 0, because the SDK batches on a delay alone with a
+// size of its own (1000 in v0.17.2), which withholds acks the same way. Size 0
+// or 1 with no delay is safe. Values that do not parse (strconv.Atoi,
+// time.ParseDuration) are left to the plugin. Refusing turns a silent liveness failure into an actionable error. It
 // fires before any connector is opened, so nothing is read and nothing is
-// acked (invariants 1 and 3). Values that do not parse as an integer are left
-// to the plugin's own config validation. The SDK trims keys and values before
+// acked (invariants 1 and 3). The SDK trims keys and values before
 // reading them, so the guard does too.
 //
 // The error names every offending connector; ConfigPath and Fix address the
