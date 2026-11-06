@@ -1,5 +1,7 @@
 ## 2. Built-in connectors (1)
 
+Destination batching on `--preview.pipeline-arch-v2`: the engine batches a destination that sets `sdk.batch.size` above 1 or `sdk.batch.delay` itself, and writes a partial batch at the latest `sdk.batch.delay` after its first record, even when no further record arrives (a timer, as in the connector SDK). With `sdk.batch.size` alone a partial batch waits for more records or a stop, and the start logs `pipeline.archv2_destination_batch_unbounded_wait`. Runbook: docs/operations/archv2-destination-batching.md.
+
 ### widget (v1.2.3)
 
 A synthetic connector used only by this test.

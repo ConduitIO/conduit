@@ -137,3 +137,40 @@ func (m ConnectorMetricsImpl) Observe(records []opencdc.Record, start time.Time)
 		}
 	}()
 }
+
+// flushTriggers is every FlushTrigger, in a fixed order.
+var flushTriggers = []FlushTrigger{
+	FlushTriggerSize, FlushTriggerBytes, FlushTriggerDeadlineArrival, FlushTriggerDeadlineTimer,
+	FlushTriggerAckQueue, FlushTriggerDrain, FlushTriggerClose,
+}
+
+// FlushMetricsImpl backs FlushMetrics with conduit_funnel_destination_flushes_total
+// and conduit_funnel_destination_flush_linger_seconds for one destination.
+type FlushMetricsImpl struct {
+	flushes map[FlushTrigger]metrics.Counter
+	linger  metrics.Timer
+}
+
+// NewFlushMetrics builds the flush metrics of one batching destination
+// connector instance. The per-trigger counters are resolved once here, not on
+// every flush.
+func NewFlushMetrics(pipelineName, pluginName, componentID string) FlushMetricsImpl {
+	flushes := make(map[FlushTrigger]metrics.Counter, len(flushTriggers))
+	for _, tr := range flushTriggers {
+		flushes[tr] = measure.FunnelDestinationFlushesCounter.WithValues(pipelineName, pluginName, componentID, string(tr))
+	}
+	return FlushMetricsImpl{
+		flushes: flushes,
+		linger:  measure.FunnelDestinationFlushLingerTimer.WithValues(pipelineName, pluginName, componentID),
+	}
+}
+
+func (m FlushMetricsImpl) ObserveFlush(trigger FlushTrigger) {
+	if c, ok := m.flushes[trigger]; ok {
+		c.Inc()
+	}
+}
+
+func (m FlushMetricsImpl) ObserveLinger(linger time.Duration) {
+	m.linger.Update(linger)
+}
