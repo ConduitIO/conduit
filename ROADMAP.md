@@ -352,7 +352,7 @@ and two green nightlies on the release branch.
 - [x] Retire the labs `redpanda` connector in favour of the `kafka` connector (its Redpanda profile
       is in the Kafka→Kafka item above)
 - [ ] List every labs connector that passes the acceptance suite in the registry as Community tier
-      with license metadata (from 6 listed connectors to roughly 30)
+      with license metadata (from the nine listed today to roughly 30)
 - [x] Quality tiers (Certified / Verified / Adapter / Community) and a public parity scorecard
       seeded from the inventory (#3186)
 
@@ -418,7 +418,7 @@ Moved from v0.21 (not shipped in v0.21.0 – v0.21.2):
 - [ ] **Debezium-compatible output mode for MySQL**, using the Postgres diff harness from v0.21
       (#3075)
       against real Debezium on the same database (PR #3076 data model + JsonConverter)
-- [ ] **Default engine flip and v1 engine deletion**: arch-v2 shipped as `preview` in v0.21; this flips
+- [ ] **Default engine flip and v1 engine deletion**: arch-v2 has been a `preview` engine since v0.19; this flips
       it to the default and removes the v1 engine, gated on the cross-engine benchi harness proving
       parity-or-faster at shipped defaults (PRs #2956/#3067). The #2978 staged batch engine and
       #3184 ProcessBatch land first as the performance substrate.
