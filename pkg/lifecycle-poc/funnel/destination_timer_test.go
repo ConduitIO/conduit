@@ -1182,3 +1182,192 @@ func TestDestinationTask_FlushMetrics(t *testing.T) {
 		is.Equal(m.lingers, []time.Duration{0, time.Second, time.Second, 100 * time.Millisecond, 0})
 	})
 }
+
+// TestDestinationTask_TimerHandOffAtomicWithArrival pins enqueueMu in
+// flushDuePipelined (review of #3335, M1): the timer has taken buffer 1 and is
+// about to hand it to the flusher when an arrival fills buffer 2 by size.
+// Buffer 1 must reach the flusher first; otherwise the flusher writes buffer 2
+// and acks the source past buffer 1 (invariants 1 and 2), and a Close in the
+// same gap closes flushCh under the timer's send.
+func TestDestinationTask_TimerHandOffAtomicWithArrival(t *testing.T) {
+	// Real time, not a synctest bubble: with the fix the arrival waits on
+	// enqueueMu, a sync.Mutex, which synctest does not count as durably
+	// blocked, so fake time would never advance past the wait below.
+	is := is.New(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	dest := newTimedDestination(t, "dest")
+	dt := NewBatchingDestinationTask("dest", dest, log.Test(t), NoOpConnectorMetrics{}, 2, 50*time.Millisecond)
+	dt.SetPipelined()
+	is.NoErr(dt.Open(ctx))
+	src := newFakeSource("src", nil)
+	w := newTimerTestWorker(t, src, &TaskNode{Task: dt}, nil)
+	recs := randomRecords(3)
+
+	inHook, proceed := make(chan struct{}), make(chan struct{})
+	var first atomic.Bool
+	// Not sync.Once: a concurrent Do would block the arrival in the hook and
+	// hide the race this test is for. Only the first send (the timer's) is
+	// held; the arrival's goes straight through.
+	dt.testBeforeEnqueueSend = func() {
+		if first.CompareAndSwap(false, true) {
+			close(inHook)
+			<-proceed
+		}
+	}
+
+	is.True(isBuffered(dt.doBuffered(ctx, NewBatch(recs[:1]), newRunAckNacker(w)))) // arms the timer
+	<-inHook                                                                        // the timer took [rec0] and is about to send it
+
+	arrival := make(chan error, 1)
+	go func() { arrival <- dt.doBuffered(ctx, NewBatch(recs[1:]), newRunAckNacker(w)) }()
+	time.Sleep(100 * time.Millisecond) // the arrival waits on enqueueMu (without it, overtakes)
+	close(proceed)
+	err := <-arrival
+	is.True(err == nil || isBuffered(err))
+	is.NoErr(dt.Close(ctx))
+
+	is.Equal(dest.writeSizes(), []int{1, 2}) // the timer's buffer first
+	assertMonotonicAcks(t, src.ackedPositions())
+	is.Equal(src.ackedPositions(), posOf(recs...))
+}
+
+// TestDestinationTask_TimerOnPoisonedTask pins the flushErr check in
+// timerDueLocked (review of #3335, M5). A sibling poisons the task through
+// setFlushErr while a partial batch is buffered; that takes nothing, so the
+// generation is unchanged and the timer stays armed. At the deadline the timer
+// must not write or ack the batch (invariant 3). On the synchronous path this
+// check is the only one that stops it: flushPending does not consult the flush
+// error.
+func TestDestinationTask_TimerOnPoisonedTask(t *testing.T) {
+	for name, pipelined := range map[string]bool{"pipelined": true, "synchronous": false} {
+		t.Run(name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				is := is.New(t)
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				dest := newTimedDestination(t, "dest")
+				dt := NewBatchingDestinationTask("dest", dest, log.Test(t), NoOpConnectorMetrics{}, 10, time.Second)
+				if pipelined {
+					dt.SetPipelined()
+				}
+				is.NoErr(dt.Open(ctx))
+				src := newFakeSource("src", nil)
+				w := newTimerTestWorker(t, src, &TaskNode{Task: dt}, nil)
+				is.True(isBuffered(dt.doBuffered(ctx, NewBatch(randomRecords(2)), newRunAckNacker(w))))
+				dt.setFlushErr(cerrors.New("sibling failed"))
+
+				sleep(2 * time.Second) // past the deadline
+				is.Equal(len(dest.timedWrites()), 0)
+				is.Equal(len(src.ackedPositions()), 0)
+				_ = dt.Close(ctx) // fails with the flush error; nothing written
+				is.Equal(len(dest.timedWrites()), 0)
+				is.Equal(len(src.ackedPositions()), 0)
+			})
+		})
+	}
+}
+
+// TestWorker_NSourceFanOut_TimerWaitsForSecondFeederPass pins that the
+// synchronous timer holds EVERY feeder's processing lock, not only the first
+// (review of #3335, M2). Two workers, one shared root per destination (the
+// production shape without pipeline processors). A pass of the SECOND worker
+// is in flight, its write to B held open, when A's deadline passes. A's timer
+// must wait for that pass: holding only worker 1's lock it would flush during
+// the pass and cast the last vote for worker 2's records, so worker 2's source
+// acks would run inside its own pass.
+func TestWorker_NSourceFanOut_TimerWaitsForSecondFeederPass(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		is := is.New(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		logger := log.Test(t)
+
+		destA, destB := newTimedDestination(t, "A"), newTimedDestination(t, "B")
+		dtA := NewBatchingDestinationTask("A", destA, logger, NoOpConnectorMetrics{}, 100, time.Second)
+		dtB := NewDestinationTask("B", destB, logger, NoOpConnectorMetrics{})
+		roots := sharedRoots(dtA, dtB)
+		is.NoErr(dtA.Open(ctx))
+		src1, src2 := newChanSource("src1"), newChanSource("src2")
+		w1 := newTimerTestWorkerNext(t, src1, nil, roots...)
+		w2 := newTimerTestWorkerNext(t, src2, nil, roots...)
+		var passDone, flushedDuringPass atomic.Bool
+		dtA.testTimerHoldsLocks = func() {
+			if !passDone.Load() {
+				flushedDuringPass.Store(true)
+			}
+		}
+		wait1, wait2 := goDo(t, ctx, cancel, w1), goDo(t, ctx, cancel, w2)
+
+		recs := randomRecords(2)
+		src2.push(recs[0]) // worker 2, pass 1: buffered in A, written by B
+		synctest.Wait()
+		sleep(500 * time.Millisecond)
+		entered, release := destB.block()
+		src2.push(recs[1]) // worker 2, pass 2: B's write is held open
+		<-entered
+		synctest.Wait()
+
+		sleep(time.Second) // A's deadline passes while worker 2's pass holds its lock
+		is.Equal(len(destA.timedWrites()), 0)
+		is.Equal(len(src2.ackedPositions()), 0)
+
+		passDone.Store(true)
+		release()
+		synctest.Wait()
+		is.True(!flushedDuringPass.Load())
+		is.Equal(destA.writeSizes(), []int{2}) // both records, one Write, after the pass
+		assertMonotonicAcks(t, src2.ackedPositions())
+		is.Equal(src2.ackedPositions(), posOf(recs...))
+
+		cancel()
+		_, _ = wait1(), wait2()
+		is.NoErr(dtA.Close(context.Background()))
+	})
+}
+
+// TestDestinationTask_StaleSyncTimerParkedOnFeederLock pins the second
+// generation check, in flushTimerSync (review of #3335, L1, M6). The callback
+// passes the early check in flushDueSync and is then held right after taking
+// its feeder's processing lock. Meanwhile buffer 1 is taken by size and buffer
+// 2 starts. When the callback goes on it must find the new generation and
+// leave buffer 2 to its own timer: flushing it would write a smaller batch
+// before its deadline and report it as deadline_timer.
+func TestDestinationTask_StaleSyncTimerParkedOnFeederLock(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		is := is.New(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		dest := newTimedDestination(t, "dest")
+		dt := NewBatchingDestinationTask("dest", dest, log.Test(t), NoOpConnectorMetrics{}, 3, time.Second)
+		is.NoErr(dt.Open(ctx))
+		src := newFakeSource("src", nil)
+		w := newTimerTestWorker(t, src, &TaskNode{Task: dt}, nil)
+		parked, hold := make(chan struct{}), make(chan struct{})
+		var first atomic.Bool
+		dt.testAfterFeederLock = func(int) {
+			if first.CompareAndSwap(false, true) {
+				close(parked)
+				<-hold
+			}
+		}
+		recs := randomRecords(4)
+
+		is.True(isBuffered(dt.doBuffered(ctx, NewBatch(recs[:1]), newRunAckNacker(w))))
+		time.Sleep(time.Second)
+		<-parked                                                           // buffer 1's callback passed the early check and holds the feeder lock
+		err := dt.doBuffered(ctx, NewBatch(recs[1:3]), newRunAckNacker(w)) // size: takes buffer 1
+		is.True(err == nil || isBuffered(err))
+		is.True(isBuffered(dt.doBuffered(ctx, NewBatch(recs[3:]), newRunAckNacker(w)))) // buffer 2, due at 2 s
+		close(hold)
+		synctest.Wait()
+		is.Equal(dest.writeSizes(), []int{3}) // the stale callback left buffer 2 alone
+
+		sleep(999 * time.Millisecond)
+		is.Equal(dest.writeSizes(), []int{3})
+		sleep(time.Millisecond)
+		is.Equal(dest.writeSizes(), []int{3, 1}) // buffer 2 at its own deadline
+		is.Equal(dest.timedWrites()[1].at, 2*time.Second)
+		is.Equal(src.ackedPositions(), posOf(recs...))
+		is.NoErr(dt.Close(ctx))
+	})
+}
