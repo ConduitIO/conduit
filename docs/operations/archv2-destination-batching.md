@@ -177,7 +177,9 @@ write. No data is at risk: nothing is acknowledged to the source before it is wr
 
 The start of a pipeline on `--preview.pipeline-arch-v2` logs a warning with the code
 `pipeline.archv2_destination_batch_unbounded_wait`, naming a destination connector that sets
-`sdk.batch.size` above 1 and no `sdk.batch.delay`. The pipeline starts and runs.
+`sdk.batch.size` above 1 and no `sdk.batch.delay`. The pipeline starts and runs. The warning is logged again on
+every start, including each restart after an error recovery, so a repeat is the same configuration, not a new
+problem.
 
 ### Diagnosis
 

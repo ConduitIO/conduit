@@ -159,7 +159,14 @@ func (t *DestinationTask) stopFlushTimerLocked() {
 // timerDueLocked reports whether the timer armed for generation gen may still
 // take the buffer: nothing took it since (same generation), it is not empty,
 // the task is not closed and has not failed. t.mu must be held.
-
+//
+// closed is a second guard, not the one that usually decides. Pipelined,
+// stopFlusher sets closed and takes (new generation) in one enqueueMu section,
+// so the generation check fails first. Synchronous, it decides only in the
+// window between Close setting closed and Close's own flush taking the buffer;
+// a timer that won syncMu there would flush what Close is about to flush, under
+// the same locks. It keeps "nothing after Close" from resting on the
+// generation reasoning alone.
 func (t *DestinationTask) timerDueLocked(gen uint64) bool {
 	return gen == t.bufferGen && len(t.pending) > 0 && !t.closed && t.flushErr == nil
 }
