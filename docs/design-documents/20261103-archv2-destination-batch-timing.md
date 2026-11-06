@@ -291,9 +291,10 @@ and configures the plugin with `"0"` for each key that would otherwise enable th
 **Where.** A `flushTimer *time.Timer` and a `bufferGen uint64` on `DestinationTask`, both guarded by
 `mu`, and, for the synchronous path, `feeders []func(context.Context) (release func(), err error)`:
 the `acquireProcessingLock` of each worker whose tree reaches the task, in worker index order. Each
-worker registers itself with the batching destinations below its `FirstTask` when it opens, using the
-`batchingDestinations` walk (`worker.go`). The task tree is fixed before any worker starts
-(`hasBatchingBelow`'s invariant), so the list is fixed too.
+worker registers itself with the batching destinations below its `FirstTask` when it is built
+(`NewWorker`, which the service calls in source order after the shared sink is marked), walking
+`Next` as `drainNode` does and recording the shared boundary node above the task. The task tree is
+fixed before any worker starts (`hasBatchingBelow`'s invariant), so the list is fixed too.
 
 - **Arm.** In `bufferBatch`, where `flushDeadline` is set today (`bufferedCount == 0 &&
   batchDelay > 0`): set the deadline, then `flushTimer = time.AfterFunc(batchDelay, func()
@@ -398,6 +399,10 @@ and only for an error that `Close` would report as `CodeFlushOnCloseFailed`
   logs;
 - a drain error recorded by `drainNotSent` when the stop context ran out during a graceful
   `Worker.Stop` (`destination_batch.go:843-871`): the worker is stopping and the records replay;
+- a synchronous drain's own flush that failed because its context ended: on the fan-out path
+  `Worker.Stop`'s `Drain` is `flush`, run with the stop context, so a stop deadline that ends while
+  the destination's `Write` or `Ack` waits makes `finishFlush` record the context error. The worker is
+  stopping and the records replay, as in the bullet above;
 - a `poisonBatchingDestinations` echo (`setFlushErr` from a sibling's failed pass): that failure
   already failed the run where it happened.
 
@@ -533,7 +538,7 @@ unchanged: an S3 destination arrives with an explicit size of 1000.
 | Source idle with a partial batch | Timer takes it after `delay`; written, then acked in order | 1, 2 |
 | Timer fires while `doBuffered` holds `enqueueMu`/`syncMu` | Callback waits; on entry finds a new generation (arrival took it) or takes it itself | 1, 4 |
 | Timer fires during a fan-out pass | Waits for the processing lock; runs after the pass, never during it | 1, 2 |
-| Two destinations' timers fire together (fan-out) | Serialised by the processing lock, acquired in worker order. The second timer's flush may cast the last vote for a position the first timer's destination did not nack, and so release a deferred nack from the first (#3324) | 2, 3 |
+| Two destinations' timers fire together (fan-out) | Serialised by the processing lock, acquired in worker order. The second timer's flush may cast the last vote for a position another branch already nacked, and so be the flush that releases that deferred nack (#3324) | 2, 3 |
 | Timer flush releases a sibling's deferred nack (fan-out, #3324): DLQ write fails, nack threshold exceeded, or default DLQ | `Worker.Nack` returns the raw error (fatal for the first two, the plain record error for the default DLQ); the flush records `flushErr`; nothing behind it is acked; the idle error channel fails the run with the classification intact, so a fatal error does not enter the backoff restart loop | 1, 3 |
 | Timer fires after a size flush took the buffer | Generation mismatch, no-op | 4 |
 | Timer and `deferOrdered` race | Both take under the same lock; queued acks stay behind earlier records | 1, 2 |
