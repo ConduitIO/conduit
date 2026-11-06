@@ -241,3 +241,41 @@ func TestConnectorErrorsCounter_Labels(t *testing.T) {
 	is.True(m != nil) // expected a conduit_connector_errors_total series with all 4 labels
 	is.Equal(m.GetCounter().GetValue(), float64(1))
 }
+
+// TestFunnelDestinationFlushMetrics_Labels asserts the arch-v2 destination flush
+// metrics (#3231) carry pipeline_name/plugin/component_id, the counter also a
+// bounded trigger label, and that the linger timer records seconds.
+func TestFunnelDestinationFlushMetrics_Labels(t *testing.T) {
+	is := is.New(t)
+
+	const (
+		pipelineName = "test-pipeline-funnel-flush"
+		plugin       = "test-plugin"
+		componentID  = "test-destination-instance-id"
+	)
+
+	promReg := registerFreshBackend(is)
+
+	measure.FunnelDestinationFlushesCounter.WithValues(pipelineName, plugin, componentID, "deadline_timer").Inc()
+	measure.FunnelDestinationFlushLingerTimer.WithValues(pipelineName, plugin, componentID).Update(1500 * time.Millisecond)
+
+	families, err := promReg.Gather()
+	is.NoErr(err)
+	flushes := findMetric(findFamily(families, "conduit_funnel_destination_flushes_total"), map[string]string{
+		"pipeline_name": pipelineName,
+		"plugin":        plugin,
+		"component_id":  componentID,
+		"trigger":       "deadline_timer",
+	})
+	is.True(flushes != nil)
+	is.Equal(flushes.GetCounter().GetValue(), float64(1))
+
+	linger := findMetric(findFamily(families, "conduit_funnel_destination_flush_linger_seconds"), map[string]string{
+		"pipeline_name": pipelineName,
+		"plugin":        plugin,
+		"component_id":  componentID,
+	})
+	is.True(linger != nil)
+	is.Equal(linger.GetHistogram().GetSampleCount(), uint64(1))
+	is.Equal(linger.GetHistogram().GetSampleSum(), 1.5)
+}

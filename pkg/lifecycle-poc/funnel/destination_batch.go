@@ -233,11 +233,18 @@ func (t *DestinationTask) bufferBatch(batch *Batch, acker ackNacker, records []o
 		return nil, false, cerrors.Errorf("destination %s is closed", t.id)
 	}
 	now := time.Now()
-	if t.bufferedCount == 0 && t.batchDelay > 0 {
-		// First record of a fresh buffer: arm the flush deadline. It is checked
-		// synchronously here on every arrival (not on a ticker); a trailing
-		// partial batch is flushed on Close.
-		t.flushDeadline = now.Add(t.batchDelay)
+	first := t.bufferedCount == 0
+	if first {
+		// First record of a fresh buffer: start its linger clock and, with a
+		// delay, its flush deadline. The deadline is enforced by the flush timer
+		// armed below (destination_timer.go) and, cheaply, by this check on every
+		// arrival, which also covers a timer whose callback is waiting on a lock.
+		// Both take under mu and the same generation, so only one of them
+		// flushes a given buffer.
+		t.bufferedSince = now
+		if t.batchDelay > 0 {
+			t.flushDeadline = now.Add(t.batchDelay)
+		}
 	}
 	t.pending = append(t.pending, pendingBatch{batch: batch, acker: acker})
 	t.addBufferedLocked(records) // count and, with a byte cap, wire bytes
@@ -246,19 +253,26 @@ func (t *DestinationTask) bufferBatch(batch *Batch, acker ackNacker, records []o
 	// source position, so a long run of them must not wait for more records. The
 	// byte cap flushes before records the standalone connector could not receive
 	// in one Write accumulate (and bounds memory the count alone does not).
-	shouldFlush = t.bufferedCount >= t.effectiveBatchSize() || len(t.pending) >= t.effectiveBatchSize() || t.bytesDueLocked()
-	if !shouldFlush && t.batchDelay > 0 && !t.flushDeadline.IsZero() && now.After(t.flushDeadline) {
-		shouldFlush = true
+	var trigger FlushTrigger
+	switch {
+	case t.bufferedCount >= t.effectiveBatchSize() || len(t.pending) >= t.effectiveBatchSize():
+		trigger = FlushTriggerSize
+	case t.bytesDueLocked():
+		trigger = FlushTriggerBytes
+	case t.batchDelay > 0 && !t.flushDeadline.IsZero() && now.After(t.flushDeadline):
+		trigger = FlushTriggerDeadlineArrival
 	}
+	shouldFlush = trigger != ""
 	if shouldFlush {
-		toFlush = t.pending
-		t.pending = nil
-		t.resetBufferedLocked()
-		// Counted on the synchronous path too: another source's filter or nack
-		// runs outside the shared lock and must see this write as ahead of it.
-		// Released by runFlusher (pipelined) or below (synchronous) once the
-		// flush is fully acked.
-		t.outstanding++
+		// Counted in outstanding on the synchronous path too: another source's
+		// filter or nack runs outside the shared lock and must see this write as
+		// ahead of it. Released by runFlusher (pipelined) or flushTaken
+		// (synchronous) once the flush is fully acked.
+		toFlush, _, _ = t.takeLocked(trigger)
+	} else if first {
+		// #3231: bound the wait of a partial batch when no further record
+		// arrives. Size-only batching (no delay) arms nothing, as in the SDK.
+		t.armFlushTimerLocked()
 	}
 	t.mu.Unlock()
 	return toFlush, shouldFlush, nil
@@ -282,12 +296,18 @@ func (t *DestinationTask) bytesDueLocked() bool {
 }
 
 // resetBufferedLocked clears the buffered accounting after pending was taken.
-// Every site that takes pending must use it (or reset both fields): a stale byte
-// count would flush early. t.mu must be held.
+// Every site that takes pending must use it: a stale byte count would flush
+// early, and a flush timer left armed for the taken buffer must not take the
+// next one. It stops the timer and starts a new buffer generation, so a timer
+// callback already running for the taken buffer does nothing (see
+// destination_timer.go). t.mu must be held.
 func (t *DestinationTask) resetBufferedLocked() {
 	t.bufferedCount = 0
 	t.bufferedBytes = 0
 	t.flushDeadline = time.Time{}
+	t.bufferedSince = time.Time{}
+	t.stopFlushTimerLocked()
+	t.bufferGen++
 }
 
 // deferOrdered runs ack (a source ack or nack for records that bypass this
@@ -344,10 +364,7 @@ func (t *DestinationTask) deferOrdered(ctx context.Context, ack func(context.Con
 		// Pipelined: hand the buffer to the flusher now when it is releasable
 		// (see releasableLocked).
 		if t.releasableLocked() {
-			toFlush = t.pending
-			t.pending = nil
-			t.resetBufferedLocked() // count AND bytes: a stale byte count would flush early
-			t.outstanding++
+			toFlush, _, _ = t.takeLocked(t.releaseTriggerLocked())
 		}
 		t.mu.Unlock()
 		if toFlush == nil {
@@ -375,6 +392,15 @@ func (t *DestinationTask) releasableLocked() bool {
 	return t.bufferedCount == 0 ||
 		len(t.pending) >= t.effectiveBatchSize() ||
 		(t.batchDelay > 0 && !t.flushDeadline.IsZero() && time.Now().After(t.flushDeadline))
+}
+
+// releaseTriggerLocked names why releasableLocked let the buffer go, for the
+// flush metrics. t.mu must be held.
+func (t *DestinationTask) releaseTriggerLocked() FlushTrigger {
+	if t.bufferedCount == 0 || len(t.pending) >= t.effectiveBatchSize() {
+		return FlushTriggerAckQueue
+	}
+	return FlushTriggerDeadlineArrival
 }
 
 // flushTaken is flushPending for the synchronous path; the caller holds syncMu,
@@ -408,10 +434,7 @@ func (t *DestinationTask) releaseSync(ctx context.Context) error {
 		// outstanding > 0 means a flush already took earlier work that is not yet
 		// written; nothing queued may run ahead of it.
 		if t.outstanding == 0 && t.releasableLocked() {
-			toFlush = t.pending
-			t.pending = nil
-			t.resetBufferedLocked() // count AND bytes
-			t.outstanding++
+			toFlush, _, _ = t.takeLocked(t.releaseTriggerLocked())
 		}
 		t.mu.Unlock()
 		var err error
@@ -434,8 +457,9 @@ func (t *DestinationTask) releaseSync(ctx context.Context) error {
 
 // flush writes all buffered records (taken from t.pending) in one Write. It is
 // the synchronous path used when pipelining is not running (fan-out) and by
-// Close; see flushPending for the write/ack work itself.
-func (t *DestinationTask) flush(ctx context.Context) error {
+// Close; see flushPending for the write/ack work itself. trigger is what asked
+// for it (Drain or Close), for the flush metrics.
+func (t *DestinationTask) flush(ctx context.Context, trigger FlushTrigger) error {
 	// syncMu before pending, as in doBuffered: take and flush are one unit.
 	t.syncMu.Lock()
 	t.mu.Lock()
@@ -448,12 +472,7 @@ func (t *DestinationTask) flush(ctx context.Context) error {
 		t.syncMu.Unlock()
 		return err
 	}
-	pending := t.pending
-	t.pending = nil
-	t.bufferedCount = 0
-	t.bufferedBytes = 0
-	t.flushDeadline = time.Time{}
-	t.outstanding++
+	pending, _, _ := t.takeLocked(trigger)
 	t.mu.Unlock()
 	if t.testAfterTake != nil {
 		t.testAfterTake()
@@ -813,7 +832,7 @@ func (t *DestinationTask) Drain(ctx context.Context) error {
 		return nil
 	}
 	if t.flushCh == nil {
-		return t.flush(ctx)
+		return t.flush(ctx, FlushTriggerDrain)
 	}
 
 	// enqueueMu covers the take and the hand-off only; the wait below must not
@@ -839,13 +858,12 @@ func (t *DestinationTask) Drain(ctx context.Context) error {
 		t.enqueueMu.Unlock()
 		return nil
 	}
-	taken := t.pending
+	// The barrier flush is counted in outstanding (takeLocked), so it is ahead
+	// of any deferOrdered that follows.
+	taken, _, _ := t.takeLocked(FlushTriggerDrain)
 	toFlush := make([]pendingBatch, 0, len(taken)+1)
 	toFlush = append(toFlush, taken...)
 	toFlush = append(toFlush, pendingBatch{done: done})
-	t.pending = nil
-	t.resetBufferedLocked() // count AND bytes
-	t.outstanding++         // the barrier flush is ahead of any deferOrdered that follows
 	t.mu.Unlock()
 
 	select {
@@ -899,8 +917,9 @@ func (t *DestinationTask) drainNotSent(taken []pendingBatch, err error) error {
 	restored = append(restored, taken...)
 	restored = append(restored, t.pending...)
 	t.pending = restored
-	t.bufferedCount = 0
-	t.bufferedBytes = 0
+	// A new generation, and no timer: flushErr is set below, so the task has
+	// failed closed and a timer could only no-op.
+	t.resetBufferedLocked()
 	for _, p := range restored {
 		if p.batch != nil {
 			t.addBufferedLocked(p.batch.ActiveRecords()) // count and bytes
@@ -970,22 +989,22 @@ func (t *DestinationTask) stopFlusher(ctx context.Context) error {
 	defer t.enqueueMu.Unlock()
 
 	t.mu.Lock()
+	// closed under enqueueMu: a flush timer callback that takes enqueueMu after
+	// this sees it and never sends on the channel closed below.
 	t.closed = true
+	t.stopFlushTimerLocked()
 	var trailing []pendingBatch
 	dropped := 0
 	if len(t.pending) > 0 {
 		if t.flushErr == nil {
 			// Invariant 3: after a flush error the trailing batch is not sent (same
 			// rule as runFlusher); it stays unacknowledged and replays.
-			trailing = t.pending
-			t.outstanding++ // same critical section as the take
+			trailing, _, _ = t.takeLocked(FlushTriggerClose) // outstanding++ in the same critical section
 		} else {
 			dropped = len(t.pending)
+			t.pending = nil
+			t.resetBufferedLocked()
 		}
-		t.pending = nil
-		t.bufferedCount = 0
-		t.bufferedBytes = 0
-		t.flushDeadline = time.Time{}
 	}
 	t.mu.Unlock()
 	if dropped > 0 {

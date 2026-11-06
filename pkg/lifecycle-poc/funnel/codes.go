@@ -155,9 +155,10 @@ var (
 	// were never acknowledged upstream and replay on restart.
 	CodeFlushOnCloseFailed = conduiterr.Register("pipeline.flush_on_close_failed", codes.Aborted)
 
-	// CodeDestinationEmptyAckFlood is returned when a destination sends more than
-	// maxConsecutiveEmptyAcks consecutive ack responses that each carry no ack
-	// while the engine is waiting for acks.
+	// CodeDestinationEmptyAckFlood is returned when a destination sends
+	// maxConsecutiveEmptyAcks (1000) consecutive ack responses that each carry no
+	// ack while the engine is waiting for acks: the 1000th such response fails
+	// the write.
 	//
 	// The connector protocol does not require a response to carry at least one
 	// ack, so an empty response is legal and the engine tolerates a bounded run

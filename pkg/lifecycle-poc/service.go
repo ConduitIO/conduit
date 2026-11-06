@@ -1594,6 +1594,7 @@ func (s *Service) buildDestinationTasks(
 	logger log.CtxLogger,
 ) ([][]funnel.Task, error) {
 	var tasks [][]funnel.Task
+	var unbounded []unboundedBatchWait
 
 	for _, connID := range pl.ConnectorIDs {
 		instance, err := s.connectors.Get(ctx, connID)
@@ -1632,6 +1633,12 @@ func (s *Service) buildDestinationTasks(
 			batchSize,
 			batchDelay,
 		)
+		if batching {
+			destTask.SetFlushMetrics(s.newFlushMetrics(pl.Config.Name, instance))
+			if batchDelay <= 0 {
+				unbounded = append(unbounded, unboundedBatchWait{instance: instance, size: batchSize})
+			}
+		}
 		// Standalone connectors reject a request over
 		// connectors.max-receive-record-size; built-ins have no such limit.
 		if plugin.FullName(instance.Plugin).PluginType() != plugin.PluginTypeBuiltin {
@@ -1667,7 +1674,11 @@ func (s *Service) buildDestinationTasks(
 	// flusher goroutines would race on the single Worker's cross-batch source
 	// ack (each multiAckNacker orders within one batch, but the final hop to
 	// connector.Source.Ack has no cross-batch happens-before), so fan-out keeps
-	// the pre-pipelining synchronous flush.
+	// the pre-pipelining synchronous flush. Its sdk.batch.delay timer stays
+	// synchronous too: it flushes under the processing lock of every worker
+	// that feeds the destination, never during a pass (see
+	// funnel.DestinationTask.flushDueSync and
+	// docs/design-documents/20261103-archv2-destination-batch-timing.md).
 	if len(tasks) == 1 {
 		for _, branch := range tasks {
 			if dt, ok := branch[len(branch)-1].(*funnel.DestinationTask); ok {
@@ -1676,7 +1687,40 @@ func (s *Service) buildDestinationTasks(
 		}
 	}
 
+	// #3231: sdk.batch.delay is what bounds how long a partial batch waits (the
+	// flush timer); with size-only batching nothing does, as in the connector
+	// SDK. Say so once per destination, at build time.
+	for _, u := range unbounded {
+		logUnboundedBatchWait(ctx, logger, u, len(tasks) > 1)
+	}
+
 	return tasks, nil
+}
+
+// unboundedBatchWait is a destination the engine batches by size only.
+type unboundedBatchWait struct {
+	instance *connector.Instance
+	size     int
+}
+
+// logUnboundedBatchWait warns, with CodeArchV2DestinationBatchUnboundedWait,
+// that destination u batches by size only, so a partial batch on a quiet
+// source waits without a time bound. On a fan-out it also says that a sibling
+// destination's nack waits for this destination's flush (#3324).
+func logUnboundedBatchWait(ctx context.Context, logger log.CtxLogger, u unboundedBatchWait, fanOut bool) {
+	msg := fmt.Sprintf("destination %s batches by sdk.batch.size (%d) with no sdk.batch.delay: on a quiet source a "+
+		"partial batch is not written or acknowledged until more records arrive or the pipeline stops", u.instance.ID, u.size)
+	if fanOut {
+		msg += "; on this fan-out a record another destination nacks also waits for this destination's flush before " +
+			"it reaches the dead-letter queue (with the default dead-letter queue, before the pipeline fails)"
+	}
+	logger.Warn(ctx).
+		Str("code", CodeArchV2DestinationBatchUnboundedWait.Reason()).
+		Str(log.ConnectorIDField, u.instance.ID).
+		Str("plugin", u.instance.Plugin).
+		Int("sdk_batch_size", u.size).
+		Str("suggestion", "set sdk.batch.delay on the destination (for example 1s) to bound the wait").
+		Msg(msg)
 }
 
 func (s *Service) buildProcessorTasks(
@@ -2790,6 +2834,13 @@ func (s *Service) newConnectorMetrics(pipelineName string, instance *connector.I
 		instance.Type,
 		instance.ID,
 	)
+}
+
+func (s *Service) newFlushMetrics(pipelineName string, instance *connector.Instance) funnel.FlushMetrics {
+	if s.metricsDisabled {
+		return funnel.NoOpFlushMetrics{}
+	}
+	return funnel.NewFlushMetrics(pipelineName, instance.Plugin, instance.ID)
 }
 
 func (s *Service) newProcessorMetrics(pipelineName, plugin, componentID string) funnel.ProcessorMetrics {

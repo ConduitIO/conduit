@@ -112,3 +112,23 @@ var (
 // error carries no ConfigPath and no Fix; the message still names the
 // connector id and name and the setting.
 var CodeArchV2DestinationBatchingUnsupported = conduiterr.Register("pipeline.archv2_destination_batching_unsupported", codes.FailedPrecondition)
+
+// CodeArchV2DestinationBatchUnboundedWait is logged as a warning when a
+// pipeline starts on the preview engine (--preview.pipeline-arch-v2) with a
+// destination that batches by sdk.batch.size alone, with no sdk.batch.delay.
+// It is not an error: the pipeline starts and runs.
+//
+// The engine batches such a destination itself and flushes a partial batch
+// only when it fills, when the pipeline stops, or, with sdk.batch.delay, when
+// the delay has passed since its first record (the flush timer). Without the
+// delay nothing bounds the wait: on a source that goes quiet the last records
+// are not written, and not acknowledged upstream, until more records arrive
+// or the pipeline stops. That matches the connector SDK's own batching. No
+// data is at risk (nothing is acknowledged before it is written), but the
+// source position does not move (on Postgres, WAL is retained). On a pipeline
+// with several destinations, a record another destination nacks is routed to
+// the dead-letter queue, or with the default dead-letter queue fails the
+// pipeline, only once this destination has flushed it too, so that waits
+// without bound as well. Set sdk.batch.delay on the destination (for example
+// 1s) to bound it. See docs/operations/archv2-destination-batching.md.
+var CodeArchV2DestinationBatchUnboundedWait = conduiterr.Register("pipeline.archv2_destination_batch_unbounded_wait", codes.FailedPrecondition)

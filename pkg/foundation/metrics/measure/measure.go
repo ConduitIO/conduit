@@ -33,6 +33,9 @@ const (
 	// pkg/inspector.Inspector.NewSession), so per-node dashboards can join
 	// across all of these metrics on this label.
 	labelComponentID = "component_id"
+	// labelTrigger is what took a batching destination's buffer for writing
+	// (see FunnelDestinationFlushesCounter). It has a fixed set of values.
+	labelTrigger = "trigger"
 )
 
 // Any changes in metrics defined below should also be reflected in the metrics documentation.
@@ -177,5 +180,26 @@ var (
 		"conduit_dlq_errors_total",
 		"Number of errors a DLQ connector returned per pipeline and plugin.",
 		[]string{labelPipelineName, labelPlugin},
+	)
+
+	// FunnelDestinationFlushesCounter and FunnelDestinationFlushLingerTimer
+	// observe the arch-v2 engine's destination batching (#3231): every time a
+	// batching destination's buffer is taken for writing, by what (trigger:
+	// size, bytes, deadline_arrival, deadline_timer, ack_queue, drain, close),
+	// and how old its oldest record was. deadline_timer is "partial batch
+	// flushed by the sdk.batch.delay timer". A linger p99 above twice
+	// sdk.batch.delay means the timer, the flush queue or, on fan-out, the
+	// passes it waits behind are not keeping up. See
+	// docs/operations/archv2-destination-batching.md.
+	FunnelDestinationFlushesCounter = metrics.NewLabeledCounter(
+		"conduit_funnel_destination_flushes_total",
+		"Number of times an arch-v2 batching destination's buffer was taken for writing, by pipeline name, plugin, component ID and trigger.",
+		[]string{labelPipelineName, labelPlugin, labelComponentID, labelTrigger},
+	)
+	FunnelDestinationFlushLingerTimer = metrics.NewLabeledTimer(
+		"conduit_funnel_destination_flush_linger_seconds",
+		"Age of the oldest buffered record when an arch-v2 batching destination's buffer was taken for writing, by pipeline name, plugin and component ID.",
+		[]string{labelPipelineName, labelPlugin, labelComponentID},
+		prometheus.HistogramOpts{Buckets: []float64{.001, .005, .01, .05, .1, .25, .5, 1, 2.5, 5, 10, 30, 60}},
 	)
 )

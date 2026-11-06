@@ -98,6 +98,15 @@ func sourceBatchingNote(connectors []connectorInfo) string {
 		"on the source connector. Runbook: docs/operations/source-batching.md."
 }
 
+// destinationBatchingNote states how the preview engine batches a destination
+// and what bounds the wait of a partial batch (#3231, design
+// 20261103-archv2-destination-batch-timing.md).
+const destinationBatchingNote = "Destination batching on `--preview.pipeline-arch-v2`: the engine batches a destination " +
+	"that sets `sdk.batch.size` above 1 or `sdk.batch.delay` itself, and writes a partial batch at the latest " +
+	"`sdk.batch.delay` after its first record, even when no further record arrives (a timer, as in the connector SDK). " +
+	"With `sdk.batch.size` alone a partial batch waits for more records or a stop, and the start logs " +
+	"`pipeline.archv2_destination_batch_unbounded_wait`. Runbook: docs/operations/archv2-destination-batching.md."
+
 // renderLLMSTxt renders the concise, llmstxt.org-conformant index: one H1,
 // one blockquote summary immediately after, then ## sections of links and
 // counts. Every list here is derived from d; the full detail lives in
@@ -122,6 +131,7 @@ func renderLLMSTxt(d generatedData) string {
 	if note := sourceBatchingNote(d.Connectors); note != "" {
 		b.WriteString("- " + note + "\n")
 	}
+	b.WriteString("- " + destinationBatchingNote + "\n")
 	b.WriteString("\n")
 
 	b.WriteString("## Error codes\n")
@@ -314,6 +324,7 @@ func renderConnectorsSection(b *strings.Builder, connectors []connectorInfo) {
 	if note := sourceBatchingNote(connectors); note != "" {
 		b.WriteString(note + "\n\n")
 	}
+	b.WriteString(destinationBatchingNote + "\n\n")
 
 	for _, c := range connectors {
 		fmt.Fprintf(b, "### %s (%s)\n\n", c.Name, c.Version)

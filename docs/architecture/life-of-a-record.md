@@ -166,9 +166,9 @@ One pass of `Worker.Do`:
    It releases the leading run of terminal positions to the parent in source order (invariant 4). Because
    every branch votes in source order, this order also holds across batches while a batching destination
    still holds an earlier one. The cost: a record a sibling nacks reaches the DLQ only when the batching
-   destination flushes, and with the default DLQ the pipeline fails only then. With `sdk.batch.size` and no
-   `sdk.batch.delay` on a quiet source that is unbounded until #3231; see
-   [the runbook](../operations/archv2-destination-batching.md#fan-out-a-nack-waits-for-the-batching-destination).
+   destination flushes, and with the default DLQ the pipeline fails only then. With `sdk.batch.delay` that is
+   bounded by the destination's flush timer (below); with `sdk.batch.size` alone on a quiet source it is not;
+   see [the runbook](../operations/archv2-destination-batching.md#fan-out-a-nack-waits-for-the-batching-destination).
    A release to the parent that fails is final: a later vote returns the same error and never retries it,
    so a record is not written to the DLQ twice. A second vote from the same branch is refused as a bug.
 6. `runAckNacker` holds back the position of a record that a processor split until every piece is terminal
@@ -180,8 +180,21 @@ One pass of `Worker.Do`:
 Only after step 7 does the loop read again. So at any moment a v2 worker has at most one batch in flight,
 and the stream of acks to the source is naturally ordered.
 
+A destination that batches (`sdk.batch.size` above 1 or `sdk.batch.delay` above 0) buffers the batch
+instead of writing it in step 4, and the worker reads on without acking it. The buffer is written when it
+is full, when the pipeline stops, or `sdk.batch.delay` after its first record: a one-shot timer armed by
+that record (#3231, design
+[`20261103-archv2-destination-batch-timing`](../design-documents/20261103-archv2-destination-batch-timing.md)),
+so a source that goes quiet still gets its tail written and acked. With one destination the timer hands
+the buffer to the flusher goroutine, which does every write and source ack in order. With several it
+flushes while holding the processing lock of every worker that feeds the destination, so its source acks,
+including a sibling's nack whose last vote that flush casts, never run during a pass. With
+`sdk.batch.size` and no delay there is no timer, as in the connector SDK, and the start logs
+`pipeline.archv2_destination_batch_unbounded_wait`.
+
 Stop: `Worker.Stop` waits for the in-flight batch (it takes the processing lock the pass holds), sets the
-stop flag, then tears down the source, which is what unblocks a `Read` that is parked. `Do` returns nil on
+stop flag, drains the batching destinations while the source can still be acked, then tears down the
+source, which is what unblocks a `Read` that is parked. `Do` returns nil on
 the next check. The shared sink is closed once, after every worker has exited
 (`Sink.Close`, invariant 1 and 3), because closing it earlier would tear down a destination a sibling is
 still writing to.
@@ -222,9 +235,10 @@ so a failed write or ack there does not return through the pass. The flusher rec
 error, and nothing queued behind it is written or acked. It also reports the error to the run
 (`DestinationTask.reportFlushFailure`, read by `Worker.WatchConnectorErrors` next to the connectors' own
 `Errors()` channels), so the run fails even when the source is idle and the worker is parked in `Read`. The
-error is wrapped, not rebuilt, so a fatal one stays fatal. The run's cancellation, a source that was already
-torn down, and a stop deadline that ran out during the drain are not reported: in those the worker is already
-going away and the records replay.
+error is wrapped, not rebuilt, so a fatal one stays fatal. The same holds for a write the flush timer starts on
+a fan-out pipeline. The run's cancellation, a source that was already torn down, and a drain that could not
+reach the flusher, or whose flush failed because the stop deadline ended, are not reported: in those the
+worker is already going away and the records replay.
 
 Backpressure is where the two engines differ, and it is a behaviour to plan around, not a bug:
 
