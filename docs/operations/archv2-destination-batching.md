@@ -86,18 +86,21 @@ destination batches (`sdk.batch.size` above 1 or `sdk.batch.delay` above 0) and 
 
 A nacked position is handled (DLQ write, then source ack, or the pipeline failure with the default DLQ) only
 once every destination has voted for it. A batching destination votes when its batch flushes: when it is full,
-or `sdk.batch.delay` after its first record. Handling the nack earlier let the source position move past records
-the batching destination still held unwritten, and a crash then lost them (#3323, postmortem
+or `sdk.batch.delay` after its first record, which a timer enforces even when no further record arrives.
+Handling the nack earlier let the source position move past records the batching destination still held
+unwritten, and a crash then lost them (#3323, postmortem
 `docs/postmortems/20261103-archv2-fanout-sibling-nack-acks-past-buffered-batch.md`).
 
-With `sdk.batch.size` set and no `sdk.batch.delay`, on a source that goes quiet, the batch may not fill for a
-long time, and nothing bounds the wait until the source sends more records or the pipeline is stopped. #3231
-tracks a flush timer for this case.
+With `sdk.batch.delay` set, the wait is bounded by that delay (plus the time the flush itself takes, and on
+a fan-out any pass in flight). With `sdk.batch.size` set and no `sdk.batch.delay`, on a source that goes
+quiet, the batch may not fill for a long time, and nothing bounds the wait until the source sends more
+records or the pipeline is stopped. The start logs `pipeline.archv2_destination_batch_unbounded_wait` for
+such a destination (see below).
 
 ### Remediation
 
 - Set `sdk.batch.delay` on the batching destination (for example `1s`). The nack is then handled within that
-  delay.
+  delay, by the destination's flush timer.
 - Or stop the pipeline: a graceful stop flushes the batch and the nack is handled then.
 
 No data is at risk from the wait itself: nothing past the nacked record is acked to the source until it is
@@ -129,8 +132,9 @@ write error goes through recovery like any other transient failure. The cause is
 destination connector's logs.
 
 These do not fail the run, because they are the expected cases where the records replay: the run's own
-cancellation, a source that was already torn down when the flush acked it, and a graceful stop whose deadline ran
-out while it drained the destination.
+cancellation, a source that was already torn down when the flush acked it, and, during a graceful stop, a drain
+that could not reach the flusher, or whose flush failed because the stop deadline ended. A genuine destination
+failure during a graceful stop (for example a write the flusher already had in flight) is still reported.
 
 ### Remediation
 
@@ -138,9 +142,62 @@ Fix the destination (the wrapped error names the cause) and let recovery restart
 yourself. No data is at risk: the records in the failed flush, and everything queued behind it, were never
 acknowledged to the source and are delivered again after the restart.
 
+## A partial batch waits longer than `sdk.batch.delay`
+
+Applies from the release that contains the flush timer (#3231, design
+`docs/design-documents/20261103-archv2-destination-batch-timing.md`). A destination the engine batches with
+`sdk.batch.delay` set.
+
+### Symptom
+
+- The last records before the source goes quiet show up at the destination, and the source position moves,
+  later than `sdk.batch.delay` after they were read.
+- `conduit_funnel_destination_flush_linger_seconds` for the destination has a p99 above twice
+  `sdk.batch.delay`.
+
+### Diagnosis
+
+`sdk.batch.delay` bounds how long a record waits in the destination's buffer before the buffer is taken for
+writing, counted from the buffer's first record. A timer takes it at that deadline if nothing else did. What
+comes after the take is not covered by the delay: the write and its acks, the flushes queued ahead of it (at
+most two on a single-destination pipeline), and on a pipeline with several destinations any pass that is in
+flight, which the timer waits for. Compare the triggers in `conduit_funnel_destination_flushes_total`:
+`deadline_timer` counts partial batches the timer flushed. If linger is high while `deadline_timer` stays flat,
+the timer is waiting behind something, usually a slow destination (check
+`conduit_connector_execution_duration_seconds` for it) or, on fan-out, a slow sibling destination.
+
+### Remediation
+
+Fix or scale the slow destination. Lowering `sdk.batch.delay` shortens the wait in the buffer but not the
+write. No data is at risk: nothing is acknowledged to the source before it is written.
+
+## Size-only batching: `pipeline.archv2_destination_batch_unbounded_wait`
+
+### Symptom
+
+The start of a pipeline on `--preview.pipeline-arch-v2` logs a warning with the code
+`pipeline.archv2_destination_batch_unbounded_wait`, naming a destination connector that sets
+`sdk.batch.size` above 1 and no `sdk.batch.delay`. The pipeline starts and runs. The warning is logged again on
+every start, including each restart after an error recovery, so a repeat is the same configuration, not a new
+problem.
+
+### Diagnosis
+
+With size-only batching nothing bounds how long a partial batch waits: on a source that goes quiet, the last
+records are not written, and not acknowledged upstream, until more records arrive or the pipeline stops. The
+connector SDK behaves the same way, so this is not a change from the default engine. It pins the source
+position (on Postgres, WAL is retained), and on a pipeline with several destinations a record another
+destination nacks reaches the DLQ, or with the default DLQ fails the pipeline, only once this destination has
+flushed.
+
+### Remediation
+
+Set `sdk.batch.delay` on the destination (for example `1s`), or accept the wait if the source never goes quiet.
+
 ## Related
 
 - Issue #2979
 - Issue #3323, PR #3324: a fan-out nack waits for every destination's vote
-- Issue #3231: flush timer for destination batches
+- Issue #3231: flush timer for destination batches (design
+  `docs/design-documents/20261103-archv2-destination-batch-timing.md`)
 - Error code reference: `pipeline.archv2_destination_batching_unsupported` in `llms-full.txt`

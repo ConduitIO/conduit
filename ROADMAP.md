@@ -280,12 +280,13 @@ A lane that misses the bar drops to the next release; the release does not wait 
 ### v0.21 — Migrate from Kafka Connect, part 1 (released 2026-10-26)
 
 v0.21.0 shipped on 2026-10-26, followed by v0.21.1 (never built) and v0.21.2 (2026-10-27). It
-delivered the certified connectors, the compatibility report and Debezium-compatible Postgres
-output. It did not deliver the full `migrate` story as planned: rules exist for Debezium Postgres,
-the S3 sink and MirrorMaker 2 only, and no offset import. The rest moved to v0.22, marked
-_moved from v0.21_ below. **No migrated pipeline resumes from imported offsets yet; every migration
-re-snapshots until v0.22.** Items still open here could not be confirmed against the repository;
-they are tracked outside this repo.
+delivered the certified connectors and the compatibility report. It did not deliver the full
+`migrate` story as planned: rules exist for Debezium Postgres, the S3 sink and MirrorMaker 2 only,
+there is no offset import, and Debezium-compatible Postgres output did not ship. Everything that
+did not ship moved to a later release and is marked _moved from v0.21_ there; live-eval numbers are
+under [Later](#later) and the design-partner call is under [How to contribute](#how-to-contribute).
+**No migrated pipeline resumes from imported offsets yet; every migration re-snapshots until
+v0.22.**
 
 The v0.21 bar was a certified connector for every output `conduit migrate kafka-connect` emits,
 and two green nightlies on the release branch.
@@ -297,14 +298,12 @@ and two green nightlies on the release branch.
       config it can't translate. Rules for Debezium Postgres, S3 sink and MirrorMaker 2
       (#3074, #3078, #3188, #3181, #3118). The remaining classes are in v0.22
 - [x] **Postgres CDC, Debezium parity** (connector v0.15.0), certified (#3202)
-- [ ] **Debezium-compatible output mode for Postgres**: not shipped. The diff harness and real
-      Debezium goldens exist (#3075), and `debezium.encode` exists (#3183) but is not registered as
-      a built-in, and the Postgres and Kafka connectors cannot carry its output yet
+- [x] Groundwork for Debezium-compatible Postgres output: the diff harness and real Debezium
+      goldens (#3075) and `debezium.encode` (#3183). The output mode itself moved to v0.22
 - [x] **MySQL CDC beta**, certified from the labs `mysql` connector (#3202)
 - [x] **Elasticsearch** certified from labs (#3202). OpenSearch is not certified yet
-- [ ] **Kafka→Kafka**, partial: the connector is certified (#3202) and MirrorMaker 2 configs
-      translate (#3118), but `migrate` does not yet preserve partition, headers and timestamp, and
-      the Redpanda profile is not confirmed
+- [x] **Kafka→Kafka**, first part: the connector is certified (#3202) and MirrorMaker 2 configs
+      translate (#3118). Partition, header and timestamp preservation moved to v0.22
 - [x] **S3 sink** format and partitioning parity with the Kafka Connect S3 sink, and the AWS
       default credential chain (`conduit-connector-s3`#1021, #1022; design #3083). `migrate` still
       blocks S3 sink migrations on `kc.output_shape_differs`
@@ -315,10 +314,6 @@ and two green nightlies on the release branch.
 - [x] SDK schema-extraction speedup (`conduit-connector-sdk`#391)
 - [x] Acceptance suite v2, the basis for "Conduit Certified" (design #3036; the certifications in
       #3202 run against it)
-- [ ] Go 1.26 toolchain moves across the connector fleet, and the archived Avro library is removed
-      from every connector
-      ([design](docs/design-documents/20260823-avro-codec-archived-decoder-advisories.md))
-- [ ] A connector scaffold (`conduit connector new`) that passes acceptance v2
 
 #### Engine
 
@@ -326,8 +321,6 @@ and two green nightlies on the release branch.
       batching and read-ahead (#3201, #3210). The default flip and deletion of the v1 engine are
       v0.22
 - [x] Groundwork: a simulated-connector test kit, `make bench-engine`, and a per-PR benchmark comment
-- [ ] Processor batch API, and a `stateless` declaration for processors: designed (#3178);
-      wiring is #3184, still open
 - [x] The guarantees page and the life-of-a-record guide (#3194)
 
 #### Formats and security
@@ -338,10 +331,6 @@ and two green nightlies on the release branch.
 
 #### Languages
 
-- [ ] Before the Python GAs: one merged Python distribution with `conduit.connector` and
-      `conduit.client` namespaces
-- [ ] Python connector SDK GA, with `conduit connector new --lang python` (scaffold: #3182)
-- [ ] Python embedded client GA
 - [x] SDK parity: spec and conformance groundwork (#2948)
 
 #### Catalog
@@ -350,20 +339,12 @@ and two green nightlies on the release branch.
 - [x] Labs connector CI runs on the default branch
 - [x] Archive the empty labs `conduit-processor-textgen` stub
 - [x] Retire the labs `redpanda` connector in favour of the `kafka` connector (its Redpanda profile
-      is in the Kafka→Kafka item above)
-- [ ] List every labs connector that passes the acceptance suite in the registry as Community tier
-      with license metadata (from 6 listed connectors to roughly 30)
+      is in the v0.22 Kafka→Kafka item)
 - [x] Quality tiers (Certified / Verified / Adapter / Community) and a public parity scorecard
       seeded from the inventory (#3186)
 
-#### AI
-
-- [ ] Live-eval numbers published from the weekly eval, reported as medians with the model and run
-      ID. In-sample numbers are not a claim
-
 #### Operations and contributors
 
-- [ ] Registry web UI with search, verified badges and download stats (built; deployment pending)
 - [x] docker-compose quickstart, and `deploy/` examples: docker-compose, systemd, ECS task
       definition, Nomad job spec (examples, not supported products) (#3056)
 - [x] Coverage floor and benchmark-regression gates in CI — coverage ratchet (`.github/workflows/coverage.yml`) and
@@ -373,16 +354,27 @@ and two green nightlies on the release branch.
 - [x] An engine section in `CONTRIBUTING.md` (#3031)
 - [x] Reliability follow-ups, done: `Source.Read` honouring its context (#2949, #2980) and bounded
       status writes on badger (#2964). The rest moved to v0.22
-- [ ] Looking for three teams migrating off Kafka Connect to work with us as design partners — open
-      a [discussion](https://github.com/ConduitIO/conduit/discussions)
 
 ### v0.22 — Migrate from Kafka Connect, part 2: zero-downtime, on one engine
+
+The story: a Kafka Connect team runs `conduit migrate kafka-connect`, gets the same output its
+consumers already read (Debezium-shaped CDC, Kafka topics with partition, headers and timestamp
+intact), resumes from its existing offsets instead of re-snapshotting, and runs it all on one
+default engine. Everything else in this release supports that path: the SDKs and scaffold
+connector authors need, and the operations surface a team needs to trust the switch.
 
 Moved from v0.21 (not shipped in v0.21.0 – v0.21.2):
 
 - [ ] _Moved from v0.21._ `conduit migrate kafka-connect` rules for Debezium MySQL, JDBC source and
       sink, and Elasticsearch and OpenSearch sink. Until they land the command reports these
       classes as unsupported and blocking
+- [ ] _Moved from v0.21._ **Debezium-compatible output mode for Postgres**: register
+      `debezium.encode` (#3183) as a built-in and let the Postgres and Kafka connectors carry its
+      output, verified with the diff harness against real Debezium goldens (#3075). The MySQL mode
+      below builds on it
+- [ ] _Moved from v0.21._ **Kafka→Kafka through `migrate`**: preserve partition, headers and
+      timestamp, and confirm the Redpanda profile. Per-partition ordering depends on the partition
+      being kept
 - [ ] _Moved from v0.21._ `conduit kc lint` — lint Kafka Connect configs, including KIP-1188
       override risks
 - [ ] _Moved from v0.21._ `conduit kc diff` — diff connector-config versions and check schema
@@ -400,10 +392,22 @@ Moved from v0.21 (not shipped in v0.21.0 – v0.21.2):
 - [ ] _Moved from v0.21._ Reliability follow-ups: standalone WASM processor timeout and CPU-loop
       containment (#2998, #3001) and serialized config writes (#2992)
 - [ ] _Moved from v0.21._ Consolidate embeddings on `ai.embed`: deprecate the built-in OpenAI and
-      Cohere embedding processors (#2957; removed in v0.23), and fold `enhanced-generator` and the
+      Cohere embedding processors (#2957; warned in v0.23, removed in v0.24), and fold `enhanced-generator` and the
       labs `textgen` test-data intent into the built-in `generator` connector (#2959)
 - [ ] _Moved from v0.21._ `conduit generate`: processor-aware generation (#2937) and the
       intent-judge false positives (#2943)
+- [ ] _Moved from v0.21._ Processor batch API and a `stateless` declaration for processors
+      (design #3178, wiring #3184), ahead of the engine flip below
+- [ ] _Moved from v0.21._ Go 1.26 toolchain across the connector fleet, and the archived Avro
+      library removed from every connector
+      ([design](docs/design-documents/20260823-avro-codec-archived-decoder-advisories.md))
+- [ ] _Moved from v0.21._ A connector scaffold (`conduit connector new`) that passes acceptance v2
+- [ ] _Moved from v0.21._ One merged Python distribution with `conduit.connector` and
+      `conduit.client` namespaces, published to PyPI as a pre-release early in the cycle. The
+      v0.21 `--lang python` scaffold depends on it, so scaffolded Python projects do not install
+      until it is published
+- [ ] _Moved from v0.21._ Registry web UI deployed, with search, verified badges and download stats
+      (built in v0.21)
 - Engine correctness on `main` since v0.21.2: source acks are released in order and on stop, and
   destination writes are capped by size (#3294–#3301, #3307). These ship in the next release
 
@@ -418,7 +422,7 @@ Moved from v0.21 (not shipped in v0.21.0 – v0.21.2):
 - [ ] **Debezium-compatible output mode for MySQL**, using the Postgres diff harness from v0.21
       (#3075)
       against real Debezium on the same database (PR #3076 data model + JsonConverter)
-- [ ] **Default engine flip and v1 engine deletion**: arch-v2 shipped as `preview` in v0.21; this flips
+- [ ] **Default engine flip and v1 engine deletion**: arch-v2 has been a `preview` engine since v0.19; this flips
       it to the default and removes the v1 engine, gated on the cross-engine benchi harness proving
       parity-or-faster at shipped defaults (PRs #2956/#3067). The #2978 staged batch engine and
       #3184 ProcessBatch land first as the performance substrate.
@@ -459,13 +463,19 @@ Moved from v0.21 (not shipped in v0.21.0 – v0.21.2):
       definition of done. (The v0.22 Parquet object-storage and Iceberg outputs are already
       directly queryable by DuckDB.)
 - [ ] **Catalog:** Bento/Redpanda Connect adapter GA
-- [ ] **Catalog:** built-in OpenAI and Cohere embedding processors removed; use `ai.embed`
+- [ ] **Catalog:** the built-in OpenAI and Cohere embedding processors warn on use; use `ai.embed`
+- [ ] _Moved from v0.21._ **Catalog:** list every labs connector that passes the acceptance suite
+      in the registry as Community tier with license metadata (from the nine listed today to
+      roughly 30)
 - [ ] MySQL CDC GA
 - [ ] Rust SDK (preview): gRPC connectors and WASM processors on the existing processor ABI, with
       `conduit connector new --lang rust`
 - [ ] ADR: WASM connector/component host choice (supersedes ADR 20260722 in part).
       WIT/component-model processors depend on it
 - [ ] TypeScript embedded client
+- [ ] _Moved from v0.21._ Python connector SDK GA, with `conduit connector new --lang python`
+      (scaffold: #3182), on the merged distribution from v0.22
+- [ ] _Moved from v0.21._ Python embedded client GA
 - [ ] Kafka Queues (share groups) source mode
 - [ ] OpenLineage events
 - [ ] Published, reproducible [benchi](https://github.com/ConduitIO/benchi) results vs Kafka Connect
@@ -504,8 +514,9 @@ Moved from v0.21 (not shipped in v0.21.0 – v0.21.2):
       `conduit-processor-sdk-python` is archived
 - [ ] Processor protocol spec (protobuf + WIT) published beside the connector protocol spec
 - [ ] SDK conformance suite and public parity matrix
-- [ ] Not before this release: Node.js client, Qdrant destination (a new build; the repository
-      is empty)
+- [ ] **Catalog:** built-in OpenAI and Cohere embedding processors removed (deprecated v0.22,
+      warned v0.23); use `ai.embed`
+- [ ] Not before this release: Qdrant destination (a new build; the repository is empty)
 
 ### v0.25 — State foundations
 
@@ -531,6 +542,9 @@ Moved from v0.21 (not shipped in v0.21.0 – v0.21.2):
       processors, including the state API (completes in v0.26)
 - [ ] TypeScript connectors over gRPC, with `conduit connector new --lang ts` (full tier — pulled
       forward from v0.26 so full-tier TS and enterprise-tier Java land in the same release)
+- [ ] TypeScript processor SDK, with the processor state API (full tier)
+- [ ] Rust embedded client over the gRPC control API (full tier; the TypeScript client ships in
+      v0.23)
 
 ### v0.26 — Curate
 
@@ -552,7 +566,7 @@ Moved from v0.21 (not shipped in v0.21.0 – v0.21.2):
 - [ ] Processing time first; event time with **bounded lateness only** — late records go to the
       DLQ or a late-data output per policy, never silently dropped
 - [ ] Aggregates: count, sum, min, max, avg, distinct (HLL), top-K, last
-- [ ] Emit on window close, with optional early updates
+- [ ] Emit on window close
 - [ ] Published benchmark vs Kafka Streams for equivalent jobs
 - [ ] C# SDK (gRPC connectors and processors, state API), scoped with early adopters
 
@@ -609,6 +623,8 @@ Kept on the list, not scheduled in a release yet:
   until there is demand
 - Evaluate a DuckDB source and DuckLake support, on demand
 - Production reference architectures beyond the streaming SQL partners
+- Live-eval numbers from a weekly eval, reported as medians with the model and run ID (in-sample
+  numbers are not a claim). Scheduled once the weekly eval runs in public
 
 ## Documentation (parallel track)
 
@@ -634,7 +650,7 @@ Conduit's historical UI was Ember-based and later de-emphasized. The built-in UI
 scratch and ships embedded in the engine (v0.18): it observes and operates pipelines on the same API
 the CLI and MCP server use, and config-as-code stays the source of truth. We keep the built-in UI
 minimal. Later UI surfaces: replay and offset management alongside the v0.24 replay verbs,
-schema-drift visibility (v0.24), the registry web UI (v0.21), and the fleet console (v0.30+).
+schema-drift visibility (v0.24), the registry web UI (v0.22), and the fleet console (v0.30+).
 Deeper org-scale console features are the commercial product.
 
 ---
@@ -671,6 +687,8 @@ Commercial features may become open source over time; the reverse never happens.
   distributed
 - Contribute a pipeline template — the gallery is community-driven
 - Join the conversation in [GitHub Discussions](https://github.com/ConduitIO/conduit/discussions)
+- Migrating off Kafka Connect? We are looking for three teams to work with us as design partners —
+  open a [discussion](https://github.com/ConduitIO/conduit/discussions)
 - Everything here is open for discussion; open an issue against this roadmap
 
 **North-star metrics we hold ourselves to:** time-to-first-pipeline < 5 minutes ·

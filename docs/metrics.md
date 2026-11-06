@@ -37,6 +37,8 @@ locally, you can get metrics if you run `curl localhost:8080/metrics`.
     | `conduit_processor_execution_duration_seconds` | Histogram | Amount of time spent on processing records per pipeline, processor and component ID.                           |
     | `conduit_dlq_execution_duration_seconds`       | Histogram | Amount of time spent writing records to DLQ connector per pipeline and plugin.                                 |
     | `conduit_inspector_sessions`                   | Gauge     | Number of inspector sessions by ID of pipeline component (connector or processor)                              |
+    | `conduit_funnel_destination_flushes_total`     | Counter   | Number of times an arch-v2 batching destination's buffer was taken for writing, by pipeline name, plugin, component ID and trigger (`size`, `bytes`, `deadline_arrival`, `deadline_timer`, `ack_queue`, `drain`, `close`). `deadline_timer` counts partial batches flushed by the `sdk.batch.delay` timer. |
+    | `conduit_funnel_destination_flush_linger_seconds` | Histogram | Age of the oldest buffered record when an arch-v2 batching destination's buffer was taken for writing, by pipeline name, plugin and component ID. A p99 above twice `sdk.batch.delay` means the flush is waiting behind something; see [the runbook](operations/archv2-destination-batching.md#a-partial-batch-waits-longer-than-sdkbatchdelay). |
 
   *We calculate bytes based on the JSON representation of the record payload
   and key.

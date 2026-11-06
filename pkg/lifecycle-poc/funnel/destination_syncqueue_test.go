@@ -136,7 +136,7 @@ func TestDestinationTask_Sync_FlushNotOvertakenByQueuedAck(t *testing.T) {
 		})
 	}
 	is.True(isBuffered(task.doBuffered(ctx, NewBatch(recs), newRecordingAckNacker(ev))))
-	is.NoErr(task.flush(ctx))
+	is.NoErr(task.flush(ctx, FlushTriggerDrain))
 
 	is.Equal(ev.snapshot(), []string{"acker.ack", "sibling.action"})
 }

@@ -39,7 +39,9 @@ import (
 //     ledger covers every position 1..total at least once — in-flight batches
 //     are replayed, never lost.
 //
-// The restart keeps destination batching on; see pipelinedFlusherRestart.
+// The restart keeps destination batching on and adds sdk.batch.delay, so the
+// trailing partial batch is flushed by the flush timer; see
+// pipelinedFlusherRestart.
 func TestSIGKILL_PipelinedFlusher_CrashMidWindow(t *testing.T) {
 	is := is.New(t)
 	dir := t.TempDir()
@@ -80,6 +82,7 @@ func TestSIGKILL_PipelinedFlusher_CrashMidWindow(t *testing.T) {
 	is.True(done)
 
 	assertRecoveryInvariantsAfterRestart(t, cfg)
+	assertTailWrittenBeforeStop(t, second, cfg.total)
 }
 
 // TestSIGKILL_PipelinedFlusher_RestartFromUnalignedPosition pins the restart
@@ -91,16 +94,19 @@ func TestSIGKILL_PipelinedFlusher_CrashMidWindow(t *testing.T) {
 // the source batches of one flush one at a time, so the persisted position at
 // the kill can fall inside a batch (CI saw a restart resume at 22 and read
 // 23..64). A batched restart then has (total-resume) mod batchSize records
-// left in a trailing partial batch once the source stops producing. The funnel
-// flushes a partial batch only on the next arrival or on Close (by design:
-// docs/design-documents/20261017-funnel-destination-batching.md), and Close
-// runs after the source is torn down, so those records are never acked
-// upstream and the graceful child's "acked through total" gate times out.
+// left in a trailing partial batch once the source stops producing. Without a
+// flush timer the funnel flushes a partial batch only on the next arrival, on
+// Worker.Stop's drain or on Close (by design:
+// docs/design-documents/20261017-funnel-destination-batching.md), so while the
+// source idles those records are not acked upstream, and a graceful child that
+// waits for "acked through total" times out.
 //
 // Here the first child runs unbatched with production capped at 22, so the
-// resume position is exactly 22 on every run, and the restart is batched at 8.
-// It used to time out deterministically (#3231); Worker.Stop now drains the
-// trailing partial batch before tearing the source down.
+// resume position is exactly 22 on every run, and the restart is batched at 8
+// with an sdk.batch.delay. It used to time out deterministically (#3231); the
+// flush timer now writes and acks the tail while the source idles, and the
+// child waits for that ack before it stops (asserted: the tail is written
+// before the source stop, so Worker.Stop's drain did not do it).
 func TestSIGKILL_PipelinedFlusher_RestartFromUnalignedPosition(t *testing.T) {
 	is := is.New(t)
 	dir := t.TempDir()
@@ -125,24 +131,31 @@ func TestSIGKILL_PipelinedFlusher_RestartFromUnalignedPosition(t *testing.T) {
 	is.Equal(assertRecoveryInvariantsAtKill(t, cfg), uint64(resumeAt))
 
 	restart := pipelinedFlusherRestart(cfg)
-	restart.destBatchSize = 8 // batched restart from an unaligned resume: needs Stop's drain (#3231)
+	restart.destBatchSize = 8 // batched restart from an unaligned resume: the tail needs the flush timer (#3231)
 	second := spawnLCChild(t, restart)
 	second.waitExit(t, parentWaitExit)
 	_, done := second.line(markerLCDone)
 	is.True(done)
 
 	assertRecoveryInvariantsAfterRestart(t, cfg)
+	assertTailWrittenBeforeStop(t, second, cfg.total)
 }
+
+// pipelinedFlusherRestartBatchDelayMS is the sdk.batch.delay of the restart
+// child: long enough that a size flush still beats it, short enough to keep
+// the tail's wait small.
+const pipelinedFlusherRestartBatchDelayMS = 200
 
 // pipelinedFlusherRestart returns the graceful restart config for a crashed
 // pipelined-flusher child: same directories and total, run to completion.
 //
-// Destination batching stays ON, as in the crashed child: the restart resumes
-// from an arbitrary position, so it ends with a trailing partial batch that has
-// no flush timer. Worker.Stop drains that batch and acks it while the source is
-// still running (#3231), which is exactly what this restart now exercises; the
-// child therefore waits for production, not for the ack, before stopping (see
-// runChildLifecycle).
+// Destination batching stays ON, as in the crashed child, and the restart adds
+// sdk.batch.delay: it resumes from an arbitrary position, so it ends with a
+// trailing partial batch, which the destination's flush timer writes and acks
+// while the source idles (#3231). The child therefore waits for the ack of
+// total, not just for production, before it stops (see runChildLifecycle), and
+// the tail is written by the timer rather than by Worker.Stop's drain. With no
+// destination batching the delay has no effect.
 func pipelinedFlusherRestart(cfg lcChildConfig) lcChildConfig {
 	return lcChildConfig{
 		dbDir:         cfg.dbDir,
@@ -156,5 +169,7 @@ func pipelinedFlusherRestart(cfg lcChildConfig) lcChildConfig {
 		minDelayMS:    10,
 		maxDelayMS:    10,
 		graceful:      true,
+
+		destBatchDelayMS: pipelinedFlusherRestartBatchDelayMS,
 	}
 }
