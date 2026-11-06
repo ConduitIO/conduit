@@ -97,8 +97,15 @@ type DestinationTask struct {
 	flushCh chan []pendingBatch
 	// flushErr holds the first error the flusher hit; guarded by mu. It is
 	// surfaced by the next doBuffered (and by Close), which propagates it
-	// through the worker exactly like a synchronous flush error would.
+	// through the worker exactly like a synchronous flush error would. A flush's
+	// own failure is also sent on flushFailures, for a worker that is idle.
 	flushErr error
+	// flushFailures carries the flush failure this task records, so that it
+	// fails the run even when no record arrives to read flushErr (see
+	// reportFlushFailure). Capacity 1, at most one send; nil when batching is
+	// disabled, since an unbatched write fails on the worker's own goroutine.
+	// Read by Worker.WatchConnectorErrors.
+	flushFailures chan error
 	// flusherDone is closed when the flusher goroutine exits (on a flush error,
 	// run-context cancellation, or Close draining the channel).
 	flusherDone chan struct{}
@@ -187,7 +194,7 @@ func newDestinationTask(
 ) *DestinationTask {
 	logger = logger.WithComponent("task:destination")
 	logger.Logger = logger.With().Str(log.ConnectorIDField, id).Logger()
-	return &DestinationTask{
+	t := &DestinationTask{
 		id:          id,
 		destination: destination,
 		logger:      logger,
@@ -195,6 +202,10 @@ func newDestinationTask(
 		batchSize:   batchSize,
 		batchDelay:  batchDelay,
 	}
+	if t.batchingEnabled() {
+		t.flushFailures = make(chan error, 1)
+	}
+	return t
 }
 
 func (t *DestinationTask) ID() string {
@@ -264,6 +275,21 @@ func (t *DestinationTask) connectorErrors() <-chan error {
 	return t.destination.Errors()
 }
 
+// flushFailuresCh returns the channel a batching task reports its flush failure
+// on (see reportFlushFailure), or nil if the task does not batch.
+func (t *DestinationTask) flushFailuresCh() <-chan error {
+	return t.flushFailures
+}
+
+// reportsFlushFailure reports whether Close reports err, a flush error, as
+// CodeFlushOnCloseFailed: everything except a source that was already torn down
+// (plugin.ErrPluginNotRunning) and the run's own cancellation, which are the
+// expected replay cases. reportFlushFailure uses the same rule, so a failure
+// that fails the run while it is idle is exactly one Close would report.
+func (t *DestinationTask) reportsFlushFailure(err error) bool {
+	return !cerrors.Is(err, plugin.ErrPluginNotRunning) && !t.runCancelled(err)
+}
+
 // runCancelled reports whether err is the run's own cancellation: the run
 // context is done and err is a cancellation. A bare context.Canceled while the
 // run is alive came from elsewhere (a plugin's transport) and is a real failure.
@@ -297,7 +323,7 @@ func (t *DestinationTask) Close(ctx context.Context) error {
 		// Report it so a stop that left records unwritten is not mistaken for a
 		// clean one. A source already torn down, or a run that was cancelled, is
 		// the expected replay case and stays a warning.
-		if !cerrors.Is(flushErr, plugin.ErrPluginNotRunning) && !t.runCancelled(flushErr) {
+		if t.reportsFlushFailure(flushErr) {
 			ce := conduiterr.Wrap(CodeFlushOnCloseFailed,
 				fmt.Sprintf("destination %s was closed with records it could not write and acknowledge", t.id), flushErr)
 			ce.Suggestion = "no records were lost: they were not acknowledged upstream and are redelivered on restart; " +

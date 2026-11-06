@@ -2008,10 +2008,18 @@ func (s *Service) runPipeline(rp *runnablePipeline) error {
 			// (invariant 1, connector.Source.onPersistFlushed); killing the
 			// tomb is what stops the source reading on, unacknowledged, while
 			// upstream retention grows. Kill cancels ctx, which the plugin
-			// streams derive from, so a blocked Read returns too. The error is
-			// not fatal, so the run goes through recovery like any other
-			// transient failure, and the stop rules (ADR
+			// streams derive from, so a blocked Read returns too. A persister
+			// error is not fatal, so the run goes through recovery like any
+			// other transient failure, and the stop rules (ADR
 			// 20261007-stop-requested-never-recovers) apply unchanged.
+			//
+			// The watch also carries a batching destination's flush failure
+			// (funnel.DestinationTask.reportFlushFailure): on the pipelined
+			// path the flusher can fail while this worker is blocked in a
+			// source Read, and nothing else would end the run. That error is
+			// wrapped with %w all the way to the tomb, so a fatal one (a
+			// failed DLQ write, an exceeded nack threshold) still degrades the
+			// pipeline instead of entering recovery.
 			stopWatch := w.WatchConnectorErrors(ctx, func(err error) {
 				rp.t.Kill(cerrors.Errorf("worker for source %s stopped with error: %w", sourceID, err))
 			})
