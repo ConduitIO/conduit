@@ -483,13 +483,13 @@ func TestChild_HoldAt_CapsProductionBelowTotal(t *testing.T) {
 
 	child := spawnChild(t, cfg)
 	child.waitForMarker(t, markerHeld+" ", 10*time.Second)
-	is.Equal(maxProgressPosition(child, markerHeld), cfg.holdAt) // the marker reports the ceiling itself
+	is.Equal(maxProgressPosition(t, child, markerHeld), cfg.holdAt) // the marker reports the ceiling itself
 
 	time.Sleep(property2HoldStall) // see property2HoldStall: adversarial, not load-bearing
 
 	// Nothing beyond the ceiling was ever produced, however long we looked
 	// away...
-	is.True(maxProgressPosition(child, "READ") <= cfg.holdAt)
+	is.True(maxProgressPosition(t, child, "READ") <= cfg.holdAt)
 
 	// No durable-side check here: at ~480ms elapsed the default 1s
 	// persister debounce has not fired, so the committed watermark is 0 by

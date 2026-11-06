@@ -198,12 +198,16 @@ func waitForUpstreamCommittedAtLeast(t *testing.T, cp *childProcess, upstreamDir
 // already produced once (see waitForLCRecovered), so counting lines and
 // reading a position off the count are not the same thing - which is
 // precisely the confusion the old read-count kill gate encoded.
-func maxProgressPosition(cp *childProcess, tag string) uint64 {
+//
+// A tagged line that does not carry a position fails the test: skipping it
+// could hide a position beyond a ceiling the caller asserts.
+func maxProgressPosition(t *testing.T, cp *childProcess, tag string) uint64 {
+	t.Helper()
 	var highest uint64
 	for _, l := range cp.linesWithPrefix(tag + " ") {
 		n, err := strconv.ParseUint(strings.TrimSpace(strings.TrimPrefix(l, tag+" ")), 10, 64)
 		if err != nil {
-			continue
+			t.Fatalf("progress line %q does not carry a position: %v\n%s", l, err, cp.diagnostics())
 		}
 		if n > highest {
 			highest = n
@@ -486,13 +490,13 @@ func TestRecoveryChild_HoldAt_CapsProductionBelowTotal(t *testing.T) {
 
 	child := spawnLCChild(t, cfg)
 	child.waitForMarker(t, markerLCHeld+" ", 10*time.Second)
-	is.Equal(maxProgressPosition(child, markerLCHeld), cfg.holdAt) // the marker reports the ceiling itself
+	is.Equal(maxProgressPosition(t, child, markerLCHeld), cfg.holdAt) // the marker reports the ceiling itself
 
 	time.Sleep(recoveryHoldStall) // see recoveryHoldStall: adversarial, not load-bearing
 
 	// Nothing beyond the ceiling was ever produced, however long we looked
 	// away...
-	is.True(maxProgressPosition(child, "READ") <= cfg.holdAt)
+	is.True(maxProgressPosition(t, child, "READ") <= cfg.holdAt)
 
 	// ...so nothing beyond it can ever have been acked and committed either,
 	// which is the property the SIGKILL scenario's upper-bound guard needs.
