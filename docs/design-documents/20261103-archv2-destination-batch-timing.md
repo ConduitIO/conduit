@@ -467,7 +467,11 @@ The spec comes from the same resolution that builds the destination's dispenser
 (`instance.Connector`, `service.go:1608`, via `newDispenser`, `pkg/plugin/connector/service.go:212-233`):
 the registry that `newDispenser` picked returns the already-loaded specification with the dispenser,
 and the connector exposes it. The name is resolved once, so the spec and the running plugin cannot
-disagree, and no plugin process is started for it.
+disagree, and no plugin process is started for it. (As implemented: the built-in and standalone
+dispensers carry the spec of the blueprint they were built from, the plugin service's cleanup wrapper
+forwards it, and `connector.Destination.Specification` reads it. A dispenser built outside the
+registries, which only tests do, carries none; then a key counts as declared only when the pipeline
+config sets it, so an enabling pipeline value is still replaced by `"0"` and no key is added.)
 
 **Take over.** The task is built with the resolved size and delay, so S3 v0.12.0 with no `sdk.batch.*`
 in the pipeline runs as an engine-batched 1000 / 1 s destination: the worker reads on, records
@@ -518,7 +522,9 @@ guard also refuses an explicit DLQ `sdk.batch.delay > 0`: the SDK turns delay-on
 (`destination.go:189-197` in v0.17.2), which withholds acks the same way, and the guard misses it
 today. Same code, `pipeline.archv2_destination_batching_unsupported`
 (`pkg/lifecycle-poc/codes.go:104`), through the same `batchingOffenders` path, so
-`PreflightPipelineConfig` refuses it on a live apply too. See open question 3.
+`PreflightPipelineConfig` refuses it on a live apply too. The offline check behind
+`conduit pipelines validate` and `conduit doctor` shares the predicate (`config.SDKBatchDelayAboveZero`), so
+they report the same refusal. See open question 3.
 
 **Classic engine.** Nothing changes. `pkg/lifecycle` never calls the setter, settings reach the plugin
 verbatim, the SDK batches, and classic reads acks asynchronously. The resolution and neutralisation
@@ -700,7 +706,8 @@ No throughput or latency number is claimed until these runs are committed.
   `destination batching taken over from connector defaults`, with connector ID, plugin, resolved
   size and delay, and the origin of each (`pipeline_config` or `connector_default`). Counter
   `conduit_funnel_destination_plugin_batching_neutralised_total` (same labels), incremented once per
-  destination open where at least one key was overridden to `"0"`, which by the rule above means a
+  destination open where at least one key was overridden to `"0"` (counted when the run is built, which
+  precedes each open), which by the rule above means a
   value that would have turned the plugin's batcher on. Destinations with nothing to neutralise
   (file, kafka, log, postgres at their defaults) do not count.
 - WARN `pipeline.archv2_destination_batch_unbounded_wait` for size-only batching (see Decision).
