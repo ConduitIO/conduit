@@ -16,6 +16,7 @@ package funnel
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1378,10 +1379,20 @@ func TestDestinationTask_StaleSyncTimerParkedOnFeederLock(t *testing.T) {
 // destination through a different node, or through none, is a build bug, and
 // NewWorker refuses it instead of keeping the first node without a sign.
 func TestNewWorker_FeedersMustShareBoundary(t *testing.T) {
-	for name, second := range map[string]func(dt *DestinationTask) []*TaskNode{
-		"different shared node": func(dt *DestinationTask) []*TaskNode { return sharedRoots(dt) },
-		"no shared node":        func(dt *DestinationTask) []*TaskNode { return []*TaskNode{{Task: dt}} },
+	for name, tc := range map[string]struct {
+		second  func(dt *DestinationTask) []*TaskNode
+		wantMsg string
+	}{
+		"different shared node": {
+			second:  func(dt *DestinationTask) []*TaskNode { return sharedRoots(dt) },
+			wantMsg: "different shared boundary nodes",
+		},
+		"no shared node": {
+			second:  func(dt *DestinationTask) []*TaskNode { return []*TaskNode{{Task: dt}} },
+			wantMsg: "mark the shared roots (NewSink) before building workers",
+		},
 	} {
+		second := tc.second
 		t.Run(name, func(t *testing.T) {
 			is := is.New(t)
 			logger := log.Test(t)
@@ -1395,6 +1406,7 @@ func TestNewWorker_FeedersMustShareBoundary(t *testing.T) {
 			srcNode := &TaskNode{Task: NewSourceTask("src3", newChanSource("src3"), logger, NoOpConnectorMetrics{}), Next: second(dt)}
 			w3, err := NewWorker(srcNode, dlq, logger, noop.Timer{})
 			is.True(err != nil)
+			is.True(strings.Contains(err.Error(), tc.wantMsg))
 			is.True(w3 == nil)
 
 			feeders, shared := dt.FeederBoundary()
@@ -1402,4 +1414,26 @@ func TestNewWorker_FeedersMustShareBoundary(t *testing.T) {
 			is.True(shared == roots[0])
 		})
 	}
+}
+
+// TestNewWorker_FeederWithoutBoundaryFirst (review of #3335, nit 2): when the
+// FIRST feeder reached the task with no shared node and a later one with a
+// node, the roots were still not marked when a worker was built, and the error
+// must say so and name the fix rather than report "different" nodes.
+func TestNewWorker_FeederWithoutBoundaryFirst(t *testing.T) {
+	is := is.New(t)
+	logger := log.Test(t)
+	dt := NewBatchingDestinationTask("dest", newTimedDestination(t, "dest"), logger, NoOpConnectorMetrics{}, 10, time.Second)
+	w1 := newTimerTestWorkerNext(t, newChanSource("src1"), nil, &TaskNode{Task: dt})
+
+	dlq := NewDLQ("dlq", newFakeDestination("dlq"), logger, NoOpConnectorMetrics{}, 10, 10)
+	srcNode := &TaskNode{Task: NewSourceTask("src2", newChanSource("src2"), logger, NoOpConnectorMetrics{}), Next: sharedRoots(dt)}
+	w2, err := NewWorker(srcNode, dlq, logger, noop.Timer{})
+	is.True(err != nil)
+	is.True(strings.Contains(err.Error(), "mark the shared roots (NewSink) before building workers"))
+	is.True(w2 == nil)
+
+	feeders, shared := dt.FeederBoundary()
+	is.Equal(feeders, []*Worker{w1})
+	is.True(shared == nil)
 }
