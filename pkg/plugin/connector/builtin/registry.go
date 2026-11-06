@@ -246,6 +246,9 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, 
 	d := b.dispenserFactory(fullName, cfg, logger, r.policyFor(fullName.PluginName(), cfg.ConnectorID))
 	if bd, ok := d.(*Dispenser); ok {
 		bd.decorate = r.decorators[fullName.PluginName()]
+		// The specification of the version resolved above, so the engine
+		// reads the defaults of the plugin it will run (#3321).
+		bd.spec, bd.hasSpec = b.specification, true
 	}
 	return d, nil
 }
