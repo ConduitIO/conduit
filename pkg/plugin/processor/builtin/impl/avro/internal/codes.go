@@ -29,18 +29,19 @@ var (
 	// fromRecord when a value does not fit the schema the record carries
 	// exactly: a different type, a number out of range, null in a non-null
 	// field, a value finer than the logical type (a decimal with more digits
-	// than its scale, a time in a date), a field the schema declares but the
-	// data lacks, or a key inside a nested record that the schema does not
-	// declare. The value is never coerced, truncated or filled with a default.
-	// Fix the processor that changed the value, or attach a schema that
-	// describes it.
+	// than its scale, a time in a date), or a key added or removed inside a
+	// nested record. The value is never coerced, truncated or filled with a
+	// default. A top-level field the data no longer has is not an error: it is
+	// dropped from the registered schema. Fix the processor that changed the
+	// value, or attach a schema that describes it.
 	CodeSchemaMismatch = conduiterr.Register("processor.avro_encode.schema_mismatch", codes.InvalidArgument)
 
 	// CodeSchemaUnsupported is returned by avro.encode with schema.strategy
 	// fromRecord when the record's schema metadata cannot be read (a subject
 	// without a version, or a version that is not a positive integer), when
-	// the schema it names is not an Avro record, or when the fields the record
-	// added cannot be added to that schema.
+	// the schema it names is not an Avro record, or when the schema cannot be
+	// fitted to the record: an added field cannot be added to it, or a removed
+	// field defines a named type another field uses.
 	CodeSchemaUnsupported = conduiterr.Register("processor.avro_encode.schema_unsupported", codes.FailedPrecondition)
 
 	// CodeRegistryUnavailable is returned by avro.encode with schema.strategy

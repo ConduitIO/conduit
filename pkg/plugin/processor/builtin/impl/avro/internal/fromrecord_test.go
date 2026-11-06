@@ -253,13 +253,30 @@ func TestFromRecord_Mismatch(t *testing.T) {
 		mutate: func(sd opencdc.StructuredData) { sd["c00_int"] = nil },
 		field:  "c00_int",
 	}, {
-		name:   "field removed",
-		mutate: func(sd opencdc.StructuredData) { delete(sd, "c10_opt") },
-		field:  "c10_opt",
+		// A removed field is dropped from the schema; the fields still
+		// present keep their carried types, so a mistyped one still fails.
+		name: "field removed, another present with the wrong type",
+		mutate: func(sd opencdc.StructuredData) {
+			delete(sd, "c10_opt")
+			sd["c00_int"] = "32"
+		},
+		field: "c00_int",
 	}, {
-		name:   "nullable field removed",
-		mutate: func(sd opencdc.StructuredData) { delete(sd, "c02_numeric") },
-		field:  "c02_numeric",
+		// A key present with nil is null, not a removed field: it is not
+		// dropped, and null does not fit the non-null int.
+		name: "field removed, another present with null in a non-null field",
+		mutate: func(sd opencdc.StructuredData) {
+			delete(sd, "c02_numeric")
+			sd["c00_int"] = nil
+		},
+		field: "c00_int",
+	}, {
+		name: "field removed, another present and finer than its scale",
+		mutate: func(sd opencdc.StructuredData) {
+			delete(sd, "c00_int")
+			sd["c02_numeric"] = big.NewRat(1234, 1000)
+		},
+		field: "c02_numeric",
 	}}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -501,12 +518,116 @@ func fallbackCount(t *testing.T, promReg *promclient.Registry, subject string) f
 	return 0
 }
 
-// TestFromRecord_EmptyPart: an empty part (the processor turns zero-length raw
-// data into empty structured data) is not encoded as a record of nulls or
-// defaults.
-func TestFromRecord_EmptyPart(t *testing.T) {
+// TestFromRecord_RemovedFieldIsDropped: a top-level field the record no
+// longer has (field.exclude before avro.encode) is left out of the encoding
+// schema, instead of being written as its default or null. The other fields
+// keep their carried types.
+func TestFromRecord_RemovedFieldIsDropped(t *testing.T) {
+	testCases := []struct {
+		name    string
+		removed string
+	}{
+		{name: "non-null field", removed: "c00_int"},
+		{name: "nullable field", removed: "c02_numeric"},
+		{name: "nullable field holding null", removed: "c10_opt"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+			env := newFromRecordEnv(t, sourceSchema)
+
+			ids := map[int]struct{}{}
+			for i := 0; i < 2; i++ {
+				in := sourceRow()
+				delete(in, tc.removed)
+				raw, err := env.enc.Encode(ctx, in, env.carried)
+				is.NoErr(err)
+
+				parsed, decoded := writerSchema(t, env.client, raw)
+				want := map[string]string{
+					"c00_int":     `"int"`,
+					"c02_numeric": `["null",{"logicalType":"decimal","precision":14,"scale":2,"type":"bytes"}]`,
+					"c06_date":    `{"logicalType":"date","type":"int"}`,
+					"c10_opt":     `["null","int"]`,
+				}
+				delete(want, tc.removed)
+				is.Equal("", cmp.Diff(want, fieldTypes(t, parsed)))
+				is.Equal(parsed["name"], "bench_source_0")
+				is.True(sameValue(in, decoded)) // nothing added back, nothing changed
+				_, ok := decoded[tc.removed]
+				is.True(!ok)
+
+				var h sr.ConfluentHeader
+				id, _, err := h.DecodeID(raw)
+				is.NoErr(err)
+				ids[id] = struct{}{}
+			}
+			is.Equal(len(ids), 1) // the same removal gives the same schema ID
+		})
+	}
+}
+
+// TestFromRecord_RemovedAndAddedFields: a field removed and another added in
+// the same record.
+func TestFromRecord_RemovedAndAddedFields(t *testing.T) {
+	is := is.New(t)
 	ctx := context.Background()
 	env := newFromRecordEnv(t, sourceSchema)
-	_, err := env.enc.Encode(ctx, nil, env.carried)
+
+	in := sourceRow()
+	delete(in, "c10_opt")
+	in["__op"] = "d"
+	raw, err := env.enc.Encode(ctx, in, env.carried)
+	is.NoErr(err)
+
+	parsed, decoded := writerSchema(t, env.client, raw)
+	want := map[string]string{
+		"c00_int":     `"int"`,
+		"c02_numeric": `["null",{"logicalType":"decimal","precision":14,"scale":2,"type":"bytes"}]`,
+		"c06_date":    `{"logicalType":"date","type":"int"}`,
+		"__op":        `["null","string"]`,
+	}
+	is.Equal("", cmp.Diff(want, fieldTypes(t, parsed)))
+	is.True(sameValue(in, decoded))
+}
+
+// TestFromRecord_RemovedNestedKey: only top-level fields are dropped. A key
+// removed inside a nested record would be written as its default or null by
+// the codec, so it must be an error.
+func TestFromRecord_RemovedNestedKey(t *testing.T) {
+	const nestedSchema = `{"type":"record","name":"outer","fields":[` +
+		`{"name":"inner","type":{"type":"record","name":"inner_t","fields":[` +
+		`{"name":"a","type":"int"},{"name":"b","type":["null","int"],"default":null}]}}]}`
+	ctx := context.Background()
+	env := newFromRecordEnv(t, nestedSchema)
+	in := opencdc.StructuredData{"inner": map[string]any{"a": 1}}
+	raw, err := env.enc.Encode(ctx, in, env.carried)
 	wantCode(t, err, CodeSchemaMismatch)
+	if len(raw) != 0 {
+		t.Fatalf("want no bytes, got %d", len(raw))
+	}
+}
+
+// TestFromRecord_RemovedFieldDefinesNamedType: when the removed field holds
+// the definition of a named type that a kept field refers to by name, the
+// schema cannot be fitted. It fails closed instead of guessing a definition.
+func TestFromRecord_RemovedFieldDefinesNamedType(t *testing.T) {
+	const namedSchema = `{"type":"record","name":"outer","fields":[` +
+		`{"name":"a","type":{"type":"enum","name":"color","symbols":["RED","BLUE"]}},` +
+		`{"name":"b","type":"color"}]}`
+	ctx := context.Background()
+	env := newFromRecordEnv(t, namedSchema)
+	_, err := env.enc.Encode(ctx, opencdc.StructuredData{"b": "RED"}, env.carried)
+	wantCode(t, err, CodeSchemaUnsupported)
+
+	// Removing the field that only refers to the type is fine.
+	raw, err := env.enc.Encode(ctx, opencdc.StructuredData{"a": "BLUE"}, env.carried)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, _ := writerSchema(t, env.client, raw)
+	if got := fieldTypes(t, parsed); len(got) != 1 || got["a"] == "" {
+		t.Fatalf("want only field a, got %v", got)
+	}
 }

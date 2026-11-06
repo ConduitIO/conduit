@@ -131,9 +131,11 @@ It provides three strategies for determining the schema:
   is added, typed by inference from its value. The result is registered under ` + "`schema.fromRecord.subject`" + `.
   The field must be the whole key or a whole payload part.
 
-  A value that does not fit the schema exactly fails the record: a different type, a number out of range, null in a
-  non-null field, more decimal digits than the scale, a time in a date field, or a field the schema declares but the
-  record no longer has. Values are never converted, truncated or filled with a default. A record that carries no
+  A top-level field the schema declares and the record no longer has (a processor removed it) is left out of the
+  registered schema. A value that does not fit the schema exactly fails the record: a different type, a number out
+  of range, null in a non-null field, more decimal digits than the scale, or a time in a date field. Values are
+  never converted, truncated or filled with a default. An empty key or payload part (nil, or raw data with no bytes,
+  as a delete record's ` + "`.Payload.After`" + ` often is) is not encoded: the record passes through unchanged. A record that carries no
   schema is encoded with an inferred schema, as with autoRegister, and counted by the
   ` + "`conduit_processor_avro_encode_schema_fallback_total`" + ` metric.
 
@@ -190,6 +192,16 @@ func (p *EncodeProcessor) processRecord(ctx context.Context, rec opencdc.Record)
 	field, err := p.cfg.fieldResolver.Resolve(&rec)
 	if err != nil {
 		return nil, cerrors.Errorf("failed resolving field: %w", err)
+	}
+
+	if p.cfg.Schema.StrategyType == strategyFromRecord && isEmptyPart(field.Get()) {
+		// Invariant 6: an empty part (a delete record's After, for example)
+		// has no value to encode. Encoding it would register and write a
+		// record with no fields, or, with the carried schema, invent its
+		// defaults. The record passes through unchanged, metadata included:
+		// nothing was replaced, and the SDK schema middlewares skip empty
+		// parts the same way.
+		return sdk.SingleRecord(rec), nil
 	}
 
 	data, err := p.structuredData(field.Get())
@@ -324,6 +336,18 @@ func classifyField(rr sdk.ReferenceResolver) recordPart {
 		return partPayload
 	}
 	return partNone
+}
+
+// isEmptyPart reports whether data is an empty record part: nil, or raw data
+// with no bytes. It is the definition the connector and processor SDK schema
+// middlewares use to skip a part, so strategy fromRecord skips the same parts
+// they do.
+func isEmptyPart(data any) bool {
+	if data == nil {
+		return true
+	}
+	raw, ok := data.(opencdc.RawData)
+	return ok && len(raw) == 0
 }
 
 func (p *EncodeProcessor) Teardown(context.Context) error {

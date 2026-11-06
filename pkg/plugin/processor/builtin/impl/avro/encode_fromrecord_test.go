@@ -16,6 +16,7 @@ package avro
 
 import (
 	"context"
+	"maps"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/config"
@@ -24,6 +25,8 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	avrointernal "github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/internal"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
+	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
 	"go.uber.org/mock/gomock"
 )
@@ -141,4 +144,87 @@ func TestEncodeProcessor_FromRecord_NestedFieldIsAConfigError(t *testing.T) {
 	is.True(ok)
 	is.Equal(ce.Code, conduiterr.CodeInvalidArgument)
 	is.Equal(ce.ConfigPath, "field")
+}
+
+// TestEncodeProcessor_FromRecord_EmptyPartPassesThrough: an empty key or
+// payload part (nil, or raw data with no bytes, as a delete record's After
+// usually is) is not encoded with fromRecord. The record comes out unchanged,
+// schema metadata included, and the encoder is not called.
+func TestEncodeProcessor_FromRecord_EmptyPartPassesThrough(t *testing.T) {
+	md := opencdc.Metadata{
+		opencdc.MetadataKeySchemaSubject:     "key-subject",
+		opencdc.MetadataKeySchemaVersion:     "3",
+		opencdc.MetadataPayloadSchemaSubject: "payload-subject",
+		opencdc.MetadataPayloadSchemaVersion: "7",
+	}
+	before := opencdc.StructuredData{"a": 1}
+	testCases := []struct {
+		name  string
+		field string
+		empty opencdc.Data
+	}{
+		{name: "after nil", field: ".Payload.After", empty: nil},
+		{name: "after raw nil", field: ".Payload.After", empty: opencdc.RawData(nil)},
+		{name: "after raw zero-length", field: ".Payload.After", empty: opencdc.RawData{}},
+		{name: "before raw zero-length", field: ".Payload.Before", empty: opencdc.RawData{}},
+		{name: "key nil", field: ".Key", empty: nil},
+		{name: "key raw zero-length", field: ".Key", empty: opencdc.RawData{}},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+			p := NewEncodeProcessor(log.Nop())
+			is.NoErr(p.Configure(ctx, config.Config{
+				"field":                     tc.field,
+				"schema.strategy":           "fromRecord",
+				"schema.fromRecord.subject": "out",
+			}))
+			p.encoder = NewMockEncoder(gomock.NewController(t)) // must not be called
+
+			rec := opencdc.Record{
+				Operation: opencdc.OperationDelete,
+				Metadata:  maps.Clone(md),
+				Key:       opencdc.RawData("k"),
+				Payload:   opencdc.Change{Before: before, After: opencdc.RawData("a")},
+			}
+			switch tc.field {
+			case ".Key":
+				rec.Key = tc.empty
+			case ".Payload.Before":
+				rec.Payload.Before = tc.empty
+			default:
+				rec.Payload.After = tc.empty
+			}
+			want := rec.Clone()
+
+			out := p.Process(ctx, []opencdc.Record{rec})
+			is.Equal(len(out), 1)
+			got, ok := out[0].(sdk.SingleRecord)
+			is.True(ok) // not an error record
+			is.Equal("", cmp.Diff(sdk.SingleRecord(want), got, internal.CmpProcessedRecordOpts...))
+		})
+	}
+}
+
+// TestEncodeProcessor_AutoRegister_StillEncodesEmptyPart pins that the empty
+// part pass-through is fromRecord only: autoRegister still hands a
+// zero-length part to the encoder as empty structured data, as before.
+func TestEncodeProcessor_AutoRegister_StillEncodesEmptyPart(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	p := NewEncodeProcessor(log.Nop())
+	is.NoErr(p.Configure(ctx, config.Config{
+		"schema.strategy":             "autoRegister",
+		"schema.autoRegister.subject": "out",
+	}))
+	m := NewMockEncoder(gomock.NewController(t))
+	m.EXPECT().Encode(ctx, opencdc.StructuredData(nil), avrointernal.SchemaRef{}).Return(opencdc.RawData("encoded"), nil)
+	p.encoder = m
+
+	out := p.Process(ctx, []opencdc.Record{{Payload: opencdc.Change{After: opencdc.RawData{}}}})
+	is.Equal(len(out), 1)
+	got, ok := out[0].(sdk.SingleRecord)
+	is.True(ok)
+	is.Equal(got.Payload.After, opencdc.Data(opencdc.RawData("encoded")))
 }

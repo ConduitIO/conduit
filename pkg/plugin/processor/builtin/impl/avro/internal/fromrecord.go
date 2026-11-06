@@ -53,8 +53,10 @@ func (r SchemaRef) IsZero() bool { return r == SchemaRef{} }
 // date or a timestamp, or which precision and scale a decimal had. Inferring a
 // schema from them (ExtractAndUploadSchemaStrategy) therefore changes the type
 // signature even when no value changes. This strategy reads the carried schema
-// from the registry, adds a nullable field for each top-level field the data
-// has and the schema lacks, and registers the result under Subject.
+// from the registry, drops each top-level field the schema declares and the
+// data no longer has (a processor removed it), adds a nullable field for each
+// top-level field the data has and the schema lacks, and registers the result
+// under Subject.
 //
 // A record that carries no schema is encoded with an inferred schema, as
 // autoRegister would, with a warning logged once and
@@ -79,7 +81,8 @@ func NewFromRecordSchemaStrategy(subject string) *FromRecordSchemaStrategy {
 }
 
 // GetSchema returns the schema sd is encoded with: the carried schema,
-// extended with the fields sd adds, registered under str.Subject. With a zero
+// without the top-level fields sd removed and with the ones it adds,
+// registered under str.Subject. With a zero
 // carried it falls back to inference.
 func (str *FromRecordSchemaStrategy) GetSchema(
 	ctx context.Context,
@@ -140,13 +143,19 @@ func (str *FromRecordSchemaStrategy) fallback(
 	return ExtractAndUploadSchemaStrategy{Subject: str.Subject}.GetSchema(ctx, registry, logger, sd, carried)
 }
 
-// extendSchema returns the Avro record schema text with a nullable field
-// appended for each top-level key of sd that the schema does not declare.
-// It returns text unchanged when sd adds nothing.
+// extendSchema returns the Avro record schema text fitted to the top-level
+// keys of sd: a declared field that sd does not have is dropped, and a
+// nullable field is appended for each key of sd that the schema does not
+// declare. It returns text unchanged when sd neither drops nor adds a field.
 //
-// Invariant 6: every field the schema declares must be present in sd. The
-// encoder would otherwise write the field's default, or null, for a value
-// the data does not have.
+// Invariant 6: a field is dropped only when its key is absent from sd (a
+// processor removed it), so no value is lost and none is invented: encoding
+// with the field kept would write its default, or null, for data the record
+// does not have. A key that is present is always encoded with its carried
+// type, so a present value that does not fit (a different type, or null in a
+// non-null field) is still an error from the codec or the round-trip check.
+// Only top-level fields are dropped or added; inside a nested record the
+// schema is used as declared.
 func extendSchema(text string, sd opencdc.StructuredData) (string, error) {
 	var top map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(text), &top); err != nil {
@@ -162,6 +171,8 @@ func extendSchema(text string, sd opencdc.StructuredData) (string, error) {
 	}
 
 	declared := make(map[string]struct{}, len(fields))
+	kept := make([]json.RawMessage, 0, len(fields))
+	var dropped []string
 	for _, f := range fields {
 		var nf struct {
 			Name string `json:"name"`
@@ -170,9 +181,13 @@ func extendSchema(text string, sd opencdc.StructuredData) (string, error) {
 			return "", unsupported("the schema the record carries has a field without a name")
 		}
 		declared[nf.Name] = struct{}{}
+		// Invariant 6: drop only on an absent key. A key present with a nil
+		// value is data (null) and keeps its carried type.
 		if _, ok := sd[nf.Name]; !ok {
-			return "", mismatch(nf.Name, "is declared in the schema the record carries but missing from the data", nil)
+			dropped = append(dropped, nf.Name)
+			continue
 		}
+		kept = append(kept, f)
 	}
 
 	added := make([]string, 0)
@@ -181,7 +196,7 @@ func extendSchema(text string, sd opencdc.StructuredData) (string, error) {
 			added = append(added, k)
 		}
 	}
-	if len(added) == 0 {
+	if len(added) == 0 && len(dropped) == 0 {
 		return text, nil
 	}
 	// Name order: the same added fields always give the same schema text, so
@@ -192,9 +207,9 @@ func extendSchema(text string, sd opencdc.StructuredData) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fields = append(fields, newFields...)
+	kept = append(kept, newFields...)
 
-	rawFields, err := json.Marshal(fields)
+	rawFields, err := json.Marshal(kept)
 	if err != nil {
 		return "", unsupported("could not build the extended schema")
 	}
@@ -204,10 +219,21 @@ func extendSchema(text string, sd opencdc.StructuredData) (string, error) {
 		return "", unsupported("could not build the extended schema")
 	}
 
-	// Fail closed if the extension does not parse, for example because an
-	// inferred record type reuses a name the carried schema defines.
+	// Fail closed if the result does not parse: an inferred record type can
+	// reuse a name the carried schema defines, and a dropped field can hold
+	// the definition of a named type (record, enum, fixed) that a kept field
+	// refers to by name.
 	if _, err := (schema.Schema{Type: schema.TypeAvro, Bytes: out}).Serde(); err != nil {
-		return "", unsupported(fmt.Sprintf("the fields %q the record adds cannot be added to the schema it carries", added))
+		switch {
+		case len(dropped) > 0 && len(added) > 0:
+			return "", unsupported(fmt.Sprintf("the schema the record carries cannot drop the fields %q the record removed and add the fields %q it added "+
+				"(a removed field may define a named type another field uses, or an added field may reuse a name the schema defines)", dropped, added))
+		case len(dropped) > 0:
+			return "", unsupported(fmt.Sprintf("the schema the record carries cannot drop the fields %q the record removed: "+
+				"one of them defines a named type another field uses", dropped))
+		default:
+			return "", unsupported(fmt.Sprintf("the fields %q the record adds cannot be added to the schema it carries", added))
+		}
 	}
 	return string(out), nil
 }

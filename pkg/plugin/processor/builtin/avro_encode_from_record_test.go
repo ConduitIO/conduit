@@ -195,3 +195,106 @@ func TestAvroEncode_FromRecord_AfterShapeChangeWithEncodeMiddleware(t *testing.T
 	is := is.New(t)
 	is.Equal(got["c00_int"], `"long"`)
 }
+
+// TestAvroEncode_FromRecord_ExcludedFieldAndDelete runs field.exclude and
+// avro.encode (fromRecord) over the real middleware chain and the built-in
+// registry: a field the pipeline removed is dropped from the writer schema
+// (the other fields keep their source types), and a delete record whose After
+// is empty passes through avro.encode unchanged instead of failing.
+func TestAvroEncode_FromRecord_ExcludedFieldAndDelete(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	srv, err := schemaregistry.NewSchemaRegistry(&inmemory.DB{})
+	is.NoErr(err)
+	reg := NewRegistry(log.Nop(), DefaultBuiltinProcessors, srv)
+	ctx = contextWithSchemaService(ctx, reg.schemaService)
+
+	exclude, err := reg.NewProcessor(ctx, plugin.FullName("builtin:field.exclude"), "exclude", egress.Policy{})
+	is.NoErr(err)
+	is.NoErr(exclude.Configure(ctx, config.Config{
+		"fields":                            ".Payload.After.c06_date",
+		"sdk.schema.encode.payload.enabled": "false",
+	}))
+	is.NoErr(exclude.Open(ctx))
+	enc, err := reg.NewProcessor(ctx, plugin.FullName("builtin:avro.encode"), "avro", egress.Policy{})
+	is.NoErr(err)
+	is.NoErr(enc.Configure(ctx, config.Config{
+		"field":                     ".Payload.After",
+		"schema.strategy":           "fromRecord",
+		"schema.fromRecord.subject": "cdc.public.bench_source_0-value",
+	}))
+	is.NoErr(enc.Open(ctx))
+
+	sch, err := sdkschema.Create(ctx, schema.TypeAvro, "bench_source_0.payload", []byte(smokeSourceSchema))
+	is.NoErr(err)
+	raw, err := sch.Marshal(opencdc.StructuredData{
+		"c00_int":     int32(32),
+		"c02_numeric": big.NewRat(3232, 100),
+		"c06_date":    time.Date(2023, 11, 14, 0, 0, 0, 0, time.UTC),
+	})
+	is.NoErr(err)
+	create := opencdc.Record{
+		Operation: opencdc.OperationCreate,
+		Metadata:  opencdc.Metadata{},
+		Payload:   opencdc.Change{After: opencdc.RawData(raw)},
+	}
+	schema.AttachPayloadSchemaToRecord(create, sch)
+	del := opencdc.Record{
+		Operation: opencdc.OperationDelete,
+		Metadata:  opencdc.Metadata{},
+		Payload:   opencdc.Change{Before: opencdc.RawData(raw), After: opencdc.RawData{}},
+	}
+	schema.AttachPayloadSchemaToRecord(del, sch)
+
+	run := func(p sdkproc.Processor, rec opencdc.Record) opencdc.Record {
+		t.Helper()
+		out := p.Process(ctx, []opencdc.Record{rec})
+		is.Equal(len(out), 1)
+		single, ok := out[0].(sdkproc.SingleRecord)
+		if !ok {
+			t.Fatalf("expected SingleRecord, got %T: %+v", out[0], out[0])
+		}
+		return opencdc.Record(single)
+	}
+
+	// Create: c06_date removed, the rest keeps the source types.
+	got := run(enc, run(exclude, create))
+	var h sr.ConfluentHeader
+	id, body, err := h.DecodeID(got.Payload.After.Bytes())
+	is.NoErr(err)
+	writer, err := srv.SchemaByID(ctx, id)
+	is.NoErr(err)
+	var parsed struct {
+		Fields []struct {
+			Name string `json:"name"`
+			Type any    `json:"type"`
+		} `json:"fields"`
+	}
+	is.NoErr(json.Unmarshal([]byte(writer.Schema), &parsed))
+	types := map[string]string{}
+	for _, f := range parsed.Fields {
+		b, err := json.Marshal(f.Type)
+		is.NoErr(err)
+		types[f.Name] = string(b)
+	}
+	want := map[string]string{
+		"c00_int":     `"int"`,
+		"c02_numeric": `["null",{"logicalType":"decimal","precision":14,"scale":2,"type":"bytes"}]`,
+	}
+	if diff := cmp.Diff(want, types); diff != "" {
+		t.Fatalf("writer schema field types (-want +got):\n%s", diff)
+	}
+	var decoded opencdc.StructuredData
+	is.NoErr((schema.Schema{Type: schema.TypeAvro, Bytes: []byte(writer.Schema)}).Unmarshal(body, &decoded))
+	is.Equal(len(decoded), 2)
+	is.Equal(decoded["c02_numeric"].(*big.Rat).Cmp(big.NewRat(3232, 100)), 0)
+
+	// Delete: the empty After is not encoded, and the payload schema
+	// metadata stays (it still describes Before).
+	got = run(enc, del)
+	is.Equal(got.Payload.After, opencdc.Data(opencdc.RawData{}))
+	subject, err := got.Metadata.GetPayloadSchemaSubject()
+	is.NoErr(err)
+	is.Equal(subject, sch.Subject)
+}
