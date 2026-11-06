@@ -16,6 +16,7 @@ package funnel
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -34,6 +35,13 @@ type connectorErrorsTask interface {
 // reachable from w.FirstTask and calls fail with the first error received,
 // wrapped with the connector's ID. fail is called at most once.
 //
+// It also reads the flush-failure channel of every batching DestinationTask
+// (see DestinationTask.reportFlushFailure): a destination's buffered write can
+// fail on the flusher goroutine while the worker is blocked in a source Read
+// that no record will end, and without this nothing would fail the run. The
+// error reaches fail wrapped with %w, so a fatal mark in its chain still
+// classifies the run's failure as fatal.
+//
 // The caller passes a fail that ends the whole run: in pkg/lifecycle-poc it
 // kills the pipeline's tomb. Canceling a context local to Do would not be
 // enough, because connector.Source.Read does not watch the context it is
@@ -48,8 +56,9 @@ type connectorErrorsTask interface {
 // Readers stop when ctx is done or stop is called. stop waits for every
 // reader to return, so after it returns nothing reads the channels. That is
 // safe: a connector whose error is not read keeps it and returns it from
-// Teardown (see connector.persistErrReporter). One goroutine per connector,
-// plus one that waits for them; once stop returns, each reader has returned
+// Teardown (see connector.persistErrReporter), and a flush failure nobody read
+// is still the task's flush error, which Close reports. One goroutine per
+// channel, plus one that waits for them; once stop returns, each reader has returned
 // from its read and has nothing left to do but exit.
 func (w *Worker) WatchConnectorErrors(ctx context.Context, fail func(error)) (stop func()) {
 	stop, _ = w.watchConnectorErrors(ctx, fail)
@@ -69,7 +78,7 @@ func (w *Worker) watchConnectorErrors(ctx context.Context, fail func(error)) (st
 		readers int
 	)
 
-	read := func(taskID string, errs <-chan error) {
+	read := func(what string, errs <-chan error) {
 		defer wg.Done()
 		select {
 		case <-quit:
@@ -79,9 +88,17 @@ func (w *Worker) watchConnectorErrors(ctx context.Context, fail func(error)) (st
 				return
 			}
 			once.Do(func() {
-				fail(cerrors.Errorf("connector %s reported an error: %w", taskID, err))
+				fail(cerrors.Errorf("%s: %w", what, err))
 			})
 		}
+	}
+	watch := func(what string, errs <-chan error) {
+		if errs == nil {
+			return
+		}
+		wg.Add(1)
+		readers++
+		go read(what, errs)
 	}
 
 	seen := make(map[*TaskNode]bool)
@@ -92,11 +109,13 @@ func (w *Worker) watchConnectorErrors(ctx context.Context, fail func(error)) (st
 		}
 		seen[n] = true
 		if t, ok := n.Task.(connectorErrorsTask); ok {
-			if errs := t.connectorErrors(); errs != nil {
-				wg.Add(1)
-				readers++
-				go read(n.Task.ID(), errs)
-			}
+			watch(fmt.Sprintf("connector %s reported an error", n.Task.ID()), t.connectorErrors())
+		}
+		if dt, ok := n.Task.(*DestinationTask); ok {
+			// Invariant 3: a flush that failed while the worker is idle fails the
+			// run, so its records replay instead of waiting for a record that
+			// may never come.
+			watch(fmt.Sprintf("destination %s failed to flush buffered records", dt.ID()), dt.flushFailuresCh())
 		}
 		for _, next := range n.Next {
 			walk(next)

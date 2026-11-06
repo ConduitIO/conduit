@@ -217,6 +217,15 @@ Either way the engine nacks the record: with a tolerant DLQ it goes to the DLQ a
 running; without one the pipeline halts, and the record is not acked, so a restart redelivers it. The
 failure is never turned into a silent drop (invariant 3), and it is never acked (invariant 1).
 
+On v2 a batching destination with a single branch writes on a flusher goroutine while the worker reads ahead,
+so a failed write or ack there does not return through the pass. The flusher records it as the task's flush
+error, and nothing queued behind it is written or acked. It also reports the error to the run
+(`DestinationTask.reportFlushFailure`, read by `Worker.WatchConnectorErrors` next to the connectors' own
+`Errors()` channels), so the run fails even when the source is idle and the worker is parked in `Read`. The
+error is wrapped, not rebuilt, so a fatal one stays fatal. The run's cancellation, a source that was already
+torn down, and a stop deadline that ran out during the drain are not reported: in those the worker is already
+going away and the records replay.
+
 Backpressure is where the two engines differ, and it is a behaviour to plan around, not a bug:
 
 - **v2** is stop-and-wait: one batch in flight, and the pass does not return until every position is
