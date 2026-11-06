@@ -10,11 +10,13 @@ table with `int4`, `numeric(14,2)` and `date` columns therefore reaches Kafka as
 Kafka Connect / Debezium consumer with a reader schema of `int` or `decimal(14,2)` cannot read it.
 
 This document adds an opt-in strategy, `schema.strategy: fromRecord`. It takes the schema the record
-carries (the subject and version in `opencdc.payload.schema.*` or `opencdc.key.schema.*`), adds a
+carries (the subject and version in `opencdc.payload.schema.*` or `opencdc.key.schema.*`), drops each
+top-level field the schema declares and the record no longer has (a processor removed it), adds a
 nullable field for each top-level field the record has and the schema lacks (an added `__op`, for
 example), registers the result under `schema.fromRecord.subject` and encodes with it. A value that
-does not fit the schema exactly is an error, never a coerced or truncated value. Records that carry no
-schema fall back to inference, with a warning and a metric.
+does not fit the schema exactly is an error, never a coerced or truncated value. An empty part (a
+delete record's `After`) is not encoded and passes through. Records that carry no schema fall back to
+inference, with a warning and a metric.
 
 Versioning: opt-in in v0.22, `autoRegister` warns in v0.23 when it infers while a record carries a
 schema, and `autoRegister` uses the carried schema by default in v0.24.
@@ -56,7 +58,13 @@ So a strategy that reads the carried schema only helps if the processors before 
 schema in place. For a processor that changes the shape, that means
 `sdk.schema.encode.payload.enabled: false` on it (the payload then stays structured and the metadata
 keeps naming the source schema). This is a usage requirement of the new strategy, documented in the
-processor description and in the docs; see _Open questions_.
+processor description and in the docs.
+
+A `conduit-processor-sdk` change is planned, and built separately, that adds an opt-in mode to
+`ProcessorWithSchemaEncode` which extends the carried schema the same way instead of inferring one. It
+follows the same versioning as this strategy: opt-in in v0.22, a warning in v0.23, the default in
+v0.24. Once it lands, the `sdk.schema.encode.payload.enabled: false` workaround is no longer needed.
+This design does not depend on it: `fromRecord` ships and is correct without it.
 
 ### Prior decisions this builds on
 
@@ -142,6 +150,12 @@ A third value for the existing `schema.strategy` parameter, modeled like the oth
 
 ### Per-record algorithm
 
+0. **Empty part.** If the encoded part is empty (nil, or raw data with no bytes, as a delete record's
+   `After` usually is), return the record unchanged, schema metadata included: there is no value to
+   encode, and encoding would invent a record of nulls or defaults. "Empty" is the definition the
+   connector and processor SDK schema middlewares use to skip a part (`isEmpty`), so downstream
+   middlewares skip it too. Decision by DeVaris. `autoRegister` does not do this today (see _Failure
+   modes_); this applies to `fromRecord` only.
 1. Read the subject and version for the part from the record metadata. Both absent: fall back (step
    7). One present, or a version that is not a positive integer: error
    `processor.avro_encode.schema_unsupported`.
@@ -149,9 +163,14 @@ A third value for the existing `schema.strategy` parameter, modeled like the oth
    `processor.avro_encode.registry_unavailable`. The record is not encoded with anything else.
 3. The schema must be Avro with a top-level `record` and no schema references; anything else is
    `processor.avro_encode.schema_unsupported`.
-4. **Missing fields.** Every field the carried schema declares must be present as a key in the data.
-   A missing key (a processor removed the field) is `processor.avro_encode.schema_mismatch`: encoding
-   it would write the field's default or null, which the data does not say.
+4. **Removed fields.** A top-level field the carried schema declares whose key is absent from the data
+   (a processor removed it, for example `field.exclude`) is dropped from the encoding schema. Encoding
+   it would write the field's default or null, which the data does not say; dropping it writes nothing
+   for it, so nothing is lost or invented. Decision by DeVaris: removal is user intent. A key that is
+   present, even with a nil value, is not removed: it keeps its carried type, and a value that does not
+   fit it is a mismatch in step 8. Only top-level fields are dropped; a key missing inside a nested
+   record is caught by step 8. If the dropped field holds the definition of a named type that a kept
+   field uses by name, the result does not parse and is `processor.avro_encode.schema_unsupported`.
 5. **Added fields.** For each top-level key the schema does not declare, infer a type from its value
    with the existing extractor, make it nullable (`["null", T]`, or keep it as is when the inferred
    type is already a union with `null`) and give it `"default": null`. Added fields are appended in
@@ -160,7 +179,7 @@ A third value for the existing `schema.strategy` parameter, modeled like the oth
    the carried one under the registry's default `BACKWARD` rule, and matches what Debezium's
    `ExtractNewRecordState` does for `__op`. Fields are added at the top level only; a new key inside a
    nested record is caught by step 8.
-6. Register the schema text (the carried schema's own text when nothing was added) under
+6. Register the schema text (the carried schema's own text when nothing was dropped or added) under
    `schema.fromRecord.subject`. A rejection with HTTP 409 (incompatible) is
    `processor.avro_encode.schema_incompatible`; any other failure is
    `processor.avro_encode.registry_unavailable`.
@@ -179,8 +198,8 @@ A third value for the existing `schema.strategy` parameter, modeled like the oth
 
 | Code | gRPC | When |
 | --- | --- | --- |
-| `processor.avro_encode.schema_mismatch` | InvalidArgument | A value does not fit the carried (or extended) schema exactly: wrong type, out of range, null for a non-null field, finer precision than the logical type, a missing field, an unknown nested key. |
-| `processor.avro_encode.schema_unsupported` | FailedPrecondition | The record's schema metadata is unreadable, or the carried schema is not an Avro record, or an extension cannot be built from it. |
+| `processor.avro_encode.schema_mismatch` | InvalidArgument | A value does not fit the carried (or extended) schema exactly: wrong type, out of range, null for a non-null field, finer precision than the logical type, a key added or removed inside a nested record. |
+| `processor.avro_encode.schema_unsupported` | FailedPrecondition | The record's schema metadata is unreadable, or the carried schema is not an Avro record, or it cannot be fitted to the record (an added field cannot be added, or a removed field defines a named type another field uses). |
 | `processor.avro_encode.registry_unavailable` | Unavailable | The registry could not return the carried schema or register the encoding schema. |
 | `processor.avro_encode.schema_incompatible` | FailedPrecondition | The registry refused the encoding schema under its compatibility rule for `schema.fromRecord.subject`. |
 
@@ -194,7 +213,12 @@ downstream (DLQ write or pipeline stop), so invariants 1 and 3 hold on every pat
 | Record without a schema | Inference fallback, warning once per processor, metric per record; lossless check still applies | There is no declared type to preserve; erroring would break mixed pipelines that work today |
 | A processor changed a field's type (e.g. `int` to `string`) | `schema_mismatch` | The codec rejects the Go type; never coerced |
 | A processor produced a value finer than the type (`1.234` into `decimal(14,2)`, 01:00 into `date`) | `schema_mismatch` | The codec truncates silently on the released commons; the round trip catches it |
-| A processor removed a field | `schema_mismatch` naming the field | Writing a default or null would invent data |
+| A processor removed a top-level field | Field dropped from the encoding schema; the other fields keep their carried types | Decision by DeVaris: removal is user intent. Lossless: the data has no value for it, and none is written |
+| A processor set a field to null instead of removing it, and the field is non-null | `schema_mismatch` | The key is present, so it is data; null does not fit |
+| A processor removed a field and mistyped another | `schema_mismatch` naming the mistyped field | Present fields keep their carried types |
+| A removed field defines a named type (record, enum, fixed) that a kept field uses by name | `schema_unsupported` | The fitted schema does not parse; fail closed rather than move the definition |
+| A processor removes a field from some records only | Each shape registers its own version; versions alternate. A subject Conduit creates has compatibility `NONE`; on an existing `BACKWARD` subject a version with a non-null field after one without it is `schema_incompatible` | Same as added fields with unstable types; documented in the runbook |
+| A processor removed a key inside a nested record | `schema_mismatch` | Only top-level fields are dropped; the codec would write the nested default |
 | A processor added a top-level field | Nullable field with default null appended | Decision by DeVaris; keeps backward compatibility |
 | A processor added a key inside a nested record | `schema_mismatch` | Only top-level extension is defined; the codec would drop the key |
 | Nullable changes: null into a non-null field | `schema_mismatch` | Codec error |
@@ -203,10 +227,10 @@ downstream (DLQ write or pipeline stop), so invariants 1 and 3 hold on every pat
 | Registry unavailable | `registry_unavailable`, record not encoded | Never fall back to inference on a transient error: it would register a lossy version |
 | Registry compatibility refuses the schema (e.g. the subject holds earlier `autoRegister` versions with `decimal(31,10)`) | `schema_incompatible`, suggestion: use a new subject or change the subject's compatibility | Conduit does not change compatibility on an existing subject |
 | Mixed tables in one processor | Each record registers its own table's schema under the one subject; versions alternate and may be refused by compatibility | Same as `autoRegister` today; route each table to its own processor and subject (as the smoke does with `condition`) |
-| Field `.Payload.Before` after `.Payload.After` was encoded | Fallback (the first encode removed the shared payload metadata) | Existing `dropStaleSchemaMetadata` behavior; documented |
+| Field `.Payload.Before` after `.Payload.After` was encoded | Fallback (the first encode removed the shared payload metadata) | Existing `dropStaleSchemaMetadata` behavior; documented. When `After` was empty and passed through, the metadata stays and `Before` uses the carried schema |
 | A preceding processor changed the shape with the SDK encode middleware on | Encodes with the middleware's inferred version (lossy types) | See _Context_; set `sdk.schema.encode.payload.enabled: false` on that processor |
 | Two named types collide when an added field's inferred type is a record | `schema_unsupported` | The extended schema does not parse; fail closed |
-| Encoded part is present but empty (zero-length raw data, as some delete records carry) with a carried schema | `schema_mismatch` (the first declared field is missing) | Encoding it would invent a record of nulls or defaults; skip deletes with a processor `condition`, as the smoke pipeline does |
+| Encoded part is empty (nil, or zero-length raw data, as delete records carry) | Not encoded; the record passes through unchanged, schema metadata included | Decision by DeVaris. Encoding would invent a record of nulls or defaults. The SDK middlewares skip an empty part by the same definition. This differs from `autoRegister`, which encodes zero-length raw data as a record with no fields (registering that empty schema) and fails on a nil part; `autoRegister` is unchanged |
 | An added field is null in one record and set in the next | The null one is typed `["null","string"]`, the set one by its value, so the schema text differs and a new version is registered | Same rule as `autoRegister`; fields a pipeline adds should have a stable type |
 | Carried schema uses schema references | `schema_unsupported` | Registering it under another subject would need the references resolved and copied; not needed for the sources this targets |
 | Crash mid-record | Nothing new: the processor is stateless; the record is re-read and re-encoded | Registration is idempotent (same text, same ID) |
@@ -230,7 +254,10 @@ downstream (DLQ write or pipeline stop), so invariants 1 and 3 hold on every pat
 ## Versioning and deprecation plan
 
 - **v0.22:** `fromRecord` ships opt-in. Release notes and docs explain it and the
-  `sdk.schema.encode.payload.enabled: false` requirement for shape-changing processors before it.
+  `sdk.schema.encode.payload.enabled: false` requirement for shape-changing processors before it. The
+  planned `conduit-processor-sdk` "extend, don't infer" encode-middleware mode follows the same
+  opt-in (v0.22) → warn (v0.23) → default (v0.24) steps; when it is the default, that requirement goes
+  away.
 - **v0.23:** `autoRegister` logs a warning (once per processor) and increments a counter when it infers
   a schema for a record that carries one, naming `fromRecord`.
 - **v0.24:** `autoRegister` uses the carried schema when a record has one (the `fromRecord` algorithm),
@@ -247,25 +274,32 @@ downstream (DLQ write or pipeline stop), so invariants 1 and 3 hold on every pat
 
 ## Test plan
 
-- Unit tests in `internal` against an in-memory registry, one per failure mode above.
+- Unit tests in `internal` against an in-memory registry, one per failure mode above, including a
+  removed field (non-null, nullable, nullable holding null) being dropped with a stable schema ID,
+  removed plus added fields, a removed field plus a present mistyped or null field still failing, a
+  removed nested key failing, and a removed field that defines a named type failing closed.
+- Processor tests for the empty-part pass-through (nil and zero-length `After`, `Before` and `Key`,
+  encoder not called, record unchanged) and a pin that `autoRegister` still encodes an empty part.
 - The smoke reproduction in `pkg/plugin/processor/builtin`: a record carrying an `int` /
   `decimal(14,2)` / `date` schema through the real middleware chain (`field.set` adding `__op`, then
   `avro.encode`); the schema behind the wire header equals the source schema plus a nullable `__op`
   with `fromRecord`, and is `long` / `decimal(31,10)` / `timestamp-micros` with `autoRegister`.
 - A test pinning the middleware caveat: with `field.set`'s encode middleware left on, the carried
   schema is the inferred version.
+- A chain test through the real middleware and built-in registry: `field.exclude` removing a column
+  before `fromRecord` (dropped from the writer schema, other types kept), and a delete record with an
+  empty `After` passing through.
 - `tests/valuecorrectness`: a `fromRecord` pipeline among the overlapping-named-types pipelines,
   checking bytes and values with an isolated codec.
 - Every test is checked to fail with the new code path reverted.
 
 ## Open questions
 
-1. **The processor SDK encode middleware still infers between processors.** Without
-   `sdk.schema.encode.payload.enabled: false` on a shape-changing processor before `avro.encode`,
-   `fromRecord` preserves an already-inferred schema. Making the default v0.24 path work without that
-   setting needs the same "extend, don't infer" rule in `conduit-processor-sdk`'s
-   `ProcessorWithSchemaEncode`, which is a contract change in that repository and needs its own
-   versioning discussion. Until then, the v0.24 default only helps pipelines whose processors before
-   `avro.encode` keep the shape or disable that middleware.
-2. **Removed fields** are an error. A "project the schema onto the data" option would let
-   `field.exclude` before `avro.encode` work; it is not in the decision and is left out.
+1. **The processor SDK encode middleware still infers between processors.** Resolved by plan: the
+   `conduit-processor-sdk` opt-in mode described under _Context_ (opt-in v0.22, warn v0.23, default
+   v0.24). Until a pipeline runs with it, the `sdk.schema.encode.payload.enabled: false` setting on a
+   shape-changing processor before `avro.encode` remains necessary, and
+   `TestAvroEncode_FromRecord_AfterShapeChangeWithEncodeMiddleware` pins the current behavior.
+2. **Removed fields.** Resolved (DeVaris): dropped from the encoding schema when the key is absent from
+   the payload; see step 4.
+3. **Empty parts.** Resolved (DeVaris): passed through unencoded; see step 0.
