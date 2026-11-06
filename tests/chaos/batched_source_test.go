@@ -174,7 +174,8 @@ func appendLines(path string, from, to int) error {
 }
 
 // parseRecord returns the number a destination line carries, or false for a
-// torn line (the process was killed mid-write).
+// line that is not a whole record. Callers fail the test on false; see
+// sequence and fifoReader.
 func parseRecord(line []byte) (int, bool) {
 	var rec struct {
 		Payload struct {
@@ -193,25 +194,99 @@ func parseRecord(line []byte) (int, bool) {
 }
 
 // sequence returns the record numbers in the destination file, in order.
+//
+// Every complete line must be a record, or the test fails: a line the reader
+// skipped could hide a replayed record or fake a loss, so loss and replay
+// counts would not be trustworthy. The destination appends to a regular file,
+// and a SIGKILL during its write(2) can leave the start of a line without its
+// newline. The restarted process appends its first line to that fragment, and
+// the merged line does not parse. Every test that SIGKILLs Conduit therefore
+// calls trimTornTail before the restart, so a merged line cannot form and an
+// unparseable line is always a real fault.
+//
+// Bytes after the last newline are not counted: while Conduit runs they are a
+// line still being written. trimTornTail (after a kill) and requireNoTornTail
+// (after a graceful stop) deal with them.
 func sequence(t *testing.T, dir string) []int {
 	t.Helper()
-	f, err := os.Open(filepath.Join(dir, batchedOutputName))
+	raw, err := os.ReadFile(filepath.Join(dir, batchedOutputName))
 	if os.IsNotExist(err) {
 		return nil
 	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
-	var seq []int
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-	for sc.Scan() {
-		if n, ok := parseRecord(sc.Bytes()); ok {
-			seq = append(seq, n)
-		}
+	seq, _, err := parseDestination(raw)
+	if err != nil {
+		t.Fatal(err)
 	}
 	return seq
+}
+
+// parseDestination splits the destination's bytes into the record numbers of
+// its complete lines and the tail after the last newline. It returns an error
+// for the first complete line that is not a record.
+func parseDestination(raw []byte) (seq []int, tail []byte, err error) {
+	end := bytes.LastIndexByte(raw, '\n') + 1
+	raw, tail = raw[:end], raw[end:]
+	seq = make([]int, 0, bytes.Count(raw, []byte{'\n'}))
+	for len(raw) > 0 {
+		i := bytes.IndexByte(raw, '\n')
+		n, ok := parseRecord(raw[:i])
+		if !ok {
+			return seq, tail, fmt.Errorf("destination line %d is not a record (%d bytes: %.160q); the reader does not skip lines, so this is a fault in the destination or a kill boundary the test did not trim", len(seq)+1, i, raw[:i])
+		}
+		seq = append(seq, n)
+		raw = raw[i+1:]
+	}
+	return seq, tail, nil
+}
+
+// tornTail returns the bytes after the last newline of the destination file.
+func tornTail(t *testing.T, dir string) []byte {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(dir, batchedOutputName))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw[bytes.LastIndexByte(raw, '\n')+1:]
+}
+
+// trimTornTail cuts the destination file back to its last newline and logs
+// what it cut. Call it after a SIGKILL, once the process is gone, and before
+// the restart. The cut bytes are what the killed destination wrote of a Write
+// that never returned, so their records were never acknowledged and must be
+// replayed: removing them cannot hide a loss (it only ever removes records, so
+// a record the engine wrongly acked and does not replay is still missing), and
+// it keeps the restart's first line from being glued to the fragment.
+func trimTornTail(t *testing.T, dir string) {
+	t.Helper()
+	tail := tornTail(t, dir)
+	if len(tail) == 0 {
+		t.Log("torn tail: none, the destination file ended in a newline at the kill")
+		return
+	}
+	path := filepath.Join(dir, batchedOutputName)
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(path, fi.Size()-int64(len(tail))); err != nil {
+		t.Fatalf("truncate %s: %v", path, err)
+	}
+	t.Logf("torn tail: cut %d bytes of a line the killed destination did not finish writing: %.160q", len(tail), tail)
+}
+
+// requireNoTornTail fails if the destination file does not end in a newline
+// after a graceful stop: a clean shutdown completes every Write (invariant 7).
+func requireNoTornTail(t *testing.T, dir string) {
+	t.Helper()
+	if tail := tornTail(t, dir); len(tail) > 0 {
+		t.Fatalf("a graceful stop left %d bytes of an unfinished line in the destination (invariant 7): %.160q", len(tail), tail)
+	}
 }
 
 func countsOf(seq []int) map[int]int {
@@ -464,6 +539,7 @@ func TestSIGKILL_BatchedSource_WhileCollecting(t *testing.T) {
 			opened := requireBatchedSource(t, first)
 			time.Sleep(1500*time.Millisecond - time.Since(opened)) // after the first flush, writer still running
 			first.sigkill(t)
+			trimTornTail(t, dir)
 			atKill := len(sequence(t, dir))
 			if atKill == 0 || atKill >= total {
 				t.Fatalf("kill did not land mid-stream (%d of %d delivered)", atKill, total)
@@ -473,6 +549,7 @@ func TestSIGKILL_BatchedSource_WhileCollecting(t *testing.T) {
 			requireBatchedSource(t, second)
 			waitComplete(t, second, dir, rangeOf(1, total))
 			second.sigterm(t)
+			requireNoTornTail(t, dir)
 
 			seq := sequence(t, dir)
 			counts := countsOf(seq)
@@ -518,6 +595,7 @@ func TestSIGKILL_BatchedSource_AfterWriteBeforePersist(t *testing.T) {
 			requireBatchedSource(t, first)
 			atKill := waitDelivered(t, first, dir, killAt)
 			first.sigkill(t)
+			trimTornTail(t, dir)
 			if lineCount(dir) >= total {
 				t.Fatalf("the whole input (%d) was delivered before the kill landed; raise total", total)
 			}
@@ -526,6 +604,7 @@ func TestSIGKILL_BatchedSource_AfterWriteBeforePersist(t *testing.T) {
 			requireBatchedSource(t, second)
 			waitComplete(t, second, dir, rangeOf(1, total))
 			second.sigterm(t)
+			requireNoTornTail(t, dir)
 
 			seq := sequence(t, dir)
 			counts := countsOf(seq)
@@ -796,6 +875,7 @@ func TestSIGKILL_BatchedSource_NSource(t *testing.T) {
 			requireBatchedSource(t, first)
 			waitDelivered(t, first, dir, 15000)
 			first.sigkill(t)
+			trimTornTail(t, dir)
 			if lineCount(dir) >= 2*lines {
 				t.Fatalf("the whole input was delivered before the kill landed; raise lines")
 			}
@@ -804,6 +884,7 @@ func TestSIGKILL_BatchedSource_NSource(t *testing.T) {
 			requireBatchedSource(t, second)
 			waitComplete(t, second, dir, want)
 			second.sigterm(t)
+			requireNoTornTail(t, dir)
 
 			seq := sequence(t, dir)
 			requireOrder(t, seq, 1, lines, 1)
