@@ -26,6 +26,12 @@ type preRegisteredConfig struct {
 	Version int `json:"version" validate:"gt=0"`
 }
 
+type fromRecordConfig struct {
+	// The subject under which the schema used to encode the record (the schema the record
+	// carries, plus any fields the record adds) is registered in the schema registry.
+	Subject string `json:"subject"`
+}
+
 type schemaConfig struct {
 	// Strategy to use to determine the schema for the record.
 	// Available strategies are:
@@ -34,11 +40,17 @@ type schemaConfig struct {
 	// * `autoRegister` (for development purposes) - Infer the schema from the record and register it
 	//    in the schema registry. This strategy is further configured with options starting with
 	//   `schema.autoRegister.*`.
+	// * `fromRecord` - Encode with the schema the record already carries (its schema subject and
+	//    version metadata), adding a nullable field for each top-level field the record adds, and
+	//    register it in the schema registry. Values that do not fit the schema exactly fail the
+	//    record. This strategy is further configured with options starting with `schema.fromRecord.*`.
 	//
 	// For more information about the behavior of each strategy read the main processor description.
-	StrategyType string `json:"strategy" validate:"required,inclusion=preRegistered|autoRegister"`
+	StrategyType string `json:"strategy" validate:"required,inclusion=preRegistered|autoRegister|fromRecord"`
 
 	PreRegistered preRegisteredConfig `json:"preRegistered"`
+
+	FromRecord fromRecordConfig `json:"fromRecord"`
 
 	// The subject name under which the inferred schema will be registered in the schema registry.
 	AutoRegisteredSubject string `json:"autoRegister.subject"`
@@ -52,6 +64,8 @@ func (c *schemaConfig) parse() error {
 		return c.parsePreRegistered()
 	case "autoRegister":
 		return c.parseAutoRegister()
+	case strategyFromRecord:
+		return c.parseFromRecord()
 	default:
 		return cerrors.Errorf("unknown schema strategy %q", c.StrategyType)
 	}
@@ -81,5 +95,17 @@ func (c *schemaConfig) parseAutoRegister() error {
 	c.strategy = internal.ExtractAndUploadSchemaStrategy{
 		Subject: c.AutoRegisteredSubject,
 	}
+	return nil
+}
+
+// strategyFromRecord is the schema.strategy value of FromRecordSchemaStrategy.
+const strategyFromRecord = "fromRecord"
+
+func (c *schemaConfig) parseFromRecord() error {
+	if c.FromRecord.Subject == "" {
+		return cerrors.New("subject required for schema strategy 'fromRecord'")
+	}
+
+	c.strategy = internal.NewFromRecordSchemaStrategy(c.FromRecord.Subject)
 	return nil
 }

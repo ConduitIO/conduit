@@ -88,6 +88,51 @@ func TestConfig_Parse(t *testing.T) {
 			wantErr: cerrors.New("failed parsing schema strategy: subject required for schema strategy 'autoRegister'"),
 		},
 		{
+			name: "fromRecord",
+			input: config.Config{
+				"schema.strategy":           "fromRecord",
+				"schema.fromRecord.subject": "testsubject",
+			},
+			want: encodeConfig{
+				Field: ".Payload.After",
+				Schema: schemaConfig{
+					StrategyType: "fromRecord",
+					FromRecord:   fromRecordConfig{Subject: "testsubject"},
+				},
+			},
+		},
+		{
+			name: "fromRecord on the key",
+			input: config.Config{
+				"schema.strategy":           "fromRecord",
+				"schema.fromRecord.subject": "testsubject",
+				"field":                     ".Key",
+			},
+			want: encodeConfig{
+				Field: ".Key",
+				Schema: schemaConfig{
+					StrategyType: "fromRecord",
+					FromRecord:   fromRecordConfig{Subject: "testsubject"},
+				},
+			},
+		},
+		{
+			name: "fromRecord without subject",
+			input: config.Config{
+				"schema.strategy": "fromRecord",
+			},
+			wantErr: cerrors.New("failed parsing schema strategy: subject required for schema strategy 'fromRecord'"),
+		},
+		{
+			name: "fromRecord on a nested field",
+			input: config.Config{
+				"schema.strategy":           "fromRecord",
+				"schema.fromRecord.subject": "testsubject",
+				"field":                     ".Payload.After.something",
+			},
+			wantErr: cerrors.New(`schema strategy 'fromRecord' needs field to be the whole key or a whole payload part, got ".Payload.After.something"`),
+		},
+		{
 			name: "non-default target field",
 			input: config.Config{
 				"schema.strategy":             "autoRegister",

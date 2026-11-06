@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 
 	opencdc "github.com/conduitio/conduit-commons/opencdc"
+	internal "github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/internal"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -42,18 +43,18 @@ func (m *MockEncoder) EXPECT() *MockEncoderMockRecorder {
 }
 
 // Encode mocks base method.
-func (m *MockEncoder) Encode(ctx context.Context, sd opencdc.StructuredData) (opencdc.RawData, error) {
+func (m *MockEncoder) Encode(ctx context.Context, sd opencdc.StructuredData, carried internal.SchemaRef) (opencdc.RawData, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Encode", ctx, sd)
+	ret := m.ctrl.Call(m, "Encode", ctx, sd, carried)
 	ret0, _ := ret[0].(opencdc.RawData)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Encode indicates an expected call of Encode.
-func (mr *MockEncoderMockRecorder) Encode(ctx, sd any) *MockEncoderEncodeCall {
+func (mr *MockEncoderMockRecorder) Encode(ctx, sd, carried any) *MockEncoderEncodeCall {
 	mr.mock.ctrl.T.Helper()
-	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Encode", reflect.TypeOf((*MockEncoder)(nil).Encode), ctx, sd)
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Encode", reflect.TypeOf((*MockEncoder)(nil).Encode), ctx, sd, carried)
 	return &MockEncoderEncodeCall{Call: call}
 }
 
@@ -69,13 +70,13 @@ func (c *MockEncoderEncodeCall) Return(arg0 opencdc.RawData, arg1 error) *MockEn
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockEncoderEncodeCall) Do(f func(context.Context, opencdc.StructuredData) (opencdc.RawData, error)) *MockEncoderEncodeCall {
+func (c *MockEncoderEncodeCall) Do(f func(context.Context, opencdc.StructuredData, internal.SchemaRef) (opencdc.RawData, error)) *MockEncoderEncodeCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockEncoderEncodeCall) DoAndReturn(f func(context.Context, opencdc.StructuredData) (opencdc.RawData, error)) *MockEncoderEncodeCall {
+func (c *MockEncoderEncodeCall) DoAndReturn(f func(context.Context, opencdc.StructuredData, internal.SchemaRef) (opencdc.RawData, error)) *MockEncoderEncodeCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

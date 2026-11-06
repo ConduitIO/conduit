@@ -68,7 +68,7 @@ func TestEncodeDecode_ExtractAndUploadSchemaStrategy(t *testing.T) {
 	})
 	dec := NewDecoder(client, logger)
 
-	bytes, err := enc.Encode(ctx, have)
+	bytes, err := enc.Encode(ctx, have, SchemaRef{})
 	is.NoErr(err)
 
 	got, err := dec.Decode(ctx, bytes)
@@ -113,7 +113,7 @@ func TestEncodeDecode_DownloadStrategy_Avro(t *testing.T) {
 	})
 	dec := NewDecoder(client, logger)
 
-	bytes, err := enc.Encode(ctx, have)
+	bytes, err := enc.Encode(ctx, have, SchemaRef{})
 	is.NoErr(err)
 
 	got, err := dec.Decode(ctx, bytes)

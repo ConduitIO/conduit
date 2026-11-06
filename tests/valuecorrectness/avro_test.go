@@ -70,9 +70,14 @@ type valuePipeline struct {
 	version int // the version the registry must assign; asserted at setup
 	schema  string
 	// kind is "encode" (structured record built by a JS processor, then
-	// avro.encode) or "roundtrip" (wire bytes read from the source, decoded by
-	// avro.decode and encoded again by avro.encode).
+	// avro.encode), "roundtrip" (wire bytes read from the source, decoded by
+	// avro.decode and encoded again by avro.encode) or "fromrecord" (as
+	// "encode", but the JS processor attaches subject and version as payload
+	// schema metadata, as a schema-aware source does, and avro.encode uses
+	// schema.strategy fromRecord to register that schema under outSubject).
 	kind string
+	// outSubject is the subject a "fromrecord" pipeline registers under.
+	outSubject string
 	// want is the value every record must carry, in the codec's native form.
 	want map[string]any
 	// p, q and sym parameterise the JS processor for kind "encode".
@@ -124,6 +129,20 @@ func TestAvro_OverlappingNamedTypes_ManyPipelinesOneProcess(t *testing.T) {
 			p:      5, q: 6, sym: "Y",
 		},
 		{
+			// fromRecord must encode with the schema the record carries, not
+			// with one inferred from the values (which would turn the enums
+			// into strings) and not with another pipeline's definitions of R
+			// and E.
+			id: "fr-a", subject: "events-a", outSubject: "events-a-out", version: 1, kind: "fromrecord",
+			schema: encodeSchema("one", `{"name":"p","type":"long"},{"name":"q","type":"long"}`, `"X","Y"`),
+			p:      7, q: 8, sym: "Y",
+		},
+		{
+			id: "fr-b", subject: "events-b", outSubject: "events-b-out", version: 1, kind: "fromrecord",
+			schema: encodeSchema("two", `{"name":"q","type":"long"},{"name":"p","type":"long"}`, `"Y","X"`),
+			p:      9, q: 10, sym: "Y",
+		},
+		{
 			id: "dec-6", subject: "amounts-6", version: 1, kind: "roundtrip",
 			schema: decimalSchema("amounts", 6),
 			want:   decWant,
@@ -135,7 +154,7 @@ func TestAvro_OverlappingNamedTypes_ManyPipelinesOneProcess(t *testing.T) {
 		},
 	}
 	for _, p := range pipelines {
-		if p.kind == "encode" {
+		if p.kind == "encode" || p.kind == "fromrecord" {
 			p.want = encWant(p.p, p.q, p.sym)
 		}
 	}
@@ -177,6 +196,9 @@ func TestAvro_OverlappingNamedTypes_ManyPipelinesOneProcess(t *testing.T) {
 			t.Fatalf("register %s: got version %d, want %d", p.subject, ss.Version, p.version)
 		}
 		p.schemaID = ss.ID
+		if p.kind == "fromrecord" {
+			p.schemaID = registerOutSubject(ctx, t, r.SchemaRegistry, p)
+		}
 		p.in = filepath.Join(dir, p.id+".in")
 		p.out = filepath.Join(dir, p.id+".out.jsonl")
 		writeInput(t, p)
@@ -241,6 +263,22 @@ func TestAvro_OverlappingNamedTypes_ManyPipelinesOneProcess(t *testing.T) {
 			checkOutput(t, p)
 		})
 	}
+}
+
+// registerOutSubject registers p's schema under p.outSubject and returns its
+// ID. A "fromrecord" pipeline must write exactly the schema its records carry
+// under that subject; the same text resolves to this ID when the processor
+// registers it.
+func registerOutSubject(ctx context.Context, t *testing.T, reg interface {
+	CreateSchema(context.Context, string, sr.Schema) (sr.SubjectSchema, error)
+}, p *valuePipeline,
+) int {
+	t.Helper()
+	out, err := reg.CreateSchema(ctx, p.outSubject, sr.Schema{Type: sr.TypeAvro, Schema: p.schema})
+	if err != nil {
+		t.Fatalf("register %s: %v", p.outSubject, err)
+	}
+	return out.ID
 }
 
 // checkOutput reads every record p wrote and compares its bytes and its
@@ -340,6 +378,13 @@ func writeInput(t *testing.T, p *valuePipeline) {
 func writePipeline(t *testing.T, dir string, p *valuePipeline) {
 	t.Helper()
 	var procs string
+	encode := fmt.Sprintf(`
+      - id: enc
+        plugin: avro.encode
+        settings:
+          schema.strategy: preRegistered
+          schema.preRegistered.subject: %s
+          schema.preRegistered.version: %d`, p.subject, p.version)
 	switch p.kind {
 	case "encode":
 		procs = fmt.Sprintf(`
@@ -356,6 +401,29 @@ func writePipeline(t *testing.T, dir string, p *valuePipeline) {
               rec.Payload.After = sd;
               return rec;
             }`, p.p, p.q, p.sym)
+	case "fromrecord":
+		procs = fmt.Sprintf(`
+      - id: build
+        plugin: custom.javascript
+        settings:
+          script: |
+            function process(rec) {
+              var sd = new StructuredData();
+              sd["top_r"] = null;
+              sd["top_e"] = null;
+              sd["a"] = [{"p": %d, "q": %d}];
+              sd["e"] = ["%s"];
+              rec.Payload.After = sd;
+              rec.Metadata["opencdc.payload.schema.subject"] = "%s";
+              rec.Metadata["opencdc.payload.schema.version"] = "%d";
+              return rec;
+            }`, p.p, p.q, p.sym, p.subject, p.version)
+		encode = fmt.Sprintf(`
+      - id: enc
+        plugin: avro.encode
+        settings:
+          schema.strategy: fromRecord
+          schema.fromRecord.subject: %s`, p.outSubject)
 	case "roundtrip":
 		procs = `
       - id: unbase64
@@ -382,14 +450,8 @@ pipelines:
         plugin: builtin:file
         settings:
           path: %[3]s
-    processors:%[4]s
-      - id: enc
-        plugin: avro.encode
-        settings:
-          schema.strategy: preRegistered
-          schema.preRegistered.subject: %[5]s
-          schema.preRegistered.version: %[6]d
-`, p.id, p.in, p.out, procs, p.subject, p.version)
+    processors:%[4]s%[5]s
+`, p.id, p.in, p.out, procs, encode)
 	if err := os.WriteFile(filepath.Join(dir, p.id+".yaml"), []byte(y), 0o600); err != nil {
 		t.Fatal(err)
 	}

@@ -144,6 +144,18 @@ var (
 		[]string{labelPipelineName, "processor", labelComponentID},
 		prometheus.HistogramOpts{Buckets: []float64{.001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5}},
 	)
+	// AvroEncodeSchemaFallbackCounter counts records the avro.encode
+	// processor's fromRecord schema strategy encoded with an inferred schema
+	// because the record carried no schema for the encoded part (by the
+	// subject the schema was registered under). Non-zero on a pipeline that is
+	// expected to keep source types means a source or an earlier processor
+	// does not attach or keep the schema. See
+	// docs/design-documents/20261106-avro-encode-preserve-source-schema.md.
+	AvroEncodeSchemaFallbackCounter = metrics.NewLabeledCounter(
+		"conduit_processor_avro_encode_schema_fallback_total",
+		"Number of records the avro.encode fromRecord strategy encoded with an inferred schema because they carried none (by subject).",
+		[]string{"subject"},
+	)
 	DLQExecutionDurationTimer = metrics.NewLabeledTimer("conduit_dlq_execution_duration_seconds",
 		"Amount of time spent writing records to DLQ connector per pipeline and plugin.",
 		[]string{labelPipelineName, labelPlugin},

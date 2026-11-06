@@ -16,6 +16,8 @@ package internal
 
 import (
 	"context"
+	"slices"
+	"strings"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit-commons/schema"
@@ -32,22 +34,34 @@ type Encoder struct {
 	logger   log.CtxLogger
 
 	SchemaStrategy
+
+	// lossless makes Encode decode what it encoded and fail unless it gets
+	// the same value back. It is set for FromRecordSchemaStrategy only, so the
+	// other strategies keep their existing behavior.
+	lossless bool
 }
 
+// SchemaStrategy decides the schema a value is encoded with. carried is the
+// schema the record part carries according to its metadata (the zero value
+// when it carries none, or when the strategy does not use it).
 type SchemaStrategy interface {
-	GetSchema(context.Context, schemaregistry.Registry, log.CtxLogger, opencdc.StructuredData) (schema.Schema, error)
+	GetSchema(ctx context.Context, registry schemaregistry.Registry, logger log.CtxLogger, sd opencdc.StructuredData, carried SchemaRef) (schema.Schema, error)
 }
 
 func NewEncoder(registry schemaregistry.Registry, logger log.CtxLogger, strategy SchemaStrategy) *Encoder {
+	_, lossless := strategy.(*FromRecordSchemaStrategy)
 	return &Encoder{
 		registry:       registry,
 		logger:         logger.WithComponent("avro.internal.Encoder"),
 		SchemaStrategy: strategy,
+		lossless:       lossless,
 	}
 }
 
-func (e *Encoder) Encode(ctx context.Context, sd opencdc.StructuredData) (opencdc.RawData, error) {
-	s, err := e.GetSchema(ctx, e.registry, e.logger, sd)
+// Encode encodes sd in the Confluent wire format with the schema the strategy
+// returns. carried is the schema the record part carries (see SchemaStrategy).
+func (e *Encoder) Encode(ctx context.Context, sd opencdc.StructuredData, carried SchemaRef) (opencdc.RawData, error) {
+	s, err := e.GetSchema(ctx, e.registry, e.logger, sd, carried)
 	if err != nil {
 		return opencdc.RawData{}, cerrors.Errorf("failed to get schema: %w", err)
 	}
@@ -60,17 +74,91 @@ func (e *Encoder) Encode(ctx context.Context, sd opencdc.StructuredData) (opencd
 
 	data, err := s.Marshal(sd)
 	if err != nil {
+		if e.lossless {
+			return nil, cerrors.Errorf("failed to marshal data with schema (ID: %v, subject: %v, version: %v): %w", s.ID, s.Subject, s.Version, mismatchFromCodec(sd, err))
+		}
 		return nil, cerrors.Errorf("failed to marshal data with schema (ID: %v, subject: %v, version: %v): %w", s.ID, s.Subject, s.Version, errsafe.Opaque(err))
+	}
+	if e.lossless {
+		if err := verifyRoundTrip(s, sd, data); err != nil {
+			return nil, cerrors.Errorf("schema (ID: %v, subject: %v, version: %v): %w", s.ID, s.Subject, s.Version, err)
+		}
 	}
 
 	return append(header, data...), nil
+}
+
+// verifyRoundTrip decodes data, the encoding of sd with s, and returns a
+// CodeSchemaMismatch error unless it gives back the same value.
+//
+// Invariant 6: the Avro codec accepts some values it cannot represent. It
+// truncates a decimal to the schema's scale and a time to the precision of
+// its logical type, and ignores a map key that is not a field of a nested
+// record. Checking the round trip, not trusting a successful encode, turns
+// each of those into an error instead of a changed value.
+func verifyRoundTrip(s schema.Schema, sd opencdc.StructuredData, data []byte) error {
+	var decoded opencdc.StructuredData
+	if err := s.Unmarshal(data, &decoded); err != nil {
+		return mismatch("(record)", "does not decode after encoding", err)
+	}
+	if len(decoded) != len(sd) {
+		return mismatch(firstMissingKey(sd, decoded), "would not survive encoding", nil)
+	}
+	for _, k := range sortedKeys(sd) {
+		if !sameValue(sd[k], decoded[k]) {
+			return mismatch(k, "would not survive encoding: the schema cannot represent its value exactly", nil)
+		}
+	}
+	return nil
+}
+
+// mismatchFromCodec turns a codec error into a CodeSchemaMismatch error. It
+// names the top-level field when the codec message starts with one (the codec
+// prefixes the field path, "name: avro: ..."), and only when that name is a
+// key of sd; the rest of the codec message is not shown, as it can quote
+// record values.
+func mismatchFromCodec(sd opencdc.StructuredData, err error) error {
+	field := "(record)"
+	msg := err.Error()
+	if i := strings.Index(msg, codecMarshalPrefix); i >= 0 {
+		rest := msg[i+len(codecMarshalPrefix):]
+		if j := strings.IndexAny(rest, ":.["); j > 0 {
+			if _, ok := sd[rest[:j]]; ok {
+				field = rest[:j]
+			}
+		}
+	}
+	return mismatch(field, "cannot be encoded with the schema: its value has a different type, is out of range, or is null where the schema does not allow it", err)
+}
+
+// codecMarshalPrefix precedes the field path in conduit-commons' Avro marshal
+// errors. If a codec upgrade changes it, the error still has the right code
+// and only loses the field name.
+const codecMarshalPrefix = "could not marshal into avro: "
+
+func firstMissingKey(want, got opencdc.StructuredData) string {
+	for _, k := range sortedKeys(want) {
+		if _, ok := got[k]; !ok {
+			return k
+		}
+	}
+	return "(record)"
+}
+
+func sortedKeys(sd opencdc.StructuredData) []string {
+	keys := make([]string, 0, len(sd))
+	for k := range sd {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return keys
 }
 
 type ExtractAndUploadSchemaStrategy struct {
 	Subject string
 }
 
-func (str ExtractAndUploadSchemaStrategy) GetSchema(ctx context.Context, registry schemaregistry.Registry, _ log.CtxLogger, sd opencdc.StructuredData) (schema.Schema, error) {
+func (str ExtractAndUploadSchemaStrategy) GetSchema(ctx context.Context, registry schemaregistry.Registry, _ log.CtxLogger, sd opencdc.StructuredData, _ SchemaRef) (schema.Schema, error) {
 	s, err := schema.KnownSerdeFactories[schema.TypeAvro].SerdeForType(sd)
 	if err != nil {
 		return schema.Schema{}, cerrors.Errorf("could not extract avro schema: %w", err)
@@ -93,7 +181,7 @@ type DownloadSchemaStrategy struct {
 	Version int
 }
 
-func (str DownloadSchemaStrategy) GetSchema(ctx context.Context, registry schemaregistry.Registry, _ log.CtxLogger, _ opencdc.StructuredData) (schema.Schema, error) {
+func (str DownloadSchemaStrategy) GetSchema(ctx context.Context, registry schemaregistry.Registry, _ log.CtxLogger, _ opencdc.StructuredData, _ SchemaRef) (schema.Schema, error) {
 	// get schema from registry
 	ss, err := registry.SchemaBySubjectVersion(ctx, str.Subject, str.Version)
 	if err != nil {
