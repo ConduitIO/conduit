@@ -95,6 +95,17 @@ const (
 	// destination, read-ahead pipelining). 0 (the default every existing
 	// scenario uses) leaves the destination unbatched.
 	envLCDestBatchSize = "CONDUIT_CHAOS_LC_DEST_BATCH_SIZE"
+	// envLCDestBatchDelayMS sets sdk.batch.delay (in ms) on the destination,
+	// which arms the funnel's one-shot flush timer for a partial batch
+	// (#3231). 0 (the default) leaves it unset.
+	envLCDestBatchDelayMS = "CONDUIT_CHAOS_LC_DEST_BATCH_DELAY_MS"
+	// envLCDestWriteDelayMS and envLCDestSlowAfter make the destination's
+	// Write slow; see lcChildConfig.destWriteDelayMS.
+	envLCDestWriteDelayMS = "CONDUIT_CHAOS_LC_DEST_WRITE_DELAY_MS"
+	envLCDestSlowAfter    = "CONDUIT_CHAOS_LC_DEST_SLOW_AFTER"
+	// envLCAwaitSigterm selects the arch-v2 SIGTERM variant (see
+	// lcChildConfig.awaitSigterm).
+	envLCAwaitSigterm = "CONDUIT_CHAOS_LC_AWAIT_SIGTERM"
 	// envLCEngine selects the lifecycle engine: "" (arch-v2,
 	// pkg/lifecycle-poc, what every scenario before #2977 uses) or
 	// lcEngineV1 (the default engine, pkg/lifecycle).
@@ -144,6 +155,19 @@ const (
 	// markerLCSourceStopCalled is printed when the source plugin's Stop is
 	// called, i.e. a graceful stop reached the connector.
 	markerLCSourceStopCalled = "LC_SOURCE_STOP_CALLED"
+	// markerLCDestReq ("LC_DEST_REQ <first> <last>") is printed by the
+	// destination plugin when a write request arrives, before any slow-write
+	// delay and before anything is recorded; markerLCDestWrite
+	// ("LC_DEST_WRITE <pos>") is printed per record after it is durably
+	// recorded, in write order. The parent uses the first to aim a kill at a
+	// request in flight and the second to check per-source write order.
+	//
+	// markerLCResume ("LC_RESUME <pos>") is printed by the source plugin's
+	// Open with the position it resumes from, so a parent can tell how much a
+	// restart replays.
+	markerLCDestReq   = "LC_DEST_REQ"
+	markerLCResume    = "LC_RESUME"
+	markerLCDestWrite = "LC_DEST_WRITE"
 	// markerLCSigtermExit is printed by the SIGTERM variant once StopAll and
 	// Wait have returned and pending position writes are flushed.
 	markerLCSigtermExit = "LC_SIGTERM_EXIT"
@@ -199,6 +223,18 @@ type lcChildConfig struct {
 	// the funnel's destination-write batching and (this scenario has a single
 	// destination) read-ahead pipelining. 0 disables both.
 	destBatchSize int
+	// destBatchDelayMS sets sdk.batch.delay on the destination connector (ms).
+	// With it set, a partial batch is flushed by the funnel's flush timer
+	// (#3231) once the delay has passed with no further arrival, so a graceful
+	// child can wait for the tail to be acked before it stops. 0 leaves it
+	// unset.
+	destBatchDelayMS int
+	// destWriteDelayMS makes the destination sleep this long on a write
+	// request before it records anything (a slow Write in flight). It applies
+	// to requests whose last position is above destSlowAfter (0 = every
+	// request).
+	destWriteDelayMS int
+	destSlowAfter    uint64
 
 	// graceful selects the child's two variants (see runChildLifecycle):
 	// false is the crashable variant used by both of recovery_test.go's
@@ -222,6 +258,11 @@ type lcChildConfig struct {
 	// pipeline, which keeps a failed source node from finishing until a stop
 	// arrives.
 	holdAcksUntilStop bool
+	// awaitSigterm selects the arch-v2 SIGTERM variant: start, wait for
+	// SIGTERM, stop the pipeline gracefully (Service.Stop without force, which
+	// drains in-flight records and checkpoints), flush pending position
+	// writes, print markerLCSigtermExit and exit 0. Exclusive with graceful.
+	awaitSigterm bool
 }
 
 func (c lcChildConfig) env() []string {
@@ -239,6 +280,10 @@ func (c lcChildConfig) env() []string {
 		envLCMinDelayMS + "=" + strconv.Itoa(c.minDelayMS),
 		envLCMaxDelayMS + "=" + strconv.Itoa(c.maxDelayMS),
 		envLCDestBatchSize + "=" + strconv.Itoa(c.destBatchSize),
+		envLCDestBatchDelayMS + "=" + strconv.Itoa(c.destBatchDelayMS),
+		envLCDestWriteDelayMS + "=" + strconv.Itoa(c.destWriteDelayMS),
+		envLCDestSlowAfter + "=" + strconv.FormatUint(c.destSlowAfter, 10),
+		envLCAwaitSigterm + "=" + strconv.FormatBool(c.awaitSigterm),
 		envLCGraceful + "=" + strconv.FormatBool(c.graceful),
 		envLCEngine + "=" + c.engine,
 		envLCSigterm + "=" + strconv.FormatBool(c.sigterm),
@@ -263,7 +308,11 @@ type lcChildEnv struct {
 	minDelayMS int
 	maxDelayMS int
 
-	destBatchSize int
+	destBatchSize    int
+	destBatchDelayMS int
+	destWriteDelayMS int
+	destSlowAfter    uint64
+	awaitSigterm     bool
 
 	graceful          bool
 	engine            string
@@ -274,7 +323,7 @@ type lcChildEnv struct {
 // parseLCChildEnv reads and validates this child's environment. Like
 // parseChildEnv, any failure here is a test-harness misconfiguration, not a
 // scenario under test, so it exits immediately with exitBadArgs.
-func parseLCChildEnv() lcChildEnv {
+func parseLCChildEnv() lcChildEnv { //nolint:gocyclo // one flat branch per env var, each with its own error exit
 	var cfg lcChildEnv
 	cfg.dbDir = os.Getenv(envLCDBDir)
 	cfg.upstreamDir = os.Getenv(envLCUpstream)
@@ -334,9 +383,40 @@ func parseLCChildEnv() lcChildEnv {
 		cfg.destBatchSize = destBatchSize
 	}
 
+	// The timer knobs are optional, like destBatchSize.
+	for _, v := range []struct {
+		env string
+		dst *int
+	}{
+		{envLCDestBatchDelayMS, &cfg.destBatchDelayMS},
+		{envLCDestWriteDelayMS, &cfg.destWriteDelayMS},
+	} {
+		raw := os.Getenv(v.env)
+		if raw == "" {
+			continue
+		}
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 0 {
+			fmt.Fprintf(os.Stderr, "%s: invalid %s: %q\n", markerFatal, v.env, raw)
+			os.Exit(exitBadArgs)
+		}
+		*v.dst = n
+	}
+	if raw := os.Getenv(envLCDestSlowAfter); raw != "" {
+		n, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s: invalid %s: %q\n", markerFatal, envLCDestSlowAfter, raw)
+			os.Exit(exitBadArgs)
+		}
+		cfg.destSlowAfter = n
+	}
+	cfg.awaitSigterm = os.Getenv(envLCAwaitSigterm) == envValueTrue
+
 	cfg.graceful = os.Getenv(envLCGraceful) == envValueTrue
 	parseLCEngineEnv(&cfg)
-	lcSettleHeartbeat.Store(cfg.graceful && cfg.destBatchSize > 0)
+	// With sdk.batch.delay set the flush timer acks the tail, so the child
+	// waits for the ack itself and needs no heartbeat (see runChildLifecycle).
+	lcSettleHeartbeat.Store(cfg.graceful && cfg.destBatchSize > 0 && cfg.destBatchDelayMS == 0)
 
 	if cfg.dbDir == "" || cfg.upstreamDir == "" || cfg.mainDir == "" || cfg.dlqDir == "" {
 		fmt.Fprintf(os.Stderr, "%s: %s, %s, %s and %s are required\n", markerFatal, envLCDBDir, envLCUpstream, envLCMainDir, envLCDLQDir)
@@ -366,6 +446,10 @@ func parseLCEngineEnv(cfg *lcChildEnv) {
 
 	if cfg.engine != "" && cfg.engine != lcEngineV1 {
 		fmt.Fprintf(os.Stderr, "%s: invalid %s %q\n", markerFatal, envLCEngine, cfg.engine)
+		os.Exit(exitBadArgs)
+	}
+	if cfg.awaitSigterm && (cfg.graceful || cfg.sigterm) {
+		fmt.Fprintf(os.Stderr, "%s: %s is exclusive with %s and %s\n", markerFatal, envLCAwaitSigterm, envLCGraceful, envLCSigterm)
 		os.Exit(exitBadArgs)
 	}
 	if cfg.sigterm && (cfg.graceful || cfg.engine != lcEngineV1) {
@@ -559,6 +643,7 @@ func (p *recoverySourcePlugin) Open(_ context.Context, req pconnector.SourceOpen
 	p.mu.Lock()
 	p.nextToRead = resume
 	p.mu.Unlock()
+	printProgress(markerLCResume, resume)
 	return pconnector.SourceOpenResponse{}, nil
 }
 
@@ -705,6 +790,13 @@ type recoveryDestinationPlugin struct {
 	// holdAcks, when non-nil, delays every ack until it is closed (or
 	// lcHoldAcksMax passes). See lcChildConfig.holdAcksUntilStop.
 	holdAcks <-chan struct{}
+	// writeDelay, when positive, is slept on a write request whose last
+	// position is above slowAfter: half before the request's records are
+	// recorded and half after they are recorded and before it is acked, so a
+	// kill in the window lands either before or after the durable write. See
+	// lcChildConfig.destWriteDelayMS.
+	writeDelay time.Duration
+	slowAfter  uint64
 }
 
 var _ pconnector.DestinationPlugin = (*recoveryDestinationPlugin)(nil)
@@ -747,6 +839,25 @@ func (p *recoveryDestinationPlugin) loop(server pconnector.DestinationRunStreamS
 		if err != nil {
 			return // stream closed
 		}
+		if n := len(req.Records); n > 0 {
+			first, ferr := decodePosition(req.Records[0].Position)
+			last, lerr := decodePosition(req.Records[n-1].Position)
+			if ferr == nil && lerr == nil {
+				// Printed before the slow-write delay and before anything is
+				// recorded, so a parent that sees it knows this request is in
+				// flight and none of it is durable yet.
+				fmt.Printf("%s %d %d\n", markerLCDestReq, first, last)
+			}
+		}
+		slow := false
+		if n := len(req.Records); n > 0 && p.writeDelay > 0 {
+			if last, err := decodePosition(req.Records[n-1].Position); err == nil && last > p.slowAfter {
+				slow = true
+			}
+		}
+		if slow {
+			time.Sleep(p.writeDelay / 2)
+		}
 		acks := make([]pconnector.DestinationRunResponseAck, 0, len(req.Records))
 		for _, r := range req.Records {
 			if pos, err := decodePosition(r.Position); err == nil {
@@ -754,8 +865,12 @@ func (p *recoveryDestinationPlugin) loop(server pconnector.DestinationRunStreamS
 					fmt.Fprintf(os.Stderr, "%s: lc dest plugin: durable record failed: %v\n", markerFatal, err)
 					os.Exit(exitOpenOtherError)
 				}
+				printProgress(markerLCDestWrite, pos)
 			}
 			acks = append(acks, pconnector.DestinationRunResponseAck{Position: r.Position})
+		}
+		if slow {
+			time.Sleep(p.writeDelay / 2)
 		}
 		// The records are durably delivered above; only their acks wait.
 		if p.holdAcks != nil {
@@ -838,8 +953,10 @@ func (d *lcSourceDispenser) DispenseDestination() (connectorPlugin.DestinationPl
 // by a single, fixed deliveryLog - used for both the main destination and the
 // DLQ destination (each gets its own lcDestDispenser over its own log).
 type lcDestDispenser struct {
-	log      *deliveryLog
-	holdAcks <-chan struct{}
+	log        *deliveryLog
+	holdAcks   <-chan struct{}
+	writeDelay time.Duration
+	slowAfter  uint64
 }
 
 var _ connectorPlugin.Dispenser = (*lcDestDispenser)(nil)
@@ -853,7 +970,7 @@ func (d *lcDestDispenser) DispenseSource() (connectorPlugin.SourcePlugin, error)
 }
 
 func (d *lcDestDispenser) DispenseDestination() (connectorPlugin.DestinationPlugin, error) {
-	return &recoveryDestinationPlugin{log: d.log, holdAcks: d.holdAcks}, nil
+	return &recoveryDestinationPlugin{log: d.log, holdAcks: d.holdAcks, writeDelay: d.writeDelay, slowAfter: d.slowAfter}, nil
 }
 
 // lcConnectorService fulfills pkg/lifecycle-poc.ConnectorService: a fixed,
@@ -1029,6 +1146,10 @@ func buildLifecycleChild(ctx context.Context, cfg lcChildEnv) (*childLifecycleBu
 	}
 
 	destSettings := map[string]string{}
+	if cfg.destBatchDelayMS > 0 {
+		// Arms the funnel's one-shot flush timer for a partial batch (#3231).
+		destSettings["sdk.batch.delay"] = strconv.Itoa(cfg.destBatchDelayMS) + "ms"
+	}
 	if cfg.destBatchSize > 1 {
 		// Turn on the funnel's destination-write batching (and, for this
 		// single-destination pipeline, read-ahead pipelining) so a SIGKILL
@@ -1078,8 +1199,11 @@ func buildLifecycleChild(ctx context.Context, cfg lcChildEnv) (*childLifecycleBu
 
 	plugins := staticFetcher{
 		sourceInstance.Plugin: &lcSourceDispenser{store: upstream, total: cfg.total, paceMS: cfg.paceMS, failAt: cfg.failAt, holdAt: cfg.holdAt, onStop: onStop},
-		destInstance.Plugin:   &lcDestDispenser{log: mainLog, holdAcks: holdAcks},
-		dlqInstance.Plugin:    &lcDestDispenser{log: dlqLog},
+		destInstance.Plugin: &lcDestDispenser{
+			log: mainLog, holdAcks: holdAcks,
+			writeDelay: time.Duration(cfg.destWriteDelayMS) * time.Millisecond, slowAfter: cfg.destSlowAfter,
+		},
+		dlqInstance.Plugin: &lcDestDispenser{log: dlqLog},
 	}
 
 	return &childLifecycleBuilt{
@@ -1213,7 +1337,7 @@ func runChildLifecycle() {
 
 	// Registered before Start so a SIGTERM can never land unhandled.
 	var sigterm chan os.Signal
-	if cfg.sigterm {
+	if cfg.sigterm || cfg.awaitSigterm {
 		sigterm = make(chan os.Signal, 1)
 		signal.Notify(sigterm, syscall.SIGTERM)
 	}
@@ -1240,6 +1364,23 @@ func runChildLifecycle() {
 		os.Exit(exitOK)
 	}
 
+	if cfg.awaitSigterm {
+		<-sigterm
+		// The graceful stop the runtime does on SIGTERM: no force, so the
+		// worker drains in-flight records and the checkpoint is flushed.
+		if err := ls.Stop(ctx, built.pipelineID, false); err != nil {
+			fmt.Fprintf(os.Stderr, "%s: stop failed: %v\n", markerFatal, err)
+			os.Exit(exitOpenOtherError)
+		}
+		if err := ls.WaitPipeline(built.pipelineID); err != nil {
+			fmt.Fprintf(os.Stderr, "%s: pipeline stopped with error: %v\n", markerFatal, err)
+			os.Exit(exitOpenOtherError)
+		}
+		built.persister.WaitPendingWrites()
+		fmt.Println(markerLCSigtermExit)
+		os.Exit(exitOK)
+	}
+
 	if !cfg.graceful {
 		// Crashable variant, used by both of recovery_test.go's SIGKILL
 		// scenarios: block forever. The parent watches this process's
@@ -1255,8 +1396,9 @@ func runChildLifecycle() {
 	// that proves the pipeline finishes end-to-end (invariant 3,
 	// at-least-once) despite the earlier kill. Resumes from whatever position
 	// was durably persisted by the killed process and runs to cfg.total.
-	if cfg.destBatchSize > 0 {
-		// Batched: the trailing partial batch is acked by Stop's drain, so wait
+	if cfg.destBatchSize > 0 && cfg.destBatchDelayMS == 0 {
+		// Batched, no flush timer: the trailing partial batch is acked by
+		// Stop's drain, so wait
 		// for the engine to have taken the last read (lcSettleHeartbeat), not
 		// for the ack. waitForUpstreamCommitted below is the real check.
 		waitForLCSettled(30 * time.Second)

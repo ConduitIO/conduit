@@ -60,6 +60,11 @@ const (
 	// means 0, the original scenario); see fanoutChildConfig.
 	envFanoutDestABatch     = "CONDUIT_CHAOS_FANOUT_DEST_A_BATCH"
 	envFanoutDestBNackEvery = "CONDUIT_CHAOS_FANOUT_DEST_B_NACK_EVERY"
+	// The flush-timer knobs (#3231), optional like the two above: each
+	// destination's sdk.batch.delay in ms, and destB's sdk.batch.size.
+	envFanoutDestABatchDelayMS = "CONDUIT_CHAOS_FANOUT_DEST_A_BATCH_DELAY_MS"
+	envFanoutDestBBatch        = "CONDUIT_CHAOS_FANOUT_DEST_B_BATCH"
+	envFanoutDestBBatchDelayMS = "CONDUIT_CHAOS_FANOUT_DEST_B_BATCH_DELAY_MS"
 
 	// markerFanoutDone is the graceful "ran to total and stopped cleanly"
 	// completion marker for this scenario - printed only by the restart run
@@ -108,6 +113,15 @@ type fanoutChildConfig struct {
 	// persistDelayMS overrides the persister debounce (0 = default), so a
 	// position acked past destA's buffer is durable before destA flushes.
 	persistDelayMS int
+
+	// destABatchDelayMS and destBBatchDelayMS set each destination's
+	// sdk.batch.delay, arming its flush timer (#3231) for a partial batch;
+	// destBBatch > 1 makes destB batch as well. With different delays the
+	// destinations flush a quiet source's tail at different instants, and the
+	// source ack waits for the later one (invariant 1).
+	destABatchDelayMS int
+	destBBatch        int
+	destBBatchDelayMS int
 }
 
 func (c fanoutChildConfig) env() []string {
@@ -125,6 +139,9 @@ func (c fanoutChildConfig) env() []string {
 		envFanoutDestABatch + "=" + strconv.Itoa(c.destABatch),
 		envFanoutDestBNackEvery + "=" + strconv.Itoa(c.destBNackEvery),
 		envPersistDelayMS + "=" + strconv.Itoa(c.persistDelayMS),
+		envFanoutDestABatchDelayMS + "=" + strconv.Itoa(c.destABatchDelayMS),
+		envFanoutDestBBatch + "=" + strconv.Itoa(c.destBBatch),
+		envFanoutDestBBatchDelayMS + "=" + strconv.Itoa(c.destBBatchDelayMS),
 	}
 }
 
@@ -144,6 +161,10 @@ type fanoutChildEnv struct {
 	destABatch     int
 	destBNackEvery uint64
 	persistDelayMS int
+
+	destABatchDelayMS int
+	destBBatch        int
+	destBBatchDelayMS int
 }
 
 // parseFanoutChildEnv reads and validates this child's environment. Like
@@ -184,6 +205,9 @@ func parseFanoutChildEnv() fanoutChildEnv {
 	}{
 		{envFanoutDestABatch, &cfg.destABatch},
 		{envPersistDelayMS, &cfg.persistDelayMS},
+		{envFanoutDestABatchDelayMS, &cfg.destABatchDelayMS},
+		{envFanoutDestBBatch, &cfg.destBBatch},
+		{envFanoutDestBBatchDelayMS, &cfg.destBBatchDelayMS},
 	} {
 		raw := os.Getenv(v.env)
 		if raw == "" {
@@ -302,7 +326,7 @@ func (d *fanoutDestination) Ack(context.Context) ([]connector.DestinationAck, er
 // markerFanoutDone) or is killed out from under it (the SIGKILL case this
 // scenario exists for - no cleanup on that path is possible or intended,
 // exactly like runChild's own doc comment).
-func runChildFanout() {
+func runChildFanout() { //nolint:gocyclo // a linear child script: env parsing, setup, then one branch per scenario knob
 	ctx := context.Background()
 	cfg := parseFanoutChildEnv()
 
@@ -346,10 +370,15 @@ func runChildFanout() {
 	logger := built.logger
 	srcTask := funnel.NewSourceTask("fanout-source-task", built.src, logger, funnel.NoOpConnectorMetrics{})
 	destATask := funnel.NewDestinationTask("fanout-dest-a-task", destA, logger, funnel.NoOpConnectorMetrics{})
-	if cfg.destABatch > 1 {
-		destATask = funnel.NewBatchingDestinationTask("fanout-dest-a-task", destA, logger, funnel.NoOpConnectorMetrics{}, cfg.destABatch, 0)
+	if cfg.destABatch > 1 || cfg.destABatchDelayMS > 0 {
+		destATask = funnel.NewBatchingDestinationTask("fanout-dest-a-task", destA, logger, funnel.NoOpConnectorMetrics{},
+			cfg.destABatch, time.Duration(cfg.destABatchDelayMS)*time.Millisecond)
 	}
 	destBTask := funnel.NewDestinationTask("fanout-dest-b-task", destB, logger, funnel.NoOpConnectorMetrics{})
+	if cfg.destBBatch > 1 || cfg.destBBatchDelayMS > 0 {
+		destBTask = funnel.NewBatchingDestinationTask("fanout-dest-b-task", destB, logger, funnel.NoOpConnectorMetrics{},
+			cfg.destBBatch, time.Duration(cfg.destBBatchDelayMS)*time.Millisecond)
+	}
 
 	destANode := &funnel.TaskNode{Task: destATask}
 	destBNode := &funnel.TaskNode{Task: destBTask}
@@ -404,7 +433,13 @@ func runChildFanout() {
 	// instead until the unbatched destB has been handed the last position,
 	// which means the worker has read every record, then Stop, and require
 	// the drain to commit all of them (below).
-	if cfg.destABatch > 1 {
+	//
+	// A batching destination with a flush timer (sdk.batch.delay) flushes its
+	// tail itself, so when every batching destination has one the commit is
+	// reached with no stop and the run waits for it, like the unbatched case.
+	// The tail is then acked by the timers, not by Stop's drain.
+	untimed := (cfg.destABatch > 1 && cfg.destABatchDelayMS == 0) || (cfg.destBBatch > 1 && cfg.destBBatchDelayMS == 0)
+	if untimed {
 		waitFanoutDestinationSaw(destB, cfg.total, doErr)
 	} else {
 		waitFanoutUpstreamCommitted(built.upstream, cfg.total, doErr)
@@ -423,7 +458,7 @@ func runChildFanout() {
 		os.Exit(exitOpenOtherError)
 	}
 	built.persister.WaitPendingWrites()
-	if cfg.destABatch > 1 {
+	if cfg.destABatch > 1 || cfg.destABatchDelayMS > 0 {
 		// The commit that follows the drain's Source.Ack is asynchronous, so
 		// poll for it. A run that stops short is a failed run, not a result:
 		// the worker read every record (see above), so a short commit means
