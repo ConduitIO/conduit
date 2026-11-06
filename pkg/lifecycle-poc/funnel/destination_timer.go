@@ -17,6 +17,8 @@ package funnel
 import (
 	"context"
 	"time"
+
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 )
 
 // The flush timer bounds how long a partial destination batch waits when the
@@ -157,6 +159,7 @@ func (t *DestinationTask) stopFlushTimerLocked() {
 // timerDueLocked reports whether the timer armed for generation gen may still
 // take the buffer: nothing took it since (same generation), it is not empty,
 // the task is not closed and has not failed. t.mu must be held.
+
 func (t *DestinationTask) timerDueLocked(gen uint64) bool {
 	return gen == t.bufferGen && len(t.pending) > 0 && !t.closed && t.flushErr == nil
 }
@@ -166,18 +169,43 @@ func (t *DestinationTask) timerDueLocked(gen uint64) bool {
 // batching destination below the worker's first task. The task tree, and so
 // this list, is fixed before any worker starts, and workers are built in order,
 // so every task sees its feeders in the same global order (see flushDueSync).
-func (t *DestinationTask) addFeeder(w *Worker, shared *TaskNode) {
+//
+// Every feeder must reach the task through the same shared boundary node,
+// because the synchronous timer flushes under that one node's mutex and
+// poisons that one node on failure. A second feeder with a different node, or
+// a second feeder with none (the roots were not marked before the workers were
+// built, MarkSharedBoundary's contract), is a build bug: it returns an error
+// and leaves the task unchanged, as validateTasks does for a bad task order.
+func (t *DestinationTask) addFeeder(w *Worker, shared *TaskNode) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	for _, f := range t.feeders {
 		if f == w {
-			return
+			return nil
+		}
+	}
+	if len(t.feeders) > 0 {
+		switch {
+		case shared != t.feederShared:
+			return cerrors.Errorf("(bug) destination %s is reached by workers below different shared boundary nodes", t.id)
+		case shared == nil:
+			return cerrors.Errorf("(bug) destination %s is reached by more than one worker without a shared boundary node; mark the shared roots (NewSink) before building workers", t.id)
 		}
 	}
 	t.feeders = append(t.feeders, w)
-	if t.feederShared == nil {
-		t.feederShared = shared
-	}
+	t.feederShared = shared
+	return nil
+}
+
+// FeederBoundary returns the workers registered as feeders of this batching
+// task, in build order, and the shared boundary node they reach it through
+// (nil if none). It is read-only: it lets the pipeline builder's tests check
+// that the roots were marked before the workers were built, which the
+// synchronous timer relies on to flush under the shared mutex.
+func (t *DestinationTask) FeederBoundary() ([]*Worker, *TaskNode) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return append([]*Worker(nil), t.feeders...), t.feederShared
 }
 
 // flushDue is the flush timer's callback for buffer generation gen.

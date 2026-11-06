@@ -175,7 +175,9 @@ func NewWorker(
 
 		processingLock: make(chan struct{}, 1),
 	}
-	registerFeeder(w, firstTask, nil)
+	if err := registerFeeder(w, firstTask, nil); err != nil {
+		return nil, err
+	}
 	return w, nil
 }
 
@@ -190,16 +192,21 @@ func NewWorker(
 // they are built: every destination sees its feeders in that one global order,
 // which is what keeps timers that hold several processing locks from
 // deadlocking each other.
-func registerFeeder(w *Worker, n *TaskNode, shared *TaskNode) {
+func registerFeeder(w *Worker, n *TaskNode, shared *TaskNode) error {
 	if n.sharedBoundary && shared == nil {
 		shared = n
 	}
 	if dt, ok := n.Task.(*DestinationTask); ok && dt.batchingEnabled() {
-		dt.addFeeder(w, shared)
+		if err := dt.addFeeder(w, shared); err != nil {
+			return err
+		}
 	}
 	for _, next := range n.Next {
-		registerFeeder(w, next, shared)
+		if err := registerFeeder(w, next, shared); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func validateTasks(task *TaskNode) error {

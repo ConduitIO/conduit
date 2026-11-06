@@ -1371,3 +1371,35 @@ func TestDestinationTask_StaleSyncTimerParkedOnFeederLock(t *testing.T) {
 		is.NoErr(dt.Close(ctx))
 	})
 }
+
+// TestNewWorker_FeedersMustShareBoundary (review of #3335, L4): the
+// synchronous timer flushes under one shared boundary node, the one its
+// feeders reach it through. A second worker that reaches the same batching
+// destination through a different node, or through none, is a build bug, and
+// NewWorker refuses it instead of keeping the first node without a sign.
+func TestNewWorker_FeedersMustShareBoundary(t *testing.T) {
+	for name, second := range map[string]func(dt *DestinationTask) []*TaskNode{
+		"different shared node": func(dt *DestinationTask) []*TaskNode { return sharedRoots(dt) },
+		"no shared node":        func(dt *DestinationTask) []*TaskNode { return []*TaskNode{{Task: dt}} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			logger := log.Test(t)
+			dt := NewBatchingDestinationTask("dest", newTimedDestination(t, "dest"), logger, NoOpConnectorMetrics{}, 10, time.Second)
+			roots := sharedRoots(dt)
+			w1 := newTimerTestWorkerNext(t, newChanSource("src1"), nil, roots...)
+			// The same node again is fine.
+			w2 := newTimerTestWorkerNext(t, newChanSource("src2"), nil, roots...)
+
+			dlq := NewDLQ("dlq", newFakeDestination("dlq"), logger, NoOpConnectorMetrics{}, 10, 10)
+			srcNode := &TaskNode{Task: NewSourceTask("src3", newChanSource("src3"), logger, NoOpConnectorMetrics{}), Next: second(dt)}
+			w3, err := NewWorker(srcNode, dlq, logger, noop.Timer{})
+			is.True(err != nil)
+			is.True(w3 == nil)
+
+			feeders, shared := dt.FeederBoundary()
+			is.Equal(feeders, []*Worker{w1, w2}) // the refused worker was not registered
+			is.True(shared == roots[0])
+		})
+	}
+}
