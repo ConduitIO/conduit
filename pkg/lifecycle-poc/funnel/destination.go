@@ -78,6 +78,25 @@ type DestinationTask struct {
 	bufferedCount int            // number of active records currently buffered
 	bufferedBytes int            // estimated wire size of the buffered records (only when writeLimit > 0)
 	flushDeadline time.Time      // zero when nothing is buffered
+	// bufferedSince is when the first record of the current buffer arrived; zero
+	// when no record is buffered. It is the start of the linger metric.
+	bufferedSince time.Time
+	// flushTimer is the one-shot timer that takes a partial buffer at its
+	// sdk.batch.delay deadline when no arrival does (see destination_timer.go);
+	// nil when not armed. bufferGen identifies the buffer it was armed for:
+	// every take bumps it (resetBufferedLocked), so a callback that lost the
+	// race finds a different generation and does nothing. Both guarded by mu.
+	flushTimer *time.Timer
+	bufferGen  uint64
+	// feeders are the workers whose passes reach this task, in the order they
+	// were built, and feederShared the shared boundary node above the task (nil
+	// if none). The synchronous timer flush holds every feeder's processing
+	// lock (see flushDueSync). Registered by NewWorker, before any record;
+	// guarded by mu.
+	feeders      []*Worker
+	feederShared *TaskNode
+	// flushMetrics observes every take of the buffer (see FlushMetrics).
+	flushMetrics FlushMetrics
 	// outstanding counts flushes handed to the flusher and not yet fully acked
 	// (queued or in flight); guarded by mu. Together with pending it tells
 	// deferOrdered whether any earlier batch is still ahead of a source ack.
@@ -112,9 +131,11 @@ type DestinationTask struct {
 	// flusherExited is closed when the flusher goroutine has fully returned,
 	// after its exit drain (flusherDone is closed before that drain).
 	flusherExited chan struct{}
-	// closed is set by Close before it drains the flusher; guarded by mu.
-	// doBuffered refuses to buffer after it, so no batch can be appended behind
-	// the drain.
+	// closed is set by Close before it flushes what is left (on the pipelined
+	// path by stopFlusher, under enqueueMu, before it drains the flusher);
+	// guarded by mu. doBuffered, deferOrdered and the flush timer refuse after
+	// it, so no batch can be appended behind the final flush and nothing
+	// touches the destination after Teardown.
 	closed bool
 
 	// enqueueMu makes "take pending + send on flushCh" atomic with respect to
@@ -144,6 +165,15 @@ type DestinationTask struct {
 	// testMidFlusherExit is called by the flusher's exit path between closing
 	// flusherDone and draining flushCh; nil in production.
 	testMidFlusherExit func()
+	// testBeforeTimerFlush is called at the start of the flush timer's callback,
+	// before it takes any lock; nil in production.
+	testBeforeTimerFlush func()
+	// testTimerHoldsLocks is called by the synchronous timer flush once it holds
+	// every feeder's processing lock, before it flushes; nil in production.
+	testTimerHoldsLocks func()
+	// testAfterFeederLock is called by the synchronous timer flush right after
+	// it acquired feeder i's processing lock; nil in production.
+	testAfterFeederLock func(i int)
 }
 
 type Destination interface {
@@ -170,9 +200,12 @@ func NewDestinationTask(
 // NewBatchingDestinationTask returns a destination task that buffers records
 // and flushes them in one multi-record Write when batchSize records are
 // pending or batchDelay has elapsed since the first buffered record (see
-// destination_batch.go). batchSize <= 1 and batchDelay <= 0 together disable
-// batching; a batchDelay > 0 without a batchSize uses defaultMaxBatchSize to
-// bound memory.
+// destination_batch.go). The delay is enforced by a timer, so a partial batch
+// is written within batchDelay even when no further record arrives
+// (destination_timer.go); with batchDelay <= 0 a partial batch waits for more
+// records or a stop, as in the connector SDK. batchSize <= 1 and
+// batchDelay <= 0 together disable batching; a batchDelay > 0 without a
+// batchSize uses defaultMaxBatchSize to bound memory.
 func NewBatchingDestinationTask(
 	id string,
 	destination Destination,
@@ -201,6 +234,8 @@ func newDestinationTask(
 		metrics:     metrics,
 		batchSize:   batchSize,
 		batchDelay:  batchDelay,
+
+		flushMetrics: NoOpFlushMetrics{},
 	}
 	if t.batchingEnabled() {
 		t.flushFailures = make(chan error, 1)
@@ -247,7 +282,10 @@ func (t *DestinationTask) errRecordTooLarge(pos opencdc.Position, size int) erro
 // destination that is not part of a destination fan-out: with M>1 destinations,
 // M flushers would race on the single Worker's cross-batch source ack, so
 // fan-out keeps the synchronous flush (see
-// docs/design-documents/20261019-funnel-read-ahead-pipelining.md).
+// docs/design-documents/20261019-funnel-read-ahead-pipelining.md). The flush
+// timer follows the same split: pipelined, it only hands the buffer to the
+// flusher; synchronous, it flushes under the processing lock of every worker
+// that feeds the task (see destination_timer.go).
 func (t *DestinationTask) SetPipelined() {
 	t.pipelined = true
 }
@@ -311,11 +349,23 @@ func (t *DestinationTask) Close(ctx context.Context) error {
 	// On the pipelined path this also drains the flusher goroutine: the
 	// trailing partial batch is enqueued, the channel is closed, and Close
 	// waits for the flusher to finish every in-flight flush before teardown.
+	//
+	// closed is set first, on both paths (stopFlusher sets it under enqueueMu).
+	// It is set here and not in flush: on the synchronous path Drain is flush,
+	// and closing there would close a shared fan-out destination under its
+	// sibling workers. A flush timer callback that started before Close holds
+	// enqueueMu or syncMu, which stopFlusher and flush wait for, or takes them
+	// afterwards and sees closed, so nothing touches the destination after
+	// Teardown (Invariant 3).
 	var flushErr error
 	if t.pipelined && t.flusherDone != nil {
 		flushErr = t.stopFlusher(ctx)
 	} else {
-		flushErr = t.flush(ctx)
+		t.mu.Lock()
+		t.closed = true
+		t.stopFlushTimerLocked()
+		t.mu.Unlock()
+		flushErr = t.flush(ctx, FlushTriggerClose)
 	}
 	var closeErr error
 	if flushErr != nil {

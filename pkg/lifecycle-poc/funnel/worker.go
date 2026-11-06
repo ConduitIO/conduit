@@ -166,7 +166,7 @@ func NewWorker(
 		return nil, cerrors.Errorf("first task must be a source task, got %T", firstTask.Task)
 	}
 
-	return &Worker{
+	w := &Worker{
 		Source:    st.GetSource(),
 		FirstTask: firstTask,
 		DLQ:       dlq,
@@ -174,7 +174,32 @@ func NewWorker(
 		timer:     timer,
 
 		processingLock: make(chan struct{}, 1),
-	}, nil
+	}
+	registerFeeder(w, firstTask, nil)
+	return w, nil
+}
+
+// registerFeeder registers w with every batching destination at or below n
+// (following Next, so across the shared boundary), together with the outermost
+// shared boundary node above it, as drainNode finds it. The synchronous flush
+// timer of such a destination holds the processing lock of each worker
+// registered with it (see DestinationTask.flushDueSync).
+//
+// It runs in NewWorker, so the shared roots must already be marked
+// (TaskNode.MarkSharedBoundary's contract), and workers register in the order
+// they are built: every destination sees its feeders in that one global order,
+// which is what keeps timers that hold several processing locks from
+// deadlocking each other.
+func registerFeeder(w *Worker, n *TaskNode, shared *TaskNode) {
+	if n.sharedBoundary && shared == nil {
+		shared = n
+	}
+	if dt, ok := n.Task.(*DestinationTask); ok && dt.batchingEnabled() {
+		dt.addFeeder(w, shared)
+	}
+	for _, next := range n.Next {
+		registerFeeder(w, next, shared)
+	}
 }
 
 func validateTasks(task *TaskNode) error {
@@ -316,8 +341,17 @@ func drainNode(ctx context.Context, n *TaskNode, shared *TaskNode) error {
 // sibling takes the lock, sees an unpoisoned node and writes or acks a later
 // batch past the batch the failed drain dropped.
 func drainTask(ctx context.Context, dt *DestinationTask, shared *TaskNode) error {
+	return underSharedLock(ctx, dt, shared, dt.Drain)
+}
+
+// underSharedLock runs flush, a flush of dt (its Drain, or the synchronous flush
+// timer's flush), under the shared boundary mutex of shared, if any, and
+// poisons the shared node and its batching destinations before it releases the
+// mutex when flush fails. A ctx that ends before the mutex is acquired returns
+// a drainNotStartedError: nothing was taken, so there is nothing to poison.
+func underSharedLock(ctx context.Context, dt *DestinationTask, shared *TaskNode, flush func(context.Context) error) error {
 	if shared == nil {
-		return dt.Drain(ctx)
+		return flush(ctx)
 	}
 	// The stop deadline must also bound the wait for the shared lock: a sibling
 	// can hold it while blocked behind a wedged destination. If the deadline
@@ -332,7 +366,7 @@ func drainTask(ctx context.Context, dt *DestinationTask, shared *TaskNode) error
 	if !acquired {
 		return &drainNotStartedError{err: cerrors.Errorf("drain of destination %s did not start: %w", dt.id, ctx.Err())}
 	}
-	err := dt.Drain(ctx)
+	err := flush(ctx)
 	if err != nil && !isDrainNotStarted(err) {
 		// Invariant 3 (enforcement site): poison before sharedMu is released.
 		// guard: funnel-drain-failure-fails-closed tests=^TestWorker_Stop_DrainFailure_PoisonedBeforeSharedLockIsReleased$
