@@ -384,7 +384,7 @@ func (t *DestinationTask) releasableLocked() bool {
 // would otherwise interleave Write/Ack on the one destination stream.
 func (t *DestinationTask) flushTaken(ctx context.Context, pending []pendingBatch) error {
 	err := t.flushPending(ctx, pending)
-	t.finishFlush(err) // releases the slot and fails closed in one step
+	t.finishFlush(ctx, err) // releases the slot and fails closed in one step
 	return err
 }
 
@@ -417,7 +417,7 @@ func (t *DestinationTask) releaseSync(ctx context.Context) error {
 		var err error
 		if toFlush != nil {
 			err = t.flushPending(ctx, toFlush)
-			t.finishFlush(err)
+			t.finishFlush(ctx, err)
 		}
 		t.syncMu.Unlock()
 		if err != nil {
@@ -474,15 +474,66 @@ func (t *DestinationTask) flush(ctx context.Context) error {
 // released first and the error recorded afterwards, a sibling arriving between
 // the two would see an idle task with no error and ack past the batch the failed
 // flush took.
-func (t *DestinationTask) finishFlush(err error) {
+//
+// A failure this call records is also reported to the run (reportFlushFailure):
+// on the pipelined path no worker may be there to read flushErr.
+func (t *DestinationTask) finishFlush(ctx context.Context, err error) {
 	t.mu.Lock()
 	t.outstanding--
+	recorded := false
 	if err != nil && t.flushErr == nil {
 		t.flushErr = err
+		recorded = true
 	}
 	t.mu.Unlock()
+	if recorded {
+		t.reportFlushFailure(ctx, err)
+	}
 	if t.testAfterFlushRelease != nil {
 		t.testAfterFlushRelease()
+	}
+}
+
+// reportFlushFailure sends err, a flush failure this task has just recorded as
+// its flush error, on flushFailures, where Worker.WatchConnectorErrors reads it
+// and fails the run.
+//
+// Invariant 3 (enforcement site): flushErr is otherwise read only on a record
+// arrival (doBuffered, deferOrdered) or a stop (Drain, Close). When the flusher
+// fails while the source is idle, the worker stays blocked in Source.Read, which
+// does not watch its context, and the pipeline reports running with records it
+// will never write. The records are not lost (nothing was acked, they replay),
+// but nothing would restart the run to replay them. Failing the run ends the
+// run's context, which is what unblocks the Read.
+//
+// It is called only where a flush's own failure is recorded: finishFlush, and
+// enqueueFlush when it fails closed. Errors recorded elsewhere (a sibling's
+// poisoning through setFlushErr, a drain that could not reach the flusher in
+// drainNotSent) are never sent: the first already failed the run where it
+// happened, the second belongs to a worker that is stopping. Only an error that
+// Close would report as CodeFlushOnCloseFailed is sent (see reportsFlushFailure),
+// and not one that is the flush's own context ending: the run's cancellation, or
+// the stop deadline of a graceful Worker.Stop draining a synchronous
+// destination. In both the worker is already going away and the records replay.
+//
+// err is sent as is, not rebuilt from its text, so cerrors.IsFatalError still
+// finds a fatal mark in its chain (a failed DLQ write, an exceeded nack
+// threshold) and the run does not go into the recovery loop for an error that
+// is not recoverable.
+//
+// The send never blocks. The channel holds one error and a task records its
+// flush error once, so at most one error is ever sent; one that nobody reads
+// (the watch has stopped) is dropped with the task.
+func (t *DestinationTask) reportFlushFailure(ctx context.Context, err error) {
+	if t.flushFailures == nil || !t.reportsFlushFailure(err) {
+		return
+	}
+	if ctx.Err() != nil && (cerrors.Is(err, context.Canceled) || cerrors.Is(err, ctx.Err())) {
+		return
+	}
+	select {
+	case t.flushFailures <- err:
+	default:
 	}
 }
 
@@ -717,12 +768,12 @@ func (t *DestinationTask) runFlusher(ctx context.Context) {
 			// source past batches that were left unacknowledged. It replays.
 			// Checked under mu (flushError), where the flush error is recorded.
 			if t.flushError() != nil {
-				t.finishFlush(nil) // release this item's slot only
+				t.finishFlush(ctx, nil) // release this item's slot only
 				cause = "flush error already set"
 				return
 			}
 			err := t.flushPending(ctx, pending)
-			t.finishFlush(err)
+			t.finishFlush(ctx, err)
 			if err != nil {
 				cause = "flush failed"
 				return
@@ -980,11 +1031,15 @@ func (t *DestinationTask) enqueueFlush(ctx context.Context, pending []pendingBat
 				// and fail closed. It was never acknowledged and replays.
 				t.dropQueued(ctx, "flusher exited during enqueue")
 				t.mu.Lock()
-				if t.flushErr == nil {
+				recorded := t.flushErr == nil
+				if recorded {
 					t.flushErr = cerrors.Errorf("destination %s flusher stopped while %d batches were being queued", t.id, len(pending))
 				}
 				ferr := t.flushErr
 				t.mu.Unlock()
+				if recorded {
+					t.reportFlushFailure(ctx, ferr)
+				}
 				return ferr
 			default:
 				return errBuffered
@@ -1002,11 +1057,15 @@ func (t *DestinationTask) enqueueFlush(ctx context.Context, pending []pendingBat
 	t.logger.Warn(ctx).Int("dropped_batches", len(pending)).Err(err).Msg("buffered batches dropped before reaching the flusher (they replay on restart)")
 	t.mu.Lock()
 	t.outstanding--
-	if t.flushErr == nil {
+	recorded := t.flushErr == nil
+	if recorded {
 		t.flushErr = err
 	}
 	ferr := t.flushErr
 	t.mu.Unlock()
+	if recorded {
+		t.reportFlushFailure(ctx, ferr)
+	}
 	return ferr
 }
 
