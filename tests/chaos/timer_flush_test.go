@@ -138,7 +138,7 @@ func assertBoundedReplay(t *testing.T, restart *childProcess, deliveredAtKill []
 	if replayed > maxReplay {
 		t.Fatalf("restart replayed %d already-delivered positions, more than the bound of %d (one batch)", replayed, maxReplay)
 	}
-	if got := maxProgressPosition(restart, markerLCResume); got != committedAtKill {
+	if got := maxProgressPosition(t, restart, markerLCResume); got != committedAtKill {
 		t.Fatalf("restart resumed from %d, want the position persisted at the kill, %d", got, committedAtKill)
 	}
 }
@@ -338,7 +338,7 @@ func TestSIGTERM_TimerFlushedTailCheckpointed(t *testing.T) {
 	_, done := second.line(markerLCDone)
 	is.True(done)
 
-	is.Equal(maxProgressPosition(second, markerLCResume), cfg.total) // checkpointed at total, not behind it
+	is.Equal(maxProgressPosition(t, second, markerLCResume), cfg.total) // checkpointed at total, not behind it
 	for _, p := range destWrites(second) {
 		if p <= cfg.total {
 			t.Fatalf("restart replayed position %d, but the tail was acked and checkpointed before the SIGTERM", p)
