@@ -89,7 +89,7 @@ project and must pass the same conformance suite in CI.
   conformance kit. Community SDKs that pass the kit are listed as community-maintained.
 
 Java teams can also run existing Kafka Connect connector JARs (v0.23) and use the SMT compatibility
-pack (v0.22); the Java SDK (v0.25–v0.26) is the native path forward for Kafka Connect connector
+pack (v0.22 or v0.23); the Java SDK (v0.25–v0.26) is the native path forward for Kafka Connect connector
 authors.
 
 **Two processor runtimes, one contract.** Processors run either in-process as WASM (sandboxed;
@@ -299,7 +299,8 @@ and two green nightlies on the release branch.
       (#3074, #3078, #3188, #3181, #3118). The remaining classes are in v0.23
 - [x] **Postgres CDC, Debezium parity** (connector v0.15.0), certified (#3202)
 - [x] Groundwork for Debezium-compatible Postgres output: the diff harness and real Debezium
-      goldens (#3075) and `debezium.encode` (#3183). The output mode itself moved to v0.22
+      goldens (#3075) and `debezium.encode` (#3183). The output mode itself moved to v0.22,
+      where it ships only if it passes against real Debezium goldens before the cut
 - [x] **MySQL CDC beta**, certified from the labs `mysql` connector (#3202)
 - [x] **Elasticsearch** certified from labs (#3202). OpenSearch is not certified yet
 - [x] **Kafka→Kafka**, first part: the connector is certified (#3202) and MirrorMaker 2 configs
@@ -386,8 +387,8 @@ by 2026-11-20 moves to v0.23.
 - [ ] _Ships in v0.22 only if it passes the diff harness against real Debezium goldens before the
       cut; otherwise it moves to v0.23._ **Debezium-compatible output mode for Postgres**: register
       `debezium.encode` (#3183) as a built-in and let the Postgres and Kafka connectors carry its
-      output, verified with the diff harness against real Debezium goldens (#3075). The v0.23 MySQL mode
-      builds on it
+      output, verified with the diff harness against real Debezium goldens (#3075). The v0.23 MySQL
+      mode builds on it
 - [ ] _Ships in v0.22 only if it merges by 2026-11-20; otherwise it moves to v0.23._ SMT
       compatibility pack: processor equivalents for the ~12 most-used Kafka Connect SMTs, mapped
       automatically by `migrate` — including the five missing today (Flatten,

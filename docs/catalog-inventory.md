@@ -412,7 +412,7 @@ Verdicts: **REUSE** = promote and certify an existing asset; **EXTEND** = existi
 | Family-based native connector library | CONSOLIDATE + REUSE | 72 Go connectors that group into SQL CDC, SQL sinks, brokers, object stores, warehouses, search and vector, SaaS | Shared family code and test kits (one trigger/tracking-table CDC implementation instead of four; one broker conformance kit); bump the 45 connectors below SDK v0.14; add `LICENSE` files; make labs CI run on the default branch |
 | Golden-path certification | REUSE | See the golden-path table | Acceptance, kill tests and benchi per connector; Iceberg, BigQuery destination and Qdrant are BUILD |
 | Kafka Connect JAR host (v0.23) | EXTEND | `conduit-kafka-connect-wrapper` | Protocol v2, schema-history store for Debezium MySQL/SQL Server/Oracle/Db2, SMT execution, container packaging, current JDK, revisit the strict FIFO ack assumption |
-| SMT compatibility pack (v0.22) | EXTEND | Built-in `field.*`, `filter`, `condition`, `unwrap.debezium` | The _missing_ and _partial_ rows in the SMT table |
+| SMT compatibility pack (v0.22 if it merges by 2026-11-20, else v0.23) | EXTEND | Built-in `field.*`, `filter`, `condition`, `unwrap.debezium` | The _missing_ and _partial_ rows in the SMT table |
 | `conduit migrate kafka-connect` (v0.21) | EXTEND | SMT table above; `unwrap.kafkaconnect`; the wrapper's connector config handling | Mapping rules per connector class; the compatibility report |
 | Bento / Redpanda Connect adapter | BUILD | `benthos` prototype as reference only | Ack propagation and resumable positions from scratch; host inputs and outputs, leave Bloblang processors out per the no-bespoke-DSL ADR |
 | Salesforce | EXTEND | `salesforce` (labs; Pub/Sub API platform events in, publish out) | Object snapshot (Bulk API) and Change Data Capture channels, acceptance suite, docs |
@@ -421,9 +421,9 @@ Verdicts: **REUSE** = promote and certify an existing asset; **EXTEND** = existi
 | Shopify | BUILD | none | Consider `connector generate --from-openapi` (v0.24) |
 | GitHub | BUILD | none | Same |
 | Curated processor library | CONSOLIDATE | Built-ins, `ai.chunk`, `ai.embed`, `hl7` | Settle the embedding and text-generation overlaps; decide on `json.query` against the ADR; publish or drop `json.cleanup` and `pdf.totext`; keep `hl7` in labs |
-| NATS JetStream native (v0.22) | EXTEND | `nats-jetstream` (labs) | Fix CI, SDK bump, move to `ConduitIO`, kill test |
-| Iceberg destination (v0.22) | BUILD | `s3-iceberg` as behavior reference | Everything |
-| MySQL CDC beta/GA (v0.22–v0.23) | EXTEND | `mysql` (core, active) | See golden paths |
+| NATS JetStream native (v0.23) | EXTEND | `nats-jetstream` (labs) | Fix CI, SDK bump, move to `ConduitIO`, kill test |
+| Iceberg destination (v0.23) | BUILD | `s3-iceberg` as behavior reference | Everything |
+| MySQL CDC beta/GA (v0.23) | EXTEND | `mysql` (core, active) | See golden paths |
 | SQL Server and MongoDB CDC (v0.24) | EXTEND (MongoDB), BUILD (SQL Server log-based) | `mongo` is log-based; `sql-server` uses triggers | MongoDB: certification. SQL Server: a log-based reader; the trigger implementation stays as a fallback |
 | Qdrant (v0.24+) | BUILD | Placeholder repository | Everything; `pgvector` as the template |
 | Windows and aggregations (v0.27) | BUILD | `aggregate` prototype (not durable) | Everything, on the state API |
