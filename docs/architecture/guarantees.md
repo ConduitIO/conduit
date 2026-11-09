@@ -16,7 +16,7 @@ Both engines sit on the same connector layer (`pkg/connector`) and the same plug
 (`pkg/plugin`), so most of what this page promises holds for either engine; where the two differ,
 the guarantee says so. A single engine is planned to replace both
 (ADR [`20261009-single-pipeline-engine`](../architecture-decision-records/20261009-single-pipeline-engine.md),
-currently **proposed, held**); the default flip and the deletion of v1 are v0.22 work, not v0.21.
+currently **proposed, held**); the default flip and the deletion of v1 are v0.23 work, not v0.21 or v0.22.
 
 Each guarantee names the data-integrity invariants it upholds, from the list in
 [`CLAUDE.md`](../../CLAUDE.md) (invariants 1 to 7). Where code upholds one, it carries a comment at

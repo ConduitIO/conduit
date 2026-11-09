@@ -252,7 +252,7 @@ it and fixes pipelines using the default DLQ being refused at start.
 - [x] **`conduit migrate kafka-connect`** (#3074 and the `kcmigrate` series): compatibility report
       for every run, `--json`, an MCP `kc_migrate` tool (#3195). Rules cover Debezium Postgres,
       the S3 sink and MirrorMaker 2; the other connector classes are reported as unsupported until
-      their rules land (v0.22)
+      their rules land (v0.23)
 - [x] **Certified connectors** for the `migrate` targets (#3202): Postgres CDC with Debezium
       parity, MySQL CDC (beta), Elasticsearch, Kafka and the S3 sink, against acceptance suite v2
 - [x] **Protocol v3** and lossless structured values: int64, uint64, bytes and decimal cross the
@@ -286,7 +286,7 @@ there is no offset import, and Debezium-compatible Postgres output did not ship.
 did not ship moved to a later release and is marked _moved from v0.21_ there; live-eval numbers are
 under [Later](#later) and the design-partner call is under [How to contribute](#how-to-contribute).
 **No migrated pipeline resumes from imported offsets yet; every migration re-snapshots until
-v0.22.**
+v0.23.**
 
 The v0.21 bar was a certified connector for every output `conduit migrate kafka-connect` emits,
 and two green nightlies on the release branch.
@@ -296,14 +296,14 @@ and two green nightlies on the release branch.
 - [x] `conduit migrate kafka-connect` v1, first slice: reads Kafka Connect worker and connector
       configs and emits Conduit pipeline config plus a compatibility report. Never silently drops
       config it can't translate. Rules for Debezium Postgres, S3 sink and MirrorMaker 2
-      (#3074, #3078, #3188, #3181, #3118). The remaining classes are in v0.22
+      (#3074, #3078, #3188, #3181, #3118). The remaining classes are in v0.23
 - [x] **Postgres CDC, Debezium parity** (connector v0.15.0), certified (#3202)
 - [x] Groundwork for Debezium-compatible Postgres output: the diff harness and real Debezium
       goldens (#3075) and `debezium.encode` (#3183). The output mode itself moved to v0.22
 - [x] **MySQL CDC beta**, certified from the labs `mysql` connector (#3202)
 - [x] **Elasticsearch** certified from labs (#3202). OpenSearch is not certified yet
 - [x] **Kafka→Kafka**, first part: the connector is certified (#3202) and MirrorMaker 2 configs
-      translate (#3118). Partition, header and timestamp preservation moved to v0.22
+      translate (#3118). Partition, header and timestamp preservation moved to v0.23
 - [x] **S3 sink** format and partitioning parity with the Kafka Connect S3 sink, and the AWS
       default credential chain (`conduit-connector-s3`#1021, #1022; design #3083). `migrate` still
       blocks S3 sink migrations on `kc.output_shape_differs`
@@ -319,7 +319,7 @@ and two green nightlies on the release branch.
 
 - [x] arch-v2 grows into the single engine: staged design and ADR (#2971), destination-write
       batching and read-ahead (#3201, #3210). The default flip and deletion of the v1 engine are
-      v0.22
+      v0.23
 - [x] Groundwork: a simulated-connector test kit, `make bench-engine`, and a per-PR benchmark comment
 - [x] The guarantees page and the life-of-a-record guide (#3194)
 
@@ -339,7 +339,7 @@ and two green nightlies on the release branch.
 - [x] Labs connector CI runs on the default branch
 - [x] Archive the empty labs `conduit-processor-textgen` stub
 - [x] Retire the labs `redpanda` connector in favour of the `kafka` connector (its Redpanda profile
-      is in the v0.22 Kafka→Kafka item)
+      is in the v0.23 Kafka→Kafka item)
 - [x] Quality tiers (Certified / Verified / Adapter / Community) and a public parity scorecard
       seeded from the inventory (#3186)
 
@@ -353,102 +353,126 @@ and two green nightlies on the release branch.
       and is not yet a required context
 - [x] An engine section in `CONTRIBUTING.md` (#3031)
 - [x] Reliability follow-ups, done: `Source.Read` honouring its context (#2949, #2980) and bounded
-      status writes on badger (#2964). The rest moved to v0.22
+      status writes on badger (#2964). The rest moved to v0.23
 
-### v0.22 — Migrate from Kafka Connect, part 2: zero-downtime, on one engine
+### v0.22 — Correct data on the default path (target 2026-11-25)
 
-The story: a Kafka Connect team runs `conduit migrate kafka-connect`, gets the same output its
-consumers already read (Debezium-shaped CDC, Kafka topics with partition, headers and timestamp
-intact), resumes from its existing offsets instead of re-snapshotting, and runs it all on one
-default engine. Everything else in this release supports that path: the SDKs and scaffold
-connector authors need, and the operations surface a team needs to trust the switch.
+v0.22 ships on the monthly train instead of waiting for the whole Kafka Connect part 2 list (decided
+2026-11-08). It carries the data-integrity and Avro-correctness work that the Debezium-shaped output
+and a migrated pipeline both depend on. The rest of part 2 moved to v0.23 and is marked _moved from
+v0.22_ there.
 
-Moved from v0.21 (not shipped in v0.21.0 – v0.21.2):
+Dates: Tier 1 merges on `main` freeze 2026-11-21; `release/v0.22.x` is cut 2026-11-23; the tag
+follows two consecutive green release-branch nightlies, targeting 2026-11-25. Anything not merged
+by 2026-11-20 moves to v0.23.
 
-- [ ] _Moved from v0.21._ `conduit migrate kafka-connect` rules for Debezium MySQL, JDBC source and
-      sink, and Elasticsearch and OpenSearch sink. Until they land the command reports these
-      classes as unsupported and blocking
-- [ ] _Moved from v0.21._ **Debezium-compatible output mode for Postgres**: register
-      `debezium.encode` (#3183) as a built-in and let the Postgres and Kafka connectors carry its
-      output, verified with the diff harness against real Debezium goldens (#3075). The MySQL mode
-      below builds on it
-- [ ] _Moved from v0.21._ **Kafka→Kafka through `migrate`**: preserve partition, headers and
-      timestamp, and confirm the Redpanda profile. Per-partition ordering depends on the partition
-      being kept
-- [ ] _Moved from v0.21._ `conduit kc lint` — lint Kafka Connect configs, including KIP-1188
-      override risks
-- [ ] _Moved from v0.21._ `conduit kc diff` — diff connector-config versions and check schema
-      compatibility against the registry. Both `kc` commands are useful without switching runtimes
-- [ ] _Moved from v0.21._ **Debezium offset import for Postgres**, so a migrated Postgres pipeline
-      resumes without a re-snapshot: the CLI surface and the fresh-slot strategy (design in
-      `docs/design-documents/20261012-migrate-debezium-postgres-offset-import.md`; automated reset
-      and rollback #3044)
 - [x] _Moved from v0.21._ Adaptive source batching by default; design #3293, implemented in #3309
       (merged 2026-11-03, ships in v0.22). No throughput claim without a committed benchi run
-- [ ] _Moved from v0.21._ Destination ack reader, bounded retries (#2997) and bounded stop
-      (#2990), and stall reasons in `inspect`
-- [ ] _Moved from v0.21._ Connector observability beyond the v0.21 counters: source lag, CDC slot
-      lag, and runbooks
-- [ ] _Moved from v0.21._ Reliability follow-ups: standalone WASM processor timeout and CPU-loop
-      containment (#2998, #3001) and serialized config writes (#2992)
-- [ ] _Moved from v0.21._ Consolidate embeddings on `ai.embed`: deprecate the built-in OpenAI and
-      Cohere embedding processors (#2957; warned in v0.23, removed in v0.24), and fold `enhanced-generator` and the
-      labs `textgen` test-data intent into the built-in `generator` connector (#2959)
-- [ ] _Moved from v0.21._ `conduit generate`: processor-aware generation (#2937) and the
-      intent-judge false positives (#2943)
-- [ ] _Moved from v0.21._ Processor batch API and a `stateless` declaration for processors
-      (design #3178, wiring #3184), ahead of the engine flip below
-- [ ] _Moved from v0.21._ Go 1.26 toolchain across the connector fleet, and the archived Avro
-      library removed from every connector
-      ([design](docs/design-documents/20260823-avro-codec-archived-decoder-advisories.md))
-- [ ] _Moved from v0.21._ A connector scaffold (`conduit connector new`) that passes acceptance v2
-- [ ] _Moved from v0.21._ One merged Python distribution with `conduit.connector` and
-      `conduit.client` namespaces, published to PyPI as a pre-release early in the cycle. The
-      v0.21 `--lang python` scaffold depends on it, so scaffolded Python projects do not install
-      until it is published
-- [ ] _Moved from v0.21._ Registry web UI deployed, with search, verified badges and download stats
-      (built in v0.21)
 - Engine correctness on `main` since v0.21.2: source acks are released in order and on stop, and
-  destination writes are capped by size (#3294–#3301, #3307). These ship in the next release
-
-- [ ] SMT compatibility pack: processor equivalents for the ~12 most-used Kafka Connect SMTs,
-      mapped automatically by `migrate` — including the five missing today (Flatten,
+  destination writes are capped by size (#3294–#3301, #3307). These ship in v0.22
+- [ ] **Avro values survive the encode path**: decimals that do not fit their schema are refused,
+      not rounded (`conduit-commons`#363); `avro.encode` can register the record's own schema
+      instead of one inferred from values (`schema.fromRecord`); the processor SDK can extend the
+      schema it carries instead of re-inferring it; record data stays out of schema and metadata
+      error messages (`conduit-commons`#365, #366)
+- [ ] **Postgres Avro schemas match the table**: nullable columns are `["null", T]`
+      (`conduit-connector-postgres`#466), and `json`/`jsonb` keep their exact text with Debezium's
+      `io.debezium.data.Json` name
+- [ ] **File destination survives a crash**: no torn last line after a kill, and acknowledged
+      records survive an operating-system crash or a power loss (`conduit-connector-file` v0.13.0,
+      built in)
+- [ ] arch-v2 owns destination batching: the pipeline's value, then the connector's declared
+      default (design #3322)
+- [ ] _Ships in v0.22 only if it passes the diff harness against real Debezium goldens before the
+      cut; otherwise it moves to v0.23._ **Debezium-compatible output mode for Postgres**: register
+      `debezium.encode` (#3183) as a built-in and let the Postgres and Kafka connectors carry its
+      output, verified with the diff harness against real Debezium goldens (#3075). The v0.23 MySQL mode
+      builds on it
+- [ ] _Ships in v0.22 only if it merges by 2026-11-20; otherwise it moves to v0.23._ SMT
+      compatibility pack: processor equivalents for the ~12 most-used Kafka Connect SMTs, mapped
+      automatically by `migrate` — including the five missing today (Flatten,
       ExtractChangedRecordState, EventRouter, PartitionRouting, TimezoneConverter) and typed values
       for `field.set`
-- [ ] Postgres offset import by reusing the Debezium replication slot, after the fresh-slot
-      strategy above
-- [ ] Offset import for the other `migrate` outputs (MySQL and the rest), from Debezium offsets and
-      `connect-offsets`, so they resume without a re-snapshot as Postgres does
-- [ ] **Debezium-compatible output mode for MySQL**, using the Postgres diff harness from v0.21
-      (#3075)
-      against real Debezium on the same database (PR #3076 data model + JsonConverter)
-- [ ] **Default engine flip and v1 engine deletion**: arch-v2 has been a `preview` engine since v0.19; this flips
-      it to the default and removes the v1 engine, gated on the cross-engine benchi harness proving
-      parity-or-faster at shipped defaults (PRs #2956/#3067). The #2978 staged batch engine and
-      #3184 ProcessBatch land first as the performance substrate.
-- [ ] **Protocol v2 deprecation:** warn on protocol v2 negotiation, announced in the v0.21 notes; protocol
-      v2 is removed no earlier than v0.24
-- [ ] NATS JetStream source and destination (certified from labs `nats-jetstream`)
-- [ ] **Catalog:** Bento/Redpanda Connect adapter (preview) — a new build with ack propagation and
-      resumable positions; the 2022 prototype acknowledges before the write is durable and is a
-      reference only. Hosts inputs and outputs, not Bloblang
-- [ ] Apache Iceberg destination beta — a new Go-native build (the labs Java connector is a behavior
-      reference only): upserts, compaction-friendly writes, REST/Glue/Nessie catalogs — operational
-      database to lakehouse in real time, no Kafka required
-- [ ] Helm chart: Deployment/StatefulSet, pipeline configs via ConfigMap or git-sync,
-      ServiceMonitor — static pipeline-to-instance assignment before the operator exists
-- [ ] Secrets: Vault, AWS and GCP KMS, Kubernetes secrets (PR #3128 secretref is the first slice)
-- [ ] Source-side dead-letter queue
-- [ ] OpenTelemetry metrics and prebuilt Grafana dashboards, with metrics covering what Kafka
-      Connect operators alert on: lag, task and pipeline status, error rate
-- [ ] JSON Schema support in the Schema Registry integration
-- [ ] **Catalog:** GCS and Azure Blob with Parquet, as object-storage family members alongside S3
 
 ### v0.23 — Drop-in
 
+Moved from v0.22 (not in v0.22.0). The v0.23 scope is re-planned once v0.22 ships: an item that
+will not make v0.23 moves on to v0.24 in the same way.
+
+- [ ] _Moved from v0.22._ `conduit migrate kafka-connect` rules for Debezium MySQL, JDBC source and
+      sink, and Elasticsearch and OpenSearch sink. Until they land the command reports these
+      classes as unsupported and blocking
+- [ ] _Moved from v0.22._ **Kafka→Kafka through `migrate`**: preserve partition, headers and
+      timestamp, and confirm the Redpanda profile. Per-partition ordering depends on the partition
+      being kept
+- [ ] _Moved from v0.22._ `conduit kc lint` — lint Kafka Connect configs, including KIP-1188
+      override risks
+- [ ] _Moved from v0.22._ `conduit kc diff` — diff connector-config versions and check schema
+      compatibility against the registry. Both `kc` commands are useful without switching runtimes
+- [ ] _Moved from v0.22._ **Debezium offset import for Postgres**, so a migrated Postgres pipeline
+      resumes without a re-snapshot: the CLI surface and the fresh-slot strategy (design in
+      `docs/design-documents/20261012-migrate-debezium-postgres-offset-import.md`; automated reset
+      and rollback #3044)
+- [ ] _Moved from v0.22._ Destination ack reader, bounded retries (#2997) and bounded stop
+      (#2990), and stall reasons in `inspect`
+- [ ] _Moved from v0.22._ Connector observability beyond the v0.21 counters: source lag, CDC slot
+      lag, and runbooks
+- [ ] _Moved from v0.22._ Reliability follow-ups: standalone WASM processor timeout and CPU-loop
+      containment (#2998, #3001) and serialized config writes (#2992)
+- [ ] _Moved from v0.22._ Consolidate embeddings on `ai.embed`: deprecate the built-in OpenAI and
+      Cohere embedding processors (#2957; warned in v0.24, removed in v0.25), and fold
+      `enhanced-generator` and the labs `textgen` test-data intent into the built-in `generator`
+      connector (#2959)
+- [ ] _Moved from v0.22._ `conduit generate`: processor-aware generation (#2937) and the
+      intent-judge false positives (#2943)
+- [ ] _Moved from v0.22._ Processor batch API and a `stateless` declaration for processors
+      (design #3178, wiring #3184), ahead of the engine flip below
+- [ ] _Moved from v0.22._ Go 1.26 toolchain across the connector fleet, and the archived Avro
+      library removed from every connector
+      ([design](docs/design-documents/20260823-avro-codec-archived-decoder-advisories.md))
+- [ ] _Moved from v0.22._ A connector scaffold (`conduit connector new`) that passes acceptance v2
+- [ ] _Moved from v0.22._ One merged Python distribution with `conduit.connector` and
+      `conduit.client` namespaces, published to PyPI as a pre-release early in the cycle. The
+      v0.21 `--lang python` scaffold depends on it, so scaffolded Python projects do not install
+      until it is published
+- [ ] _Moved from v0.22._ Registry web UI deployed, with search, verified badges and download stats
+      (built in v0.21)
+- [ ] _Moved from v0.22._ Postgres offset import by reusing the Debezium replication slot, after the
+      fresh-slot strategy
+- [ ] _Moved from v0.22._ Offset import for the other `migrate` outputs (MySQL and the rest), from
+      Debezium offsets and `connect-offsets`, so they resume without a re-snapshot as Postgres does
+- [ ] _Moved from v0.22._ **Debezium-compatible output mode for MySQL**, using the Postgres diff
+      harness from v0.21 (#3075) against real Debezium on the same database (PR #3076 data model +
+      JsonConverter)
+- [ ] _Moved from v0.22._ **Default engine flip and v1 engine deletion**: arch-v2 has been a
+      `preview` engine since v0.19; this flips it to the default and removes the v1 engine, gated on
+      the cross-engine benchi harness proving parity-or-faster at shipped defaults (PRs
+      #2956/#3067). The #2978 staged batch engine and #3184 ProcessBatch land first as the
+      performance substrate.
+- [ ] _Moved from v0.22._ **Protocol v2 deprecation:** warn on protocol v2 negotiation, announced in
+      the v0.21 notes; protocol v2 is removed no earlier than v0.24
+- [ ] _Moved from v0.22._ NATS JetStream source and destination (certified from labs
+      `nats-jetstream`)
+- [ ] _Moved from v0.22._ **Catalog:** Bento/Redpanda Connect adapter (preview) — a new build with
+      ack propagation and resumable positions; the 2022 prototype acknowledges before the write is
+      durable and is a reference only. Hosts inputs and outputs, not Bloblang
+- [ ] _Moved from v0.22._ Apache Iceberg destination beta — a new Go-native build (the labs Java
+      connector is a behavior reference only): upserts, compaction-friendly writes, REST/Glue/Nessie
+      catalogs — operational database to lakehouse in real time, no Kafka required
+- [ ] _Moved from v0.22._ Helm chart: Deployment/StatefulSet, pipeline configs via ConfigMap or
+      git-sync, ServiceMonitor — static pipeline-to-instance assignment before the operator exists
+- [ ] _Moved from v0.22._ Secrets: Vault, AWS and GCP KMS, Kubernetes secrets (PR #3128 secretref is
+      the first slice)
+- [ ] _Moved from v0.22._ Source-side dead-letter queue
+- [ ] _Moved from v0.22._ OpenTelemetry metrics and prebuilt Grafana dashboards, with metrics
+      covering what Kafka Connect operators alert on: lag, task and pipeline status, error rate
+- [ ] _Moved from v0.22._ JSON Schema support in the Schema Registry integration
+- [ ] _Moved from v0.22._ **Catalog:** GCS and Azure Blob with Parquet, as object-storage family
+      members alongside S3
+
 - [ ] Kafka Connect REST API compatibility: `/connectors` create, config, status, pause, resume,
-      restart — so Strimzi `KafkaConnector` resources, Kafka Connect Terraform providers and Kafka UI
-      keep working
+      restart — so Strimzi `KafkaConnector` resources, Kafka Connect Terraform providers and Kafka
+      UI keep working
 - [ ] **Active/passive HA on Kubernetes**: lease, failover, resume from checkpoint, chaos-tested
 - [ ] Kafka Connect connector JAR host (preview): an opt-in JVM sidecar over the plugin protocol,
       never inside the engine, built on the existing Kafka Connect wrapper. Meanwhile it is the path
@@ -460,10 +484,9 @@ Moved from v0.21 (not shipped in v0.21.0 – v0.21.2):
 - [ ] **Catalog:** DuckDB / MotherDuck destination with the warehouse family: upsert and delete by
       source key, schema evolution. Ships as a standalone gRPC connector so the DuckDB CGO driver
       never enters the engine binary. A Postgres CDC → DuckDB/MotherDuck template is part of its
-      definition of done. (The v0.22 Parquet object-storage and Iceberg outputs are already
+      definition of done. (The v0.23 Parquet object-storage and Iceberg outputs are already
       directly queryable by DuckDB.)
 - [ ] **Catalog:** Bento/Redpanda Connect adapter GA
-- [ ] **Catalog:** the built-in OpenAI and Cohere embedding processors warn on use; use `ai.embed`
 - [ ] _Moved from v0.21._ **Catalog:** list every labs connector that passes the acceptance suite
       in the registry as Community tier with license metadata (from the nine listed today to
       roughly 30)
@@ -474,7 +497,7 @@ Moved from v0.21 (not shipped in v0.21.0 – v0.21.2):
       WIT/component-model processors depend on it
 - [ ] TypeScript embedded client
 - [ ] _Moved from v0.21._ Python connector SDK GA, with `conduit connector new --lang python`
-      (scaffold: #3182), on the merged distribution from v0.22
+      (scaffold: #3182), on the merged distribution above
 - [ ] _Moved from v0.21._ Python embedded client GA
 - [ ] Kafka Queues (share groups) source mode
 - [ ] OpenLineage events
@@ -482,8 +505,8 @@ Moved from v0.21 (not shipped in v0.21.0 – v0.21.2):
 - [ ] Profiling as a CI gate
 - [ ] **Catalog:** HTTP/webhooks on the HTTP family core — a rebuilt source whose response waits for
       the ack, plus a destination
-- [ ] Open connector-protocol spec and acceptance suite (v2, from v0.21) published as a certification
-      ("Conduit Certified")
+- [ ] Open connector-protocol spec and acceptance suite (v2, from v0.21) published as a
+      certification ("Conduit Certified")
 
 ### v0.24 — Production at scale
 
@@ -505,7 +528,7 @@ Moved from v0.21 (not shipped in v0.21.0 – v0.21.2):
       source/destination pair
 - [ ] Community publishing to the registry (GitHub Action + signing) and private registries
 - [ ] **Partition-claims protocol** shipped in the connector protocol
-- [ ] **Protocol v2 removed**, no earlier than this release (announce v0.21 → warn v0.22 → remove
+- [ ] **Protocol v2 removed**, no earlier than this release (announce v0.21 → warn v0.23 → remove
       v0.24)
 - [ ] **Replay and backfill as first-class verbs**: `conduit pipeline replay --from <position>`,
       snapshot re-runs, offset inspection and reset in CLI and UI
@@ -514,8 +537,8 @@ Moved from v0.21 (not shipped in v0.21.0 – v0.21.2):
       `conduit-processor-sdk-python` is archived
 - [ ] Processor protocol spec (protobuf + WIT) published beside the connector protocol spec
 - [ ] SDK conformance suite and public parity matrix
-- [ ] **Catalog:** built-in OpenAI and Cohere embedding processors removed (deprecated v0.22,
-      warned v0.23); use `ai.embed`
+- [ ] **Catalog:** the built-in OpenAI and Cohere embedding processors warn on use (deprecated
+      v0.23, removed no earlier than v0.25); use `ai.embed`
 - [ ] Not before this release: Qdrant destination (a new build; the repository is empty)
 
 ### v0.25 — State foundations
@@ -545,6 +568,8 @@ Moved from v0.21 (not shipped in v0.21.0 – v0.21.2):
 - [ ] TypeScript processor SDK, with the processor state API (full tier)
 - [ ] Rust embedded client over the gRPC control API (full tier; the TypeScript client ships in
       v0.23)
+- [ ] **Catalog:** built-in OpenAI and Cohere embedding processors removed (deprecated v0.23,
+      warned v0.24); use `ai.embed`
 
 ### v0.26 — Curate
 
@@ -650,7 +675,7 @@ Conduit's historical UI was Ember-based and later de-emphasized. The built-in UI
 scratch and ships embedded in the engine (v0.18): it observes and operates pipelines on the same API
 the CLI and MCP server use, and config-as-code stays the source of truth. We keep the built-in UI
 minimal. Later UI surfaces: replay and offset management alongside the v0.24 replay verbs,
-schema-drift visibility (v0.24), the registry web UI (v0.22), and the fleet console (v0.30+).
+schema-drift visibility (v0.24), the registry web UI (v0.23), and the fleet console (v0.30+).
 Deeper org-scale console features are the commercial product.
 
 ---
