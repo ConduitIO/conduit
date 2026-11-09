@@ -89,8 +89,8 @@ project and must pass the same conformance suite in CI.
   conformance kit. Community SDKs that pass the kit are listed as community-maintained.
 
 Java teams can also run existing Kafka Connect connector JARs (v0.23) and use the SMT compatibility
-pack (v0.22 or v0.23); the Java SDK (v0.25–v0.26) is the native path forward for Kafka Connect connector
-authors.
+pack (v0.22 or v0.23); the Java SDK (v0.25–v0.26) is the native path forward for Kafka Connect
+connector authors.
 
 **Two processor runtimes, one contract.** Processors run either in-process as WASM (sandboxed;
 suited to Go, Rust, TypeScript and untrusted logic) or out-of-process over gRPC (needed for Python
