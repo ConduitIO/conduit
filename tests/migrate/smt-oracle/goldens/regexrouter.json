@@ -1,5 +1,7 @@
 {
+  "caseSha256": "6e836bc9a828a9ee1c8e0b50b1d70772a013d971e6e4c183c5be9f6f5fddf568",
   "description": "RegexRouter: group references, full-match semantics, replaceFirst, escapes and non-matching topics.",
+  "fixtureSha256": {},
   "recordType": "sink",
   "runs": [
     {

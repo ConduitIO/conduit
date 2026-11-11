@@ -81,6 +81,9 @@ public final class Oracle {
   /** Directory of captured source events that suites reference with "recordsFrom". */
   private static Path FIXTURES;
 
+  /** SHA-256 of every fixture file the current suite reads records from, by file name. */
+  private static final Map<String, String> FIXTURE_HASHES = new HashMap<>();
+
   private Oracle() {}
 
   public static void main(String[] args) throws Exception {
@@ -98,12 +101,26 @@ public final class Oracle {
     }
     Collections.sort(files);
     for (Path f : files) {
-      JsonNode suite = IN.readTree(f.toFile());
+      byte[] caseBytes = Files.readAllBytes(f);
+      JsonNode suite = IN.readTree(caseBytes);
       Map<String, Object> result = runSuite(suite);
+      // The offline tests compare these with the committed files, so a case or a fixture edited
+      // without a re-capture is caught without Docker.
+      result.put("caseSha256", sha256(caseBytes));
+      result.put("fixtureSha256", new java.util.TreeMap<>(FIXTURE_HASHES));
       String name = f.getFileName().toString();
       Files.write(outDir.resolve(name), render(result));
       System.err.println("captured " + name);
     }
+  }
+
+  static String sha256(byte[] b) throws Exception {
+    byte[] sum = java.security.MessageDigest.getInstance("SHA-256").digest(b);
+    StringBuilder sb = new StringBuilder();
+    for (byte x : sum) {
+      sb.append(String.format("%02x", x));
+    }
+    return sb.toString();
   }
 
   static byte[] render(Object o) throws IOException {
@@ -117,6 +134,7 @@ public final class Oracle {
 
   static Map<String, Object> runSuite(JsonNode suite) throws Exception {
     SCHEMAS.clear();
+    FIXTURE_HASHES.clear();
     Map<String, Object> out = new LinkedHashMap<>();
     out.put("suite", suite.path("suite").asText());
     out.put("description", suite.path("description").asText());
@@ -128,7 +146,10 @@ public final class Oracle {
       r.put("chain", chainEcho(run));
       JsonNode records = run.has("records") ? run.get("records") : suite.get("records");
       if (run.has("recordsFrom") || (records == null && suite.has("recordsFrom"))) {
-        records = IN.readTree(FIXTURES.resolve((run.has("recordsFrom") ? run : suite).get("recordsFrom").asText()).toFile());
+        String from = (run.has("recordsFrom") ? run : suite).get("recordsFrom").asText();
+        byte[] fixture = Files.readAllBytes(FIXTURES.resolve(from));
+        FIXTURE_HASHES.put(from, sha256(fixture));
+        records = IN.readTree(fixture);
       }
       String type = run.path("recordType").asText(suite.path("recordType").asText("sink"));
       List<Object> results = new ArrayList<>();
@@ -316,6 +337,11 @@ public final class Oracle {
   }
 
   static JsonConverter converter() {
+    return converter(false);
+  }
+
+  /** replaceNull is the converter's replace.null.with.default. The oracle itself uses false. */
+  static JsonConverter converter(boolean replaceNull) {
     JsonConverter c = new JsonConverter();
     Map<String, Object> cfg = new HashMap<>();
     cfg.put("schemas.enable", "true");
@@ -323,7 +349,7 @@ public final class Oracle {
     // The converter must not hide what the SMT did: with the default (true) it writes a schema's
     // default for a null field, on input and on output, so a substitution made by the SMT itself
     // could not be told from the converter's.
-    cfg.put("replace.null.with.default", "false");
+    cfg.put("replace.null.with.default", Boolean.toString(replaceNull));
     c.configure(cfg, false);
     return c;
   }
@@ -406,6 +432,15 @@ public final class Oracle {
       JsonNode env = OUT.readTree(bytes);
       m.put("schema", schemaId(OUT.convertValue(env.get("schema"), Object.class)));
       m.put("payload", OUT.convertValue(env.get("payload"), Object.class));
+    }
+    // What a worker with the converter's default (replace.null.with.default=true) would write for
+    // the same record, shown only where it differs: the schema's default in place of a null.
+    try (JsonConverter c = converter(true)) {
+      byte[] bytes = c.fromConnectData("t", schema, value);
+      Object wire = OUT.convertValue(OUT.readTree(bytes).get("payload"), Object.class);
+      if (!OUT.writeValueAsString(wire).equals(OUT.writeValueAsString(m.get("payload")))) {
+        m.put("payloadDefaultConverter", wire);
+      }
     }
     return m;
   }

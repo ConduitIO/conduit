@@ -13,7 +13,7 @@ INSERT INTO ab VALUES (2, 'two');
 DELETE FROM ab WHERE id = 1;
 UPDATE toast SET label = 'one-b' WHERE id = 1;                                     -- big is TOASTed and unchanged
 INSERT INTO strict VALUES (3, 'three', 1, 1.50, '2024-01-01 00:00:00+00', '{}', 'x', true);
--- big is rewritten: Conduit's source halts on an update that leaves a TOASTed
--- column unchanged when its Avro schema is attached (README, findings).
+-- big is rewritten: with the Avro schema attached, Conduit fails closed on an update that
+-- leaves a TOASTed column unchanged (postgres.avro.unchanged_toast; README, findings).
 UPDATE strict SET name = 'one-b', big = repeat(md5('strict-1b'), 80) WHERE id = 1;
 DELETE FROM strict WHERE id = 2;

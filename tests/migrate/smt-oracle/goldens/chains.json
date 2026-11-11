@@ -1,5 +1,7 @@
 {
+  "caseSha256": "75595ebeab2d384c16c78c3a15e41b4817790936af76ea885407210003377039",
   "description": "Multi-SMT chains: predicates evaluated per stage after earlier stages ran, negate, drops mid-chain, errors mid-chain, and stage interactions.",
+  "fixtureSha256": {},
   "recordType": "sink",
   "runs": [
     {

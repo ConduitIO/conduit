@@ -1,5 +1,7 @@
 {
+  "caseSha256": "6a8e674001b232e4ace075d51db01cd36fd34d9f6dad3e1f8dba84d6a248f92a",
   "description": "ExtractField with the V1 and V2 field syntax over maps, structs, nulls and missing fields.",
+  "fixtureSha256": {},
   "recordType": "sink",
   "runs": [
     {

@@ -1,5 +1,7 @@
 {
+  "caseSha256": "52dcaac328133f1267b080eca4bba3de26a45ce6ef50971fd596aa0266b735c4",
   "description": "Chains that start from a Debezium envelope: unwrap first, then reshape, route and cast what is left.",
+  "fixtureSha256": {},
   "recordType": "source",
   "runs": [
     {

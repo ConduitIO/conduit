@@ -1,5 +1,7 @@
 {
+  "caseSha256": "ac00c889040dad2f1e49e1796230a4d6dfbff1f44ca87fd531bbab41c0921e6b",
   "description": "Debezium 3.7 ExtractNewRecordState over Postgres-shaped create, update, delete, snapshot and tombstone events: defaults, add.fields, add.headers, delete handling, routing, and legacy option names that 3.7 no longer defines.",
+  "fixtureSha256": {},
   "recordType": "source",
   "runs": [
     {

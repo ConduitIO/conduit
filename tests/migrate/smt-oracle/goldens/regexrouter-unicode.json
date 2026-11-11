@@ -1,5 +1,7 @@
 {
+  "caseSha256": "b386b13eb69e60d60b1b167ef3d7101b1bffdb52ee8e1cace46fefc5b7510e1d",
   "description": "RegexRouter and TopicNameMatches with the Kelvin sign (U+212A, which Java's case-insensitive matching folds to k only with UNICODE_CASE), alternation and lazy quantifiers.",
+  "fixtureSha256": {},
   "recordType": "sink",
   "runs": [
     {

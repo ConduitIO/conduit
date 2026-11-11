@@ -15,6 +15,8 @@
 package smtoracle
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"testing"
 
@@ -205,4 +207,49 @@ func TestFixtureRecordsReferenceKnownSchemas(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestGoldensMatchCaseDefinitions fails when a case file or a fixture has been edited since the
+// golden was captured: the golden would then describe a different chain or different inputs.
+func TestGoldensMatchCaseDefinitions(t *testing.T) {
+	names, err := Names()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			g, err := Load(name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cb, err := CaseBytes(name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := hexSum(cb); got != g.CaseSha256 {
+				t.Fatalf("cases/%s.json changed since the golden was captured (sha256 %s, golden has %s): re-capture with SKIP_SOURCE=1 tests/migrate/smt-oracle/capture.sh", name, got, g.CaseSha256)
+			}
+			for file, want := range g.FixtureSha256 {
+				fb, err := Fixture(file)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got := hexSum(fb); got != want {
+					t.Fatalf("fixtures/%s changed since the golden was captured: re-capture", file)
+				}
+			}
+			c, err := LoadCases(name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (c.RecordsFrom != "") != (len(g.FixtureSha256) > 0) {
+				t.Fatalf("golden lists %d fixtures but the case reads records from %q", len(g.FixtureSha256), c.RecordsFrom)
+			}
+		})
+	}
+}
+
+func hexSum(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }

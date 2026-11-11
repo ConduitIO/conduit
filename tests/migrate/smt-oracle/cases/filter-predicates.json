@@ -15,7 +15,7 @@
   ],
   "runs": [
     {"run": "filter-no-predicate", "chain": [{"alias": "f", "type": "Filter", "config": {}}]},
-    {"run": "topic-matches", "chain": [{"alias": "f", "type": "Filter", "config": {"predicate": "p"}, "predicate": "p"}], "predicates": {"p": {"type": "TopicNameMatches", "config": {"pattern": "audit-.*"}}}},
+    {"run": "topic-matches", "chain": [{"alias": "f", "type": "Filter", "config": {}, "predicate": "p"}], "predicates": {"p": {"type": "TopicNameMatches", "config": {"pattern": "audit-.*"}}}},
     {"run": "topic-matches-negate", "chain": [{"alias": "f", "type": "Filter", "config": {}, "predicate": "p", "negate": true}], "predicates": {"p": {"type": "TopicNameMatches", "config": {"pattern": "audit-.*"}}}},
     {"run": "topic-matches-bare-pattern", "chain": [{"alias": "f", "type": "Filter", "config": {}, "predicate": "p"}], "predicates": {"p": {"type": "TopicNameMatches", "config": {"pattern": "audit"}}}},
     {"run": "topic-matches-alternation", "chain": [{"alias": "f", "type": "Filter", "config": {}, "predicate": "p"}], "predicates": {"p": {"type": "TopicNameMatches", "config": {"pattern": "orders|audit"}}}},

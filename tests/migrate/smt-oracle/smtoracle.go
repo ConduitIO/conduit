@@ -49,6 +49,12 @@ type Suite struct {
 	RecordType string                     `json:"recordType"`
 	Runs       []Run                      `json:"runs"`
 	Schemas    map[string]json.RawMessage `json:"schemas"`
+	// CaseSha256 is the SHA-256 of cases/<suite>.json as captured, and
+	// FixtureSha256 that of every fixture file the suite reads records from.
+	// TestGoldensMatchCaseDefinitions compares them with the committed files,
+	// so a case or a fixture edited without a re-capture fails offline.
+	CaseSha256    string            `json:"caseSha256"`
+	FixtureSha256 map[string]string `json:"fixtureSha256"`
 }
 
 // Run is one configured chain applied to every record of the suite.
@@ -108,6 +114,11 @@ type Record struct {
 type Side struct {
 	Schema  *string         `json:"schema"`
 	Payload json.RawMessage `json:"payload"`
+	// PayloadDefaultConverter is what a worker whose JsonConverter keeps its
+	// default (replace.null.with.default=true) would write for this side:
+	// the schema's default in place of a null. It is only present where it
+	// differs from Payload.
+	PayloadDefaultConverter json.RawMessage `json:"payloadDefaultConverter,omitempty"`
 }
 
 // Header is one record header. Schema is the Connect type name ("string"),
@@ -259,6 +270,15 @@ func (c *Cases) RecordsFor(run string) ([]InputRecord, error) {
 		return nil, fmt.Errorf("smtoracle: decode fixture %s: %w", from, err)
 	}
 	return loaded, nil
+}
+
+// CaseBytes returns the raw bytes of cases/<suite>.json.
+func CaseBytes(suite string) ([]byte, error) {
+	b, err := files.ReadFile(path.Join("cases", suite+".json"))
+	if err != nil {
+		return nil, fmt.Errorf("smtoracle: %w", err)
+	}
+	return b, nil
 }
 
 func decodeStrict(file string, v any) error {

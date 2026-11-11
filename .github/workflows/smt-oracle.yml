@@ -28,18 +28,22 @@ env:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   recapture:
     name: tests/migrate/smt-oracle recapture
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+      issues: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: 'go.mod'
 
@@ -48,15 +52,21 @@ jobs:
 
       - name: Compare with the committed files
         run: |
-          git status --short -- tests/migrate/smt-oracle
-          git diff --exit-code -- tests/migrate/smt-oracle/goldens tests/migrate/smt-oracle/fixtures
+          # --porcelain lists untracked files too, so a new golden or fixture is a difference.
+          changes=$(git status --porcelain -- tests/migrate/smt-oracle)
+          if [[ -n $changes ]]; then
+            echo "the fresh capture differs from the committed files:" >&2
+            echo "$changes" >&2
+            git diff --stat -- tests/migrate/smt-oracle >&2
+            exit 1
+          fi
 
       - name: Offline tests over the fresh files
         run: go test ./tests/migrate/smt-oracle/...
 
       - name: Upload the fresh capture
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: smt-oracle-capture
           path: |
@@ -65,7 +75,7 @@ jobs:
 
       - name: File an issue on failure
         if: failure() && github.event_name == 'schedule'
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             const title = 'SMT oracle no longer reproduces';

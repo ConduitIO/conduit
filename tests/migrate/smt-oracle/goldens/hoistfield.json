@@ -1,5 +1,7 @@
 {
+  "caseSha256": "12083693b685ae3afb714d8acafef622ca29ea87a73707177063017aeb2f6c63",
   "description": "HoistField wraps a value in a new single-field record, including null and primitive sides.",
+  "fixtureSha256": {},
   "recordType": "sink",
   "runs": [
     {

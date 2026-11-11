@@ -28,6 +28,9 @@ const (
 	// DebeziumFile holds what real Debezium Postgres wrote to Kafka for the
 	// fixture database, as oracle input records.
 	DebeziumFile = "debezium-postgres.json"
+	// DebeziumDefaultConverterFile is the same capture with the worker's
+	// converters at their defaults (replace.null.with.default=true).
+	DebeziumDefaultConverterFile = "debezium-postgres-default-converter.json"
 	// ConduitFile holds what Conduit's built-in Postgres source produced for the
 	// same database in the same capture run: a JSON array of OpenCDC records.
 	ConduitFile = "conduit-postgres.json"

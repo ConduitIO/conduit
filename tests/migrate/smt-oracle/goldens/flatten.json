@@ -1,5 +1,7 @@
 {
+  "caseSha256": "547be483b5c92e296c32055ea7695dee313864feeb0ffa2d927c340d578be66c",
   "description": "Flatten with the default and custom delimiters over nested maps and structs, nulls, empties, arrays and key collisions.",
+  "fixtureSha256": {},
   "recordType": "sink",
   "runs": [
     {

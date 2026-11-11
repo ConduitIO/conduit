@@ -1,5 +1,7 @@
 {
+  "caseSha256": "664929470ebaf24e43e06ade32fea8c5b3ceed8dd8fee3ea47d3a76c8f91d580",
   "description": "ValueToKey replaces the key with a record of the named value fields.",
+  "fixtureSha256": {},
   "recordType": "sink",
   "runs": [
     {

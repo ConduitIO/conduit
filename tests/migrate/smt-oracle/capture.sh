@@ -108,7 +108,7 @@ java_run() { # java_run <extra docker args...> -- <java args...>
 # before the workload's second half runs, so both see the same snapshot and the
 # same changes. Their schemas, and the record counts, are cross-checked.
 if [[ -n ${SKIP_SOURCE:-} ]]; then
-  cp "$here/fixtures/debezium-postgres.json" "$here/fixtures/conduit-postgres.json" "$here/fixtures/conduit-schemas.json" "$work/fixtures/"
+  cp "$here/fixtures/debezium-postgres.json" "$here/fixtures/debezium-postgres-default-converter.json" "$here/fixtures/conduit-postgres.json" "$here/fixtures/conduit-schemas.json" "$work/fixtures/"
 else
   export COMPOSE_PROJECT_NAME=$name POSTGRES_IMAGE KAFKA_IMAGE DEBEZIUM_IMAGE
   # A JVM container can be OOM-killed on a host that is short of memory (exit 137); retry once.
@@ -151,6 +151,31 @@ else
 }
 JSON
 
+  # The same connector again with the converters' defaults (replace.null.with.default=true): what a
+  # sink connector reads from a topic written by a default worker. Its own slot and topic prefix.
+  compose exec -T connect curl -sS --fail-with-body -X PUT -H 'Content-Type: application/json' \
+    http://localhost:8083/connectors/smtdef/config -d @- >/dev/null <<JSON
+{
+  "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+  "database.hostname": "postgres",
+  "database.port": "5432",
+  "database.user": "postgres",
+  "database.password": "oracle",
+  "database.dbname": "oracle",
+  "plugin.name": "pgoutput",
+  "slot.name": "dbz_smt_def",
+  "publication.name": "dbz_smt",
+  "publication.autocreate.mode": "disabled",
+  "schema.include.list": "public",
+  "topic.prefix": "dbzd",
+  "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+  "key.converter.schemas.enable": "true",
+  "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+  "value.converter.schemas.enable": "true",
+  "tasks.max": "1"
+}
+JSON
+
   # Conduit: built from this checkout, against an in-memory Confluent-compatible
   # registry that records every schema the source registers.
   pg_port=$(compose port postgres 5432 | sed 's/.*://')
@@ -165,28 +190,31 @@ pipelines:
   - id: oracle
     status: running
     connectors:
-      # Default settings, schemas attached: only the table without nullable columns.
-      - id: strict
-        type: source
-        plugin: builtin:postgres
-        settings:
-          url: $pg_url
-          tables: strict
-          cdcMode: logrepl
-          logrepl.slotName: conduit_smt_strict
-          logrepl.publicationName: conduit_smt_strict
-          snapshotMode: initial
-      # Every other table: the connector's own Avro schema is off (it cannot
-      # represent NULLs, arrays or dotted names), so these records carry none.
+      # Default settings, Avro schemas attached: what users run. Connector v0.21 handles NULLs,
+      # jsonb and TOAST here (an unchanged TOASTed column fails closed, so the workload only
+      # makes such an update on a table with REPLICA IDENTITY FULL or on the table below).
       - id: pg
         type: source
         plugin: builtin:postgres
         settings:
           url: $pg_url
-          tables: items,a,ab,toast,noschema
+          tables: items,a,ab,strict
           cdcMode: logrepl
           logrepl.slotName: conduit_smt
           logrepl.publicationName: conduit_smt
+          snapshotMode: initial
+      # Tables the connector cannot build an Avro schema for (arrays, a dotted name, the Kelvin
+      # sign) and the table whose update leaves a TOASTed column unchanged: with the schema off the
+      # update is emitted without that column. These records carry no schema.
+      - id: pgnoavro
+        type: source
+        plugin: builtin:postgres
+        settings:
+          url: $pg_url
+          tables: toast,noschema
+          cdcMode: logrepl
+          logrepl.slotName: conduit_smt_noavro
+          logrepl.publicationName: conduit_smt_noavro
           snapshotMode: initial
           logrepl.withAvroSchema: "false"
       - id: out
@@ -213,7 +241,7 @@ YAML
   trap 'stop_conduit; cleanup' EXIT
 
   deadline=$((SECONDS + 240))
-  for slot in dbz_smt conduit_smt conduit_smt_strict; do
+  for slot in dbz_smt dbz_smt_def conduit_smt conduit_smt_noavro; do
     until [[ $(psql_run -tAc "SELECT active FROM pg_replication_slots WHERE slot_name = '$slot'") == t ]]; do
       if (( SECONDS > deadline )); then
         echo "replication slot $slot never became active" >&2
@@ -239,6 +267,8 @@ YAML
     fi
     java_run --name "$name-consume" --network "${name}_default" -v "$work/fixtures:/out" -- \
       Consume kafka:9092 dbz.public. /out/debezium-postgres.json >"$work/consume.log" 2>&1 || { cat "$work/consume.log" >&2; exit 1; }
+    java_run --name "$name-consume" --network "${name}_default" -v "$work/fixtures:/out" -- \
+      Consume kafka:9092 dbzd.public. /out/debezium-postgres-default-converter.json >"$work/consume.log" 2>&1 || { cat "$work/consume.log" >&2; exit 1; }
     dbz_n=$(python3 -c 'import json,sys; print(sum(1 for e in json.load(open(sys.argv[1])) if e["value"] is not None))' "$work/fixtures/debezium-postgres.json")
     cond_n=$(grep -c . "$work/conduit-run/records.jsonl" || true)
     cur="$dbz_n/$cond_n"
@@ -272,6 +302,10 @@ if ! java_run --name "$name-run" --network none -v "$here/cases:/cases:ro" -v "$
   exit 1
 fi
 
+conduit_mod() { go -C "$here/../../.." list -m -f '{{.Version}}' "$1"; }
+postgres_connector=$(conduit_mod github.com/conduitio/conduit-connector-postgres)
+file_connector=$(conduit_mod github.com/conduitio/conduit-connector-file)
+
 # What the captured files came from. Changing a pin changes this file, so a bump shows up in review.
 cat >"$work/out/provenance.json" <<JSON
 {
@@ -279,6 +313,7 @@ cat >"$work/out/provenance.json" <<JSON
   "debezium": {"version": "3.7.0.Final", "image": "${DEBEZIUM_IMAGE##*@}"},
   "postgres": {"version": "16", "image": "${POSTGRES_IMAGE##*@}"},
   "jdk": {"version": "21", "image": "${JDK_IMAGE##*@}"},
+  "conduit": {"postgresConnector": "$postgres_connector", "fileConnector": "$file_connector"},
   "timezone": "Asia/Kolkata"
 }
 JSON

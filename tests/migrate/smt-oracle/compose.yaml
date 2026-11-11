@@ -1,6 +1,7 @@
 # Source stack for the SMT oracle: real Debezium Postgres writing to a real
 # Kafka broker. Always start it through capture.sh, which sets a unique project
-# name and the pinned images. Nothing binds a host port.
+# name and the pinned images. The only published port is Postgres on an ephemeral
+# 127.0.0.1 port (Conduit's source runs on the host).
 name: ${COMPOSE_PROJECT_NAME:?set COMPOSE_PROJECT_NAME through capture.sh}
 
 services:

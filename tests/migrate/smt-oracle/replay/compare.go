@@ -55,21 +55,30 @@ type View struct {
 	// Key and Value are decoded JSON: nil, bool, string, json.Number,
 	// []any or map[string]any. A tombstone or a deleted row is nil.
 	Key, Value any
-	// Topic and Headers are only set on the Kafka Connect side, where a
-	// record has them; Conduit has no counterpart, so they are not compared
-	// unless the caller copies them over.
-	Topic   string
+	// Topic is the topic the record ends up with. On the Kafka Connect side it
+	// is the output topic and InputTopic the topic the record came in with; on
+	// the Conduit side Topic is what the translator's topic expression
+	// evaluates to (Mapping.Topic), or "" when the translator supplies none.
+	Topic, InputTopic string
+	// Headers are the headers the chain added or changed (Kafka Connect: output
+	// headers that differ from the input's; Conduit: the metadata keys the
+	// translator maps to headers, Mapping.Headers).
 	Headers map[string]any
+	// ErrClass and ErrMessage describe the failure when Kind is ViewError: the
+	// exception on the Kafka Connect side, ErrMessage alone (the error text)
+	// on the Conduit side.
+	ErrClass, ErrMessage string
 }
 
-// FromKafkaConnect builds the View of a captured Kafka Connect result. A
-// result with an error, whatever the exception, is ViewError.
-func FromKafkaConnect(res smtoracle.Result) (View, error) {
+// FromKafkaConnect builds the View of a captured Kafka Connect result for the
+// given input record (the one the result is for: it supplies the input topic
+// and the headers the chain did not add).
+func FromKafkaConnect(res smtoracle.Result, in smtoracle.InputRecord) (View, error) {
 	switch res.Result {
 	case smtoracle.ResultDropped:
-		return View{Kind: ViewDropped}, nil
+		return View{Kind: ViewDropped, InputTopic: in.Topic}, nil
 	case smtoracle.ResultError:
-		return View{Kind: ViewError}, nil
+		return View{Kind: ViewError, InputTopic: in.Topic, ErrClass: res.Error.Class, ErrMessage: res.Error.Message}, nil
 	case smtoracle.ResultRecord:
 	default:
 		return View{}, fmt.Errorf("replay: unknown result %q", res.Result)
@@ -82,25 +91,49 @@ func FromKafkaConnect(res smtoracle.Result) (View, error) {
 	if err != nil {
 		return View{}, err
 	}
-	v := View{Kind: ViewRecord, Key: key, Value: val, Topic: res.Output.Topic, Headers: map[string]any{}}
+	inHeaders := map[string]any{}
+	for _, h := range in.Headers {
+		hv, err := untag(h.Value)
+		if err != nil {
+			return View{}, err
+		}
+		inHeaders[h.Key] = hv
+	}
+	v := View{Kind: ViewRecord, Key: key, Value: val, Topic: res.Output.Topic, InputTopic: in.Topic, Headers: map[string]any{}}
 	for _, h := range res.Output.Headers {
 		hv, err := untag(h.Value)
 		if err != nil {
 			return View{}, err
+		}
+		if old, ok := inHeaders[h.Key]; ok && len(diffValues("", old, hv)) == 0 {
+			continue // the chain did not touch it
 		}
 		v.Headers[h.Key] = hv
 	}
 	return v, nil
 }
 
+// Mapping is what a translator tells the harness about the parts of a record
+// Conduit does not have: the topic its expression evaluates to, and which
+// metadata keys carry the headers it writes.
+type Mapping struct {
+	// Topic is the evaluated topic expression. Leave it empty when the
+	// translator emits none, in which case Compare fails if Kafka Connect
+	// changed the topic.
+	Topic string
+	// Headers maps a Kafka Connect header name to the metadata key the
+	// translator writes it to.
+	Headers map[string]string
+}
+
 // FromConduit builds the View of one replay outcome, from the decoded record.
-// The value is Payload.After, the key is Key; raw data is its base64 text, so a
-// normalization that expects structured data fails loudly instead of
+// The value is Payload.After, the key is Key; raw data is its base64 text, so
+// a normalization that expects structured data fails loudly instead of
 // comparing unlike things.
-func FromConduit(o Outcome) (View, error) {
+func FromConduit(o Outcome, m Mapping) (View, error) {
 	switch {
 	case o.Err != nil:
-		return View{Kind: ViewError}, nil
+		return View{Kind: ViewError, ErrMessage: o.Err.Error()}, nil
 	case o.Filtered:
 		return View{Kind: ViewDropped}, nil
 	}
@@ -112,7 +145,13 @@ func FromConduit(o Outcome) (View, error) {
 	if err != nil {
 		return View{}, err
 	}
-	return View{Kind: ViewRecord, Key: key, Value: val}, nil
+	v := View{Kind: ViewRecord, Key: key, Value: val, Topic: m.Topic, Headers: map[string]any{}}
+	for name, mdKey := range m.Headers {
+		if mv, ok := o.Decoded.Metadata[mdKey]; ok {
+			v.Headers[name] = mv
+		}
+	}
+	return v, nil
 }
 
 func dataView(d opencdc.Data) (any, error) {
@@ -192,8 +231,8 @@ func untagValue(v any) any {
 // column, never a difference an SMT makes. The zero value normalizes nothing
 // beyond decoding.
 type Options struct {
-	// JSONFields are columns holding JSON. Debezium writes the JSON text as a
-	// string; Conduit writes the bytes of the text, base64-encoded. Both are
+	// JSONFields are jsonb columns. Both sources write the JSON text as a
+	// string (Conduit's connector before v0.21 wrote its base64). Both are
 	// parsed, so key order and whitespace do not matter.
 	JSONFields []string
 	// DecimalFields are numeric columns, with their scale. Debezium writes a
@@ -208,8 +247,12 @@ type Options struct {
 	// unchanged TOASTed column as the column being absent, which is how
 	// Conduit reports it.
 	ToastAbsent bool
-	// NullAsAbsent treats a null field and a missing field as the same.
-	NullAsAbsent bool
+	// ErrorMatch declares which Conduit error corresponds to which Kafka
+	// Connect exception. A record both sides fail is only "the same" when an
+	// entry matches the Kafka Connect failure and its Conduit text appears in
+	// the Conduit error; an undeclared pair is reported with both texts, so a
+	// chain that fails every record for the wrong reason cannot pass.
+	ErrorMatch []ErrorMatch
 }
 
 // Normalize applies the options to a value (a Key or Value of a View).
@@ -221,9 +264,6 @@ func (o Options) Normalize(v any) (any, error) {
 	out := make(map[string]any, len(m))
 	for k, e := range m {
 		if o.ToastAbsent && e == ToastPlaceholder {
-			continue
-		}
-		if o.NullAsAbsent && e == nil {
 			continue
 		}
 		n, err := o.normalizeField(k, e)
@@ -261,21 +301,16 @@ func contains(ss []string, s string) bool {
 }
 
 func normalizeJSON(v any) (any, error) {
-	s, ok := v.(string)
-	if !ok {
-		return v, nil // already structured
+	str, ok := v.(string)
+	if !ok || str == "" {
+		// Already structured, or empty text, which is not JSON: leave it so the comparison reports it.
+		return v, nil
 	}
-	// JSON text cannot be valid base64 (it contains braces, quotes or
-	// spaces), so which of the two a string is, is unambiguous. A bare JSON
-	// scalar such as 1 or true is the one exception and is read as text.
-	if parsed, err := decodeNumbers([]byte(s)); err == nil {
-		return parsed, nil
-	}
-	raw, err := base64.StdEncoding.DecodeString(s)
+	parsed, err := decodeNumbers([]byte(str))
 	if err != nil {
-		return nil, fmt.Errorf("neither JSON text nor base64 of JSON text")
+		return nil, fmt.Errorf("not JSON text: %w", err)
 	}
-	return decodeNumbers(raw)
+	return parsed, nil
 }
 
 func normalizeDecimal(v any, scale int) (any, error) {
@@ -307,17 +342,44 @@ func normalizeTimestamp(v any) (any, error) {
 	return t.UTC().Truncate(time.Microsecond).Format("2006-01-02T15:04:05.000000Z"), nil
 }
 
+// ErrorMatch pairs a Kafka Connect exception with the Conduit error that
+// corresponds to it.
+type ErrorMatch struct {
+	// KCClass is the exception's class name, full or simple.
+	KCClass string
+	// KCMessage, when set, must be contained in the exception's message.
+	KCMessage string
+	// Conduit must be contained in the Conduit error's text, for example a
+	// stable error code.
+	Conduit string
+}
+
 // Compare returns the differences between the Kafka Connect output and the
 // Conduit output for one record, after the options' normalizations; an empty
-// result means "diff clean". Each difference is one line naming the path.
+// result means "diff clean". It compares the outcome (record, dropped or
+// failed), the topic, the headers the chain added or changed, the key and the
+// value. Each difference is one line naming the path.
+//
+// The topic fails closed: Kafka Connect rewriting it while the Conduit side
+// supplies none (Mapping.Topic empty) is a difference.
 func Compare(kc, conduit View, opts Options) ([]string, error) {
 	if kc.Kind != conduit.Kind {
-		return []string{fmt.Sprintf("outcome: Kafka Connect %s, Conduit %s", kc.Kind, conduit.Kind)}, nil
+		return []string{fmt.Sprintf("outcome: Kafka Connect %s, Conduit %s", describeOutcome(kc), describeOutcome(conduit))}, nil
 	}
-	if kc.Kind != ViewRecord {
+	switch kc.Kind {
+	case ViewDropped:
 		return nil, nil
+	case ViewError:
+		return opts.compareErrors(kc, conduit), nil
 	}
 	var diffs []string
+	switch {
+	case conduit.Topic == "" && kc.Topic != kc.InputTopic:
+		diffs = append(diffs, fmt.Sprintf("topic: Kafka Connect rewrote %q to %q, the Conduit side supplied no topic", kc.InputTopic, kc.Topic))
+	case conduit.Topic != "" && conduit.Topic != kc.Topic:
+		diffs = append(diffs, fmt.Sprintf("topic: Kafka Connect %q, Conduit %q", kc.Topic, conduit.Topic))
+	}
+	diffs = append(diffs, diffValues("headers", kc.Headers, conduit.Headers)...)
 	for _, side := range []struct {
 		name   string
 		kc, cd any
@@ -333,6 +395,43 @@ func Compare(kc, conduit View, opts Options) ([]string, error) {
 		diffs = append(diffs, diffValues(side.name, a, b)...)
 	}
 	return diffs, nil
+}
+
+func describeOutcome(v View) string {
+	if v.Kind == ViewError {
+		return fmt.Sprintf("error (%s)", strings.TrimSpace(v.ErrClass+" "+v.ErrMessage))
+	}
+	return v.Kind
+}
+
+func (o Options) compareErrors(kc, conduit View) []string {
+	for _, m := range o.ErrorMatch {
+		if !strings.HasSuffix(kc.ErrClass, m.KCClass) || !strings.Contains(kc.ErrMessage, m.KCMessage) {
+			continue
+		}
+		if !strings.Contains(conduit.ErrMessage, m.Conduit) {
+			return []string{fmt.Sprintf("error: Kafka Connect %s (%s), Conduit failed with %q, which does not contain %q", kc.ErrClass, describe(kc.ErrMessage), conduit.ErrMessage, m.Conduit)}
+		}
+		return nil
+	}
+	return []string{fmt.Sprintf("error: both sides fail, but no ErrorMatch pairs Kafka Connect %s (%s) with the Conduit error %q", kc.ErrClass, describe(kc.ErrMessage), conduit.ErrMessage)}
+}
+
+// CompareTombstone reports a difference when Kafka Connect's handling of the
+// tombstone that follows a delete (smtoracle.Pair.Tombstone) is not what the
+// translation does. Conduit emits no tombstone, so there is no Conduit record
+// to compare: the translator states whether its chain keeps the tombstone
+// (wantKept) and this checks that against Kafka Connect, which keeps it when
+// the result is a record with a null value.
+func CompareTombstone(kc View, wantKept bool) []string {
+	kept := kc.Kind == ViewRecord && kc.Value == nil
+	if kc.Kind == ViewError || kept == wantKept {
+		if kc.Kind == ViewError {
+			return []string{"tombstone: Kafka Connect failed it: " + describeOutcome(kc)}
+		}
+		return nil
+	}
+	return []string{fmt.Sprintf("tombstone: Kafka Connect kept=%v, the translation says kept=%v", kept, wantKept)}
 }
 
 func diffValues(path string, kc, cd any) []string {

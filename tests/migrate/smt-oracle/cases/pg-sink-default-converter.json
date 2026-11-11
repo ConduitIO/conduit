@@ -1,0 +1,15 @@
+{
+  "suite": "pg-sink-default-converter",
+  "description": "What a sink connector reads from a topic written by a worker whose converters keep their defaults (replace.null.with.default=true): the column default is already on the wire in place of the NULL, before any SMT runs. The same chains as pg-reshape and pg-unwrap, over that input.",
+  "recordType": "sink",
+  "recordsFrom": "debezium-postgres-default-converter.json",
+  "runs": [
+    {"run": "defaults", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {}}]},
+    {"run": "defaults-enrs-null-false", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"replace.null.with.default": "false"}}]},
+    {"run": "flatten", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"replace.null.with.default": "false"}}, {"alias": "f", "type": "Flatten$Value", "config": {}}]},
+    {"run": "hoist", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"replace.null.with.default": "false"}}, {"alias": "h", "type": "HoistField$Value", "config": {"field": "row"}}]},
+    {"run": "exclude", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"replace.null.with.default": "false"}}, {"alias": "r", "type": "ReplaceField$Value", "config": {"exclude": "big,attrs", "replace.null.with.default": "false"}}]},
+    {"run": "rename-defaulted-column", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"replace.null.with.default": "false"}}, {"alias": "r", "type": "ReplaceField$Value", "config": {"renames": "note:remark", "replace.null.with.default": "false"}}]},
+    {"run": "delete-rewrite", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"replace.null.with.default": "false", "delete.tombstone.handling.mode": "rewrite"}}]}
+  ]
+}

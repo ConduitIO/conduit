@@ -3,9 +3,9 @@
 -- java/Consume.java normalizes.
 
 
--- The main fixture: a nullable column WITH a default (note, qty), a nullable
--- column without one, a TOASTed text column, jsonb and array columns, a column
--- whose name contains a dot, and a column named with the Kelvin sign (U+212A).
+-- The main fixture: a nullable column WITH a default (note, qty), nullable columns
+-- without one, a TOASTed text column, a jsonb column, numeric and timestamptz. Replica
+-- identity FULL, so an update that does not touch the TOASTed column still carries it.
 CREATE TABLE items (
     id        integer PRIMARY KEY,
     name      text NOT NULL,
@@ -19,15 +19,14 @@ CREATE TABLE items (
     created   timestamptz
 );
 -- Out-of-line storage without compression (the values are 2.5 kB, over the 2 kB
--- TOAST threshold), so the value stays TOASTed and an
--- update that does not touch it carries Debezium's unavailable-value marker.
+-- TOAST threshold), so the value stays TOASTed.
 ALTER TABLE items ALTER COLUMN big SET STORAGE EXTERNAL;
 ALTER TABLE items REPLICA IDENTITY FULL;
 
--- Columns Conduit's Postgres source (v0.20) cannot build an Avro schema for
+-- Columns Conduit's Postgres source (connector v0.21) cannot build an Avro schema for
 -- live in their own table, which the oracle reads with the connector's schema
 -- attachment off: arrays (cannot resolve field type "_text"), a dotted column
--- name ("invalid name a.b"), and a column named with the Kelvin sign (U+212A).
+-- name, and a column named with the Kelvin sign (U+212A).
 CREATE TABLE noschema (id integer PRIMARY KEY, tags text[], nums integer[], "a.b" text, "temp_K" text);
 INSERT INTO noschema VALUES
   (1, ARRAY['x','y'], ARRAY[1,2,3], 'dot', 'kelvin'),
@@ -43,9 +42,9 @@ CREATE TABLE ab (id integer PRIMARY KEY, v text);
 CREATE TABLE toast (id integer PRIMARY KEY, label text, big text);
 ALTER TABLE toast ALTER COLUMN big SET STORAGE EXTERNAL;
 
--- No nullable columns: the only table Conduit's Postgres source can read with
--- its default Avro schema attachment (a NULL in a nullable column halts it, see
--- the README), so it is the one table whose records carry registry schemas.
+-- No nullable columns and default replica identity: updates that leave `big` unchanged would
+-- fail closed in Conduit with the Avro schema attached, so the workload rewrites it. Its
+-- schemas and `items`' are what the replay harness registers.
 CREATE TABLE strict (
     id      integer PRIMARY KEY,
     name    text NOT NULL,

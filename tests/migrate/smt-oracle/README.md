@@ -16,20 +16,32 @@ One capture run, against one fixture database (`pg/*.sql`), produces three kinds
 
 | Path | What | Produced by |
 | --- | --- | --- |
-| `fixtures/debezium-postgres.json` | every message real Debezium Postgres 3.7.0.Final wrote to a real Kafka 4.2.0 broker (JsonConverter, `schemas.enable=true`, `replace.null.with.default=false`): key, value, both with their Connect schemas | `java/Consume.java` |
-| `fixtures/conduit-postgres.json`, `fixtures/conduit-schemas.json` | every OpenCDC record Conduit's built-in Postgres source (built from this checkout) produced for the same snapshot and the same changes, and every schema it registered | `cmd/normalize`, `cmd/registry` |
+| `fixtures/debezium-postgres.json` | every message real Debezium Postgres 3.7.0.Final wrote to a real Kafka 4.2.0 broker, with the worker's JsonConverter at `schemas.enable=true`, `replace.null.with.default=false`: key and value with their Connect schemas | `java/Consume.java` |
+| `fixtures/debezium-postgres-default-converter.json` | the same changes from a second connector whose converters keep their defaults (`replace.null.with.default=true`): the column default is on the wire in place of a NULL | `java/Consume.java` |
+| `fixtures/conduit-postgres.json`, `fixtures/conduit-schemas.json` | every OpenCDC record Conduit's built-in Postgres source (connector v0.21.0, built from this checkout) produced for the same snapshot and changes, and every schema it registered | `cmd/normalize`, `cmd/registry` |
 | `goldens/<suite>.json` | the output of the Kafka Connect 4.2.0 and Debezium 3.7.0.Final SMT classes for each chain in `cases/<suite>.json`, over hand-written records and over the Debezium messages above | `java/Oracle.java` |
 
 `fixtures/` are the inputs of a translator case, `goldens/` the expected output. Both are
-committed. `goldens/provenance.json` names the image digests they came from.
+committed. `goldens/provenance.json` names the image digests and the Conduit connector versions they
+came from: a connector bump changes what the fixtures hold, so it needs a re-capture.
 
 Only what differs on every capture is normalized when the fixtures are written: Debezium's
 `ts_ms`/`ts_us`/`ts_ns`, `lsn`, `txId`, `xmin` and `sequence`, the Kafka record timestamp, the
-`__debezium.context.runId` header (a new UUID per connector start),
-Conduit's `position` (it embeds the WAL position) and `opencdc.readAt`. Nothing else is touched.
+`__debezium.context.runId` header (a new UUID per connector start), Conduit's `position` (it embeds the
+WAL position) and the wall-clock metadata `opencdc.readAt` and `opencdc.createdAt`. Nothing else is
+touched.
 
 The capture fails if Debezium and Conduit disagree about the workload: per table, in order, every
 Debezium change needs a Conduit record with the same operation and key (`smtoracle.Pairs`).
+
+Every golden records the SHA-256 of the case file and of each fixture it was captured from, and
+`TestGoldensMatchCaseDefinitions` compares them with the committed files, so a case or a fixture that
+was edited without a re-capture fails the offline tests.
+
+A record that carries a schema has its payload written twice where it matters: `payload` is what the
+SMT left (the oracle's converter uses `replace.null.with.default=false`, so it shows the SMT's own
+effect), and `payloadDefaultConverter`, present only where it differs, is what a worker with the
+converter's default (`true`) would write: the schema's default in place of a NULL.
 
 ### Why the SMT classes are called directly
 
@@ -49,7 +61,7 @@ The Kafka classes run on the `apache/kafka:4.2.0` image's own Java and jars. The
 from the Debezium 3.7.0.Final jars of the pinned Debezium image, on those same Kafka 4.2.0 jars
 (the Debezium image ships Connect 4.3.1; 4.2.0 is the version under test).
 
-## Findings the first capture produced
+## Findings
 
 These are facts about the pinned versions, each backed by a committed file. Translator PRs rely on
 them.
@@ -57,43 +69,66 @@ them.
 **Debezium Postgres propagates column defaults into the Connect schema.** `items.note` (default
 `'none'`) and `items.qty` (default `5`) are `"default": "none"` and `"default": 5` in
 `fixtures/debezium-postgres.json`, also when the row holds an explicit NULL. Kafka Connect then
-substitutes the default in some SMTs and not in others (`goldens/pg-reshape.json`, record
-`items@1`, a row with `note` and `qty` NULL):
+substitutes the default in some SMTs and not in others (`goldens/pg-reshape.json`,
+`goldens/pg-unwrap.json`, record `items@1`, a row with `note` and `qty` NULL):
 
-| SMT after `ExtractNewRecordState` | `note`, `qty` |
+| SMT (after `ExtractNewRecordState` with `replace.null.with.default=false`) | `note`, `qty` |
 | --- | --- |
-| `ExtractNewRecordState` itself | null, null |
+| `ExtractNewRecordState` itself, default `tombstone` mode, either setting of its option | null, null |
+| `ExtractNewRecordState` in `rewrite` mode, option left at its default `true` | **"none", 5** |
+| `ExtractNewRecordState` in `rewrite` mode with the option `false` | null, null |
 | `HoistField` | null, null |
-| `Flatten` | **"none", 5** (no option to turn it off) |
-| `ReplaceField` with `replace.null.with.default=true` (the default) | **"none", 5** |
-| `ReplaceField` with `replace.null.with.default=false` | null, null |
+| `Flatten` (no option) | **"none", 5** |
+| `ReplaceField`, `InsertField`, `ValueToKey` with `replace.null.with.default=true` (the default) | **"none", 5** (`ValueToKey`: in the key) |
+| the same with `replace.null.with.default=false` | null, null |
 | `ExtractField` of `note`, default true / false | **"none"** / null |
 
 So on a Debezium source `Flatten` cannot be translated (Conduit would write the NULL KC does not),
-`HoistField` can, and the others only with `replace.null.with.default=false` set explicitly.
+`HoistField` can, and `ExtractNewRecordState`, `ReplaceField`, `InsertField`, `ExtractField` and
+`ValueToKey` only with `replace.null.with.default=false` set explicitly on each.
 
-**The jsonb fixture matches, after one normalization.** Debezium writes jsonb as a string holding
-the JSON text; Conduit writes the base64 of the same text. With `Options.JSONFields` both parse to
-the same value for `items.attrs` and `strict.attrs` in every captured change
-(`TestReplay_NativeSourceEqualsUnwrap`). Key order and spacing come out identical here, but the
-normalization parses, so it would not depend on it.
+**All of that holds only if the worker's converters also keep the NULL.** The SMTs run before the
+converter, so they see the NULL. But a worker with the JsonConverter at its default
+(`key.converter.replace.null.with.default=true`, `value.converter...=true`) then writes the schema's
+default in place of every NULL it is given, the bare unwrap included
+(`payloadDefaultConverter` in the goldens; `fixtures/debezium-postgres-default-converter.json` is what
+a sink reads from such a topic, and `goldens/pg-sink-default-converter.json` the SMTs over it). Without
+that setting a translation of a Debezium chain is not exact on a table with a defaulted nullable
+column. The rule this oracle supports, to be decided in the design doc: **a Debezium-source chain
+translates only when `key.converter.replace.null.with.default=false` and
+`value.converter.replace.null.with.default=false` are set explicitly in the connector config**,
+otherwise it is blocking with that fix, the same pattern as the per-SMT option. The oracle's own
+converter always uses `false`; that is its stated configuration, not a default.
 
-**Conduit's Postgres source (connector v0.20.0) has gaps the fixture runs into.** None is fixed
-here; the capture works around each, and each is why the fixture database is split the way it is.
-They are reported because translators and migration claims depend on them.
+**The jsonb fixture matches.** Debezium writes jsonb as a string holding the JSON text; Conduit's
+connector v0.21.0 writes a string too (its Avro schema carries `connect.name`
+`io.debezium.data.Json`, as Debezium's does). With `Options.JSONFields` both parse to the same value for
+`items.attrs` and `strict.attrs` in every captured change (`TestReplay_NativeSourceEqualsUnwrap`).
 
-- With its default Avro schema attached, the source halts on the first NULL in a nullable column
-  (`avro: *avro.null is unsupported for Avro string`): every column is written as a non-null Avro
-  type. Only `strict`, which has no nullable column, is read that way. Everything else is read
-  with `logrepl.withAvroSchema: "false"`, so those records carry no schema.
-- It cannot build a schema for an array column (`cannot resolve field type "_text"`) or a column
-  with a dotted name (`invalid name a.b`). Those live in `noschema`.
-- With the schema attached, an update that leaves a TOASTed column unchanged halts the source
-  (`avro: missing required field big`). `strict` is updated with its TOASTed column rewritten.
-  Without the schema attached it works, and Conduit omits the unchanged column where Debezium
-  writes `__debezium_unavailable_value` (`ToastAbsent` normalizes this).
+**Conduit's Postgres source, connector v0.21.0.** Re-checked against the version in `go.mod`; each
+line is why the fixture database is split the way it is.
+
+- Nullable columns, jsonb, `numeric` and `timestamptz` now carry Avro schemas (`["null", T]`), so
+  `items`, `a`, `ab` and `strict` are read with the default settings, and replay exercises raw Avro
+  through the in-memory registry for all four. (v0.20.0 halted on the first NULL and wrote jsonb as
+  base64 bytes.)
+- It still cannot build a schema for an array column (`cannot resolve field type "_text"`) or a
+  column with a dotted name or the Kelvin sign. `noschema` is read with `logrepl.withAvroSchema:
+  "false"`, and its records carry no schema.
+- An update that leaves a TOASTed column unchanged now fails closed with the schema attached
+  (`postgres.avro.unchanged_toast`: the Avro record cannot be encoded without writing NULL over it).
+  The workload therefore never makes one on a table read with the schema: `items` has `REPLICA
+  IDENTITY FULL` (the old tuple carries the value) and `strict` is updated with its TOASTed column
+  rewritten. `toast`, whose update leaves it unchanged, is read with the schema off, where Conduit
+  omits the column and Debezium writes `__debezium_unavailable_value` (`ToastAbsent` normalizes it).
 - It renders `numeric` as a fraction (`"25/2"` for 12.50) and trims trailing zeros of a
   `timestamptz` (`...20Z` against Debezium's `...20.000000Z`).
+
+**Replay finding, not a translation problem.** Replaying `field.exclude` over `items@7` (an update
+where `qty` goes from 7 to NULL) fails with `failed to encode before payload`: the built-in registry's
+schema middleware extracts a new schema from the after payload alone, and the before payload no longer
+fits it. Kafka Connect has no such failure. `replay_test.go` records it as a known difference and fails
+if it stops reproducing.
 
 **Kafka Connect 4.2 behaviours the design depends on** (`goldens/`):
 
@@ -115,6 +150,10 @@ They are reported because translators and migration claims depend on them.
   unknown keys, so they have no effect (`dbz-extractnewrecordstate`).
 - `delete.tombstone.handling.mode` takes `drop`, `tombstone`, `rewrite`, `rewrite-with-tombstone`
   and `delete-to-tombstone`.
+
+Not modelled: a real Debezium `SourceRecord` has a null partition and timestamp, where the oracle's
+copy carries the consumed message's partition and a fixed timestamp. It only matters for
+`InsertField` `partition.field` and `timestamp.field` on Debezium sources, which the pack refuses.
 
 ## Layout
 
@@ -138,7 +177,8 @@ Suites: `filter-predicates`, `regexrouter`, `regexrouter-unicode`, `replacefield
 `extractfield`, `hoistfield`, `valuetokey`, `flatten`, `replace-null-with-default`, `chains` (all
 over hand-written records, schemaless and with schemas), `dbz-extractnewrecordstate` and
 `chains-debezium` (hand-built Debezium envelopes, schemaless and with schemas), and `pg-unwrap`,
-`pg-reshape`, `pg-envelope` (over what real Debezium Postgres wrote).
+`pg-reshape`, `pg-envelope` (over what real Debezium Postgres wrote), and `pg-sink-default-converter`
+(over what a default-converter worker wrote).
 
 v0.23 SMTs (`Cast`, `TimestampConverter`, `TimezoneConverter`, `ExtractChangedRecordState`,
 `EventRouter`) are not captured; adding them is a new suite, not a change to the program.
@@ -150,6 +190,7 @@ Everything below is Docker-free and runs in the ordinary `test` job.
 ```go
 suite, _ := smtoracle.Load("pg-reshape")          // the golden
 pairs, _ := smtoracle.Pairs()                     // Debezium change <-> Conduit record, per table
+events, _ := smtoracle.DebeziumEvents()           // the KC inputs (topic and headers come from here)
 recs, _ := replay.Records()                       // the committed OpenCDC records
 r, _ := replay.New(ctx, schemas)                  // in-memory schema registry loaded with the capture
 outs, _ := r.Run(ctx, []replay.Step{{             // the chain the translator emitted
@@ -158,8 +199,8 @@ outs, _ := r.Run(ctx, []replay.Step{{             // the chain the translator em
 }}, recs)
 for _, p := range pairs {
     res, _ := suite.Find("exclude", p.Debezium)
-    kc, _ := replay.FromKafkaConnect(*res)
-    cd, _ := replay.FromConduit(outs[p.Conduit])
+    kc, _ := replay.FromKafkaConnect(*res, eventNamed(events, p.Debezium))
+    cd, _ := replay.FromConduit(outs[p.Conduit], replay.Mapping{ /* Topic, Headers */ })
     diffs, _ := replay.Compare(kc, cd, replay.PostgresOptions(p.Table))
     // diffs must be empty
 }
@@ -167,27 +208,53 @@ for _, p := range pairs {
 
 `replay.Run` goes through `processor.RunnableProcessor`: the condition, the deep copy the engine
 hands every processor, the schema middleware and the built-in registry behave as in a pipeline. A
-processor that resolves schemas (`avro.encode`, `error`, a registry assertion) reads the in-memory
-registry, which holds the captured schemas at the versions they had. Filtered and failed records are
-reported as such. `replay_test.go` shows the pattern, including a chain that must differ (a delete
-turned into `{}`, #3147) so the harness is known to be able to fail.
+record that carries schema metadata is Avro-encoded with its registered schema before the chain runs,
+as the connector does before the record leaves it, and decoded again for `Compare`. A processor that
+resolves schemas (`avro.encode`, `error`, a registry assertion) reads the in-memory registry, which
+holds the captured schemas at the versions they had. Filtered and failed records are reported as
+such. `replay_test.go` shows the pattern, including chains that must differ (a delete turned into
+`{}`, #3147; an empty chain against the routing and header goldens) so the harness is known to be
+able to fail.
+
+### What `Compare` compares
+
+The outcome (record, dropped, failed), then, for a record: the topic, the headers the chain added or
+changed, the key and the value.
+
+- **Topic.** Conduit has no topic. The translator passes the value its topic expression evaluates to
+  in `Mapping.Topic`; Kafka Connect's output topic must equal it. If Kafka Connect changed the topic
+  and the translator passed none, that is a difference (fail closed): an empty chain cannot pass a
+  `RegexRouter` golden.
+- **Headers.** Kafka Connect's headers that the chain added or changed (not the input's) must equal
+  the metadata values the translator maps to them (`Mapping.Headers`), and no others.
+- **Errors.** A record both sides fail is "the same" only if `Options.ErrorMatch` pairs the Kafka
+  Connect exception (class, message) with text of the Conduit error. An undeclared pair is reported with
+  both texts.
+- **Tombstones.** Kafka Connect's tombstone results are not compared against a Conduit record,
+  because Conduit emits none. `CompareTombstone` checks the translation's stated handling (kept or
+  dropped) against the golden for `smtoracle.Pair.Tombstone`.
+- **Numbers** compare by value (`5` equals `5.0`; Conduit widens integers). This is always on.
 
 ### Normalizations
 
-`replay.Options` is the complete list. Each one has a test showing both representations becoming one
-value, and a real difference surviving it. They cover how the two Postgres _sources_ represent a
-column, never what an SMT did.
+`replay.Options` is the complete list. They cover how the two Postgres _sources_ represent a column,
+never what an SMT did, and each has a test that shows the two representations becoming one value.
+Options that could hide a real difference (`ToastAbsent`) are off unless set, with a test that the
+difference is reported without them.
 
 | Option | Debezium | Conduit |
 | --- | --- | --- |
 | tagged Java types (always) | `{"$int32": 5}`, `{"$date": ...}`, `{"$bytes": ...}` | plain JSON; ints are widened |
-| `JSONFields` | JSON text in a string | base64 of the JSON text |
+| `JSONFields` | JSON text in a string | JSON text in a string (formatting may differ) |
 | `DecimalFields` (column, scale) | decimal number | fraction, `"999/100"` |
 | `TimestampFields` | `...20.000000Z` | `...20Z` |
 | `ToastAbsent` | `__debezium_unavailable_value` | the column is missing |
-| `NullAsAbsent` | null | missing |
 
-`replay.PostgresOptions(table)` declares which columns of the fixture database need which.
+`replay.PostgresOptions(table)` declares which columns of the fixture database need which. Options
+name top-level fields: after a `HoistField` (`row.price`) or a rename of a normalized column the
+normalization no longer applies and the case reports a spurious difference (it fails safe). A case
+that reshapes those columns passes `Options` with the new names.
+
 `replay.Records()` also turns the typed nil that decoding JSON null produces into an untyped nil: a
 source leaves the interface nil, and the engine's per-processor `Clone` would otherwise turn a typed
 nil into `{}` before any processor ran.
@@ -208,7 +275,8 @@ normalization adds it to `replay.Options` with its test in the same PR.
    JSON schema; `"recordType": "source"` makes `SourceRecord`s (the default is `SinkRecord`).
 2. `tests/migrate/smt-oracle/capture.sh` (Docker, a few minutes) rewrites `goldens/` and
    `fixtures/`. To change only the SMT stage, which needs no database and finishes in seconds, run
-   `SKIP_SOURCE=1 tests/migrate/smt-oracle/capture.sh`.
+   `SKIP_SOURCE=1 tests/migrate/smt-oracle/capture.sh`. Editing a case without re-capturing fails
+   `TestGoldensMatchCaseDefinitions`.
 3. Commit the new golden. `go test ./tests/migrate/smt-oracle/...` checks that every case has a
    result for every record and that the fixtures pair up.
 4. In the translator's test, replay the emitted chain and `Compare`.

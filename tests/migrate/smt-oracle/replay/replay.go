@@ -28,7 +28,9 @@ package replay
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"strconv"
+	"time"
 
 	"github.com/goccy/go-json"
 
@@ -158,6 +160,10 @@ func (r *Replayer) Run(ctx context.Context, steps []Step, records []opencdc.Reco
 
 	out := make([]Outcome, len(records))
 	for i, rec := range records {
+		rec, err := r.encode(ctx, rec)
+		if err != nil {
+			return nil, fmt.Errorf("replay: record %d: %w", i, err)
+		}
 		out[i] = Outcome{Record: rec, Decoded: rec}
 		cur := rec
 		for si, b := range runnable {
@@ -285,4 +291,175 @@ func commonsType(t sr.SchemaType) (commonsschema.Type, error) {
 		return 0, fmt.Errorf("replay: cannot decode schema type %v yet", t)
 	}
 	return 0, fmt.Errorf("replay: unknown schema type %v", t)
+}
+
+// encode turns the sides of a record that carry schema metadata back into the
+// raw Avro bytes the engine hands to processors: a source with a schema
+// attached encodes its values before they leave the connector, and the JSON
+// file the fixture is stored in cannot say which numbers were ints. Each value
+// is coerced to the Go type the Avro schema expects (int, int64, *big.Rat for a
+// decimal, time.Time for timestamp-micros), then marshalled with the schema
+// the metadata names, from the in-memory registry.
+func (r *Replayer) encode(ctx context.Context, rec opencdc.Record) (opencdc.Record, error) {
+	rec = rec.Clone()
+	var err error
+	if rec.Key, err = r.encodeSide(ctx, rec.Key, rec.Metadata, "key"); err != nil {
+		return rec, fmt.Errorf("key: %w", err)
+	}
+	if rec.Payload.Before, err = r.encodeSide(ctx, rec.Payload.Before, rec.Metadata, "payload"); err != nil {
+		return rec, fmt.Errorf("payload.before: %w", err)
+	}
+	if rec.Payload.After, err = r.encodeSide(ctx, rec.Payload.After, rec.Metadata, "payload"); err != nil {
+		return rec, fmt.Errorf("payload.after: %w", err)
+	}
+	return rec, nil
+}
+
+func (r *Replayer) encodeSide(ctx context.Context, d opencdc.Data, md opencdc.Metadata, side string) (opencdc.Data, error) {
+	sd, ok := d.(opencdc.StructuredData)
+	subject := md["opencdc."+side+".schema.subject"]
+	if !ok || sd == nil || subject == "" {
+		return d, nil
+	}
+	version, err := strconv.Atoi(md["opencdc."+side+".schema.version"])
+	if err != nil {
+		return nil, fmt.Errorf("schema version of %s: %w", subject, err)
+	}
+	ss, err := r.registry.SchemaBySubjectVersion(ctx, subject, version)
+	if err != nil {
+		return nil, fmt.Errorf("schema %s v%d: %w", subject, version, err)
+	}
+	t, err := commonsType(ss.Type)
+	if err != nil {
+		return nil, err
+	}
+	var schemaJSON any
+	if err := json.Unmarshal([]byte(ss.Schema.Schema), &schemaJSON); err != nil {
+		return nil, fmt.Errorf("schema %s v%d: %w", subject, version, err)
+	}
+	coerced, err := coerceAvro(schemaJSON, map[string]any(sd))
+	if err != nil {
+		return nil, fmt.Errorf("coerce for %s v%d: %w", subject, version, err)
+	}
+	b, err := (commonsschema.Schema{Type: t, Bytes: []byte(ss.Schema.Schema)}).Marshal(coerced)
+	if err != nil {
+		return nil, fmt.Errorf("encode with %s v%d: %w", subject, version, err)
+	}
+	return opencdc.RawData(b), nil
+}
+
+// coerceAvro converts a value decoded from JSON to the Go type the Avro schema
+// expects. It covers what the captured schemas use: null, boolean, int, long,
+// float, double, string, bytes, records, arrays, unions with null, and the
+// decimal and timestamp-micros logical types. Anything else is an error, so a
+// new column type fails loudly here instead of encoding something else.
+func coerceAvro(schema, v any) (any, error) {
+	switch sch := schema.(type) {
+	case string:
+		return coercePrimitive(sch, nil, v)
+	case []any: // union
+		if v == nil {
+			return nil, nil
+		}
+		for _, branch := range sch {
+			if b, ok := branch.(string); ok && b == "null" {
+				continue
+			}
+			return coerceAvro(branch, v)
+		}
+		return nil, fmt.Errorf("union with no non-null branch")
+	case map[string]any:
+		switch typ, _ := sch["type"].(string); typ {
+		case "record":
+			m, ok := v.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("record value is %T", v)
+			}
+			out := make(map[string]any, len(m))
+			fields, _ := sch["fields"].([]any)
+			for _, f := range fields {
+				fm, _ := f.(map[string]any)
+				name, _ := fm["name"].(string)
+				fv, present := m[name]
+				if !present {
+					continue
+				}
+				c, err := coerceAvro(fm["type"], fv)
+				if err != nil {
+					return nil, fmt.Errorf("field %q: %w", name, err)
+				}
+				out[name] = c
+			}
+			return out, nil
+		case "array":
+			arr, ok := v.([]any)
+			if !ok {
+				return nil, fmt.Errorf("array value is %T", v)
+			}
+			out := make([]any, len(arr))
+			for i, e := range arr {
+				c, err := coerceAvro(sch["items"], e)
+				if err != nil {
+					return nil, err
+				}
+				out[i] = c
+			}
+			return out, nil
+		default:
+			logical, _ := sch["logicalType"].(string)
+			return coercePrimitive(typ, sch, v, logical)
+		}
+	}
+	return nil, fmt.Errorf("unsupported Avro schema %T", schema)
+}
+
+func coercePrimitive(typ string, sch map[string]any, v any, logical ...string) (any, error) {
+	if v == nil {
+		return nil, nil
+	}
+	l := ""
+	if len(logical) > 0 {
+		l = logical[0]
+	}
+	switch {
+	case typ == "boolean" || typ == "string":
+		return v, nil
+	case typ == "int":
+		f, ok := v.(float64)
+		if !ok {
+			return nil, fmt.Errorf("int value is %T", v)
+		}
+		return int32(f), nil
+	case typ == "long" && l == "timestamp-micros":
+		s, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("timestamp value is %T", v)
+		}
+		t, err := time.Parse(time.RFC3339Nano, s)
+		return t, err
+	case typ == "long":
+		f, ok := v.(float64)
+		if !ok {
+			return nil, fmt.Errorf("long value is %T", v)
+		}
+		return int64(f), nil
+	case typ == "float" || typ == "double":
+		f, ok := v.(float64)
+		if !ok {
+			return nil, fmt.Errorf("%s value is %T", typ, v)
+		}
+		return f, nil
+	case typ == "bytes" && l == "decimal":
+		s, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("decimal value is %T", v)
+		}
+		r, ok := new(big.Rat).SetString(s)
+		if !ok {
+			return nil, fmt.Errorf("not a decimal: %q", s)
+		}
+		return r, nil
+	}
+	_ = sch
+	return nil, fmt.Errorf("unsupported Avro type %q (logical %q)", typ, l)
 }

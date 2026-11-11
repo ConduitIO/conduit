@@ -1,5 +1,7 @@
 {
+  "caseSha256": "b6a98bad6a8109765644442af231e1c593f7f55b1bcec6c0a9422f7530d25ff8",
   "description": "replace.null.with.default true (the default) and false over schemas whose optional fields carry defaults, for each SMT that has the option.",
+  "fixtureSha256": {},
   "recordType": "sink",
   "runs": [
     {
@@ -117,6 +119,12 @@
                 "id": 1,
                 "label": null,
                 "tenant": null
+              },
+              "payloadDefaultConverter": {
+                "cnt": 0,
+                "id": 1,
+                "label": "anon",
+                "tenant": "t0"
               },
               "schema": "s-b17d3b1fb8fb"
             }
@@ -282,6 +290,11 @@
                 "id": 1,
                 "name": null,
                 "tenant": null
+              },
+              "payloadDefaultConverter": {
+                "id": 1,
+                "name": "anon",
+                "tenant": "t0"
               },
               "schema": "s-539fe9869d01"
             }
@@ -455,6 +468,13 @@
                 "s": "v",
                 "tenant": null
               },
+              "payloadDefaultConverter": {
+                "cnt": 0,
+                "id": 1,
+                "name": "anon",
+                "s": "v",
+                "tenant": "t0"
+              },
               "schema": "s-23102ed87d0b"
             }
           },
@@ -598,6 +618,7 @@
             "topic": "orders",
             "value": {
               "payload": null,
+              "payloadDefaultConverter": "anon",
               "schema": "s-7e9293d7adf0"
             }
           },
@@ -669,6 +690,12 @@
                 "name": null,
                 "tenant": null
               },
+              "payloadDefaultConverter": {
+                "cnt": 0,
+                "id": 1,
+                "name": "anon",
+                "tenant": "t0"
+              },
               "schema": "s-29583bb4d7ae"
             }
           },
@@ -736,6 +763,10 @@
                 "cnt": null,
                 "name": null
               },
+              "payloadDefaultConverter": {
+                "cnt": 0,
+                "name": "anon"
+              },
               "schema": "s-32efad1c583e"
             },
             "partition": 3,
@@ -747,6 +778,12 @@
                 "id": 1,
                 "name": null,
                 "tenant": null
+              },
+              "payloadDefaultConverter": {
+                "cnt": 0,
+                "id": 1,
+                "name": "anon",
+                "tenant": "t0"
               },
               "schema": "s-29583bb4d7ae"
             }

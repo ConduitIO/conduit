@@ -1,5 +1,7 @@
 {
+  "caseSha256": "a1b157bf35082c218b2ecae76286ea45ecb04ffbdb5a47310fb73cedd6fb5ddf",
   "description": "Filter with TopicNameMatches, HasHeaderKey and RecordIsTombstone, with and without negate, and an unconditional Filter.",
+  "fixtureSha256": {},
   "recordType": "sink",
   "runs": [
     {
@@ -69,9 +71,7 @@
         "transforms": [
           {
             "alias": "f",
-            "config": {
-              "predicate": "p"
-            },
+            "config": {},
             "predicate": "p",
             "type": "Filter"
           }

@@ -42,18 +42,23 @@ func norm(t *testing.T, o Options, in string) map[string]any {
 
 func TestNormalize_JSON(t *testing.T) {
 	o := Options{JSONFields: []string{"attrs"}}
-	// Debezium: the JSON text. Conduit: base64 of the same text. Key order and spacing differ.
+	// Both sources write the JSON text; key order and spacing may differ.
 	kc := norm(t, o, `{"attrs": "{\"b\": [1, 2], \"a\": null}"}`)
-	cd := norm(t, o, `{"attrs": "eyJhIjpudWxsLCJiIjpbMSwyXX0="}`) // {"a":null,"b":[1,2]}
+	cd := norm(t, o, `{"attrs": "{\"a\":null,\"b\":[1,2]}"}`)
 	if d := diffValues("value", kc, cd); len(d) != 0 {
-		t.Fatalf("same JSON, different representation: %v", d)
+		t.Fatalf("same JSON, different text: %v", d)
 	}
-	other := norm(t, o, `{"attrs": "eyJhIjpudWxsLCJiIjpbMSwzXX0="}`) // {"a":null,"b":[1,3]}
+	other := norm(t, o, `{"attrs": "{\"a\":null,\"b\":[1,3]}"}`)
 	if d := diffValues("value", kc, other); len(d) != 1 || !strings.Contains(d[0], "value.attrs.b[1]") {
 		t.Fatalf("different JSON must still differ: %v", d)
 	}
 	if _, err := o.Normalize(map[string]any{"attrs": "***"}); err == nil {
-		t.Fatal("a value that is neither JSON nor base64 must fail, not pass through")
+		t.Fatal("text that is not JSON must fail, not pass through")
+	}
+	// Empty text is not JSON; it is reported as a difference, not an error (Debezium writes it for a
+	// NOT NULL jsonb in a default-identity delete's before-image).
+	if d := diffValues("value", norm(t, o, `{"attrs": ""}`), kc); len(d) != 1 {
+		t.Fatalf("empty text against JSON must differ: %v", d)
 	}
 }
 
@@ -92,7 +97,7 @@ func TestNormalize_Timestamp(t *testing.T) {
 	}
 }
 
-func TestNormalize_ToastAndNull(t *testing.T) {
+func TestNormalize_Toast(t *testing.T) {
 	o := Options{ToastAbsent: true}
 	kc := norm(t, o, `{"id": 1, "big": "__debezium_unavailable_value"}`)
 	cd := norm(t, o, `{"id": 1}`)
@@ -103,12 +108,26 @@ func TestNormalize_ToastAndNull(t *testing.T) {
 	if d := diffValues("value", norm(t, Options{}, `{"id": 1, "big": "__debezium_unavailable_value"}`), cd); len(d) != 1 {
 		t.Fatalf("placeholder without ToastAbsent must differ: %v", d)
 	}
-	n := Options{NullAsAbsent: true}
-	if d := diffValues("value", norm(t, n, `{"id": 1, "x": null}`), norm(t, n, `{"id": 1}`)); len(d) != 0 {
-		t.Fatalf("null vs absent: %v", d)
+	// A real value in place of the placeholder is a difference even with the option.
+	if d := diffValues("value", norm(t, o, `{"id": 1, "big": "x"}`), cd); len(d) != 1 {
+		t.Fatalf("a present column must differ from an absent one: %v", d)
 	}
-	if d := diffValues("value", norm(t, Options{}, `{"id": 1, "x": null}`), norm(t, Options{}, `{"id": 1}`)); len(d) != 1 {
-		t.Fatalf("null vs absent without the option must differ: %v", d)
+	// Null and absent are different things, always.
+	if d := diffValues("value", norm(t, o, `{"id": 1, "x": null}`), norm(t, o, `{"id": 1}`)); len(d) != 1 {
+		t.Fatalf("null vs absent must differ: %v", d)
+	}
+}
+
+func TestNumbersCompareByValue(t *testing.T) {
+	// Conduit widens integers and has no float32: 5 and 5.0 are the same number.
+	a, _ := decodeNumbers([]byte(`{"n": 5}`))
+	b, _ := decodeNumbers([]byte(`{"n": 5.0}`))
+	if d := diffValues("v", a, b); len(d) != 0 {
+		t.Fatalf("5 vs 5.0: %v", d)
+	}
+	c, _ := decodeNumbers([]byte(`{"n": 5.5}`))
+	if d := diffValues("v", a, c); len(d) != 1 {
+		t.Fatalf("5 vs 5.5 must differ: %v", d)
 	}
 }
 
@@ -129,7 +148,7 @@ func TestUntag(t *testing.T) {
 }
 
 func TestCompare_Outcomes(t *testing.T) {
-	rec := View{Kind: ViewRecord, Value: map[string]any{"a": json.Number("1")}}
+	rec := View{Kind: ViewRecord, InputTopic: "t", Topic: "t", Value: map[string]any{"a": json.Number("1")}}
 	if d, _ := Compare(rec, View{Kind: ViewDropped}, Options{}); len(d) != 1 {
 		t.Fatalf("record vs dropped: %v", d)
 	}
@@ -137,11 +156,11 @@ func TestCompare_Outcomes(t *testing.T) {
 		t.Fatalf("dropped vs dropped: %v", d)
 	}
 	// A deleted row: Kafka Connect's null value and Conduit's nil After are the same.
-	cd, err := FromConduit(Outcome{Decoded: opencdc.Record{Key: opencdc.StructuredData{"id": 1}}})
+	cd, err := FromConduit(Outcome{Decoded: opencdc.Record{Key: opencdc.StructuredData{"id": 1}}}, Mapping{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	kc := View{Kind: ViewRecord, Key: map[string]any{"id": json.Number("1")}}
+	kc := View{Kind: ViewRecord, InputTopic: "t", Topic: "t", Key: map[string]any{"id": json.Number("1")}}
 	if d, _ := Compare(kc, cd, Options{}); len(d) != 0 {
 		t.Fatalf("delete: %v", d)
 	}
@@ -152,23 +171,102 @@ func TestCompare_Outcomes(t *testing.T) {
 	}
 }
 
+func TestCompare_Topic(t *testing.T) {
+	kc := View{Kind: ViewRecord, InputTopic: "dbz.public.items", Topic: "cdc.items"}
+	if d, _ := Compare(kc, View{Kind: ViewRecord}, Options{}); len(d) != 1 || !strings.Contains(d[0], "supplied no topic") {
+		t.Fatalf("a rewritten topic with none supplied must fail closed: %v", d)
+	}
+	if d, _ := Compare(kc, View{Kind: ViewRecord, Topic: "cdc.items"}, Options{}); len(d) != 0 {
+		t.Fatalf("the right topic: %v", d)
+	}
+	if d, _ := Compare(kc, View{Kind: ViewRecord, Topic: "cdc.other"}, Options{}); len(d) != 1 {
+		t.Fatalf("the wrong topic: %v", d)
+	}
+	same := View{Kind: ViewRecord, InputTopic: "t", Topic: "t"}
+	if d, _ := Compare(same, View{Kind: ViewRecord}, Options{}); len(d) != 0 {
+		t.Fatalf("an untouched topic needs none supplied: %v", d)
+	}
+	if d, _ := Compare(same, View{Kind: ViewRecord, Topic: "u"}, Options{}); len(d) != 1 {
+		t.Fatalf("a topic changed by the translation but not by Kafka Connect: %v", d)
+	}
+}
+
+func TestCompare_Headers(t *testing.T) {
+	kc := View{Kind: ViewRecord, InputTopic: "t", Topic: "t", Headers: map[string]any{"__op": "c"}}
+	if d, _ := Compare(kc, View{Kind: ViewRecord, Topic: "t", Headers: map[string]any{}}, Options{}); len(d) != 1 {
+		t.Fatalf("a missing header: %v", d)
+	}
+	if d, _ := Compare(kc, View{Kind: ViewRecord, Topic: "t", Headers: map[string]any{"__op": "c"}}, Options{}); len(d) != 0 {
+		t.Fatalf("a matching header: %v", d)
+	}
+	if d, _ := Compare(kc, View{Kind: ViewRecord, Topic: "t", Headers: map[string]any{"__op": "u"}}, Options{}); len(d) != 1 {
+		t.Fatalf("a wrong header value: %v", d)
+	}
+	// A header Conduit adds that Kafka Connect did not is a difference too.
+	none := View{Kind: ViewRecord, InputTopic: "t", Topic: "t", Headers: map[string]any{}}
+	if d, _ := Compare(none, View{Kind: ViewRecord, Topic: "t", Headers: map[string]any{"x": "y"}}, Options{}); len(d) != 1 {
+		t.Fatalf("an extra header: %v", d)
+	}
+}
+
+func TestCompare_Errors(t *testing.T) {
+	kc := View{Kind: ViewError, ErrClass: "org.apache.kafka.connect.errors.DataException", ErrMessage: "Only Struct objects supported, found: null"}
+	cd := View{Kind: ViewError, ErrMessage: "field.set.missing_field: .Payload.After.name"}
+	d, _ := Compare(kc, cd, Options{})
+	if len(d) != 1 || !strings.Contains(d[0], "no ErrorMatch") || !strings.Contains(d[0], "field.set.missing_field") {
+		t.Fatalf("an undeclared error pair must be reported with both texts: %v", d)
+	}
+	ok := Options{ErrorMatch: []ErrorMatch{{KCClass: "DataException", KCMessage: "found: null", Conduit: "field.set.missing_field"}}}
+	if d, _ := Compare(kc, cd, ok); len(d) != 0 {
+		t.Fatalf("a declared pair: %v", d)
+	}
+	wrong := View{Kind: ViewError, ErrMessage: "template: bad function"}
+	if d, _ := Compare(kc, wrong, ok); len(d) != 1 {
+		t.Fatalf("a Conduit failure for the wrong reason must differ: %v", d)
+	}
+}
+
+func TestCompareTombstone(t *testing.T) {
+	kept := View{Kind: ViewRecord}
+	if d := CompareTombstone(kept, true); len(d) != 0 {
+		t.Fatalf("kept as expected: %v", d)
+	}
+	if d := CompareTombstone(View{Kind: ViewDropped}, true); len(d) != 1 {
+		t.Fatalf("dropped but the translation keeps it: %v", d)
+	}
+	if d := CompareTombstone(View{Kind: ViewDropped}, false); len(d) != 0 {
+		t.Fatalf("dropped as expected: %v", d)
+	}
+	if d := CompareTombstone(View{Kind: ViewError, ErrClass: "X"}, false); len(d) != 1 {
+		t.Fatalf("a failed tombstone is reported: %v", d)
+	}
+}
+
 func TestFromKafkaConnect(t *testing.T) {
+	in := smtoracle.InputRecord{Topic: "in", Headers: []smtoracle.InputHeader{{Key: "keep", Value: json.RawMessage(`"x"`)}, {Key: "change", Value: json.RawMessage(`"old"`)}}}
 	v, err := FromKafkaConnect(smtoracle.Result{Result: smtoracle.ResultRecord, Output: &smtoracle.Record{
-		Topic:   "t",
-		Key:     smtoracle.Side{Payload: json.RawMessage(`{"id": {"$int32": 1}}`)},
-		Value:   smtoracle.Side{Payload: json.RawMessage(`null`)},
-		Headers: []smtoracle.Header{{Key: "h", Value: json.RawMessage(`"x"`)}},
-	}})
+		Topic: "out",
+		Key:   smtoracle.Side{Payload: json.RawMessage(`{"id": {"$int32": 1}}`)},
+		Value: smtoracle.Side{Payload: json.RawMessage(`null`)},
+		Headers: []smtoracle.Header{
+			{Key: "keep", Value: json.RawMessage(`"x"`)},
+			{Key: "change", Value: json.RawMessage(`"new"`)},
+			{Key: "added", Value: json.RawMessage(`"y"`)},
+		},
+	}}, in)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.Kind != ViewRecord || v.Value != nil || v.Topic != "t" || v.Headers["h"] != "x" {
+	if v.Kind != ViewRecord || v.Value != nil || v.Topic != "out" || v.InputTopic != "in" {
 		t.Fatalf("unexpected view: %+v", v)
+	}
+	if len(v.Headers) != 2 || v.Headers["change"] != "new" || v.Headers["added"] != "y" {
+		t.Fatalf("only changed and added headers belong in the view: %v", v.Headers)
 	}
 	if v.Key.(map[string]any)["id"] != json.Number("1") {
 		t.Fatalf("tag not removed: %v", v.Key)
 	}
-	if _, err := FromKafkaConnect(smtoracle.Result{Result: "nope"}); err == nil {
+	if _, err := FromKafkaConnect(smtoracle.Result{Result: "nope"}, in); err == nil {
 		t.Fatal("unknown result must fail")
 	}
 }

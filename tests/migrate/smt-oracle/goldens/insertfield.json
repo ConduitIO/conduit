@@ -1,5 +1,7 @@
 {
+  "caseSha256": "3600462c2cd3b5ac218ccafbd8352e9ff24619dacbc3aeaee1edf8fbf5696c59",
   "description": "InsertField static values and the record metadata fields (topic, partition, offset, timestamp), on a sink record.",
+  "fixtureSha256": {},
   "recordType": "sink",
   "runs": [
     {

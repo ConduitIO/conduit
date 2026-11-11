@@ -1,5 +1,7 @@
 {
+  "caseSha256": "dcc303617af0e0f8f7350d21f10b4e7e219d749d350463ddf7da8cb7650a68a3",
   "description": "ReplaceField exclude, renames and include over schemaless and schema'd values; include is refused by the translator but captured here.",
+  "fixtureSha256": {},
   "recordType": "sink",
   "runs": [
     {
