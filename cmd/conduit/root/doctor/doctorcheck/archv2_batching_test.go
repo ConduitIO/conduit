@@ -35,12 +35,14 @@ pipelines:
       - id: dst
         type: destination
         plugin: builtin:log
-        settings:
-          sdk.batch.size: "5"
+    dead-letter-queue:
+      plugin: builtin:log
+      settings:
+        sdk.batch.size: "5"
 `
 
 // TestArchV2BatchingCheck_FailsOnBatching pins that doctor, with arch-v2
-// enabled, refuses a batched destination with the same error code the runtime
+// enabled, refuses a batched dead-letter-queue with the same error code the runtime
 // engine uses — before deploy.
 func TestArchV2BatchingCheck_FailsOnBatching(t *testing.T) {
 	is := is.New(t)

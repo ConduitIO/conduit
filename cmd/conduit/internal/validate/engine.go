@@ -375,19 +375,8 @@ func archV2BatchingFindings(p config.Pipeline) []Finding {
 	}
 	findings = nonLiteral(findings, "the dead letter queue", "/pipelines/dead-letter-queue/settings/", p.DLQ.Settings)
 
-	for ci, conn := range p.Connectors {
-		if conn.Type != config.TypeDestination {
-			continue
-		}
-		_, value, bad := config.SDKBatchSizeAboveOne(conn.Settings)
-		if !bad {
-			continue
-		}
-		findings = add(findings,
-			fmt.Sprintf("/pipelines/connectors/%d/settings/%s", ci, config.SDKBatchSizeSetting),
-			fmt.Sprintf("destination connector %q (sets %s=%s)", conn.ID, config.SDKBatchSizeSetting, value),
-		)
-	}
+	// A destination's sdk.batch.size/delay is not refused: the engine batches
+	// destinations itself, so only the DLQ is checked here (same as Start).
 	if _, value, bad := config.SDKBatchSizeAboveOne(p.DLQ.Settings); bad {
 		findings = add(findings,
 			"/pipelines/dead-letter-queue/settings/"+config.SDKBatchSizeSetting,
