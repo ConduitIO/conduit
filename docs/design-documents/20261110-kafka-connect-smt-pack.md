@@ -2,452 +2,583 @@
 
 ## Summary
 
-`conduit migrate kafka-connect` blocks every connector that has a `transforms=` chain today. This pack gives it
-a translator for the most-used Kafka Connect (KC) and Debezium single message transforms (SMTs), plus the
-processor changes those translations need: a typed, opt-in field-copy mode for `field.set`, a `flatten`
-processor, and processors for the Debezium SMTs that have no equivalent yet.
+Today `conduit migrate kafka-connect` blocks every connector that has a `transforms=` chain. This pack adds
+a translator for Kafka Connect (KC) and Debezium single message transforms (SMTs). It also makes the
+processor changes those translations need: a typed, opt-in field-copy mode for `field.set`, and two new
+processors, `flatten` and `field.hoist`.
 
-The rule from the base design stays: **emit-if-exact.** A translator writes processors only when the
-configuration falls inside the subset where the processors behave exactly as the SMT does. Anything else is
-reported `unsupported` and blocking, with a reason and a fix. An SMT is never silently dropped and never
-approximated: transforms change data (invariant 6). Data that falls outside the exact subset at run time
-fails the record with a coded error. It is never reshaped differently.
+The rule from the base design still holds: **emit-if-exact.** A translator writes processors only when the
+configuration falls inside the subset where those processors behave exactly as the SMT does, including for
+null and missing fields. Anything else is reported `unsupported` and blocking, with a reason and a fix. An
+SMT is never silently dropped and never approximated, because transforms change data (invariant 6). Where
+KC itself fails a record, the emitted processors fail it too, with a coded error.
+
+v0.22 ships a deliberately narrow set. An SMT is in v0.22 only if its corpus cases diff clean against output
+captured from real Kafka Connect 4.2. Everything else reports blocking with a fix that names v0.23.
 
 Roadmap item: v0.22 "SMT compatibility pack" (ROADMAP.md), issue #2960. This PR is the design only (Tier 3).
-The implementation PRs (B1 to B10 below) are Tier 2: processors and CLI. The deferred PartitionRouting work
-touches Kafka partition assignment and is Tier 1 when it lands in v0.23.
+The v0.22 implementation PRs are Tier 2 (processors, CLI) or Tier 3 (docs, the oracle tool). PartitionRouting
+touches Kafka partition assignment, so it is Tier 1 when it lands in v0.23.
 
 ## Context
 
-- **kcmigrate has no translator framework.** `rules/data/shared.yaml` claims `transforms`,
-  `transforms.*`, `predicates` and `predicates.*` and makes all of them `unsupported` and blocking.
-  `report.Transform` (alias, class, status, processor) exists in the report and the JSON Schema, but no code
-  fills it. The generated pipeline model (`emit.connectorDef`) has no `processors` field.
-- **The SMT parity table** (`docs/catalog-inventory.md`, "Kafka Connect SMT parity") maps every standard
-  SMT to a processor. Five SMTs have no processor (Flatten, ExtractChangedRecordState, EventRouter,
-  PartitionRouting, TimezoneConverter). Four are partial only because `field.set` renders a template and
-  so always produces a string (ExtractField, HoistField, InsertField, ValueToKey).
+Checked against `main` (9de15d31), Apache Kafka 4.2.0 and the Debezium source.
+
+- **kcmigrate.**
+  - `rules/data/shared.yaml` claims `transforms`, `transforms.*`, `predicates` and `predicates.*`, and makes
+    every non-empty value `unsupported` and blocking.
+  - Entries take their outcome from rule data when keys are classified. `emit.ApplyAll` refines entries in
+    place. Finishers (`emit.Finisher`, which returns notes only) come from each class file's `finish:` list.
+  - `migrate/run.go` builds entries from the decisions after `Finish`, then runs `DropUnprotectedSASL`, which
+    edits entries in place.
+  - Unknown classes, and classes that produce no pipeline, never reach `Finish`.
+  - The report already has `report.Transform`, but nothing fills it. `emit.connectorDef` has no
+    `processors` field.
+- **Converters.** For `key.converter` and `value.converter`, only `ByteArrayConverter` is translated. No
+  converter rule emits a decode processor.
+- **Topics.** `debezium-postgres.yaml` blocks `topic.prefix` and writes no Kafka `topic` setting. Debezium
+  Postgres, S3 sink and MirrorMaker source all carry the blocking note `kc.output_shape_differs`.
 - **WIP commit 6887b977** (local branch `wip/v022-smt-pack`, unreviewed) has a typed `field.set` and a
-  `flatten` processor. It is a starting point, not something to merge. It has five defects:
-  - `field.set` switches to copy mode whenever `value` starts with `.` and has no `{{`. A pipeline that
-    sets the literal string `.Payload.After.id` today would silently start copying that field instead,
-    which is a breaking change. The WIP also drops the `tplerr.Exec` wrapping of template errors.
-  - `flatten` overwrites one value with another when two paths flatten to the same key. Which value wins
-    depends on Go map iteration order.
-  - `flatten` leaves the input's schema subject and version on the record.
-  - `flatten` is not registered as a built-in.
-  - `flatten` returns `flatten.not_structured` for a nil side, where KC passes a null value through. No
-    test covers a nil key or payload.
-- **#3147.** A processor that references a field under a nil key or payload writes `StructuredData{}`
-  into that side. That turns a delete's after-image or a tombstone into an empty row. The fix belongs in
-  `conduit-processor-sdk` and is not part of this pack. Translations must not depend on it.
-- **Schema middleware.** Built-in processors run inside the processor SDK's schema encode middleware
-  (`conduit-processor-sdk` v0.9.2). When a processor reshapes a record that carries
-  `opencdc.<side>.schema.subject`/`.version`, the middleware extracts a schema from the values and
-  registers it as a new version of the source's subject. That schema widens int to long and drops logical
-  types and enums. For KC parity that output is lossy, and it pollutes the source subject.
+  `flatten` processor. It is a starting point, not something to merge.
+  - `field.set` auto-detects copy mode whenever the value starts with `.` and contains no `{{`. That is a
+    silent breaking change, and the commit also drops the `tplerr.Exec` wrapping.
+  - `flatten` silently overwrites keys that collide.
+  - `flatten` leaves stale schema metadata on the record, fails on a nil side, and is not registered.
+- **Existing processors at field level.**
+  - `field.convert` renders a nil or missing field as `"<nil>"`. It formats `*big.Rat` as `617/50` and an
+    integral `float64` as `3`, and it writes bytes as the raw string.
+  - `field.rename` of a missing field writes `new: nil`. Renames are sequential and fail with
+    `ErrFieldExists`.
+  - The reference resolver creates intermediate maps on nested paths. It turns a nil side into
+    `StructuredData{}` (#3147, open). Setting a string into `.Key` or `.Payload.*` stores `RawData`.
+- **Schema middleware** (`conduit-processor-sdk` v0.9.2). Every built-in processor runs the encode
+  middleware. Suppose a processor reshapes a side whose `opencdc.<side>.schema.subject`/`.version` did not
+  change. The middleware then extracts a schema from the values, which widens int to long and drops
+  logical types. It registers that schema as a new version of the source's subject and encodes the data
+  with it. `builtin:postgres` always attaches a subject.
+- **Kafka connector v0.17.0.**
+  - The source writes header `N` as metadata `kafka.header.N`. With `emitMirrorMetadata`, it omits headers
+    that are not UTF-8. It sets `kafka.partition`/`kafka.offset` only with `emitMirrorMetadata`.
+  - The source always sets `opencdc.collection` (the topic) and `opencdc.createdAt` (nanoseconds). Keys and
+    values arrive as `RawData`.
+  - The destination (not mirror mode) writes no headers, partitions by key hash, and writes `r.Bytes()`,
+    the whole OpenCDC record.
+- **Postgres connector v0.20.0.** `opencdc.collection` is the relation name. `numeric` is `*big.Rat`.
+  Temporal columns are `time.Time`.
+- **KC semantics that matter here.**
+  - Debezium produces `Struct` values, so SMTs on a source connector always run in schema mode, whatever
+    converter follows.
+  - `replace.null.with.default` defaults to `true` on Cast, ReplaceField, InsertField, ExtractField,
+    ValueToKey and TimestampConverter. With it on, a null field is replaced by the column's schema default.
+  - HoistField and ValueToKey have no null check: HoistField wraps a null, and ValueToKey throws on one.
+  - RegexRouter runs `matches()`, then `replaceFirst`.
+  - ExtractNewRecordState defaults to `delete.tombstone.handling.mode=tombstone`.
 
 ## Constraints
 
-- Every input key ends up in the report exactly once (the completeness invariant of the base design). This
-  covers every `transforms.<alias>.*` and `predicates.<alias>.*` key.
-- `conduit migrate` always emits a compatibility report. A refused SMT is a report entry with code, reason
-  and fix, never an omission.
-- No new configuration language (ADR `20260704-no-bespoke-dsl`). SMTs map to processors, conditions are the
+- **Completeness.** Every input key ends up in the report exactly once, including every
+  `transforms.<alias>.*` and `predicates.<alias>.*` key.
+- **Always a report.** `conduit migrate` always emits a compatibility report. A refused SMT is an entry with
+  a code, a reason and a fix.
+- **No DSL.** There is no new configuration language (ADR `20260704-no-bespoke-dsl`). Conditions use the
   existing Go-template `condition`, and topic expressions use sprig functions that already ship.
-- The default behaviour of every existing processor stays byte-identical. New behaviour is opt-in through
-  new parameters or new processors.
-- No report schema change. `reportVersion` stays 1, and the schema sets `additionalProperties: false`, so
-  adding a field would break strict v1 validators.
-- MCP `kc_migrate` and the CLI run the same `pkg/kcmigrate` code, with no divergent logic.
-- Output is deterministic: the same input produces byte-identical pipeline YAML and report, whatever the
-  key order in the input.
+- **No default changes.** Every existing processor's default behaviour stays byte-identical. New behaviour
+  is opt-in.
+- **Report schema unchanged.** `reportVersion` stays 1, and the schema sets `additionalProperties: false`.
+- **One code path.** MCP `kc_migrate` and the CLI run the same `pkg/kcmigrate` code.
+- **Deterministic output.** The same input gives byte-identical YAML and report, whatever the key order.
 
 ## Maintainer decisions (2026-11-10)
 
 Recorded as decided:
 
-1. **Scope for v0.22:** `Filter` with the predicates `TopicNameMatches`, `HasHeaderKey` and
-   `RecordIsTombstone`; `RegexRouter`, `Cast`, `ReplaceField`, `InsertField`, `ExtractField`, `HoistField`,
-   `ValueToKey`, `TimestampConverter` and `Flatten`; the Debezium `ExtractNewRecordState`,
-   `ExtractChangedRecordState` and `TimezoneConverter` (narrow form). `EventRouter` is a stretch goal.
-   `PartitionRouting` moves to v0.23, because it needs the Kafka destination to write an explicit
-   partition (invariant 4). Until then migrate reports it as blocking, with that reason.
-2. **Typed `field.set`:** copying a field by reference is an explicit opt-in. The default behaviour stays
-   byte-identical, and a test pins it.
-3. **Emit-if-exact:** a translator emits processors only when the result is exactly equivalent. Otherwise
-   the SMT is reported unsupported with a reason. It is never silently dropped.
-4. **Headers and partitions:** an SMT that reads or writes headers or partitions translates only when the
-   target plugin actually reads or writes them. Otherwise it is blocking.
-5. **Debezium output mode:** SMTs that reshape the envelope stay blocking when the pipeline uses
-   Debezium-compatible output mode. That mode is v0.23.
-6. **`HoistField`** gets a small `field.hoist` processor in v0.22. Wrapping a value in a new map cannot be
-   expressed as a field copy.
-7. **`ReplaceField include`** is v0.23. Until then migrate reports it as blocking, with a fix that names
-   v0.23.
-8. **SMTs that reshape a schema-carrying side** (Avro, Protobuf, JSON Schema, `JsonConverter` with
-   `schemas.enable=true`) are refused in v0.22 with an honest reason. Type-preserving schema derivation
-   is v0.23.
-9. **KC oracle:** the JVM capture program `tests/migrate/smt-oracle` is accepted. It runs Kafka Connect
-   4.2, manually or nightly, and its outputs are committed. Each translator's corpus case is diffed
-   against the captured output.
-10. **`DropHeaders`, `InsertHeader` and `HeaderFrom`** are v0.23. Until then they are blocking, with that
-    reason.
+1. **The v0.22 cut line.**
+   - The base work: the processors from B1 and B2 (including `field.hoist`), the B3 framework and the B11
+     oracle.
+   - The SMTs: `Filter` with the predicates, `RegexRouter` (with the anchoring fix below), `ReplaceField`
+     exclude/rename, `ExtractField`, `HoistField`, `InsertField` static/topic, `ValueToKey`, `Flatten` and
+     `ExtractNewRecordState`.
+   - Each of those ships only when its corpus cases diff clean against captured KC output on
+     debezium-postgres with a schemaless JsonConverter.
+   - Everything else reports blocking, with a v0.23 fix.
+2. **Typed `field.set`.** Copying by reference is an explicit opt-in. The choice is the `from` parameter. The
+   default stays byte-identical, pinned by a test.
+3. **Emit-if-exact.** Processors are emitted only for an exact equivalent. Otherwise the SMT is unsupported
+   with a reason, never silently dropped.
+4. **Headers and partitions.** SMTs that depend on headers or partitions translate only when the target
+   plugin actually reads or writes them. Otherwise they are blocking.
+5. **Debezium output mode.** In Debezium-compatible output mode, SMTs that reshape the envelope stay
+   blocking. That mode is v0.23.
+6. **`HoistField`** gets a small `field.hoist` processor in v0.22.
+7. **`ReplaceField include`** is v0.23. It is blocking, with a fix that names v0.23.
+8. **Schema-carrying sides.** SMTs that reshape a side whose KC converter carries a schema (Avro, Protobuf,
+   JSON Schema, or `JsonConverter` with `schemas.enable=true`) are refused in v0.22. Type-preserving schema
+   derivation is v0.23.
+9. **KC oracle.** `tests/migrate/smt-oracle` (Kafka Connect 4.2, run manually or nightly, outputs
+   committed) is accepted. Each translator's corpus case diffs against the captured output.
+10. **`DropHeaders`, `InsertHeader`, `HeaderFrom`** are v0.23, blocking with that reason.
+11. **`Cast`, `TimestampConverter`, `TimezoneConverter`** are refused until v0.23. The same column reaches
+    KC and Conduit as different types, and column types are unknown offline. v0.23 adds runtime type
+    gates, proven by the oracle.
+12. **Before-image.** Translators apply the same processors to `.Payload.Before` as to `.Payload.After`.
+13. **`replace.null.with.default`.** SMT chains on Debezium sources translate only when it is set
+    explicitly to `false` on every SMT that has the option. Otherwise they are blocking, with that fix.
+14. **`ExtractChangedRecordState`** is v0.23, blocking with a reason. At the pinned connector versions, no
+    target writes headers.
+15. **`EventRouter`** is out of v0.22 and moves to v0.23. It was a stretch goal.
+16. **`PartitionRouting`** is v0.23. It needs the Kafka destination to write an explicit partition
+    (invariant 4). Until then it is blocking, with that reason.
 
 ## Decision
 
-### Translator architecture
+### Where the translator runs
 
-The translators live in a new package, `pkg/kcmigrate/smt`. It has no I/O and depends only on `kcmigrate`
-and `kcmigrate/rules`.
+The translators live in a new package, `pkg/kcmigrate/smt`. It has no I/O.
 
-**Claiming keys.** `shared.yaml` changes so that `transforms`, `predicates` and the `transforms.`/`predicates.`
-prefix rules emit kind `smt-chain` instead of blocking. That kind records the key for the chain finisher
-and sets no outcome. The finisher sets the outcome of every claimed key. If it leaves a key without one,
-the run fails as an internal error. A test asserts this, so a claimed key cannot fall off the report.
+- **Placeholder outcome in rule data.** In `shared.yaml`, every non-empty `transforms`/`predicates` value and
+  every `transforms.`/`predicates.` prefix key gets a placeholder outcome:
+  - status `unsupported`, `blocking: true`, code `kc.smt_unsupported`;
+  - reason "Transforms are translated only for connector classes that produce a pipeline";
+  - fix "Keep this connector on Kafka Connect";
+  - emit kind `smt`, a registered no-op kind like `none`.
 
-**Grouping.** The `smt-chain` finisher runs after every other rule and finisher of the connector, because it
-needs their results: the topic expression, the converter shape and the target plugins. It parses
-`transforms=` and `predicates=` into ordered alias lists and groups the sub-keys by alias. These cases are
-handled before any translator runs:
+  The placeholder is the final, honest outcome for unknown classes and for classes that produce no
+  pipeline, which never reach the SMT pass. Their `transforms` index stays empty.
+- **The SMT pass.** `smt.Translate(plan, cl.Decisions, ctx)` is called from `migrateConnector` after
+  `emit.Finish` and before `rules.Entries`, for every class that produces a pipeline. It is not listed per
+  class file.
+  - It rewrites `Decision.Entry` of each key it claims. That follows the existing practice of editing entries
+    in place, as `emit.ApplyAll` and `DropUnprotectedSASL` do.
+  - It appends processors to the plan and returns notes, which go into `rc.Notes`.
+  - A test asserts that no entry of a class that produces a pipeline keeps the placeholder reason.
+- **Data lives in Go, not `rules/data`.** The per-class known sub-key sets and the plugin capability table
+  are Go tables in `pkg/kcmigrate/smt`, not YAML in `rules/data`. This leaves `rules.Builtin` and
+  `harness.LoadRuleSet` unchanged; both would reject a file with a new scope.
+  - The capability table records, for the connector versions pinned in `go.mod`: whether a plugin reads
+    headers into metadata, and under which key; whether it writes headers or an explicit partition; and
+    which setting names its target.
+  - A test checks the table against the pinned connectors' specs.
+- **Context.** `ctx` carries:
+  - the chain side: source or sink;
+  - the reference mode: schema mode on Debezium source chains; on sink chains, decided by the converter;
+  - the shape of each record side;
+  - the initial topic expression;
+  - the target plugins and their capabilities;
+  - whether the pipeline uses Debezium output mode.
+
+### Grouping and per-key outcomes
+
+The pass parses `transforms=` and `predicates=` into ordered alias lists and groups the sub-keys by alias.
 
 | Input | Outcome |
 | --- | --- |
-| Alias listed in `transforms=` with no `.type` | Every key of the alias unsupported and blocking (KC rejects the config) |
-| `transforms.<a>.*` keys for an alias not listed | Translated as no-op ("Kafka Connect ignores transforms not in `transforms=`"), not blocking |
-| Alias listed twice | The second occurrence is blocking (KC rejects duplicates) |
-| `transforms.<a>.predicate` names an undefined predicate | Blocking |
-| Predicate defined but used by no transform | Translated as no-op |
-| A config-provider reference as any SMT value | Blocking (it cannot be evaluated offline, as in the base rules) |
+| Alias listed with no `.type` | Every key of that alias is blocking (KC rejects the config) |
+| `transforms.<a>.*` for an alias that is not listed | Translated as a no-op ("Kafka Connect ignores it"), not blocking |
+| Alias listed twice | The second occurrence is blocking |
+| `.predicate` names an undefined predicate | Blocking |
+| Predicate used by no transform | Translated as a no-op |
+| Predicate whose only users are refused or not emitted | Unsupported and blocking: "used only by transform(s) `<a>`, which are not translated" |
+| Config-provider reference as any SMT value | Blocking (cannot be evaluated offline) |
+| Sub-key no translator claims | `kc.key_unknown`, blocking (so an option added in a later KC release shows up) |
+| Class with no v0.22 translator | `kc.smt_unsupported` on every key of the alias; fix names v0.23, or "write a processor" |
+| Key of a refused SMT | The key the refusal is about gets the specific reason. The SMT's other sub-keys get "part of transform `<a>`, which is not translated: `<reason>`". All are blocking |
 
-**Per-class translators.** A registry maps the SMT class, after its `$Key`/`$Value` suffix is stripped, to
-a translator:
+Translators have this shape:
 
 ```go
 // Translate returns the exact processors for one SMT, or a refusal. The
-// error is for bugs only (bad rule data, impossible state); it fails the run.
+// error is for bugs only; it fails the run.
 type Translator func(c *Chain, t *SMT) (Result, error)
 
 type Result struct {
 	Processors []Processor // in order; empty with Refusal set
+	Reads      []Path      // fields and metadata the SMT's emitted logic reads
+	Writes     []Path      // what its processors write; a whole side when unknown
 	Refusal    *Refusal    // code, reason, fix, and the key the reason is about
-	Claimed    []string    // the sub-keys this translator consumed
+	Claimed    []string    // sub-keys consumed
 }
 ```
 
-A translator receives the SMT's sub-keys and the chain state: which side it operates on, the shape of that
-side, the current topic expression, the target plugins and their capabilities, and whether the pipeline
-uses Debezium output mode. If the translator does not claim a sub-key, that key is `kc.key_unknown` and
-blocking. This is how an option added to a later KC release surfaces instead of being ignored. A class with
-no translator gets `kc.smt_unsupported` on every one of its keys, and the fix names the release that maps
-it, or says to write a processor (processor SDK).
+**All or nothing per chain.** If one SMT in a chain is refused, no processor of that chain is written. Every
+link still gets its own entries, and a link that was translatable on its own is reported as blocking, with a
+reason that names the refused alias. With `--accept-gaps`, the pipeline runs with no SMT processors, and
+`acceptedGaps` lists every link.
 
-**Placement.** The processors of a source connector's SMTs go on the source connector's `processors`, and
-those of a sink connector's SMTs on the destination's. Either way they keep `transforms=` order. A new emit
-helper, `Plan.AppendProcessor(side, def)`, appends a processor, and `connectorDef` gains
-`processors: [{id, plugin, condition, settings}]`. On a sink, KC runs the converter before the SMTs, so the
-SMT processors go after any decode processor the converter rules emit. On a source they go before any
-encode processor. Processor IDs are `smt-<alias>` (sanitized), with `-<n>` added when one SMT emits more
-than one processor. A sanitized ID that collides gets a numeric suffix in alias order.
+**Placement.** On a source chain, processors go on the source connector's `processors`. On a sink chain they
+go on the destination's. Both keep `transforms=` order. Emitting them needs:
 
-**All or nothing per chain.** If any SMT in a chain is refused, no processor of that chain is written. A
-partial chain would hand the later links different data from what they had in KC. Every link still gets
-its own entries. A link that was translatable on its own is reported `unsupported` (`kc.smt_unsupported`,
-blocking), and its reason names the refused alias. With `--accept-gaps` the pipeline therefore runs with no
-SMT processors at all, and `acceptedGaps` lists every link.
+- `Plan.AppendProcessor(side, def)`;
+- `processors: [{id, plugin, condition, settings}]` added to `connectorDef`.
 
-**Predicates and `negate`** become the processor's `condition`. `negate=true` wraps the predicate in
-`not`. When a nil guard is needed (see _Nil keys and payloads_), it is combined with the predicate using
-`and`. A `Filter` becomes the `filter` processor carrying that condition. A `Filter` without a predicate
-drops every record, and so does `filter` without a condition.
+Processor IDs are `smt-<alias>` (sanitized), with `-<n>` when one SMT emits several processors. A collision
+gets a numeric suffix in alias order. The report's `transforms` entry for an SMT gives its alias, class and
+worst status, plus the plugin of its first processor. Each key's `target.configPath` points at the
+processor it became.
 
-**The topic is threaded through the chain, not written into records.** The chain starts from a topic
-expression, a Go-template pipeline the connector's topic rules already produce. It is the destination
-topic template on a source chain, and `(index .Metadata "opencdc.collection")` on a sink chain that reads
-from the Kafka source. `RegexRouter` rewrites the expression. `TopicNameMatches` and
-`InsertField topic.field` read it. At the end of the chain the expression is written to the plugin's topic
-setting: the Kafka destination's `topic` on a source chain, and the destination's naming setting on a sink
-chain, listed in the capability data. If the connector rules left the topic unset, or blocked it, every
-topic-reading SMT is refused ("the topic this SMT reads is not translated"). It is also refused if a later
-processor in the chain writes a metadata key the expression reads.
+### Reference semantics
 
-**Capability data.** A new data file, `rules/data/smt.yaml`, holds the per-class known sub-key sets and a
-per-plugin capability table: whether the plugin reads headers into metadata, whether it writes metadata as
-headers, whether it writes an explicit partition, and which setting names its target topic or table. The
-capabilities are stated for the connector version pinned in `go.mod`. A test re-checks them against that
-connector's spec, so a connector bump that changes a capability fails the build instead of changing what
-migrate emits.
+- **Source chains.**
+  - The reference is KC's schema-mode code path over the Debezium `Struct`.
+  - Before `ExtractNewRecordState`, the value is the envelope (`before`, `after`, `source`, `op`, `ts_ms`).
+    Value-side reshaping SMTs placed there are refused, with one exception: `ExtractField` of `after`, which
+    is a no-op in Conduit because native CDC records are already flat. Whole-value SMTs placed there are
+    refused too. A chain with no `ExtractNewRecordState` keeps the envelope throughout. Key-side SMTs are not
+    affected, because the key is not enveloped.
+  - `replace.null.with.default` must be set explicitly to `false` on every SMT that has it (decision 13).
+  - Flatten and HoistField have no such option. They read through `Struct.get`, which applies defaults. If
+    the oracle shows that a defaulted nullable column comes out with its default, they are refused on
+    Debezium sources. One thing is not verified: whether Debezium Postgres propagates column defaults into
+    the Connect schema. The oracle confirms it.
+- **Sink chains.**
+  - The converter decides. Only `ByteArrayConverter` is translated, so the value is bytes.
+  - SMTs that need a map or a struct fail on bytes in KC itself, and are refused (see the reachability
+    matrix).
+- **Before-image** (decision 12). Every value-side processor is emitted twice: once for `.Payload.After`
+  and once for `.Payload.Before`. Each copy has its own nil guard. KC's value after the unwrap has no
+  before-image, so this keeps the two images consistent for CDC consumers rather than matching a KC byte
+  stream. The output-shape note already covers the record envelope.
 
-**Report.** Each SMT fills one `report.Transform`: `alias`, `class`, `status` (worst status among its keys),
-and `processor` (the plugin of the first processor it emits). The other processors of a multi-processor
-translation are located by each entry's `target.configPath`, for example
-`/pipelines/0/connectors/0/processors/2`. That needs no schema change.
+### Nulls and missing fields
 
-**MCP parity.** `kc_migrate` calls the same `migrate.Run`. The harness's `TestMigrate_MCPParity` runs every
-SMT corpus case through both paths and compares the outputs byte for byte.
+KC distinguishes a null side (tombstone or delete), a null field, and a field that is absent. The table gives
+the KC behaviour and what is emitted, for each SMT in v0.22. Every row is pinned by an oracle fixture and a
+`rapid` property test over null and missing fields.
 
-### Mapping and exactness
+| SMT | Null side (KC) | Null field (KC) | Missing field (KC) | Emitted |
+| --- | --- | --- | --- | --- |
+| `ReplaceField` exclude | passthrough | removed | no-op | `field.exclude` with a side nil guard; a missing field is already a no-op |
+| `ReplaceField` renames | passthrough | renamed, value null (default replacement off) | schema mode: never absent | `field.rename` with a side nil guard and a field-present guard, so an absent field does not become `new: nil` |
+| `InsertField` static/topic | passthrough | n/a | n/a | typed `field.set` with a side nil guard; an existing field of the same name fails (KC schema mode throws on the duplicate), emitted as an `error` processor conditioned on presence |
+| `ExtractField` `after` (envelope) | null value | null value | throws | no processor (native CDC is already flat) |
+| `HoistField` | wraps null: `{name: null}` | n/a | n/a | `field.hoist`, no nil guard; wraps nil |
+| `ValueToKey` | throws | key field null | throws | `error` processor when `.Payload.After` is nil; then `field.set from` per field, where a missing source field fails with `field.set.from_missing` |
+| `Flatten` | passthrough | leaf kept as null | n/a | `flatten`, which keeps null leaves and passes a nil side through |
+| `ExtractNewRecordState` | see row in the mapping table | | | |
 
-KC's `$Key` variants operate on `.Key` and `$Value` variants on `.Payload.After`. "Structured" means the
-translator knows the side holds `StructuredData` at that position. That is the case after a native CDC
-source, or after a decode processor emitted from the converter rules. If the shape is unknown, any SMT that
-reshapes the side is refused.
+**Nil guards.** A nil guard is ANDed with any predicate. The condition is true only for a non-nil interface,
+so `StructuredData{}` is still processed, as in KC. Its exact template is fixed in B3 and tested over a nil
+interface, `RawData(nil)` and an empty struct. The guards make translations independent of #3147. When the
+SDK fix lands, they become redundant but stay correct.
 
-On a native Conduit CDC source, an SMT placed before `ExtractNewRecordState` sees the Debezium envelope in
-KC. The translator maps `after.*` to `.Payload.After.*` and `before.*` to `.Payload.Before.*`, and refuses
-any other envelope path (`source.*`, `op`, `ts_ms`) unless the row below lists it. With Debezium output
-mode on, every SMT that reshapes the value or key is refused (decision 5). `Filter`, the predicates and
-`RegexRouter` do not reshape, and still translate.
+**Present-field guards and the `error` processor.** These use the existing built-in `error` processor with a
+`condition`. KC fails such a record, and the emitted chain fails it too: to the DLQ, or halting, per
+`errors.tolerance` (invariant 3). Nothing is coerced.
 
-| SMT | Emits | Exact when | Refused otherwise (reason) |
+### Reachability at the pinned versions
+
+What the translators can reach on `main` today. Even where an SMT translates, the pipeline stays `stopped`
+in v0.22 because of blockers outside the SMT keys:
+
+- on debezium-postgres: `topic.prefix`, the JsonConverter entry and `kc.output_shape_differs`, until
+  Debezium output mode lands in v0.23;
+- on s3-sink and mirror-source: `kc.output_shape_differs`.
+
+So in v0.22 an SMT translation is a correct report entry and a processor chain that is ready to run. It does
+not by itself make a pipeline runnable.
+
+| Class | Converter | Reachable SMTs in v0.22 | Refused |
 | --- | --- | --- | --- |
-| `Filter` | `filter` + `condition` | always, given a translatable predicate or none | - |
-| `TopicNameMatches` | condition `regexMatch "^(?:P)$" T` | `pattern` is in the RE2-safe Java subset (below) and T is known | Java construct named; topic not translated |
-| `HasHeaderKey` | condition testing that key `N` is present in `.Metadata` (template fixed in B3: `index` alone cannot tell an empty header value from a missing one) | the side that carries headers at this position maps headers to metadata (sink chain: Kafka source reads them; source chain: an earlier SMT in the same chain wrote them), and `N` does not start with a reserved metadata prefix (`opencdc.`, `conduit.`, `kafka.`) | header capability missing; reserved name |
-| `RecordIsTombstone` | sink chain: condition testing for a null Kafka value; native CDC source chain: constant false, evaluated at translate time | sink chain: the Kafka source's null-value representation is pinned by a test; source chain: native CDC emits no tombstones (already in the output-shape note) | other sources |
-| `RegexRouter` | rewrites T to `regexReplaceAll "^(?:P)$" T "R"` | `regex` is in the RE2-safe subset; `$n` in `replacement` is rewritten to `${n}`, and `\$` handled; KC full-match plus `replaceFirst` equals an anchored replace-all | construct named |
-| `Cast` | one `field.convert` per `field:type` pair, in spec order | target is `int64`, `float64`, `boolean` or `string`, and B4's conformance table shows that `field.convert` equals KC's `Cast` for every input type KC accepts for that target | `int8`/`int16`/`int32`/`float32`, `bytes`, the whole-value form, any pair that differs in the conformance table |
-| `ReplaceField` | `field.exclude`, then `field.rename` | structured side; `exclude` and `renames` only; a rename of an excluded field is dropped at translate time, as KC drops it | `include` (fix: v0.23, decision 7), `replace.null.with.default` other than the default |
-| `InsertField` | typed `field.set`, one per field | `static.field`/`static.value` (string, as in KC); `topic.field` from T; `partition.field`, `offset.field`, `timestamp.field` on sink chains only, from the Kafka source metadata, with `type` set to KC's type; `!`/`?` suffixes stripped | partition/offset/timestamp on source chains (KC gives null or connector-specific values there) |
-| `ExtractField` | `field.set` with `from: <side>.<f>` into the side | top-level `field`, or a `field.syntax.version=V2` dotted path; runtime: the extracted value must be representable on that side (structured, string or bytes), otherwise the record fails with a coded error | nested path under V1 |
-| `HoistField` | `field.hoist` (new, B2) | structured or nil side | - |
-| `ValueToKey` | `field.exclude .Key`, then one `field.set` with `from` per field | structured value; the old key replaced as a whole, as in KC | unstructured value |
-| `TimestampConverter` | `field.convert` (`time`, new `format`/`unit` params, B4) | `target.type` `Timestamp`, `unix` or `string`; `format` uses only the pattern letters B4 maps to a Go layout (`yyyy MM dd HH mm ss SSS XXX`, quoted literals), parsed and rendered in UTC as KC does; `unix.precision` any | `Date`/`Time` targets, other pattern letters, locale-dependent patterns |
-| `Flatten` | `flatten` (B2) | structured or nil side; `delimiter` any | unstructured side |
-| `ExtractNewRecordState` | native CDC source: no processor, or `field.set` steps for options; sink chain: `unwrap.debezium` | defaults; `add.fields` and `add.headers` for `op`, `table`, `schema`/`db`, `source.ts_ms` and `lsn` (headers only with header capability); `add.fields.prefix`; `delete.handling.mode`/`delete.tombstone.handling.mode` values whose per-operation output B5 tabulates and pins with goldens; on a sink chain, only for destinations whose write of the unwrapped record B5 shows equal | other options; Debezium output mode |
-| `ExtractChangedRecordState` | new processor (B6) writing metadata | header capability on the target; the update carries a full before-image; header value bytes equal KC's `SimpleHeaderConverter` rendering of the name list | no header capability; source without full before-images |
-| `TimezoneConverter` | new processor (B7) | narrow form: `converted.timezone` is an IANA name or a fixed offset; only columns Debezium types as `ZonedTimestamp`/`ZonedTime` (`timestamptz`/`timetz`), which Conduit holds as `time.Time`; the instant is unchanged; `include.list`/`exclude.list` only in `<table>:<column>` form | any other temporal type, other list forms |
-| `EventRouter` (stretch) | `filter` (non-create ops), `field.set` with `from` for key and value, T rewritten from `aggregatetype` | default column names or explicit `table.field.*`, no `expand.json.payload`, no additional placement to headers without header capability | everything else; the whole class refused if B8 does not land |
-| `PartitionRouting` | none | - | always in v0.22: `kc.target_capability_missing`, "the Kafka destination partitions by key only; explicit partition writing is v0.23 (per-partition ordering, invariant 4)" |
-| `DropHeaders`, `InsertHeader`, `HeaderFrom` | none | - | always in v0.22: `kc.smt_unsupported`, blocking, "header transforms are mapped in v0.23" (decision 10) |
-| Others (`MaskField`, `TimestampRouter`, `SetSchemaMetadata`, `HeaderToValue`, `ContentBasedRouter`, `ByLogicalTableRouter`, Debezium `Filter`, custom) | none | - | `kc.smt_unsupported`; fix names v0.23 or "write a processor" |
+| debezium-postgres (source, schema mode) | any; JsonConverter schemaless is the oracle target | `Filter` + `TopicNameMatches`, `RecordIsTombstone`; `RegexRouter` (single schema, below); `ReplaceField` exclude/rename, `InsertField` static/topic, `ValueToKey`, `HoistField`, `Flatten`, `ExtractNewRecordState`, `ExtractField after` | `HasHeaderKey` (Debezium headers are v0.23); everything else (v0.23) |
+| s3-sink (sink) | `ByteArrayConverter` | `Filter` + `TopicNameMatches`, `HasHeaderKey`; `RegexRouter` if the S3 destination names objects from `opencdc.collection` (checked in B3); `HoistField` on bytes | `RecordIsTombstone` unless B3 shows that the Kafka source distinguishes a null value from an empty one; every SMT that needs a map or struct (KC fails it on bytes) |
+| s3-sink | any other | none (the converter is blocking) | all |
+| mirror-source (source of records from Kafka) | `ByteArrayConverter` | `Filter` + `TopicNameMatches`; `HoistField` on bytes | `HasHeaderKey` (mirror mode omits headers that are not UTF-8); `RegexRouter` (MirrorMaker topic naming is a finisher; combining the two is v0.23) |
+| Unknown or no-pipeline classes | any | none: placeholder outcome | all |
 
-**RE2-safe Java regex subset.** The pattern is parsed with `regexp/syntax`. It is accepted only if every
-node belongs to a list of constructs whose Java and RE2 meanings are the same: literals, `.`, classes
-without POSIX bracket names, `\d \w \s` with their ASCII meaning, the anchors `^ $ \b`, greedy and lazy
-quantifiers, and capturing and non-capturing groups. Flags other than `(?i)` are refused. Lookaround,
-backreferences, possessive and atomic forms, `\h`, `\Z`, `\p{...}` and `[[:alpha:]]` are refused; the last
-one means different things in Java and RE2. Being accepted by RE2 is not enough on its own.
+`debezium-mysql` has no class file on `main`, so its corpus cases stay pending whatever the SMT work does.
 
-### Typed `field.set`
+### Mapping and exactness (v0.22)
 
-`field.set` gains two optional parameters. With neither set, nothing changes.
+| SMT | Emits | Exact when | Refused otherwise |
+| --- | --- | --- | --- |
+| `Filter` | `filter` + `condition` | predicate translatable or absent (no predicate drops everything in both) | - |
+| `TopicNameMatches` | condition: anchored match on T (below) | `pattern` is in the RE2-safe ASCII subset and T is known | Java construct named; topic unknown |
+| `HasHeaderKey` | condition testing key `kafka.header.N` in `.Metadata` with a `range` and a flag variable (`index` cannot tell an empty value from a missing key; sprig `hasKey` does not take `opencdc.Metadata`) | sink chain from the Kafka source in non-mirror mode | source chains; mirror mode |
+| `RecordIsTombstone` | depends on position | source chain before the unwrap: constant false, evaluated at translate time (no processor). Native CDC emits no tombstones, so the records KC's predicate matches do not exist in Conduit; the output-shape note covers that; after an unwrap in `tombstone` mode: condition `.Operation` is `delete`; after `drop` mode: constant false | sink chains unless verified (above); other delete modes |
+| `RegexRouter` | rewrites T (below) | `regex` and `replacement` translate (below), and no later processor writes what T or the predicate reads | construct named; topic unknown; later write |
+| `ReplaceField` | `field.exclude`, then `field.rename`, on After and Before | structured side after the unwrap; `exclude` and `renames`; `replace.null.with.default=false` on Debezium sources; no rename target is also a rename source (KC renames simultaneously from the original names, Conduit renames in sequence) | `include` (v0.23); swap or chain renames; envelope position; default replacement on |
+| `InsertField` | typed `field.set` (`type: string`), on After and Before | `static.field`/`static.value`; `topic.field` from T; `!`/`?` suffixes stripped; `replace.null.with.default=false` | `partition.field`, `offset.field` (Kafka source emits them only in mirror mode, which changes what destinations write), `timestamp.field` (v0.23), default replacement on |
+| `ExtractField` | none for `field=after` before the unwrap | KC's result equals the already-flat native CDC record | every other field: on debezium-postgres every column is a scalar, and a scalar cannot become an OpenCDC side without changing its bytes; on sink chains the value is bytes |
+| `HoistField` | `field.hoist`, on After and Before (or on `.Key`) | structured, nil or raw side; on Debezium sources, only if the oracle shows that no default is substituted | as above |
+| `ValueToKey` | `error` on a nil value, `field.exclude .Key`, then `field.set` with `from` per field | structured value after the unwrap; `replace.null.with.default=false` on Debezium sources; B5 confirms that `field.exclude` accepts `.Key` (otherwise it drops out of the cut) | envelope position; default replacement on |
+| `Flatten` | `flatten`, on After and Before (or `.Key`) | structured or nil side after the unwrap; `delimiter` any; the oracle diffs clean on the jsonb and array fixtures (Debezium emits jsonb as a string, so if the Conduit source emits a map, Flatten is refused on debezium-postgres) | envelope position; any fixture that differs |
+| `ExtractNewRecordState` | none (`tombstone`, the default); `filter` on `.Operation` delete (`drop`) | native CDC source; no other options set | `add.fields`, `add.headers`, `rewrite*` modes and other options (v0.23); a predicate on it (it emits no processor, so it cannot be made conditional); sink chains (`unwrap.debezium` needs the `payload` wrapper of `schemas.enable=true`, which decision 8 refuses, and its `json.Unmarshal` loses int64 precision); Debezium output mode |
+| `Cast`, `TimestampConverter`, `TimezoneConverter` | none | - | v0.23 (decision 11) |
+| `ExtractChangedRecordState`, `EventRouter`, `DropHeaders`, `InsertHeader`, `HeaderFrom` | none | - | v0.23 (decisions 10, 14, 15) |
+| `PartitionRouting` | none | - | `kc.target_capability_missing`: "the Kafka destination partitions by key only; explicit partition writing is v0.23 (per-partition ordering, invariant 4)" |
+| Others (`MaskField`, `TimestampRouter`, `SetSchemaMetadata`, `HeaderToValue`, `ContentBasedRouter`, `ByLogicalTableRouter`, Debezium `Filter`, custom) | none | - | `kc.smt_unsupported`; fix names v0.23, or "write a processor" |
 
-- `from`: a field reference such as `.Payload.After.id`. The referenced value is deep-copied, with its type
-  kept, into `field`. `from` and `value` are mutually exclusive. `Configure` fails with
-  `field.set.value_and_from` if both are set, and with `field.set.value_required` if neither is. `from` is
-  a reference, never a template: it is parsed with the reference resolver at configure time.
-- `type`: `string` (default), `int`, `float`, `bool` or `time`. It converts the rendered template output
-  using `field.convert`'s conversion code, so the two processors share their semantics. `type` together
-  with `from` is a configure error.
+Every refusal on a side that carries a schema in KC (decision 8) or in Debezium output mode (decision 5)
+comes before any of the rows above.
 
-We chose a separate `from` parameter over `type: reference`. In every other mode, `value` is a template.
-With `type: reference`, the same string would sometimes be a template and sometimes a path, depending on
-another parameter, and a YAML reader could not tell which without reading both. `type` would also mix "what
-to convert to" with "where the value comes from". With `from`, the YAML says what it does, a template in
-`from` is rejected at configure time, and `type` stays a closed list of target types. The cost is that
-`value` loses its `required` tag and "exactly one of `value` and `from`" moves into `Configure`, covered
-by a test.
+### Topic expression
 
-**Byte-identical default.** B1 adds a test that keeps a frozen copy of the current `Process` as a
-reference. Over generated records (raw, structured, nil sides, templates that error), it asserts that the
-new processor with only `field` and `value` set returns identical records and identical errors, including
-the `tplerr.Exec` wrapping. The test that the WIP's auto-detect would have failed is part of it: `value:
-".Payload.After.id"` still sets that literal string. The processor version moves to v0.2.0.
+The topic is a Go-template pipeline expression, T, carried through the chain. It is never written into
+records.
 
-### `flatten`
+- **Initial T.**
+  - debezium-postgres: `<topic.prefix>.<schema>.<collection>`, but only when every captured table is in one
+    schema named by `table.include.list` or `schema.include.list`, and `topic.delimiter` is the default. B3
+    pins that the Postgres source's `opencdc.collection` is the bare relation name. Otherwise T is unknown.
+  - Sink chains: `(index .Metadata "opencdc.collection")`.
+- **RegexRouter** (fixes the replace-all anchoring):
 
-The WIP processor, with these changes:
+  ```text
+  {{ if regexMatch `^(?:P)$` T }}{{ regexReplaceAll `^(?:P)` T `R` }}{{ else }}{{ T }}{{ end }}
+  ```
 
-- **Collisions refuse and never overwrite.** If two input paths flatten to the same key (`{"a.b": 1, "a":
-  {"b": 2}}` with `.`), the record fails with `flatten.key_collision`. The error names both source paths
-  and the key, never the values. KC overwrites silently in schemaless mode and throws in schema mode;
-  refusing matches the throw, and the difference is in the report's reason for every `Flatten`
-  translation. The check does not depend on iteration order, so the output is deterministic.
-- **Nil passes through.** A nil side is returned unchanged with no error, matching KC's handling of null
-  values. Raw data still fails with `flatten.not_structured`.
-- **Schema metadata is dropped** for the side it flattens (see below).
-- Registered in the built-in registry, with a doc page and examples.
-- Arrays stay as they are. An empty nested map produces no key, as in KC.
+  - KC runs `matches()`, then `replaceFirst`, which finds from index 0 with leftmost-first preference. So a
+    proper prefix can be replaced: `a|ab` on `ab` gives `Xb`. The pattern anchored only at the start
+    reproduces that in RE2, which also prefers the leftmost-first match.
+  - A predicate on a RegexRouter becomes `{{ if PRED }}…{{ else }}T{{ end }}`.
+  - T is evaluated against the final record, so the pass refuses a RegexRouter, or a predicate, when a
+    later processor in the chain writes any path, field or metadata key that it reads. A processor whose
+    writes are a whole side conflicts with any read of that side.
+- **At the end of the chain**, T is written to the plugin's topic or naming setting from the capability
+  table. On debezium-postgres that is the Kafka destination's `topic`. `topic.prefix` stays blocking on its
+  own entry, for the output-mode reason.
 
-### `field.hoist`
+**Regex translation.**
 
-A small processor with two parameters: `field` (`.Key` or `.Payload.After`, default `.Payload.After`) and
-`name`. It replaces the side with a structured value `{<name>: <old side>}`, deep-copied, and it is the
-equivalent of `HoistField$Key`/`$Value` (decision 6). How it treats a nil side (wrap or pass through)
-follows the captured KC 4.2 output and is pinned by a test. Raw data is wrapped as bytes, as KC wraps a
-byte array. It drops the side's schema metadata (below). It lands in B2 with `flatten`.
+- The pattern is parsed with `regexp/syntax`, and every node must be on an allow-list of constructs with the
+  same meaning in Java and RE2:
+  - literals and `.`;
+  - classes without POSIX bracket names;
+  - `\d \w \s` with their ASCII meaning;
+  - the anchors `^ $ \b`;
+  - greedy and lazy quantifiers;
+  - capturing and non-capturing groups.
+- Pattern literals must be ASCII. RE2's `(?i)` folds Unicode, so a Kelvin sign would match `k`, while Java
+  folds ASCII only by default. `(?i)` is the only flag allowed.
+- Refused: lookaround, backreferences, possessive and atomic forms, `\h`, `\Z`, `\p{…}`, `[[:alpha:]]`.
+- Replacement translation, following Java's rules:
+  - `$n` takes the longest digit run that is still a valid group number, and becomes `${n}`;
+  - `${name}` stays a named group;
+  - `\x` becomes the literal `x`;
+  - a literal `$` becomes `$$`.
+- Patterns and replacements are written as backtick raw strings inside templates, because `"\d"` is a
+  template parse error. One that contains a backtick is refused.
+
+**Quoting.** Field references whose names contain `.` or other special characters use bracket form
+(`.Payload.After["a.b"]`). Static values are written as quoted Go template string literals.
 
 ### Schema metadata after reshaping
 
-A processor in this pack that changes a side's shape removes that side's `opencdc.<side>.schema.subject`
-and `opencdc.<side>.schema.version`: `flatten`, `field.set` with `from` or a non-string `type` on a path
-under `.Key` or `.Payload`, and `field.hoist`. The encode middleware then leaves the data structured. It
-does not register a lossy extracted schema as a new version of the source's subject. We chose dropping over
-updating. Updating means deriving a type-preserving schema from the input schema and registering it under
-a new subject, which is v0.23 work.
+When a chain reshapes a side that carries `opencdc.<side>.schema.subject`/`.version`, a `field.exclude` of
+those two keys goes **before the first reshaping processor** of the chain. Placed after, it would come too
+late: each built-in processor's encode middleware would already have registered a widened schema as a new
+version of the source subject and encoded the data with it.
 
-Existing processors (`field.exclude`, `field.rename`, `field.convert`) keep their current behaviour,
-because changing it would be a silent change for hand-written pipelines. When the translator emits one of
-them to reshape a side that carries schema metadata, it appends a `field.exclude` of those two keys. This
-is visible in the YAML and exact.
+The new processors (`flatten`, `field.hoist`, and `field.set` with `from` or a non-string `type` under
+`.Key`/`.Payload`) also drop the two keys themselves, so hand-written pipelines are safe. A test asserts that
+the schema registry holds no new version after the chain runs.
 
-When the KC converter for the reshaped side carries a schema (Avro, Protobuf, JSON Schema, or
-`JsonConverter` with `schemas.enable=true`), KC derives a type-preserving schema for the new shape. Conduit
-cannot reproduce that in v0.22, so every reshaping SMT on such a side is refused (decision 8). The reason
-reads: "a schema-carrying converter needs a type-preserving schema for the reshaped data; Conduit would
-register a schema with widened types, so this is refused until v0.23". Non-reshaping SMTs (`Filter`, the
+Decision 8 refuses reshaping SMTs on sides whose KC converter carries a schema, with the reason "a
+schema-carrying converter needs a type-preserving schema for the reshaped data; Conduit would register one
+with widened types, so this is refused until v0.23". The SMTs that do not reshape (`Filter`, the
 predicates, `RegexRouter`) are unaffected.
 
-### Nil keys and payloads (#3147)
+### Processor requirements (B1, B2)
 
-KC passes a null key or value through most SMTs unchanged: `Cast`, `ReplaceField`, `InsertField`,
-`Flatten`, `ExtractField`, `ValueToKey` and `TimestampConverter`. Conduit's reference resolver turns a nil
-side into `StructuredData{}` (#3147). A delete has a nil `.Payload.After`, and a tombstone has a nil key or
-value, so after such a processor the record would carry `{}`.
+**`field.set` (B1).**
 
-- The translator adds a nil guard to the `condition` of every processor it emits for such an SMT. The guard
-  is ANDed with any predicate, so a nil side skips the processor. The guard's exact template is fixed in B3,
-  and a test covers a nil interface, `RawData(nil)` and empty `StructuredData`. Only a nil interface
-  counts as nil, so an empty struct is still processed, as in KC.
-- For each SMT, the captured oracle output (Tests) records how KC treats a null side. An SMT that acts on
-  null gets no guard. `HoistField` may be one of them, and the captured output decides.
-- `flatten` passes a nil side through itself. `field.hoist` handles nil the way the captured output shows.
-  Both have tests for it. The SDK fix for #3147 is tracked there. When it lands, the guards become redundant but stay correct.
+- New `from` parameter: a field reference whose value is deep-copied into `field`, type kept.
+  - `from` and `value` are mutually exclusive. Configure-time errors: `field.set.value_and_from` when both
+    are set, `field.set.value_required` when neither is, and an error for a template in `from`.
+  - We chose `from` over `type: reference`, because then the meaning of `value` would depend on another
+    parameter.
+- `from` at run time:
+  - a nil value sets the target to nil; if the target is a side, the side becomes nil, never `{}`;
+  - a missing path fails with `field.set.from_missing`;
+  - a value going into a side (`.Key`, `.Payload.*`) must be `StructuredData` or nil; anything else fails
+    with `field.set.side_not_structured`.
+- `type` (`string` default, `int`, `float`, `bool`, `time`) converts the template output using
+  `field.convert`'s code. Setting `type` together with `from` is a configure error.
+- When the value written under `.Key`/`.Payload` comes from `from` or a non-string `type`, the processor
+  drops that side's schema keys.
+- The default is byte-identical to today, `tplerr.Exec` wrapping included. This is checked against a frozen
+  copy of today's `Process` over generated records, and `value: ".Payload.After.id"` still sets that
+  literal string. The version moves to v0.2.0.
+
+**`flatten` (B2).**
+
+- `field` is `.Key`, `.Payload.Before` or `.Payload.After`; `delimiter` defaults to `.`.
+- A nil side passes through. Raw data fails with `flatten.not_structured`.
+- Null leaves are kept as nil, and a nil nested value `a: nil` is kept as `a: nil`, as in KC's schemaless
+  mode. In schema mode KC expands a null nested struct into per-field nulls, which Conduit cannot do without
+  a schema. Postgres rows have no nested structs, so this does not arise on debezium-postgres, and the
+  oracle fixture records it.
+- An empty nested map produces no key. Arrays are unchanged. `time.Time` and other leaves are unchanged.
+  KC's schemaless mode throws on non-Connect Java types; that is recorded as an oracle fixture.
+- A collision (two paths flattening to one key) fails with `flatten.key_collision`, naming both source paths
+  and never the values. This does not depend on map iteration order.
+- Drops the side's schema keys. Registered as a built-in, with a doc page and examples.
+
+**`field.hoist` (B2).** Parameters: `field` (`.Key`, `.Payload.Before` or `.Payload.After`) and `name`. It
+replaces the side with `{<name>: <old side>}`:
+
+- a structured side is deep-copied;
+- raw data becomes `[]byte`;
+- nil becomes `{<name>: nil}`, as KC wraps a null.
+
+It drops the side's schema keys.
 
 ## Alternatives considered
 
-**Run the SMTs themselves in a JVM (the v0.23 connector JAR host).** This would give exact behaviour for
-every SMT, custom classes included. It lost because it brings a JVM into a v0.22 migration path for
-configurations that existing processors already express exactly. It also leaves no Conduit-native pipeline
-to own afterwards. It stays the answer for custom SMTs in v0.23.
+**Run the SMTs in a JVM (the v0.23 connector JAR host).** This would be exact for every SMT, custom classes
+included. It lost because it puts a JVM into a v0.22 migration path and leaves no Conduit-native pipeline to
+own afterwards. It remains the answer for custom SMTs.
 
-**Approximate, then let the user accept the difference.** Translate every SMT as closely as possible, mark
-it `approximated`, and let `--accept-gaps` or review cover the difference. It lost because an approximated
-transform reshapes data differently, which is invariant 6. A reviewer reading "approximated" cannot see
-which records come out different. The base design already ruled this out for SMTs.
+**Approximate, and let the user accept the difference.** It lost because an approximated transform reshapes
+data differently (invariant 6), and "approximated" does not tell a reviewer which records change.
 
-**Auto-detect copy mode in `field.set` (the WIP).** Zero new parameters, but it silently changes existing
-pipelines whose value is a literal starting with `.`. Rejected by decision 2.
+**Auto-detect copy mode in `field.set` (the WIP).** It lost because it silently changes existing pipelines.
 
-**`type: reference` instead of `from`.** One parameter fewer, but the meaning of `value` would depend on
-another parameter. See _Typed `field.set`_.
+**`type: reference` instead of `from`.** It lost because the meaning of `value` would then depend on another
+parameter.
 
-**Emit the exact links of a chain that contains a refused link.** This is more useful with
-`--accept-gaps`, but the links after the refused one would see different data than in KC. Rejected for
-all-or-nothing.
+**Emit the exact links of a partly refused chain.** It lost because later links would see different data
+than in KC.
 
-**Write the topic into `opencdc.collection` with `field.set` at each `RegexRouter`.** This would be simple,
-but it mutates every record, changes what destinations that read the collection see, and does not cover
-`TopicNameMatches` before the router. Threading the expression through the chain costs nothing at run time.
+**Write the topic into `opencdc.collection` at each RegexRouter.** It lost because it mutates every record,
+changes what destinations see, and does not cover a `TopicNameMatches` that comes before the router.
+
+**Ship Cast, TimestampConverter and TimezoneConverter with a conformance table keyed by target type.** It
+lost because the same column reaches KC and Conduit as different types: `numeric` as `*big.Rat` against
+`Decimal`, and `timestamp` as `time.Time` against a `MicroTimestamp` INT64. Column types are not known
+offline either.
+
+**Clear `.Payload.Before` on chains that reshape the value.** This is closer to KC's value after the unwrap.
+It lost to decision 12, which keeps the before-image consistent for CDC consumers.
 
 ## Failure modes
 
 | Failure | Effect | Prevention or detection |
 | --- | --- | --- |
-| A translator claims exactness for a config that is not exact | Pipeline runs and writes different data | Conservative per-SMT subsets; oracle goldens from real KC per SMT (Tests); all-or-nothing chains; Tier 2 review reads the exactness column against KC source |
-| Java regex construct means something else in RE2 | Different topic, or wrong predicate | Allow-list over `regexp/syntax` nodes, not "compiles"; fuzz test on the classifier |
-| Topic expression diverges from KC's topic at that chain position | Wrong routing | Expression only from connector topic rules already covered by goldens; refused when unknown or overwritten later in the chain |
-| `flatten` key collision | Without the rule, silent overwrite, order-dependent | `flatten.key_collision`; record to DLQ or halt per `errors.tolerance`, never dropped (invariant 3) |
-| Nil side becomes `{}` (#3147) | Delete or tombstone turned into an upsert of an empty row | Nil guard on emitted conditions; nil passthrough in new processors; property tests over nil sides |
-| Stale or lossy schema after reshaping | New subject version with widened types; consumers break | New processors drop schema metadata; translator appends an exclude for existing ones; schema-carrying converters refuse reshaping SMTs |
-| Runtime value outside the exact subset (e.g. `ExtractField` yields an int into `.Payload.After`) | Without a check, a coerced or mangled record | Coded processor error; never coerced (invariant 6) |
-| `field.set` default changes | Existing pipelines change output | Frozen-reference byte-identical test (B1) |
-| Connector bump changes header or partition behaviour | Header SMTs translate against a capability that no longer holds | Capability data checked against the pinned connector's spec in a test |
-| KC adds an SMT option | Option ignored | Unclaimed sub-key is `kc.key_unknown`, blocking |
-| Missing tz database (`TimezoneConverter`) | Configure fails on minimal images | Embed `time/tzdata` in the processor; unknown zone is a configure-time coded error |
-| Nondeterministic output (map order, IDs) | Flaky goldens; diffs between runs and between CLI and MCP | Ordered alias lists, deterministic IDs; determinism property test |
+| A translator claims exactness for a config that is not exact | Different data downstream | Narrow cut line; every SMT gated on a clean oracle diff; all-or-nothing chains; review against KC source |
+| Null or missing field handled differently | `"<nil>"` strings, invented `new: nil`, lost nulls | Per-SMT null/missing table; side and field guards; `error` where KC throws; property tests over null and missing fields |
+| Schema default substituted by KC, not by Conduit | A null where KC wrote a default | `replace.null.with.default=false` required on Debezium sources; oracle fixture with a defaulted nullable column |
+| Java and RE2 regexes differ | Wrong topic or predicate | Allow-list over syntax nodes, ASCII literals, start-only anchoring, Java replacement translation; fuzz and oracle seeds (`a\|ab`, lazy quantifiers) |
+| T diverges from KC's topic | Wrong routing | T defined only where pinned; refused when unknown or when a later processor writes something it reads |
+| Delete handled differently from KC's tombstone after the unwrap | Records KC dropped are written | `RecordIsTombstone` depends on chain position and delete mode |
+| Before-image left untransformed | Excluded column survives in `.Payload.Before` | Every value-side processor also emitted on Before |
+| `flatten` key collision | Silent overwrite (without the rule) | `flatten.key_collision`, to the DLQ or halting (invariant 3) |
+| Nil side becomes `{}` (#3147) | A delete or tombstone becomes an empty upsert | Nil guards; nil handling in the new processors |
+| Lossy schema registered under the source subject | Widened types, a polluted subject | Schema-key exclude before the first reshaping processor; registry test; decision 8 |
+| `field.set` default changes | Existing pipelines change | Byte-identical test against a frozen reference |
+| Connector bump changes header or partition behaviour | Translations made against stale capabilities | Capability table checked against the pinned specs |
+| KC adds an SMT option | Option ignored | `kc.key_unknown`, blocking |
+| Nondeterministic output | Flaky goldens; CLI and MCP outputs differ | Ordered aliases, deterministic IDs; property test |
+| Oracle image disappears (as Debezium 3.7.0 did on quay) | B11 cannot recapture | Pin the image by digest and mirror it; committed outputs keep PR CI green |
 
 ## Tests
 
-- **Corpus.** A new `smt` family in `tests/migrate/corpus` holds one case per SMT in the exact subset, one
-  per refusal reason, chains that mix both, and the Debezium-output-mode and schema-carrying-converter
-  refusals. Each case commits its pipeline YAML and report goldens. The existing `dbz-mysql-regexrouter`
-  case turns from pending to ready. Following the harness rule, the family turns required when
-  `rules/data/smt.yaml` lands (B3).
-- **KC oracle goldens.** For each translated SMT, fixture records (structured, nested, nil key, nil value,
-  edge values) are run through Apache Kafka Connect 4.2's own transform classes. A small JVM capture
-  program under `tests/migrate/smt-oracle` does this. It runs manually or nightly, and its outputs are
-  committed with provenance (decision 9). Each translator's corpus case runs the emitted processors over
-  the same fixtures and diffs the result against the captured output. A translator PR cannot merge without
-  its captured output. PR CI runs only the Go side, so it needs no JVM.
+- **Corpus.**
+  - SMT cases go in the existing `debezium-postgres` and `s3-sink` families. Those class files exist, so
+    readiness needs no harness change. Each case commits its pipeline YAML and report goldens and lands
+    with its translator PR.
+  - The cases cover: each translated SMT, each refusal reason, mixed chains, Debezium output mode, the
+    schema-carrying converters, `replace.null.with.default` left unset, and predicated non-emitting SMTs.
+- **KC oracle (B11).**
+  - `tests/migrate/smt-oracle` runs Debezium Postgres (the corpus's pinned version, image mirrored) and
+    Kafka Connect 4.2 with the case's SMT chain and a schemaless JsonConverter, against a fixture database.
+  - It captures key, value, topic and headers per record, and the outputs are committed with provenance.
+  - The Conduit side runs the Postgres source and the emitted processors over the same database. A Go diff
+    helper compares the transformed key, value, topic and headers after a fixed set of normalizations.
+    Those normalizations cover representation differences from the source connector, not from the SMT, and
+    each one has its own test.
+  - "Diff clean" means no difference after normalization. An SMT whose case does not diff clean is not in
+    v0.22.
+  - Fixtures:
+    - nullable columns, with and without a default;
+    - TOAST-unchanged columns;
+    - jsonb and array columns;
+    - deletes and tombstones;
+    - names containing `.`;
+    - a Kelvin sign;
+    - `a|ab` and lazy-quantifier regexes;
+    - rename swaps;
+    - an existing field named like an InsertField target.
+  - PR CI runs only the Go side, with no JVM.
 - **Property tests** (`rapid`, already used by `field.exclude`'s property test):
-  - Completeness, extended to `transforms`/`predicates` keys.
-  - Determinism under permuted input key order and renamed aliases.
-  - All-or-nothing: a refused link means no processors for that chain.
-  - `flatten`: either every leaf appears exactly once in the output, or the record fails with a collision,
-    and a nil side passes through.
-  - `field.set` with `from` never aliases its source.
-  - The `field.set` default is byte-identical.
-- **Fuzz** targets on the Java regex classifier and the `SimpleDateFormat`-to-Go-layout translator. Both
-  run their seed corpora in the `test` job.
-- **Processor unit tests** over raw, structured, nil and error records, per the processor workflow in
-  CLAUDE.md, with `Example*` functions for the doc pages.
+  - completeness, including `transforms` and `predicates` keys;
+  - determinism under permuted input key order, identical modulo processor IDs when aliases are renamed;
+  - all-or-nothing chains;
+  - per translator, null and missing fields on each side;
+  - `flatten`: every leaf appears exactly once, or the record fails with a collision;
+  - `field.set from` never aliases its source;
+  - the byte-identical `field.set` default.
+- **Fuzz** targets on the regex classifier and the replacement translator. Their seed corpora run in `test`.
+- **Processor unit tests** over raw, structured, nil and error records, with `Example*` functions.
 
 ## Docs
 
-The docs land in the same PRs as the code, collected in B10 for the cross-cutting pages:
+Each PR updates its own docs. B10 covers the cross-cutting pages:
 
-- `docs/catalog-inventory.md`: move the SMT parity rows to their v0.22 status.
-- The Kafka Connect migration guide in the `conduit.io` docs source: an SMT section with the exactness table
-  and the refusal reasons.
-- `llms.txt`: the new processors and parameters, and the SMT mapping.
-- Processor doc pages for `flatten`, `field.hoist` and the B6 to B8 processors, plus the new `field.set`
-  and `field.convert` parameters.
-- Changelog entries.
+- `docs/catalog-inventory.md` (SMT parity rows);
+- the Kafka Connect migration guide in the `conduit.io` docs source (an SMT section with the reachability
+  matrix, the exactness table and the refusal reasons);
+- `llms.txt`;
+- processor pages for `flatten`, `field.hoist` and the new `field.set` parameters;
+- changelog entries.
 
 ## Upgrade, rollback and compatibility
 
-- Existing pipelines are unaffected. `field.set` and `field.convert` defaults are unchanged and pinned by
-  tests, and all new behaviour is opt-in.
-- migrate output changes only for inputs with transforms. Those inputs went from blocking to translated or
-  refused-with-reason, and goldens are updated in the same PRs. The report schema is unchanged.
-- Rollback: a pipeline generated by v0.22 that uses `flatten`, `field.hoist`, `from` or `type` does not
-  validate on v0.21 (unknown processor or parameter), so it fails at start. It never runs differently.
-  Rolling back means regenerating with the older migrate, which blocks the transforms again.
+- **Existing pipelines are unaffected.** Every new behaviour is opt-in, and the `field.set` default is
+  pinned.
+- **migrate output changes** only for inputs with transforms, and goldens move in the same PRs. The report
+  schema is unchanged.
+- **Rollback.** A pipeline that uses `flatten`, `field.hoist`, `from` or `type` fails validation on v0.21:
+  `conduit-commons` rejects unknown processors and parameters, so it fails at start and never runs
+  differently. Rolling back means regenerating with the older migrate.
 
 ## Observability
 
-- The report is the primary signal. `transforms` lists every alias with its status and first processor, and
-  every SMT key has an entry whose `configPath` points at the processor it became.
-- The emitted processors use the standard processor metrics. Runtime refusals (`flatten.key_collision`,
-  `flatten.not_structured`, the `field.set` type errors) are coded errors on the record. They reach the
-  DLQ or halt the pipeline per `errors.tolerance`, and they carry the field path, never the value.
-- `conduit migrate` runs offline, so there are no new metrics.
+- **The report is the primary signal.** The `transforms` index lists every alias with its status, and each
+  key's `configPath` points at its processor.
+- **Runtime refusals are coded errors on the record**, routed to the DLQ or halting per `errors.tolerance`.
+  The codes are `flatten.key_collision`, `flatten.not_structured`, `field.set.from_missing`,
+  `field.set.side_not_structured`, and `error`-processor records whose messages name the SMT alias and the
+  field path. None of them carries a value.
+- **Metrics.** The emitted processors use the standard processor metrics. migrate runs offline and adds
+  none.
 
-## PR breakdown
+## PR breakdown and cut line
 
-| PR | Content | Depends on | Tier |
-| --- | --- | --- | --- |
-| B1 | Typed `field.set`: `from`, `type`, configure errors, byte-identical default test, schema-metadata drop, v0.2.0 | - | 2 |
-| B2 | `flatten`: collision error, nil passthrough, schema drop, registration, doc page. `field.hoist`: wraps a structured or nil side under one field name, schema drop, doc page | - | 2 |
-| B3 | Chain translator: `smt-chain` kind and finisher, `processors` in the pipeline model, grouping and edge cases, predicates and `negate`, topic expression, `rules/data/smt.yaml` with capability data, all-or-nothing, `report.Transform`, MCP parity, the `Filter`/predicate translators, the `PartitionRouting` refusal, the `smt` corpus family | - | 2 |
-| B4 | Translators over existing processors: `RegexRouter` (regex classifier), `Cast` (conformance table), `ReplaceField` (`include` refused), `TimestampConverter` (`field.convert` `format`/`unit`), `Flatten` | B2, B3, B11 | 2 |
-| B5 | `field.set`-based translators: `InsertField`, `ExtractField`, `ValueToKey`, `ExtractNewRecordState` options, `HoistField` | B1, B2, B3, B11 | 2 |
-| B6 | `ExtractChangedRecordState`: processor and translator | B3, B11 | 2 |
-| B7 | `TimezoneConverter`, narrow form: processor and translator | B3, B11 | 2 |
-| B8 | `EventRouter` (stretch) | B1, B3, B11 | 2 |
-| B9 | `PartitionRouting`: Kafka destination explicit partition and translator. **v0.23**, with its own design doc | v0.23 | 1 |
-| B10 | Cross-cutting docs: catalog inventory, KC migration guide, `llms.txt`, changelog | B4-B7 | 3 |
-| B11 | KC oracle: `tests/migrate/smt-oracle` capture program (Kafka Connect 4.2 transform classes over the fixture records), manual and nightly workflow, first captured outputs for the B4 SMTs, and the Go diff helper the corpus cases use | - | 3 |
+v0.22 cuts on 2026-11-20.
 
-The critical path is B3 and B11 in parallel, then B4 and B5 in parallel. B11 needs no translator code and
-starts on day one. It must land before the first translator PR (B4) merges, so it is on the critical path
-only if it takes longer than B3. Each later translator PR adds its own captured outputs to B11's program.
-B1 and B2 run alongside B3.
+| PR | Content | Depends on | Tier | Release |
+| --- | --- | --- | --- | --- |
+| B1 | `field.set`: `from`, `type`, the runtime rules above, schema-key drop, byte-identical test, v0.2.0 | - | 2 | v0.22 (required) |
+| B2 | `flatten` and `field.hoist` per the requirements above; registration; doc pages | - | 2 | v0.22 (required) |
+| B3 | SMT pass in `migrateConnector`; placeholder rule data and the `smt` kind; `processors` in the pipeline model; grouping and per-key outcomes; capability and sub-key tables in Go; T and the regex translator; predicates, nil, field and `error` guards; schema-key exclude placement; all-or-nothing; `report.Transform`; MCP parity; `Filter` and the predicates; the `PartitionRouting` and v0.23 refusals | - | 2 | v0.22 (required) |
+| B11 | KC oracle: capture program, pinned and mirrored images, manual and nightly workflow, the Go diff helper and normalizations, the first captured outputs | - | 3 | v0.22 (required) |
+| B4 | Translators over existing processors: `RegexRouter`, `ReplaceField` exclude/rename, `ExtractNewRecordState`, `ExtractField after` | B3, B11 | 2 | v0.22, per SMT, if its case diffs clean |
+| B5 | Translators over new processors: `InsertField` static/topic, `ValueToKey`, `HoistField`, `Flatten` | B1, B2, B3, B11 | 2 | v0.22, per SMT, if its case diffs clean |
+| B10 | Cross-cutting docs | B4, B5 | 3 | v0.22 |
+| B6 | `ExtractChangedRecordState` | header-writing destination | 2 | v0.23 |
+| B7 | `Cast`, `TimestampConverter`, `TimezoneConverter` with runtime type gates proven by the oracle | B11 | 2 | v0.23 |
+| B8 | `EventRouter` | B1, B3 | 2 | v0.23 |
+| B9 | `PartitionRouting`: explicit Kafka partition, with its own design doc | v0.23 | 1 | v0.23 |
+| B12 | `ReplaceField include`, `DropHeaders`/`InsertHeader`/`HeaderFrom`, `ExtractNewRecordState` options, type-preserving schema derivation | B3 | 2 | v0.23 |
+
+**Critical path.** B3 and B11 run in parallel, then B4 and B5 in parallel; B1 and B2 run alongside B3. B11
+needs no translator code and starts on day one. The minimum v0.22 is B1, B2, B3 and B11.
+
+Landing partially is safe. An SMT whose translator misses the date, or whose case does not diff clean,
+keeps its refusal with a v0.23 fix, so no report gets worse.
 
 ## Open questions
 
-None. The questions raised in the first draft were decided on 2026-11-10 (decisions 6 to 10).
+None. The decisions above (2026-11-10) close every question from the first draft and its review.
 
 ## Related
 
-- `docs/design-documents/20261012-migrate-kafka-connect.md` ("Single message transforms and
-  predicates"), which this extends.
+- `docs/design-documents/20261012-migrate-kafka-connect.md` ("Single message transforms and predicates"),
+  which this extends.
 - `docs/design-documents/20261014-migrate-kafka-connect-mapping-and-harness.md`: rule data, corpus,
-  pending rule, and MCP parity.
+  readiness and MCP parity.
 - `docs/catalog-inventory.md`, "Kafka Connect SMT parity".
 - ADR `20260704-no-bespoke-dsl`.
 - Issues #2960 (SMT pack), #3147 (nil side becomes `{}`), #3139 (processor property tests).
-- WIP commit 6887b977 on `wip/v022-smt-pack` (typed `field.set`, `flatten`; not for merge).
+- WIP commit 6887b977 on `wip/v022-smt-pack` (not for merge).
 - Roadmap: v0.22 "SMT compatibility pack".
