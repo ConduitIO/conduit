@@ -313,7 +313,7 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, 
 	}
 
 	logger = logger.WithComponent("plugin.standalone")
-	return NewDispenser(
+	d, err := NewDispenser(
 		logger.ZerologWithComponent(),
 		bp.Path,
 		r.envPolicy.ClientOption(os.Environ()), // first: the WithEnvVar options below append to its environment
@@ -323,6 +323,14 @@ func (r *Registry) NewDispenser(logger log.CtxLogger, fullName plugin.FullName, 
 		client.WithEnvVar(pconnector.EnvConduitConnectorLogLevel, cfg.LogLevel),
 		client.WithEnvVar(pconnector.EnvConduitConnectorMaxReceiveRecordSize, strconv.Itoa(r.maxReceiveRecordSize)),
 	)
+	if err != nil {
+		return nil, err
+	}
+	// The specification loaded from this binary at registration, resolved by
+	// the same lookup as bp.Path, so the engine reads the defaults of the
+	// plugin it will run (#3321).
+	d.spec, d.hasSpec = bp.Specification, true
+	return d, nil
 }
 
 func (r *Registry) List() map[plugin.FullName]pconnector.Specification {

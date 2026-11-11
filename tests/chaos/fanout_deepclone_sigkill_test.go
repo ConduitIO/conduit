@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -204,19 +205,17 @@ func runFanoutDeepCase(t *testing.T, archV2 bool) (noWindow bool) {
 	})
 	cp.sigkill(t)
 
-	// Whatever each destination wrote before the kill is already durable and
-	// is judged now, before the restart: a leak written then stays in the file.
-	// A kill can leave a half-written last line (never acknowledged, so it is
-	// redelivered); cut it so the restart appends after a whole line, which is
-	// what a destination whose write is atomic would have left.
+	// What each destination made durable before the kill is judged now,
+	// before the restart: a leak written then stays in the file. builtin:file
+	// records the length it last made durable in <path>.committed and its Open
+	// cuts the file back to that length, so bytes after it (whole lines of a
+	// batch that was never acknowledged, or a half-written last line) are gone
+	// after the restart and redelivered. Judge exactly the committed prefix,
+	// which is what the restarted run appends after.
 	pre := make(map[string]map[int]bool, len(dests))
 	preLines := make(map[string]int, len(dests))
 	for _, d := range dests {
-		if trimFanoutDeepTornTail(t, d.path) {
-			t.Fatalf("destination %s: the kill left a half-written last line, so builtin:file's batch write is not atomic across SIGKILL; "+
-				"look at conduit-connector-file's destination (one bufio Flush per batch) before touching this test", d.name)
-		}
-		recs, _ := readFanoutDeepDest(t, d)
+		recs := readFanoutDeepCommitted(t, d)
 		preLines[d.name] = len(recs)
 		checkFanoutDeepRecords(t, "before restart", d, recs)
 		pre[d.name] = seqSet(recs)
@@ -410,6 +409,13 @@ func readFanoutDeepDest(t *testing.T, d fanoutDeepDest) (recs []fanoutDeepRecord
 		torn = true
 		raw = raw[:bytes.LastIndexByte(raw, '\n')+1]
 	}
+	return parseFanoutDeepLines(t, d, raw), torn
+}
+
+// parseFanoutDeepLines parses newline-terminated records; a line that does
+// not parse fails the test.
+func parseFanoutDeepLines(t *testing.T, d fanoutDeepDest, raw []byte) (recs []fanoutDeepRecord) {
+	t.Helper()
 	for _, line := range bytes.Split(raw, []byte("\n")) {
 		if len(line) == 0 {
 			continue
@@ -425,27 +431,39 @@ func readFanoutDeepDest(t *testing.T, d fanoutDeepDest) (recs []fanoutDeepRecord
 		}
 		recs = append(recs, fanoutDeepRecord{Position: string(rec.Position), After: rec.Payload.After})
 	}
-	return recs, torn
+	return recs
 }
 
-// trimFanoutDeepTornTail cuts a file back to its last newline and reports
-// whether it cut anything.
-func trimFanoutDeepTornTail(t *testing.T, path string) bool {
+// readFanoutDeepCommitted parses the prefix of a destination's file that
+// builtin:file recorded as durable in <path>.committed (an 8-byte big-endian
+// length). Records are acknowledged only after that length is synced, so the
+// prefix holds every acknowledged record. A prefix that does not end on a
+// record boundary is a torn durable write and fails the test.
+func readFanoutDeepCommitted(t *testing.T, d fanoutDeepDest) []fanoutDeepRecord {
 	t.Helper()
-	raw, err := os.ReadFile(path)
+	sidecar, err := os.ReadFile(d.path + ".committed")
 	if os.IsNotExist(err) {
-		return false
+		return nil // nothing was committed before the kill
 	}
 	if err != nil {
-		t.Fatalf("read %s: %v", path, err)
+		t.Fatalf("read %s.committed: %v", d.path, err)
 	}
-	if len(raw) == 0 || raw[len(raw)-1] == '\n' {
-		return false
+	if len(sidecar) != 8 {
+		t.Fatalf("destination %s: %s.committed holds %d bytes, want 8", d.name, d.path, len(sidecar))
 	}
-	if err := os.Truncate(path, int64(bytes.LastIndexByte(raw, '\n')+1)); err != nil {
-		t.Fatalf("truncate %s: %v", path, err)
+	n := binary.BigEndian.Uint64(sidecar)
+	raw, err := os.ReadFile(d.path)
+	if err != nil {
+		t.Fatalf("read %s: %v", d.path, err)
 	}
-	return true
+	if n > uint64(len(raw)) {
+		t.Fatalf("destination %s: committed length %d is past the end of the file (%d bytes): an acknowledged write was lost", d.name, n, len(raw))
+	}
+	raw = raw[:n]
+	if len(raw) > 0 && raw[len(raw)-1] != '\n' {
+		t.Fatalf("destination %s: the committed prefix (%d bytes) ends inside a record: a durable write was torn", d.name, n)
+	}
+	return parseFanoutDeepLines(t, d, raw)
 }
 
 func seqSet(recs []fanoutDeepRecord) map[int]bool {

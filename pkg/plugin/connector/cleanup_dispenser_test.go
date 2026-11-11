@@ -163,3 +163,29 @@ func TestCleanupDispenser_Destination_Teardown(t *testing.T) {
 		})
 	}
 }
+
+// TestDispenserWithCleanup_ForwardsSpecification: the plugin service wraps
+// every registry dispenser for token cleanup; the wrapper must keep the
+// specification visible (#3321), and report none for a dispenser without one.
+func TestDispenserWithCleanup_ForwardsSpecification(t *testing.T) {
+	is := is.New(t)
+	ctrl := gomock.NewController(t)
+
+	plain := mock.NewDispenser(ctrl)
+	_, ok := connector.DispenserSpecification(connector.DispenserWithCleanup(plain, func() {}))
+	is.True(!ok)
+
+	want := pconnector.Specification{Name: "with-spec"}
+	_, ok = connector.DispenserSpecification(plain)
+	is.True(!ok)
+	got, ok := connector.DispenserSpecification(connector.DispenserWithCleanup(specCarrying{Dispenser: plain, spec: want}, func() {}))
+	is.True(ok)
+	is.Equal(got, want)
+}
+
+type specCarrying struct {
+	connector.Dispenser
+	spec pconnector.Specification
+}
+
+func (d specCarrying) Specification() (pconnector.Specification, bool) { return d.spec, true }

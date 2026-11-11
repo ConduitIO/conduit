@@ -38,3 +38,26 @@ type DestinationPlugin interface {
 type SpecifierPlugin interface {
 	pconnector.SpecifierPlugin
 }
+
+// specificationCarrier is implemented by a Dispenser that knows the
+// specification of the plugin it dispenses, because the registry that built it
+// had already loaded that specification when it resolved the plugin name.
+type specificationCarrier interface {
+	Specification() (pconnector.Specification, bool)
+}
+
+// DispenserSpecification returns the specification of the plugin d dispenses,
+// and false if d does not carry one. The built-in and standalone registries
+// attach the specification of the exact plugin version they resolved, so the
+// specification and the plugin a later Dispense call starts cannot disagree,
+// and reading it starts no plugin. Other dispensers (test doubles) carry none.
+//
+// The arch-v2 engine reads it to resolve a destination's effective
+// sdk.batch.* settings (docs/design-documents/
+// 20261103-archv2-destination-batch-timing.md, Decision 2).
+func DispenserSpecification(d Dispenser) (pconnector.Specification, bool) {
+	if c, ok := d.(specificationCarrier); ok {
+		return c.Specification()
+	}
+	return pconnector.Specification{}, false
+}

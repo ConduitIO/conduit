@@ -22,10 +22,11 @@ import (
 )
 
 // SDKBatchSizeSetting is the destination/DLQ setting the conduit-connector-sdk
-// reads to buffer writes. Arch-v2's stop-and-wait destination task cannot run
-// it above 1 (CodeArchV2DestinationBatchingUnsupported); the engine guard in
-// pkg/lifecycle-poc and the offline validate finding share this predicate so
-// the two report the same refusal.
+// reads to buffer writes. The arch-v2 engine batches a destination's writes
+// itself with it, and refuses it above 1 on the dead-letter queue, which it
+// does not batch (CodeArchV2DestinationBatchingUnsupported). The engine guard
+// in pkg/lifecycle-poc and the offline validate finding share
+// SDKBatchSizeAboveOne so the two report the same refusal.
 const SDKBatchSizeSetting = "sdk.batch.size"
 
 // SDKBatchSizeAboveOne reports whether settings carry an sdk.batch.size the SDK
@@ -59,12 +60,36 @@ func SDKBatchSizeAboveOne(settings map[string]string) (key, value string, ok boo
 }
 
 // SDKBatchDelaySetting is the destination/DLQ setting the conduit-connector-sdk
-// reads to flush a partial batch by time. Like SDKBatchSizeSetting, it is read
-// by the arch-v2 engine so the funnel can batch writes itself, and it must be
-// stripped from the settings handed to the plugin so the SDK does not also
-// batch (see pkg/lifecycle-poc and docs/design-documents/
-// 20261017-funnel-destination-batching.md).
+// reads to flush a partial batch by time. Like SDKBatchSizeSetting, the arch-v2
+// engine batches a destination with it and hands the plugin "0" instead, so
+// the SDK does not also batch (docs/design-documents/
+// 20261103-archv2-destination-batch-timing.md, Decision 2), and refuses it
+// above 0 on the dead-letter queue (SDKBatchDelayAboveZero).
 const SDKBatchDelaySetting = "sdk.batch.delay"
+
+// SDKBatchDelayAboveZero reports whether settings carry an sdk.batch.delay the
+// SDK would read as larger than 0, returning the key as written and the
+// trimmed value. It is SDKBatchSizeAboveOne's twin for the delay: the SDK
+// batches a destination whose delay is above 0 even when its size is not set
+// (it then uses a size of its own), so such a delay withholds acks the same
+// way. The value is parsed with time.ParseDuration, as the SDK does; a value
+// it rejects is left to the plugin's own validation.
+func SDKBatchDelayAboveZero(settings map[string]string) (key, value string, ok bool) {
+	var keys []string
+	for k := range settings {
+		if strings.TrimSpace(k) == SDKBatchDelaySetting {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys) // deterministic when a map carries both padded and plain keys
+	for _, k := range keys {
+		v := strings.TrimSpace(settings[k])
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return k, v, true
+		}
+	}
+	return "", "", false
+}
 
 // SDKBatchSettings parses the destination/DLQ batching settings the connector
 // SDK would read, mirroring its decoding: sdk.batch.size via strconv.Atoi and
@@ -82,6 +107,18 @@ func SDKBatchSettings(settings map[string]string) (size int, delay time.Duration
 // target after trimming, mirroring how config.Sanitize trims keys. It is
 // deterministic even when a map carries both padded and plain keys.
 func settingValue(settings map[string]string, target string) string {
+	v, _ := SDKSettingValue(settings, target)
+	return v
+}
+
+// SDKSettingValue returns the trimmed value of the setting target as the
+// connector SDK would read it: keys are matched after trimming (config.Sanitize
+// trims every key and value), the first match in sorted key order wins so the
+// result is deterministic when a map carries both padded and plain keys, and
+// present is false when no key matches or the value is empty, because the SDK
+// applies the connector's default to an empty value as it does to a missing
+// key (config.ApplyDefaults).
+func SDKSettingValue(settings map[string]string, target string) (value string, present bool) {
 	var keys []string
 	for k := range settings {
 		if strings.TrimSpace(k) == target {
@@ -90,7 +127,39 @@ func settingValue(settings map[string]string, target string) string {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		return strings.TrimSpace(settings[k])
+		v := strings.TrimSpace(settings[k])
+		return v, v != ""
 	}
-	return ""
+	return "", false
+}
+
+// SDKBatchNonLiteral returns, sorted, every key of settings that names
+// sdk.batch.size or sdk.batch.delay (after trimming, as the SDK matches keys)
+// and whose value is not a literal, because it contains "$".
+//
+// The arch-v2 engine resolves a destination's batching from the stored
+// settings, before ${VAR} references are expanded for the plugin (see
+// pkg/foundation/env), and configures the plugin "0" only for the keys whose
+// stored value turns its batcher on. A reference such as "${S3_BATCH}" parses
+// as nothing for the engine but reaches the plugin expanded, so the plugin
+// would batch behind the engine: double batching, or an ack withheld until a
+// batch the engine never sends fills (a stall). The engine therefore refuses
+// a non-literal value under arch-v2 (lifecycle.CodeArchV2DestinationBatchingNotLiteral).
+//
+// "$" is exactly what the settings resolver acts on: env.ResolveEnv returns a
+// value without "$" unchanged, and expands or collapses ("$$") anything else.
+// No valid integer or duration contains "$", so the refusal costs no
+// literal configuration.
+func SDKBatchNonLiteral(settings map[string]string) []string {
+	var keys []string
+	for k, v := range settings {
+		switch strings.TrimSpace(k) {
+		case SDKBatchSizeSetting, SDKBatchDelaySetting:
+			if strings.Contains(v, "$") {
+				keys = append(keys, k)
+			}
+		}
+	}
+	sort.Strings(keys)
+	return keys
 }

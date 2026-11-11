@@ -70,9 +70,9 @@ v1 pipeline configs key `pipelines`, `connectors`, and `processors` by map (`pip
 
 Source batching: a source that leaves `sdk.batch.size` and `sdk.batch.delay` unset reads in batches (adaptive drain: it returns what is already queued, with no timer). Default sdk.batch.size of built-in sources: file (100), generator (100), kafka (100); not batched by default: postgres, s3. To read one record at a time, set both `sdk.batch.size: "0"` and `sdk.batch.delay: "0"` on the source connector. Runbook: docs/operations/source-batching.md.
 
-Destination batching on `--preview.pipeline-arch-v2`: the engine batches a destination that sets `sdk.batch.size` above 1 or `sdk.batch.delay` itself, and writes a partial batch at the latest `sdk.batch.delay` after its first record, even when no further record arrives (a timer, as in the connector SDK). With `sdk.batch.size` alone a partial batch waits for more records or a stop, and the start logs `pipeline.archv2_destination_batch_unbounded_wait`. Runbook: docs/operations/archv2-destination-batching.md.
+Destination batching on `--preview.pipeline-arch-v2`: the engine batches a destination itself with its effective `sdk.batch.size` and `sdk.batch.delay` (the pipeline config, else the connector's own defaults, so S3 is batched at 1000 records / 1s with nothing set) and hands the connector `0` for them, so the connector does not batch as well. It writes a partial batch at the latest `sdk.batch.delay` after its first record, even when no further record arrives (a timer, as in the connector SDK). With `sdk.batch.size` alone a partial batch waits for more records or a stop, and the start logs `pipeline.archv2_destination_batch_unbounded_wait`. A dead-letter queue with `sdk.batch.size` above 1 or `sdk.batch.delay` above 0 is refused with `pipeline.archv2_destination_batching_unsupported`. A destination or dead-letter-queue `sdk.batch.*` value must be a literal: one containing `$` (an environment reference such as `${S3_BATCH}`) is refused with `pipeline.archv2_destination_batching_not_literal`, because the engine batches with the value as written. Runbook: docs/operations/archv2-destination-batching.md.
 
-### file (v0.12.0)
+### file (v0.13.0)
 
 A file source and destination plugin for Conduit.
 
@@ -150,8 +150,151 @@ A file created by the connector is readable and writable by its owner only
 (mode 0600, further restricted by the process umask). The mode of an
 existing file is never changed: **output files created by earlier versions
 are world-readable (0644); run `chmod 600` on them after upgrading.**
+
+**Delivery semantics**
+
+Each record is one line: its bytes in the configured record format and a
+newline. A batch is acknowledged only after it is on disk: the destination
+writes the batch, fsyncs the output, records the new length of the output
+in `<path>.committed` (next to the output) and fsyncs that file, and only
+then returns. On `Open` it also fsyncs the output's directory, so a newly
+created output survives a crash. A kill of the process, an operating-system
+crash or a power loss therefore never loses an acknowledged record, provided
+the storage honors fsync (a disk write cache without power-loss protection,
+or a filesystem mounted without write barriers, can still lose data the
+operating system reported as synced). Delivery is at-least-once: after a
+crash the batch that was being written, and not yet acknowledged, is
+delivered again, so the output can hold a record twice. After a failed
+write (an I/O error, a full disk, a failed fsync) the destination refuses
+further writes until it is opened again, so the next batch never lands
+after part of the failed one.
+
+Some filesystems (some network and FUSE filesystems) reject an fsync of a
+directory as unsupported (EINVAL, ENOTSUP, EOPNOTSUPP). There `Open` fails
+with FILE_DIR_SYNC_UNSUPPORTED, naming the directory and the error: without
+that fsync a newly created output file may not survive an operating-system
+crash or a power loss, and every record acknowledged into it would be lost
+with it. To run on such a filesystem anyway, first create the output file
+and `<path>.committed` and make their directory entries durable by other
+means, for example `(umask 077 && touch <path> <path>.committed) && sync` (or, on Linux,
+`sync -f <dir>` after creating them), then set
+`dirSync.acceptUnsupported: true` on the destination. `Open` then logs the
+same code as a warning and continues. Once both entries are durable the
+missing fsync puts nothing at risk: the destination does not create, rename
+or remove either file while it exists (a clean stop empties
+`<path>.committed`, it does not remove it). If either file is deleted later,
+`Open` creates it again, and the new file is exposed as below. With the
+option set, what an operating-system crash or a power loss can do depends
+on which entries were made durable first:
+
+- If the output file's was not, the crash can lose the whole output, with
+  every record acknowledged into it.
+- If the output file's was but `<path>.committed`'s was not, the crash can
+  lose `<path>.committed`. The next `Open` then finds no committed length
+  and keeps the output up to its last newline (the rule for a missing
+  length, below). With a `*/json` record format that removes only the
+  partial last line of the batch that was being written; its complete
+  records stay and are delivered again, so they appear twice. With any
+  other record format a newline can be inside a record. If the output then
+  ends with a newline inside a record of that unacknowledged batch,
+  nothing is cut and that fragment of a record stays in the output, before
+  the redelivered batch. If it ends with no newline, `Open` fails with
+  FILE_OUTPUT_TAIL_UNTERMINATED.
+
+Any other error syncing the directory (EIO, ENOSPC, EROFS, and so on)
+always fails `Open`.
+
+Every Write ends with the two fsyncs, whatever its size. A larger batch
+takes longer to write and sync than a smaller one, but it shares the fixed
+cost of the fsyncs among all its records, so the cost per record falls by
+orders of magnitude from batches of one record to batches of a thousand
+(`BenchmarkDestinationWrite1` to `BenchmarkDestinationWrite1000` in
+`destination_bench_test.go` measure it). So the destination batches by
+default: `sdk.batch.size` defaults to 1000 and `sdk.batch.delay` to
+`100ms`. The SDK collects the records the engine passes until at least
+1000 are pending, or until 100ms after the first of them, and then hands
+all pending records to one Write. It does not split what the engine
+passes in one call, so a Write gets fewer than 1000 records when the
+delay ends a partial batch, and 1000 or more otherwise: more when one
+call brings many records at once (a 3000-record batch from the engine is
+one Write of 3000). The delay bounds the latency batching adds. For one
+Write per batch the engine passes, as before these defaults, set both
+`sdk.batch.size` and `sdk.batch.delay` to 0 on the destination. Set both:
+with only `sdk.batch.delay` at 0 a partial batch waits until it is full,
+with no deadline, and with only `sdk.batch.size` at 0 the delay still
+batches (the engine or the SDK then picks the batch size).
+
+A process that is killed while writing (SIGKILL, the OOM killer) can leave
+the file ending in part of a line: Linux stops a write at a page boundary
+when the process is killed. On `Open` the destination cuts the file back
+to the length recorded in `<path>.committed`, and logs a warning with the
+path, the old and new size and the number of bytes removed. Those bytes are
+the start of a batch that was never acknowledged and is delivered again, so
+the next record never lands on a partial line. After an operating-system
+crash the recorded length can be behind the output by at most that one
+batch (the output was synced, the length was not yet), and the cut removes
+only that unacknowledged batch.
+
+`<path>.committed` is part of the output: keep it with the file (it has
+the output file's mode), back it up and restore it together with the file,
+and do not edit it. It holds 8 bytes while the destination runs and is
+emptied when the destination stops cleanly.
+
+When `<path>.committed` is missing or empty (an output written by v0.12.0
+or earlier, or after a clean stop) and the file does not end with a newline
+(a crash of v0.12.0 or earlier), `Open` can only cut after the last
+newline, and does so only if a record cannot contain one. That is decided
+by the record format's name: every format whose name ends in `/json` (the
+default `opencdc/json`, and `debezium/json`) is encoded by the SDK's JSON
+encoder, which escapes newlines inside strings and emits no whitespace, so
+`Open` removes what follows the last newline, with the same warning. With
+any other record format (for example `template`) a record can contain a
+newline, so `Open` fails with FILE_OUTPUT_TAIL_UNTERMINATED instead of
+guessing: inspect the end of the file, remove the partial record (or
+truncate the file), then restart.
+
+When the output is empty but `<path>.committed` holds a length (the output
+was deleted or emptied), the destination starts again from empty with a
+warning. When the output is shorter than the recorded length, or the
+recorded length does not end a line, `Open` fails with
+FILE_COMMITTED_LENGTH_MISMATCH without changing anything. Neither a kill
+nor an operating-system crash can cause this: the output was truncated,
+replaced or restored from a backup without its `<path>.committed`, or the
+storage lost writes it had reported as synced. Check the file. If it holds
+what you expect, delete `<path>.committed` and restart: the output is then
+kept up to its last newline, under the rule above for a missing length.
+Otherwise restore the output and `<path>.committed` together from the same
+backup. A `<path>.committed` that is not 0 or 8 bytes long, is a symlink or
+is not a regular file fails with FILE_COMMITTED_LENGTH_INVALID. A path that
+is not a regular file (a device such as `/dev/stdout`, a FIFO) is written
+as before, without `<path>.committed` and without fsync.
+
+The destination owns its output file: do not point two destinations, or
+another writer, at the same path, and do not let a source's
+`rotatedPattern` match `<path>.committed`.
+
+Downgrading: v0.12.0 and earlier ignore `<path>.committed` and append to
+the output without updating it. After a clean stop the file is empty and
+nothing is lost when you upgrade again. After a crash it still holds a
+length, and if an older version then appends acknowledged records, the
+next `Open` of this version cuts them off as unacknowledged: those records
+are removed from the output and not delivered again. So when you go back to
+an older version after a crash, delete `<path>.committed` before starting
+this version again.
+
+Windows: the destination is compile-checked on Windows but not tested
+there. The output and `<path>.committed` are flushed with FlushFileBuffers;
+the directory is not flushed (NTFS journals file creation).
+`<path>.committed` is opened without following a reparse point (a
+symlink, a junction), and one is refused by the opened handle's
+attributes; for that it is opened directly, not through `file.WithOpener`.
+On platforms that are neither unix nor Windows, a destination writing a
+regular file fails to open: the connector cannot open `<path>.committed`
+there without following a symlink.
+
 An embedding engine can supply the open function through `file.WithOpener`
-(both the source and the destination use it) and a check for the directories
+(both the source and the destination use it, the destination also for
+`<path>.committed`, except on Windows) and a check for the directories
 the source lists to find rotated files through `file.WithDirChecker`.
 
 Author: Meroxa, Inc.
@@ -180,9 +323,10 @@ Author: Meroxa, Inc.
 
 | Key | Type | Default | Required | Description | Validations |
 | --- | --- | --- | --- | --- | --- |
+| `dirSync.acceptUnsupported` | bool | false | no | DirSyncAcceptUnsupported makes Open continue, with a warning, when the filesystem rejects an fsync of the output's directory as unsupported (EINVAL, ENOTSUP or EOPNOTSUPP; some network and FUSE filesystems do). By default Open then fails with FILE_DIR_SYNC_UNSUPPORTED. Without that fsync a newly created output file may not survive an operating-system crash or a power loss, and the records acknowledged into it are lost with it. Set it only after creating the output file and <path>.committed and making their directory entries durable by other means (see the connector's description). |  |
 | `path` | string |  | yes | Path is the file path used by the connector to read/write records. | required |
-| `sdk.batch.delay` | duration | 0 | no | Maximum delay before an incomplete batch is written to the destination. |  |
-| `sdk.batch.size` | int | 0 | no | Maximum size of batch before it gets written to the destination. | greater-than(-1) |
+| `sdk.batch.delay` | duration | 100ms | no | Maximum delay before an incomplete batch is written to the destination. |  |
+| `sdk.batch.size` | int | 1000 | no | Maximum size of batch before it gets written to the destination. | greater-than(-1) |
 | `sdk.rate.burst` | int | 0 | no | Allow bursts of at most X records (0 or less means that bursts are not limited). Only takes effect if a rate limit per second is set. Note that if `sdk.batch.size` is bigger than `sdk.rate.burst`, the effective batch size will be equal to `sdk.rate.burst`. | greater-than(-1) |
 | `sdk.rate.perSecond` | float | 0 | no | Maximum number of records written per second (0 means no rate limit). | greater-than(-1) |
 | `sdk.record.format` | string | opencdc/json | no | The format of the output record. See the Conduit documentation for a full list of supported formats (https://conduitdata.io/docs/using/connectors/configuration-parameters/output-format). |  |
@@ -665,7 +809,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-### postgres (v0.20.0)
+### postgres (v0.21.0)
 
 Conduit connector for PostgreSQL
 
@@ -1158,6 +1302,76 @@ What this means for your destination:
   row image carries every column, and this connector backfills unchanged TOASTed
   values from it so the payload is always complete.
 
+With `logrepl.withAvroSchema: true` (the default) and the default `REPLICA IDENTITY`,
+such an update stops the source with the error code `postgres.avro.unchanged_toast`,
+which names the table, the columns and the LSN. The Avro payload schema gives a
+nullable column a default of `null`, so encoding the record without the column would
+deliver `NULL` in its place. Before v0.21.0 the same update stopped the source with
+`avro: missing required field`. To continue, restart with
+`logrepl.withAvroSchema: false`, which delivers the update without the unchanged
+columns, and set `REPLICA IDENTITY FULL` on the table if you want to keep Avro
+schemas. A per-record schema without the unchanged columns is proposed in
+[#388](https://github.com/ConduitIO/conduit-connector-postgres/issues/388).
+
+So that this does not come as a surprise, `Open` logs a warning with the code
+`postgres.avro.toast_identity`, once per captured table, for every table that has a
+column that can be TOASTed and a replica identity other than `FULL`, when
+`logrepl.withAvroSchema` is on. Such a column is only at risk once a value is stored
+out of line, which Postgres does only for rows above about 2 kB: a table whose rows
+stay smaller never stops this way. The warning names the table, its replica identity
+and the columns, and gives the `ALTER TABLE ... REPLICA IDENTITY FULL` statement. It
+never stops `Open`.
+
+**Avro Schema**
+
+With `logrepl.withAvroSchema: true` (the default) the source registers an Avro schema
+for each table's payload and key and attaches it to every record. The nullability of
+each field comes from the catalog (`pg_attribute.attnotnull`; from Postgres 18 a
+`NOT NULL NOT VALID` constraint does not count, because existing rows may still be
+`NULL`):
+
+- A column declared `NOT NULL`, including every primary-key column, is a plain field
+  of its type, for example `{"name":"id","type":"long"}`.
+- Any other column is a union with `null` first and a default of `null`, the shape
+  Debezium's Avro converter uses for an optional column:
+  `{"name":"price","type":["null",{"type":"bytes","logicalType":"decimal","precision":10,"scale":2}],"default":null}`.
+  A `NULL` value is delivered as `null` for every type, logical types included.
+
+Change data capture reads the nullability when Postgres sends a table's
+relation message: at the start of streaming and after every `ALTER TABLE`, including
+`SET NOT NULL` and `DROP NOT NULL`. It reads the catalog as it is at that moment. If
+the connector is behind and a column was made `NOT NULL` after a change that stored
+`NULL` in it, the source makes that column's field `["null", T]` again, registers the
+new payload schema version, delivers the `NULL` as `null` and logs a warning with the
+code `postgres.avro.null_in_not_null_column`, the table and the column. The field
+stays nullable until the connector restarts. If the schema registry rejects the new
+version (a subject with `FORWARD` or `FULL` compatibility), the source stops with the
+same code; allow `BACKWARD` on the subject, or restart with
+`logrepl.withAvroSchema: false`. A `SET NOT NULL` that commits while a snapshot
+runs does not affect the snapshot: it reads the catalog in its `REPEATABLE READ`
+transaction, as of the same point in time as its rows, so the two agree. A column
+that is no longer in the catalog (dropped
+or renamed since the change was written) is nullable.
+
+**Upgrading from v0.20.x or earlier.** Earlier versions registered every column as a
+plain field, so any `NULL` in a nullable column stopped the source
+([#326](https://github.com/ConduitIO/conduit-connector-postgres/issues/326)). After the
+upgrade, the first record of each table that has a nullable column registers a new
+schema version for its payload subject (`<table>_payload`). Tables whose columns are
+all `NOT NULL`, and every key subject keyed on a primary key, register the same schema
+text as before, so no new version. Changing a field from `T` to `["null", T]` is
+`BACKWARD` compatible (a consumer on the new schema reads records written with the
+old one) and not `FORWARD` compatible (a consumer still on the old schema cannot read
+a `null`). If you copy these schemas to a registry that enforces `FORWARD` or `FULL`
+compatibility on these subjects, the new version is rejected: relax the subject's
+compatibility for the upgrade or upgrade the consumers first. Consumers that read the
+field as `T` must now handle `null`. Rolling back to an earlier version registers the
+old shape again, and that version stops on the first `NULL` it reads, as before.
+
+A `NULL` in a `uuid` column used to be delivered by the snapshot as an empty string
+(change data capture delivered `null`). It is now `null` in both, with or without an
+Avro schema.
+
 **Value Representation**
 
 Values do not depend on the time zone of the machine running the connector or on the
@@ -1170,6 +1384,7 @@ snapshot and CDC.
 | `timestamptz` | The instant, in UTC (`Z`). | `timestamp-micros`. |
 | `date` | Midnight UTC of the date. | `date`. |
 | `tsvector` | Postgres text form, `'a':1 'cat':3A,4B`. | `string`, same text. |
+| `json`, `jsonb` | A string holding the text Postgres prints for the value (`json` as written, `jsonb` in its canonical form). | `string` named `io.debezium.data.Json`, same text (since v0.21.0, `bytes` before). |
 | `infinity`, `-infinity` | The strings `infinity` and `-infinity`. | The source halts with error code `postgres.source.temporal_not_representable`. |
 | Years before 1 BC or after 9999 AD | Postgres text, for example `0044-03-15 12:00:00 BC`. | As above, up to what 64-bit microseconds hold; beyond that the same error. |
 | Arrays, ranges, multiranges of these | Element and bound values as above. | Not supported by the Avro schema. |
@@ -1184,6 +1399,231 @@ are emitted as the Postgres text of the array.
 If the source halts with `postgres.source.temporal_not_representable`, set
 `logrepl.withAvroSchema` to `false`. Removing the row does not help a change that is
 already in the WAL, because it is read again after every restart.
+
+**json and jsonb Columns**
+
+> **Upgrade note: check consumers on a database that is not UTF8.** If the source
+> database's `server_encoding` is not `UTF8` (in practice `SQL_ASCII`), a `json` or
+> `jsonb` value whose text is not valid UTF-8 is delivered by default as the base64 of
+> its bytes, with the column named in the record metadata `postgres.json.raw_bytes`.
+> A consumer that does not check `postgres.json.raw_bytes` reads that base64 text as if
+> it were the JSON value. For pipelines whose consumers cannot be updated, set
+> `json.invalidUTF8: halt`: the source then stops on such a value (fail closed)
+> instead of delivering it. The startup warning `postgres.source.json_server_encoding`
+> tells you whether your database can hold such values. Details below.
+
+A `json` or `jsonb` value is a string holding exactly the text Postgres prints for it:
+nothing is parsed, reformatted or rounded, so object keys keep their order,
+`12345678901234567890` keeps every digit and `1.50` keeps its zero. `jsonb` text is
+the canonical form Postgres stores (keys in jsonb's storage order, duplicate keys
+removed, whitespace normalized), `json` text is the document as it was written. The JSON literal `null` is the string `"null"`; a SQL
+`NULL` is `NULL`. Elements of `json[]` and `jsonb[]` are strings too. This is what
+Debezium emits.
+
+In the Avro schema a `json` or `jsonb` field has the type
+`{"type":"string","connect.name":"io.debezium.data.Json","connect.version":1}`: a
+plain Avro string with the Kafka Connect name Debezium gives these columns, written
+the way Confluent's Avro converter writes it for Debezium. Consumers and sinks that
+look for `io.debezium.data.Json` see a json column. The `connect.*` properties are not
+part of the Avro type: readers, schema resolution and compatibility checks ignore
+them. A nullable `json` or `jsonb` column is `["null", <that type>]` with a default of
+`null`, the optional field Debezium emits; a `NOT NULL` one is the plain type (see Avro
+Schema). One difference from Debezium remains: `json[]` and `jsonb[]` have no Avro
+schema here, like every array type, so they need `logrepl.withAvroSchema: false`;
+Debezium emits them as an Avro array of optional `io.debezium.data.Json` strings.
+
+A value whose text is not valid UTF-8 is delivered, never replaced, dropped or
+skipped. This can only happen when the database's `server_encoding` is `SQL_ASCII`,
+which stores bytes unchecked: every other server encoding checks json text on input.
+`json.invalidUTF8` decides how it is delivered:
+
+- `base64` (the default): the field holds the standard base64 (RFC 4648, with padding)
+  of the value's exact bytes, and the record's metadata `postgres.json.raw_bytes` names
+  the column. For a `json[]` or `jsonb[]` column with one such element, every non-`NULL`
+  element of that value is base64 (`NULL` elements stay `NULL`), so a listed array
+  column is decoded element by element. Valid values, in the same record or another, are
+  the exact text as above, and a record with none has no `postgres.json.raw_bytes`.
+- `halt`: the source stops with the error `postgres.source.json_not_utf8`, and stops
+  again on the same row after every restart.
+
+`postgres.json.raw_bytes` is a JSON array of column names, sorted, each once, for
+example `["doc","tags"]` (a JSON array, because a column name can contain a comma). It
+covers the record's key and `payload.after`; `postgres.json.raw_bytes.before` covers
+`payload.before` (an `UPDATE` or `DELETE` under `REPLICA IDENTITY FULL`). A field
+named in one is base64 only in the part of the record that key covers: an `UPDATE` that
+corrects the value lists the column in `postgres.json.raw_bytes.before` and not in
+`postgres.json.raw_bytes`. The field stays an Avro string, so the schema does not
+change.
+
+Debezium handles such text differently: it decodes it with replacement, so each invalid
+byte becomes U+FFFD (`�`) and the original bytes are lost. This connector keeps them, in
+the OpenCDC format and in the Debezium record format (`sdk.record.format: debezium/json`
+on a destination), where the metadata is in the envelope's `payload.source` object.
+A consumer written for Debezium that ignores `postgres.json.raw_bytes` sees a base64
+string where Debezium would have sent text with `�` in it.
+
+At startup the source logs a warning (`code` `postgres.source.json_server_encoding`)
+when `server_encoding` is not `UTF8` and a captured table has a `json`, `jsonb`,
+`json[]` or `jsonb[]` column, naming the columns and what `json.invalidUTF8` will do.
+The first value of each table and column that is encoded as base64 logs one more
+warning (`code` `postgres.source.json_not_utf8`); later values of that column are
+encoded without one. The connector exposes no metrics, so these warnings and the
+metadata are the signals. See the runbook below.
+
+**Runbook: postgres.source.json_not_utf8**
+
+**Symptom.** With `json.invalidUTF8: base64` (the default), a warning like
+
+```
+{"level":"warn","code":"postgres.source.json_not_utf8","table":"orders","column":"doc",
+"row":"columns id, key hash 3f2a...","path":"cdc","metadata":"postgres.json.raw_bytes",...}
+```
+
+and records whose metadata has `postgres.json.raw_bytes` (or
+`postgres.json.raw_bytes.before`). The pipeline keeps running. Consumers that do not
+read the metadata see base64 where they expect JSON, and may fail to parse it.
+
+With `json.invalidUTF8: halt`, the pipeline stops with an error like
+
+```
+postgres.source.json_not_utf8: json value in column "doc" of table "orders"
+(row columns id, key hash 3f2a...) is not valid UTF-8 (first invalid byte at offset 16),
+and json.invalidUTF8 is halt, ...
+```
+
+and stops again with the same error after every restart. The source resumes at the
+position of the last record it delivered, so it reads the same row again. Nothing after
+that row is delivered, and nothing is lost: the row was never acknowledged.
+
+The warning and the error name the table, the column and the key columns, never a
+value. The key hash correlates log lines of one process; it differs after a restart and
+cannot be used to look the row up.
+
+**Diagnosis.**
+
+1. Check the encoding: `SHOW server_encoding;` in the source database. It is
+   `SQL_ASCII` (or the startup warning named it).
+2. Find the rows whose text is not valid UTF-8, by table and column from the warning
+   or the error:
+
+   ```sql
+   CREATE FUNCTION pg_temp.is_utf8(b bytea) RETURNS boolean LANGUAGE plpgsql AS $$
+   BEGIN
+     PERFORM convert_from(b, 'UTF8');
+     RETURN true;
+   EXCEPTION WHEN character_not_in_repertoire OR untranslatable_character THEN
+     RETURN false;
+   END $$;
+
+   SELECT id FROM orders WHERE NOT pg_temp.is_utf8(convert_to(doc::text, 'SQL_ASCII'));
+   ```
+
+   Replace `orders`, `doc` and `id` with the table, the column and the key columns.
+   For a `json[]` or `jsonb[]` column the same query finds the rows.
+3. With `halt`, find out whether the source stopped in the snapshot or in CDC: a
+   snapshot error contains `fetcher for table`, a CDC error contains
+   `logical replication error`.
+
+**Remediation.**
+
+- **Consumers (base64).** Decode the fields `postgres.json.raw_bytes` names from base64
+  to get the exact bytes Postgres stored, then decode them with the encoding the writer
+  used, or keep them as bytes. Decode nothing else: an unlisted field is JSON text,
+  even when it happens to look like base64. For example, in Python:
+
+  ```python
+  import base64, json
+
+  def json_columns(record):
+      after = record["payload"]["after"]
+      raw = set(json.loads(record["metadata"].get("postgres.json.raw_bytes", "[]")))
+      for col in raw:
+          v = after[col]
+          if isinstance(v, list):  # json[] / jsonb[]: every non-NULL element
+              after[col] = [None if e is None else base64.b64decode(e) for e in v]
+          elif v is not None:
+              after[col] = base64.b64decode(v)  # bytes; e.g. .decode("latin-1")
+      return after
+  ```
+
+  Use `postgres.json.raw_bytes.before` the same way for `payload.before`, and
+  `postgres.json.raw_bytes` for the key. This connector's destination does this
+  itself: it writes the bytes of every listed column, which a `SQL_ASCII` target
+  stores exactly and a `UTF8` target rejects with SQLSTATE 22021 (see "json text that
+  is not valid UTF-8" under Destination).
+- **Halted pipeline.** Set `json.invalidUTF8: base64` and restart: the row is delivered
+  as base64 with the metadata, and the pipeline goes on. A snapshot row can instead be
+  corrected and the source restarted; a change already in the WAL is read again with
+  the bytes it was written with however the row is corrected afterwards, so for CDC
+  base64 is the way past it. Do not drop or advance the replication slot to get past
+  it: that skips every change before the new position, for every table of the slot.
+- **Correct the data.** If you know the encoding the writer used, convert the value,
+  for example from LATIN1:
+
+  ```sql
+  UPDATE orders
+  SET doc = convert_from(convert(convert_to(doc::text, 'SQL_ASCII'), 'LATIN1', 'UTF8'), 'SQL_ASCII')::json
+  WHERE id = ...;
+  ```
+
+  The update is delivered as valid text (under `REPLICA IDENTITY FULL` its Before is
+  still base64 and listed in `postgres.json.raw_bytes.before`).
+- **Prevent it.** Move the database to `UTF8` (dump it and restore it into a database
+  created with `ENCODING 'UTF8'`, converting the data from the encoding the writers
+  used), then start a new pipeline with a snapshot. Until then, make sure every writer
+  stores valid UTF-8 in `json` and `jsonb` columns.
+
+**Upgrading to v0.21.0: json and jsonb change from bytes to string**
+
+v0.20.0 and earlier emitted `json` and `jsonb` as Avro `bytes` and as Go `[]byte`
+values. v0.21.0 emits Avro `string` and Go `string`. Positions and the data are not
+affected; the type of the field is.
+
+- **Schema registry.** The first record of each table after the upgrade registers a
+  new schema version for its subjects (payload, and key if the key is a `jsonb`
+  column) with the field typed `string` and named `io.debezium.data.Json`. The Avro
+  specification allows promoting `bytes` to `string` and `string` to `bytes` in schema
+  resolution, and the `connect.*` properties are ignored by it, so for a `NOT NULL`
+  column the new version is `BACKWARD`, `FORWARD` and `FULL` compatible with the old
+  one; the Avro library this connector uses agrees
+  (`source/schema/avro_json_compat_test.go`). A nullable column also becomes
+  `["null", string]` in this release (see "Upgrading from v0.20.x or earlier" under
+  Avro Schema), and that version is only `BACKWARD` compatible with the old `bytes`
+  one: a registry that enforces `FORWARD` or `FULL` on the subject rejects it, so
+  relax the subject's compatibility for the upgrade or upgrade the consumers first.
+  Conduit sets compatibility `NONE` on subjects it creates and its built-in registry
+  does not check compatibility, so nothing is rejected there either way.
+- **Consumers.** A consumer that resolves records against its own reader schema keeps
+  working: with the old schema it still reads `bytes`, with the new one a `string`, from
+  records written before or after the upgrade (the wire encoding is identical: a length
+  followed by the UTF-8 text). A consumer that decodes with the writer's schema and
+  expects bytes (for example code that casts the field to `ByteBuffer` or `[]byte`)
+  must accept a string. Without an Avro schema, JSON serializers used to print the
+  `[]byte` as base64; they now print the document as a JSON string.
+- **Processors** in built-in pipelines that type-assert the field to `[]byte` must
+  accept `string`.
+- **json text that is not valid UTF-8** (possible only in a `SQL_ASCII` database) was
+  emitted as the raw bytes. It is now the base64 of those bytes with the column named
+  in `postgres.json.raw_bytes` (see above), or a halt with `json.invalidUTF8: halt`.
+- **`json[]` and `jsonb[]`** elements were parsed into Go maps and numbers, which
+  reordered keys, rounded large numbers and stopped the source on numbers beyond the
+  range of a float64. They are now the exact text of each element.
+- **Schema drift.** With the `evolve` policy, a column type change between `bytea` and
+  `json`/`jsonb` is no longer admitted automatically (the value changes from bytes to a
+  string), and a change between `json`/`jsonb` and any other type still halts.
+  `json` to `jsonb` and back is admitted.
+- **Destination.** This connector's destination writes a `json` or `jsonb` column from
+  a string or from bytes, so records produced before and after the upgrade both land as
+  the same document. A column listed in `postgres.json.raw_bytes` is base64-decoded and
+  written as its bytes (see "json text that is not valid UTF-8" under Destination).
+  Upgrade the destination with the source, or before it: an older destination writes
+  the base64 text of such a column.
+- **Rolling back** to v0.20.0 registers the `bytes` version again on the next record.
+  For a `NOT NULL` column that is compatible in every mode. For a nullable column,
+  `bytes` after `["null", string]` is not `BACKWARD` compatible, so a registry that
+  enforces `BACKWARD` or `FULL` on the subject rejects it. v0.20.0 emits json text that
+  is not valid UTF-8 as raw bytes again, without `postgres.json.raw_bytes`. Positions
+  and state are unchanged, so the rollback is otherwise safe.
 
 **Numeric Columns**
 
@@ -1312,6 +1752,42 @@ If there is no key, the record will be simply appended.
   commit fails, nothing from that write is stored and no record of it is acknowledged;
   the records are redelivered (at-least-once). Keyed upserts make redelivery
   idempotent; keyless inserts append again.
+
+**json text that is not valid UTF-8**
+
+This connector's source delivers a `json` or `jsonb` value whose text is not valid
+UTF-8 (possible only in a `SQL_ASCII` database) as the base64 of its bytes and lists
+its column in the record metadata `postgres.json.raw_bytes` (see json and jsonb
+Columns under Source). For every listed column, in the key and in the payload, the
+destination decodes the base64 and writes the bytes, never the base64 text. For a
+list (a `json[]` or `jsonb[]`) it decodes every element and keeps `NULL` elements.
+Unlisted columns are written as they are.
+
+- A `SQL_ASCII` target database stores the bytes exactly as the source read them, in
+  `json`, `jsonb` and `text` columns and in `jsonb[]` and `text[]` columns, and a
+  delete by a listed `jsonb` key matches the row by those bytes.
+- A `UTF8` target database cannot hold them: Postgres rejects the write with its own
+  error, SQLSTATE `22021` (invalid byte sequence for encoding "UTF8"), and nothing of
+  that write is stored or acknowledged. Move the target to `SQL_ASCII`, fix the data at
+  the source (see the source runbook), or transform the column before the destination
+  and remove it from the metadata.
+- The bytes are sent in the session's `client_encoding`, which is the database's
+  encoding unless the url sets it. A url that sets `client_encoding=UTF8` on a
+  `SQL_ASCII` target makes Postgres reject them as on a `UTF8` one. For that reason
+  `default_query_exec_mode=simple_protocol` cannot write to a `SQL_ASCII` target: pgx
+  refuses every simple-protocol query unless `client_encoding` is `UTF8`, and with it
+  Postgres rejects the listed values. Use `describe_exec` (the default),
+  `cache_statement`, `cache_describe` or `exec`.
+- A metadata value that is not a JSON array of column names, a listed column that the
+  record's key and payload do not have, or a listed value that is not standard padded
+  base64 (or a list of such strings and nulls) fails the write with
+  `postgres.destination.json_raw_bytes_invalid`, naming the table and the column, never
+  the value. A processor that renames, drops or rewrites a listed column must update
+  the metadata, or remove the column from it. The destination cannot always tell a
+  rewritten value from base64: a new value that happens to be valid padded base64,
+  such as `true` or `1234`, is decoded and its bytes are written without an error.
+- `postgres.json.raw_bytes.before` is ignored: the destination does not write
+  `payload.before`.
 
 **Schema-drift markers**
 
@@ -1449,6 +1925,7 @@ Author: Meroxa, Inc.
 | Key | Type | Default | Required | Description | Validations |
 | --- | --- | --- | --- | --- | --- |
 | `cdcMode` | string | auto | no | CDCMode determines how the connector should listen to changes. | inclusion(auto,logrepl) |
+| `json.invalidUTF8` | string | base64 | no | JSONInvalidUTF8 is what the source does with a json or jsonb value (or an element of a json[] or jsonb[]) whose text is not valid UTF-8, which only a database with server_encoding SQL_ASCII can hold:   - "base64" (default): the field holds the standard base64 (RFC 4648,     padded) of the value's bytes, and the record's metadata     postgres.json.raw_bytes (postgres.json.raw_bytes.before for     Before) lists the column as a JSON array of column names, for     example ["doc"]. For an array column every non-NULL element is     base64. Nothing is replaced, dropped or skipped. A consumer that     does not read that metadata reads the base64 text as if it were     the JSON value; set "halt" to fail closed instead.   - "halt": the source stops with the error postgres.source.json_not_utf8. Valid text is emitted unchanged either way. | inclusion(base64,halt) |
 | `logrepl.allowWALGap` | bool | false | no | LogreplAllowWALGap lets the connector resume from a saved position when the replication slot no longer exists and has to be created again, or when the slot that exists is not the one the position was taken from (it was dropped and created again under the same name, or another client advanced it). Such a slot starts after the saved position, so every change in between is skipped and never delivered: this setting accepts that DATA LOSS. Leave it false (the default) and the connector refuses to start with the error `postgres.source.slot_wal_gap` or `postgres.source.slot_replaced` instead. Use it only after deciding that the destination can be repaired some other way, and remove it once the pipeline has resumed. |  |
 | `logrepl.autoCleanup` | bool | true | no | LogreplAutoCleanup determines if the replication slot and publication should be removed when the connector is deleted. |  |
 | `logrepl.import.debeziumOffset` | string |  | no | LogreplImportDebeziumOffset starts the pipeline from a Debezium Postgres connector's committed offset instead of a snapshot. It is written by `conduit migrate kafka-connect --cutover`, not by hand. It applies only while the pipeline has no position: the first acknowledged record writes an ordinary position and the setting is ignored from then on (remove it once the import is complete). Requires snapshotMode "never" and cdcMode "logrepl", and an existing slot and publication, which import mode never creates. Requires Conduit v0.19.0 or later, which acks a record only after its position is persisted. |  |
@@ -1846,7 +2323,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (194)
+## 3. Error codes (195)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -1945,7 +2422,8 @@ Author: Meroxa, Inc.
 | `orchestrator.redacted_setting_with_other_changes` | InvalidArgument | CodeRedactedSettingWithOtherChanges is raised when an update sends "***" (keep the stored value) for a setting while any other setting in the same update changes: a different value, an added key, or a removed key. A stored value is kept only by a pure round trip, so an update that repoints a host or URL cannot also ask Conduit to send the stored credential there. The update must send real values. |
 | `orchestrator.redacted_setting_without_stored_value` | InvalidArgument | CodeRedactedSettingWithoutStoredValue is raised when an update sends the redacted placeholder "***" for a setting that has no stored value. "***" in an update means "keep the stored value"; with nothing stored there is nothing to keep, and storing "***" itself would silently break the setting. |
 | `pipeline.archv2_destination_batch_unbounded_wait` | FailedPrecondition | CodeArchV2DestinationBatchUnboundedWait is logged as a warning when a pipeline starts on the preview engine (--preview.pipeline-arch-v2) with a destination that batches by sdk.batch.size alone, with no sdk.batch.delay. It is not an error: the pipeline starts and runs.  The engine batches such a destination itself and flushes a partial batch only when it fills, when the pipeline stops, or, with sdk.batch.delay, when the delay has passed since its first record (the flush timer). Without the delay nothing bounds the wait: on a source that goes quiet the last records are not written, and not acknowledged upstream, until more records arrive or the pipeline stops. That matches the connector SDK's own batching. No data is at risk (nothing is acknowledged before it is written), but the source position does not move (on Postgres, WAL is retained). On a pipeline with several destinations, a record another destination nacks is routed to the dead-letter queue, or with the default dead-letter queue fails the pipeline, only once this destination has flushed it too, so that waits without bound as well. Set sdk.batch.delay on the destination (for example 1s) to bound it. See docs/operations/archv2-destination-batching.md. |
-| `pipeline.archv2_destination_batching_unsupported` | FailedPrecondition | CodeArchV2DestinationBatchingUnsupported is returned by Start, and by the live-apply preflight (PreflightPipelineConfig), when a pipeline would run on the preview pipeline architecture v2 (--preview.pipeline-arch-v2) and the dead-letter-queue connector sets sdk.batch.size above 1 (#2979).  Regular destinations are no longer refused by this code: the funnel now batches destination writes itself using the destination's sdk.batch.size/sdk.batch.delay (see docs/design-documents/20261017-funnel-destination-batching.md) and strips the settings from the SDK plugin, so a destination batch can no longer withhold its acks and stall the stop-and-wait loop. The DLQ is not wired through that path, so its SDK destination batching still withholds acks and is refused.  With a fan-out (one source, several destinations), a record another destination nacks is handled only once a batching destination has also voted for it, that is when that destination's batch flushes (#3323): the DLQ write, and with the default DLQ (window-size 1, window-nack-threshold 0) the pipeline failure, wait for that flush. With sdk.batch.size and no sdk.batch.delay on a quiet source that wait has no bound until the next records fill the batch or the pipeline is stopped (#3231), and the pipeline reports running meanwhile. Set sdk.batch.delay to bound it. See docs/operations/archv2-destination-batching.md.  The v2 destination task writes a batch and then waits for every ack of it before the next read. With sdk.batch.size > 1 the SDK destination only enqueues on Write and acks when its batch flushes: when it reaches sdk.batch.size, or sdk.batch.delay after its first record. When a destination batch is larger than the records per write, acks are withheld, and with the default sdk.batch.delay of 0 nothing flushes by time, so the pipeline stops delivering while still reporting Running. With a delay it delivers, but one flush per write (one measurement: 83 rec/s against 56.7k rec/s on the default engine, with one-record reads and a 10ms delay). The classic engine reads acks on their own goroutine and is not affected.  The guard is conservative: any sdk.batch.size above 1 is refused, even where a particular write size would happen to align with the batch. Size 0 or 1, or sdk.batch.delay on its own, is safe (the SDK flushes synchronously at the size). Refusing turns a silent liveness failure into an actionable error. It fires before any connector is opened, so nothing is read and nothing is acked (invariants 1 and 3). Values that do not parse as an integer are left to the plugin's own config validation. The SDK trims keys and values before reading them, so the guard does too.  The error names every offending connector; ConfigPath and Fix address the first one, as a JSON pointer into the pipeline config document (/dead-letter-queue/settings/sdk.batch.size). Remove sdk.batch.size (and sdk.batch.delay) from the dead-letter queue, or run without --preview.pipeline-arch-v2 if the pipeline does not need record fan-out. See docs/operations/archv2-destination-batching.md.  A pipeline created through the API has no config document, so for it the error carries no ConfigPath and no Fix; the message still names the connector id and name and the setting. |
+| `pipeline.archv2_destination_batching_not_literal` | FailedPrecondition | CodeArchV2DestinationBatchingNotLiteral is returned by Start, and by the live-apply preflight (PreflightPipelineConfig), when a pipeline would run on the preview pipeline architecture v2 (--preview.pipeline-arch-v2) and a destination or the dead-letter-queue sets sdk.batch.size or sdk.batch.delay to a value that is not a literal: it contains "$", such as an environment reference (${S3_BATCH}). `conduit pipelines validate` and `conduit doctor` report the same finding offline (config.SDKBatchNonLiteral is shared).  v2 batches a destination itself with its effective sdk.batch.* settings and configures the plugin "0" for each key that would turn the plugin's own batcher on (docs/design-documents/20261103-archv2-destination-batch-timing.md, Decision 2). The engine decides that from the stored settings, and ${VAR} references are expanded only for the plugin. A reference therefore reads as unset to the engine (which adopts the connector default) while the plugin gets the expanded value and batches behind the engine: each engine flush waits up to the plugin's delay more, or, with a plugin size above the engine's and no plugin delay, the plugin holds the acks of a flush until records the engine never sends fill its batch, and the pipeline stalls while reporting Running. On the dead-letter queue a reference would also slip past CodeArchV2DestinationBatchingUnsupported. No record is lost either way (acks are only withheld), but liveness is, so the value is refused before any connector is built or opened: nothing is read and nothing is acked (invariants 1 and 3).  Set sdk.batch.size and sdk.batch.delay to literal values (for example 1000 and 1s). The classic engine passes the settings to the plugin and is not affected. ConfigPath addresses the first offending setting as a JSON pointer into the pipeline config document (/connectors/1/settings/sdk.batch.size or /dead-letter-queue/settings/sdk.batch.delay); a pipeline created through the API has no config document, so the error then carries no ConfigPath and the message alone names the connector and the setting. There is no structured Fix: the right literal is the operator's choice. See docs/operations/archv2-destination-batching.md. |
+| `pipeline.archv2_destination_batching_unsupported` | FailedPrecondition | CodeArchV2DestinationBatchingUnsupported is returned by Start, and by the live-apply preflight (PreflightPipelineConfig), when a pipeline would run on the preview pipeline architecture v2 (--preview.pipeline-arch-v2) and the dead-letter-queue connector sets sdk.batch.size above 1 (#2979) or sdk.batch.delay above 0 (#3321).  Regular destinations are no longer refused by this code: the funnel now batches destination writes itself using the destination's effective sdk.batch.size/sdk.batch.delay, from the pipeline config or the connector spec's default (see docs/design-documents/20261017-funnel-destination-batching.md and 20261103-archv2-destination-batch-timing.md), and configures the SDK plugin with "0" for them, so a destination batch can no longer withhold its acks and stall the stop-and-wait loop. The DLQ is not wired through that path, so an explicit SDK batch on it still withholds acks and is refused. A DLQ connector that batches only by its spec default (S3) is configured "0" and writes each nack synchronously.  With a fan-out (one source, several destinations), a record another destination nacks is handled only once a batching destination has also voted for it, that is when that destination's batch flushes (#3323): the DLQ write, and with the default DLQ (window-size 1, window-nack-threshold 0) the pipeline failure, wait for that flush. With sdk.batch.size and no sdk.batch.delay on a quiet source that wait has no bound until the next records fill the batch or the pipeline is stopped (#3231), and the pipeline reports running meanwhile. Set sdk.batch.delay to bound it. See docs/operations/archv2-destination-batching.md.  The v2 destination task writes a batch and then waits for every ack of it before the next read. With sdk.batch.size > 1 the SDK destination only enqueues on Write and acks when its batch flushes: when it reaches sdk.batch.size, or sdk.batch.delay after its first record. When a destination batch is larger than the records per write, acks are withheld, and with the default sdk.batch.delay of 0 nothing flushes by time, so the pipeline stops delivering while still reporting Running. With a delay it delivers, but one flush per write (one measurement: 83 rec/s against 56.7k rec/s on the default engine, with one-record reads and a 10ms delay). The classic engine reads acks on their own goroutine and is not affected.  The guard is conservative: any sdk.batch.size above 1 is refused, even where a particular write size would happen to align with the batch, and so is any sdk.batch.delay above 0, because the SDK batches on a delay alone with a size of its own (1000 in v0.17.2), which withholds acks the same way. Size 0 or 1 with no delay is safe. Values that do not parse (strconv.Atoi, time.ParseDuration) are left to the plugin. Refusing turns a silent liveness failure into an actionable error. It fires before any connector is opened, so nothing is read and nothing is acked (invariants 1 and 3). The SDK trims keys and values before reading them, so the guard does too.  The error names every offending connector; ConfigPath and Fix address the first one, as a JSON pointer into the pipeline config document (/dead-letter-queue/settings/sdk.batch.size). Remove sdk.batch.size (and sdk.batch.delay) from the dead-letter queue, or run without --preview.pipeline-arch-v2 if the pipeline does not need record fan-out. See docs/operations/archv2-destination-batching.md.  A pipeline created through the API has no config document, so for it the error carries no ConfigPath and no Fix; the message still names the connector id and name and the setting. |
 | `pipeline.config_changing` | Unavailable | CodePipelineConfigChanging is raised when a pipeline start is refused because an update, delete or connector/processor change on that pipeline is writing its config. Starting inside that window would build the run from a half-applied config, or for a pipeline that is being deleted. The change is a short store write, never a node operation. Unavailable: retry the start shortly. |
 | `pipeline.config_persist_unknown` | Unavailable | CodeConfigPersistUnknown is raised when a pipeline create, update or delete could not be confirmed in the pipeline store: the write timed out, was retried once, and timed out again. The store may or may not hold the change, and until the next start this instance's view of the pipeline may differ from it; the next start loads what the store holds. Unavailable: check the database, then get the pipeline after the next start and repeat the change if it is missing. |
 | `pipeline.destination_empty_ack_flood` | Aborted | CodeDestinationEmptyAckFlood is returned when a destination sends maxConsecutiveEmptyAcks (1000) consecutive ack responses that each carry no ack while the engine is waiting for acks: the 1000th such response fails the write.  The connector protocol does not require a response to carry at least one ack, so an empty response is legal and the engine tolerates a bounded run of them. The bound is engine policy, not protocol enforcement: without it a destination that keeps answering with empty responses would keep the writer spinning on its receive loop forever. Nothing is acked upstream before this error is returned, so every unacked record is redelivered on restart (invariant 3). |

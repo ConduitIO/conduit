@@ -180,8 +180,8 @@ func (t *DestinationTask) timerDueLocked(gen uint64) bool {
 // Every feeder must reach the task through the same shared boundary node,
 // because the synchronous timer flushes under that one node's mutex and
 // poisons that one node on failure. A second feeder with a different node, or
-// a second feeder with none (the roots were not marked before the workers were
-// built, MarkSharedBoundary's contract), is a build bug: it returns an error
+// a second feeder where either has none (the roots were not marked before the
+// workers were built, MarkSharedBoundary's contract), is a build bug: it returns an error
 // and leaves the task unchanged, as validateTasks does for a bad task order.
 func (t *DestinationTask) addFeeder(w *Worker, shared *TaskNode) error {
 	t.mu.Lock()
@@ -193,10 +193,12 @@ func (t *DestinationTask) addFeeder(w *Worker, shared *TaskNode) error {
 	}
 	if len(t.feeders) > 0 {
 		switch {
+		case shared == nil || t.feederShared == nil:
+			// Either feeder reaching the task with no node means the roots
+			// were not marked when one of the workers was built.
+			return cerrors.Errorf("(bug) destination %s is reached by more than one worker, not all of them through a shared boundary node; mark the shared roots (NewSink) before building workers", t.id)
 		case shared != t.feederShared:
 			return cerrors.Errorf("(bug) destination %s is reached by workers below different shared boundary nodes", t.id)
-		case shared == nil:
-			return cerrors.Errorf("(bug) destination %s is reached by more than one worker without a shared boundary node; mark the shared roots (NewSink) before building workers", t.id)
 		}
 	}
 	t.feeders = append(t.feeders, w)

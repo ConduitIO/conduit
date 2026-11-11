@@ -1,6 +1,6 @@
 module github.com/conduitio/conduit
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
@@ -11,11 +11,11 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.5
 	github.com/cohere-ai/cohere-go/v2 v2.14.1
 	github.com/conduitio/conduit-commons v0.13.0
-	github.com/conduitio/conduit-connector-file v0.12.0
+	github.com/conduitio/conduit-connector-file v0.13.0
 	github.com/conduitio/conduit-connector-generator v0.11.0
 	github.com/conduitio/conduit-connector-kafka v0.17.0
 	github.com/conduitio/conduit-connector-log v0.9.0
-	github.com/conduitio/conduit-connector-postgres v0.20.0
+	github.com/conduitio/conduit-connector-postgres v0.21.0
 	github.com/conduitio/conduit-connector-protocol v0.12.0
 	github.com/conduitio/conduit-connector-s3 v0.13.0
 	github.com/conduitio/conduit-connector-sdk v0.18.1

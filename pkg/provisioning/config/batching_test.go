@@ -106,3 +106,76 @@ func TestSDKBatchSettings(t *testing.T) {
 		})
 	}
 }
+
+// TestSDKBatchDelayAboveZero mirrors the SDK's reading of sdk.batch.delay
+// (#3321): trimmed key and value, time.ParseDuration, above 0 only.
+func TestSDKBatchDelayAboveZero(t *testing.T) {
+	for name, tc := range map[string]struct {
+		settings map[string]string
+		wantKey  string
+		want     bool
+	}{
+		"1s":         {settings: map[string]string{"sdk.batch.delay": "1s"}, wantKey: "sdk.batch.delay", want: true},
+		"padded":     {settings: map[string]string{" sdk.batch.delay ": " 10ms "}, wantKey: " sdk.batch.delay ", want: true},
+		"0":          {settings: map[string]string{"sdk.batch.delay": "0"}},
+		"0s":         {settings: map[string]string{"sdk.batch.delay": "0s"}},
+		"negative":   {settings: map[string]string{"sdk.batch.delay": "-1s"}},
+		"unparsable": {settings: map[string]string{"sdk.batch.delay": "soon"}},
+		"unset":      {settings: nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			key, _, ok := SDKBatchDelayAboveZero(tc.settings)
+			is.Equal(ok, tc.want)
+			is.Equal(key, tc.wantKey)
+		})
+	}
+}
+
+// TestSDKSettingValue: an empty value counts as absent, as the SDK applies the
+// connector default to it; padded keys match once, deterministically.
+func TestSDKSettingValue(t *testing.T) {
+	is := is.New(t)
+	v, ok := SDKSettingValue(map[string]string{"sdk.batch.size": " 5 "}, "sdk.batch.size")
+	is.True(ok)
+	is.Equal(v, "5")
+	_, ok = SDKSettingValue(map[string]string{"sdk.batch.size": "  "}, "sdk.batch.size")
+	is.True(!ok)
+	_, ok = SDKSettingValue(nil, "sdk.batch.size")
+	is.True(!ok)
+	//nolint:gocritic // the padded key is the point
+	v, ok = SDKSettingValue(map[string]string{" sdk.batch.size": "1", "sdk.batch.size": "100"}, "sdk.batch.size")
+	is.True(ok)
+	is.Equal(v, "1") // the sorted-first key, as settingValue
+}
+
+// TestSDKBatchNonLiteral pins the predicate behind
+// pipeline.archv2_destination_batching_not_literal (the Start guard, the
+// live-apply preflight, validate and doctor share it): any "$" in an
+// sdk.batch.* value is something the settings resolver would expand or
+// collapse, so the engine and the plugin could read different values.
+func TestSDKBatchNonLiteral(t *testing.T) {
+	for name, tc := range map[string]struct {
+		settings map[string]string
+		want     []string
+	}{
+		"braced reference":       {settings: map[string]string{"sdk.batch.size": "${S3_BATCH}"}, want: []string{"sdk.batch.size"}},
+		"bare reference":         {settings: map[string]string{"sdk.batch.delay": "$D"}, want: []string{"sdk.batch.delay"}},
+		"reference inside value": {settings: map[string]string{"sdk.batch.delay": "${N}ms"}, want: []string{"sdk.batch.delay"}},
+		"escaped dollar":         {settings: map[string]string{"sdk.batch.size": "$$5"}, want: []string{"sdk.batch.size"}},
+		"padded key":             {settings: map[string]string{paddedBatchKey: "${N}"}, want: []string{paddedBatchKey}},
+		"both, sorted": {
+			settings: map[string]string{"sdk.batch.size": "${N}", "sdk.batch.delay": "${D}"},
+			want:     []string{"sdk.batch.delay", "sdk.batch.size"},
+		},
+		"literals":                {settings: map[string]string{"sdk.batch.size": "1000", "sdk.batch.delay": "1s"}},
+		"other setting reference": {settings: map[string]string{"url": "${URL}", "sdk.batch.size": "10"}},
+		"wrong-case key":          {settings: map[string]string{"SDK.BATCH.SIZE": "${N}"}},
+		"unset":                   {settings: nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			is.Equal(SDKBatchNonLiteral(tc.settings), tc.want)
+		})
+	}
+}

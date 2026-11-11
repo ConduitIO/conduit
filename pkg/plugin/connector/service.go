@@ -209,6 +209,13 @@ func (s *PluginService) ValidateDestinationConfig(ctx context.Context, name stri
 	return nil
 }
 
+// newDispenser resolves name to a dispenser from the standalone or built-in
+// registry. Every dispenser it returns must carry the specification of the
+// plugin it dispenses (DispenserSpecification): the arch-v2 engine reads the
+// connector's sdk.batch.* defaults from it (#3321). Both registries attach it;
+// pkg/plugin/connector/external.Dispenser does not yet, so wiring a new kind of
+// dispenser in here starts by attaching its specification (see that package's
+// doc).
 func (s *PluginService) newDispenser(logger log.CtxLogger, name string, cfg pconnector.PluginConfig) (Dispenser, error) {
 	fullName := plugin.FullName(name)
 	switch fullName.PluginType() {
