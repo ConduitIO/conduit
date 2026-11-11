@@ -105,23 +105,34 @@ func TestReplay_NativeSourceEqualsUnwrap(t *testing.T) {
 	}
 }
 
-// excludeChain is what a ReplaceField exclude translates to today: field.exclude on the
-// unwrapped row. guard skips records with no row, as KC does (design: Nil keys and payloads).
+// excludeChain is what a ReplaceField exclude translates to: field.exclude on the unwrapped row,
+// from both images (the translator's BothImages, design decision 12). guard skips records with no row,
+// as KC does (design: Nil keys and payloads). Excluding from After only is the shape processor-sdk
+// v0.10.0 refuses on an update that has a Before image (see afterOnlyExcludeChain).
 func excludeChain(guard bool) []Step {
-	st := Step{Plugin: "builtin:field.exclude", Settings: map[string]string{"fields": ".Payload.After.big,.Payload.After.attrs"}}
+	st := Step{Plugin: "builtin:field.exclude", Settings: map[string]string{
+		"fields": ".Payload.Before.big,.Payload.Before.attrs,.Payload.After.big,.Payload.After.attrs",
+	}}
 	if guard {
 		st.Condition = `{{ not (eq (printf "%v" .Operation) "delete") }}`
 	}
 	return []Step{st}
 }
 
-// TestReplay_ReplaceFieldExclude replays field.exclude against Kafka Connect's
-// ReplaceField$Value exclude after ExtractNewRecordState. With a guard on deletes the chain diffs
-// clean for every change of every table that has the columns; without it the
-// harness reports the #3147 difference, a delete that comes out as {} where
-// Kafka Connect has null. Both halves matter: a harness that cannot fail
-// proves nothing.
-func TestReplay_ReplaceFieldExclude(t *testing.T) {
+// afterOnlyExcludeChain is the negative control for the exclude replay: the same exclude from After
+// only, which v0.9.2 let through with the field silently dropped from Before and v0.10.0 fails with
+// ErrFieldNotInSchema.
+func afterOnlyExcludeChain() []Step {
+	return []Step{{
+		Plugin:   "builtin:field.exclude",
+		Settings: map[string]string{"fields": ".Payload.After.big,.Payload.After.attrs"},
+	}}
+}
+
+// replayExcludeFailures replays chain and returns, per Debezium event of the tables that have the
+// columns, the differences from Kafka Connect's ReplaceField$Value exclude after ExtractNewRecordState.
+func replayExcludeFailures(t *testing.T, chain []Step) []string {
+	t.Helper()
 	ctx := context.Background()
 	suite, err := smtoracle.Load("pg-reshape")
 	if err != nil {
@@ -135,50 +146,73 @@ func TestReplay_ReplaceFieldExclude(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, tc := range []struct {
-		name      string
-		guard     bool
-		wantDiffs bool
-	}{{"guarded", true, false}, {"unguarded", false, true}} {
-		t.Run(tc.name, func(t *testing.T) {
-			outs, err := newReplayer(t).Run(ctx, excludeChain(tc.guard), recs)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var failures []string
-			for _, p := range pairs {
-				if p.Table != TableItems && p.Table != TableStrict { // the tables that have the columns
-					continue
-				}
-				kc := kcView(t, suite, "exclude", p.Debezium)
-				cd, err := FromConduit(outs[p.Conduit], Mapping{})
-				if err != nil {
-					t.Fatal(err)
-				}
-				diffs, err := Compare(kc, cd, PostgresOptions(p.Table))
-				if err != nil {
-					t.Fatal(err)
-				}
-				for _, d := range diffs {
-					failures = append(failures, p.Debezium+" "+p.Op+": "+d)
-				}
-			}
-			if !tc.wantDiffs {
-				failures = withoutKnownSDKFailure(t, failures)
-			}
-			if tc.wantDiffs && len(failures) == 0 {
-				t.Fatal("expected the unguarded chain to differ on deletes, found no difference")
-			}
-			if !tc.wantDiffs {
-				for _, f := range failures {
-					t.Error(f)
-				}
-			}
-			if tc.wantDiffs {
-				t.Logf("unguarded chain, as expected, differs: %v", failures)
+	outs, err := newReplayer(t).Run(ctx, chain, recs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var failures []string
+	sawNullFlip := false
+	for _, p := range pairs {
+		if p.Table != TableItems && p.Table != TableStrict { // the tables that have the columns
+			continue
+		}
+		sawNullFlip = sawNullFlip || p.Debezium == "items@7" && p.Op == "update"
+		kc := kcView(t, suite, "exclude", p.Debezium)
+		cd, err := FromConduit(outs[p.Conduit], Mapping{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		diffs, err := Compare(kc, cd, PostgresOptions(p.Table))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, d := range diffs {
+			failures = append(failures, p.Debezium+" "+p.Op+": "+d)
+		}
+	}
+	if !sawNullFlip {
+		t.Fatal("items@7 (qty 7 to NULL) is not among the compared changes: the replay no longer covers the nullable flip")
+	}
+	return failures
+}
+
+// TestReplay_ReplaceFieldExclude replays field.exclude, from both images and guarded on deletes,
+// against Kafka Connect's ReplaceField$Value exclude after ExtractNewRecordState. It must diff clean
+// for every change of every table that has the columns, including items@7, the update where qty goes
+// from 7 to NULL: processor-sdk v0.9.2 failed that record (conduit-processor-sdk#193), v0.10.0 (#195)
+// encodes it. The unguarded chain also diffs clean now: v0.10.0's reference resolver no longer
+// turns a delete's nil after into {} (#3147 was this difference).
+func TestReplay_ReplaceFieldExclude(t *testing.T) {
+	for _, guard := range []bool{true, false} {
+		name := "guarded"
+		if !guard {
+			name = "unguarded"
+		}
+		t.Run(name, func(t *testing.T) {
+			for _, f := range replayExcludeFailures(t, excludeChain(guard)) {
+				t.Error(f)
 			}
 		})
 	}
+}
+
+// TestReplay_ReplaceFieldExcludeAfterOnlyFails is the negative control: a harness that cannot fail
+// proves nothing. Excluding from After only is exactly what v0.10.0 refuses on an update with a
+// Before image, so the harness must report every such update as a failed record naming
+// ErrFieldNotInSchema, and nothing else must differ (creates, snapshots and deletes have no
+// Before and no After respectively, so the check does not apply). This replaces the pre-v0.10.0
+// control, an unguarded chain turning a delete into {} (#3147).
+func TestReplay_ReplaceFieldExcludeAfterOnlyFails(t *testing.T) {
+	failures := replayExcludeFailures(t, afterOnlyExcludeChain())
+	if len(failures) == 0 {
+		t.Fatal("expected an After-only exclude to fail on updates with a Before image, found no difference")
+	}
+	for _, f := range failures {
+		if !strings.Contains(f, " update: ") || !strings.Contains(f, "field is not in the attached schema") {
+			t.Errorf("unexpected failure, want only updates that fail with ErrFieldNotInSchema: %s", f)
+		}
+	}
+	t.Logf("After-only exclude, as expected, fails: %v", failures)
 }
 
 // TestReplay_SchemaBearingRecords runs a chain over records that carry registry schemas
@@ -227,38 +261,6 @@ func TestReplay_SchemaBearingRecords(t *testing.T) {
 	if _, err := empty.Run(ctx, steps, strict); err == nil || !strings.Contains(err.Error(), "Subject not found") {
 		t.Fatalf("a registry without the captured schemas should fail on records that carry them, got %v", err)
 	}
-}
-
-// knownSDKFailure is a conduit-processor-sdk v0.9.2 bug the replay found, not a harness artifact and not
-// a translation problem: when a nullable column flips from a value to NULL (items@7: qty 7 -> NULL), any
-// processor that changes the after payload makes the SDK's encode middleware extract a new schema from the
-// after values alone, and the before payload (qty is an int there) can no longer be encoded with it
-// ("unknown union type int"). Production runs processors through the same middleware, so a real pipeline
-// fails this record too, and Kafka Connect does not.
-//
-// TODO(ConduitIO/conduit-processor-sdk#193): remove this when the SDK is fixed.
-//
-// It is pinned here, not hidden, and only in this package: the helper is unexported and matches one record and
-// one text. Translator tests must NOT filter it. Until it is fixed, a translation that reshapes the value of a
-// schema-attached table with nullable columns is not exact, and its case correctly fails to diff clean on
-// items@7. This test fails if the failure stops reproducing, so the fix is noticed.
-const knownSDKFailure = "failed to encode before payload"
-
-func withoutKnownSDKFailure(t *testing.T, failures []string) []string {
-	t.Helper()
-	var rest []string
-	found := false
-	for _, f := range failures {
-		if strings.HasPrefix(f, "items@7 update") && strings.Contains(f, knownSDKFailure) {
-			found = true
-			continue
-		}
-		rest = append(rest, f)
-	}
-	if !found {
-		t.Error("the known schema-middleware failure on items@7 no longer reproduces: delete knownSDKFailure")
-	}
-	return rest
 }
 
 func TestCoerceAvroRejectsInexactNumbers(t *testing.T) {
