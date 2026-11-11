@@ -33,6 +33,7 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/cohere"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field"
+	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/flatten"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/json"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/ollama"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/openai"
@@ -60,6 +61,7 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"field.exclude":       Constructor(field.NewExcludeProcessor),
 	"field.rename":        Constructor(field.NewRenameProcessor),
 	"field.set":           Constructor(field.NewSetProcessor),
+	"flatten":             Constructor(flatten.NewProcessor),
 	"json.decode":         Constructor(json.NewDecodeProcessor),
 	"json.encode":         Constructor(json.NewEncodeProcessor),
 	"ollama.request":      Constructor(ollama.NewOllamaProcessor),
