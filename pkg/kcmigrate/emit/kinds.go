@@ -547,8 +547,12 @@ func listSetting(p *Plan, d *rules.Decision) error {
 
 var listSplit = regexp.MustCompile(`\s*,\s*`)
 
-// settingTables is the builtin:postgres source setting pgTables writes.
-const settingTables = "tables"
+// settingTables is the builtin:postgres source setting pgTables writes, and
+// allTables its all-tables wildcard, which lists the public schema's tables.
+const (
+	settingTables = "tables"
+	allTables     = "*"
+)
 
 // pgTables translates Debezium Postgres's table.include.list into the
 // builtin:postgres source's tables setting, and only when the result reads

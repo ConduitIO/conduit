@@ -25,13 +25,14 @@ notes:
     reason: Debezium-compatible output mode is not available. The released builtin:postgres source has no debezium.enabled setting and the debezium.encode processor has not landed, so the pipeline emits OpenCDC-shaped records, not the Debezium envelope (before/after structs, source, op, ts_ms) or its topic naming. Consumers of the Debezium envelope break.
     fix: Keep this connector on Kafka Connect until the Debezium output mode ships (#3032), or accept the difference with --accept-gaps.
 finish:
+  # table.include.list absent means every table; the Conduit source needs an
+  # explicit list, and "*" is its wildcard for the public schema's tables.
+  # Only when no table or schema selection key is set: a refused selection
+  # leaves tables unset (kc.setting_required) rather than widening it to "*".
+  # Before pg-url, which adds search_path=public for "*".
+  - {kind: default-setting, side: source, name: tables, value: "*", unless: "table.include.list,table.whitelist,table.exclude.list,table.blacklist,schema.include.list,schema.whitelist,schema.exclude.list,schema.blacklist"}
   # Assemble database.* into the source url.
   - {kind: pg-url}
-  # table.include.list absent means every table; the Conduit source needs an
-  # explicit list, and "*" is its all-tables wildcard. Only when absent: a
-  # refused table.include.list leaves tables unset (kc.setting_required)
-  # rather than widening it to "*".
-  - {kind: default-setting, side: source, name: tables, value: "*", unless: "table.include.list,table.whitelist"}
 keys:
   # --- Connection ---
   - key: database.hostname
@@ -971,5 +972,5 @@ defaults:
     default: ""
     note:
       code: kc.default_differs
-      reason: table.include.list is absent, so Debezium reads every table; the source is set to tables "*", whose schema coverage is connector-defined.
+      reason: table.include.list is absent, so Debezium reads every table it selects, in every non-system schema. Unless another table or schema selection key is set, the source is set to tables "*", which reads only the tables of the public schema (url sets search_path=public so each name resolves there).
       fix: Set table.include.list to the tables to read, or accept the difference.

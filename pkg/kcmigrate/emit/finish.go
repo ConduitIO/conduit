@@ -191,9 +191,19 @@ func sinkConsumerDefaults(p *Plan, _ rules.Action) ([]kcmigrate.Note, error) {
 // writes nothing when no part was recorded, so the required-settings check
 // reports the missing url as kc.setting_required. A secret part is already a
 // ${VAR} reference, so the assembled URL carries no plaintext secret.
+//
+// When the source reads tables "*" (the absent-list default, written by an
+// earlier default-setting finisher), the URL also gets search_path=public:
+// builtin:postgres lists the table names of the public schema explicitly
+// (pg_tables WHERE schemaname = 'public') and then finds each name through
+// search_path, so without it a same-name table of the "$user" schema or of a
+// server-side search_path would be read instead of the listed one.
 func pgURL(p *Plan, _ rules.Action) ([]kcmigrate.Note, error) {
 	if len(p.pgURL) == 0 {
 		return nil, nil
+	}
+	if t, ok := p.Setting(SideSource, settingTables); ok && t == allTables && p.pgURL[pgURLSearchPath] == "" {
+		p.pgURL[pgURLSearchPath] = "public"
 	}
 	var parts []string
 	connection := false // a part other than search_path names the server

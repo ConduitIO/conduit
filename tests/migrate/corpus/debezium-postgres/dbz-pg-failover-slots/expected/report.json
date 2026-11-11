@@ -27,7 +27,7 @@
     "translated": 8,
     "approximated": 0,
     "unsupported": 4,
-    "blocking": 8
+    "blocking": 9
   },
   "connectors": [
     {
@@ -197,6 +197,13 @@
         },
         {
           "code": "kc.setting_required",
+          "reason": "The builtin:postgres source requires tables, and no key of the Kafka Connect config sets it; the pipeline references ${KC_INVENTORY_SOURCE_SOURCE_TABLES} instead.",
+          "fix": "Set KC_INVENTORY_SOURCE_SOURCE_TABLES in the environment (see secrets.env.template).",
+          "blocking": true,
+          "rule": "required/source/tables"
+        },
+        {
+          "code": "kc.setting_required",
           "reason": "The builtin:kafka destination requires servers, and no key of the Kafka Connect config sets it; the pipeline references ${KC_INVENTORY_SOURCE_DESTINATION_SERVERS} instead.",
           "fix": "Set KC_INVENTORY_SOURCE_DESTINATION_SERVERS in the environment (see secrets.env.template), or pass the worker file with --worker if it holds bootstrap.servers.",
           "blocking": true,
@@ -225,7 +232,7 @@
         },
         {
           "code": "kc.default_differs",
-          "reason": "table.include.list is absent, so Debezium reads every table; the source is set to tables \"*\", whose schema coverage is connector-defined.",
+          "reason": "table.include.list is absent, so Debezium reads every table it selects, in every non-system schema. Unless another table or schema selection key is set, the source is set to tables \"*\", which reads only the tables of the public schema (url sets search_path=public so each name resolves there).",
           "fix": "Set table.include.list to the tables to read, or accept the difference.",
           "blocking": false,
           "rule": "debezium-postgres/defaults/table.include.list"

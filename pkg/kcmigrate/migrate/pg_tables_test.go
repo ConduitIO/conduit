@@ -136,15 +136,47 @@ func TestPGTables(t *testing.T) {
 }
 
 // Without table.include.list Debezium reads every table: the source gets
-// "*" and the default is noted, as before, and no search_path is written.
-func TestPGTables_AbsentListDefaultsToAll(t *testing.T) {
+// "*", the default is noted, and url sets search_path=public. The source
+// lists the public schema's table names explicitly and finds each through
+// search_path, so only search_path=public makes the name the listed table.
+func TestPGTables_AbsentListDefaultsToAllInPublic(t *testing.T) {
 	is := is.New(t)
 	rc, p := pgRun(t, "")
 	is.Equal(setting(t, tablesLine, p), "'*'")
-	is.True(!strings.Contains(setting(t, urlLine, p), "search_path"))
+	is.True(strings.HasSuffix(setting(t, urlLine, p), " search_path=public"))
 	var noted bool
 	for _, n := range rc.Notes {
-		noted = noted || n.Rule == "debezium-postgres/defaults/table.include.list"
+		noted = noted || (n.Rule == "debezium-postgres/defaults/table.include.list" && strings.Contains(n.Reason, "search_path=public"))
 	}
 	is.True(noted)
+}
+
+// A refused table or schema selection key never falls back to tables "*"
+// (the public schema), which --accept-gaps would run: tables stays a
+// variable with a blocking kc.setting_required note, and no search_path is
+// written.
+func TestPGTables_RefusedSelectionDoesNotWidenToAll(t *testing.T) {
+	for _, kv := range []string{
+		"schema.include.list=inventory",
+		"schema.whitelist=inventory",
+		"schema.exclude.list=audit",
+		"schema.blacklist=audit",
+		"table.exclude.list=public.audit",
+		"table.blacklist=public.audit",
+		"table.include.list=public.*",
+	} {
+		t.Run(kv, func(t *testing.T) {
+			is := is.New(t)
+			rc, p := pgRun(t, kv+"\n")
+			is.True(entryFor(rc, strings.SplitN(kv, "=", 2)[0]).Blocking)
+			is.Equal(setting(t, tablesLine, p), "${KC_PG_SOURCE_TABLES}")
+			is.True(!strings.Contains(setting(t, urlLine, p), "search_path"))
+			var required bool
+			for _, n := range rc.Notes {
+				required = required || (n.Code == "kc.setting_required" && n.Rule == "required/source/tables" && n.Blocking)
+			}
+			is.True(required)
+			is.Equal(rc.PipelineStatus, kcmigrate.PipelineStopped)
+		})
+	}
 }

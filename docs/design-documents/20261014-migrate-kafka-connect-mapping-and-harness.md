@@ -286,7 +286,7 @@ mechanism:
 | Family | Absent key (upstream default) | Note | Blocking |
 | --- | --- | --- | --- |
 | Postgres | `plugin.name` (`decoderbufs`) | decoder differences not emulated | no |
-| Postgres | `table.include.list` (all tables) | `tables: "*"` schema coverage is connector-defined | no |
+| Postgres | `table.include.list` (all tables) | `tables: "*"` reads the `public` schema's tables only; `url` gets `search_path=public` so each name resolves there. Not written when any other table or schema selection key is set (#3350) | no |
 | Postgres | `skipped.operations` (`t`) | none: truncates skipped, equal to Conduit | not a note |
 | MySQL | `database.ssl.mode` (`preferred`) | the emitted DSN would be plaintext: a TLS downgrade. Fix: decide `tls` explicitly | yes |
 | MySQL | `include.schema.changes` (`true`), type-handling keys | `coveredBy: kc.output_shape_differs` | yes |
@@ -421,7 +421,7 @@ not from this table: a value outside it is `unsupported`, blocking, whatever the
 | `topic.prefix`; legacy `database.server.name` | T | `debezium.topic.prefix` | Legacy name adds `kc.key_deprecated` (below) |
 | `topic.delimiter`, `topic.naming.strategy` | default T; other U! | `debezium.topic.*` | |
 | `topic.cache.size`, `topic.transaction`, `topic.heartbeat.prefix`, `topic.heartbeat.name` | U | none | |
-| `schema.include.list`, `schema.exclude.list` | A when combined with a literal table list; U! otherwise | folded into `tables` | |
+| `schema.include.list`, `schema.exclude.list` | A when combined with a literal table list; U! otherwise | folded into `tables` | When refused, `tables` is left unset (`kc.setting_required`), never defaulted to `*` (#3350) |
 | `table.include.list` | T for literal lowercase `schema.table` entries in one schema; U! otherwise | source `tables` (bare names) + `search_path=<schema>` in `url` | The source reads each `tables` entry as one identifier through `search_path`, so a dotted entry fails at start (conduit-connector-postgres#277, #3350). Several schemas: U! `kc.target_capability_missing`. A bare, mixed-case, `pg_*` or system-schema entry, or a regex: U! `kc.key_unsupported`. A refused list leaves `tables` unset (`kc.setting_required`), never `*` |
 | `table.exclude.list` | U! | none | `tables` has no exclusion. Fix: list the included tables |
 | `column.include.list`, `column.exclude.list` | T | `debezium.column.include.list`, `.exclude.list` | Applied in the source so the schema descriptor matches |
