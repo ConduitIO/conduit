@@ -88,4 +88,19 @@
 // process listening at the dispensed address. Conduit did not spawn it and
 // cannot safely assume a local OS PID identifies it. Teardown only closes
 // this package's own gRPC client connection.
+//
+// # No plugin specification yet (wiring prerequisite)
+//
+// Unlike the built-in and standalone registries' dispensers, Dispenser does
+// not carry the specification of the plugin it dispenses
+// (connector.DispenserSpecification reports false; pinned by
+// TestDispenser_CarriesNoSpecification). That is harmless while nothing
+// dispenses through it: connector.PluginService.newDispenser has no branch
+// that can return one. Before adding that branch, attach the specification
+// from the Validate round trip (Specify) to the Dispenser that is wired in,
+// and flip that test. Without it the arch-v2 engine cannot see the
+// connector's sdk.batch.* defaults (docs/design-documents/
+// 20261103-archv2-destination-batch-timing.md, deviation 1): a connector that
+// batches by default, such as S3, would again withhold every ack behind its
+// own batcher and run at one record per batch delay (#3321).
 package external
