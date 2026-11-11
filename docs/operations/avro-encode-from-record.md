@@ -54,7 +54,9 @@ field counts as null, not as an empty value (the codec writes an empty value, an
 written); set it to an empty value, or make the field nullable. A `time.Time` in a `local-timestamp-millis` or
 `-micros` field fails when its zone differs from the process's local zone at that instant: the codec writes the wall
 clock of the local zone, so the wall clock a reader sees would differ from the one the value has. Convert the time to
-UTC and run with `TZ=UTC`, or to the local zone, before this processor.
+UTC and run with `TZ=UTC`, or to the local zone, before this processor. A union that lists both a `timestamp-*`
+and a `local-timestamp-*` branch is checked as local-timestamp, so such a time is refused even when the codec would
+write it to the `timestamp-*` branch; drop one of the two branches from the schema if that matters.
 
 ### Remediation
 

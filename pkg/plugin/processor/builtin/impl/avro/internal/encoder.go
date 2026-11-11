@@ -39,6 +39,10 @@ type Encoder struct {
 	// the same value back. It is set for FromRecordSchemaStrategy only, so the
 	// other strategies keep their existing behavior.
 	lossless bool
+
+	// localTime caches the local-timestamp check of verifyRoundTrip per
+	// schema.
+	localTime localTimeCheck
 }
 
 // SchemaStrategy decides the schema a value is encoded with. carried is the
@@ -80,7 +84,7 @@ func (e *Encoder) Encode(ctx context.Context, sd opencdc.StructuredData, carried
 		return nil, cerrors.Errorf("failed to marshal data with schema (ID: %v, subject: %v, version: %v): %w", s.ID, s.Subject, s.Version, errsafe.Opaque(err))
 	}
 	if e.lossless {
-		if err := verifyRoundTrip(s, sd, data); err != nil {
+		if err := e.verifyRoundTrip(s, sd, data); err != nil {
 			return nil, cerrors.Errorf("schema (ID: %v, subject: %v, version: %v): %w", s.ID, s.Subject, s.Version, err)
 		}
 	}
@@ -96,12 +100,12 @@ func (e *Encoder) Encode(ctx context.Context, sd opencdc.StructuredData, carried
 // its logical type, and ignores a map key that is not a field of a nested
 // record. Checking the round trip, not trusting a successful encode, turns
 // each of those into an error instead of a changed value.
-func verifyRoundTrip(s schema.Schema, sd opencdc.StructuredData, data []byte) error {
+func (e *Encoder) verifyRoundTrip(s schema.Schema, sd opencdc.StructuredData, data []byte) error {
 	var decoded opencdc.StructuredData
 	if err := s.Unmarshal(data, &decoded); err != nil {
 		return mismatch("(record)", "does not decode after encoding", err)
 	}
-	if k := localWallClockChanged(s, sd); k != "" {
+	if k := e.localTime.changed(s, sd); k != "" {
 		return mismatch(k, "would not survive encoding: a local-timestamp field is written with the wall clock the time has in the local time zone, not the wall clock of the time's own zone", nil)
 	}
 	if len(decoded) != len(sd) {
