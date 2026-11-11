@@ -181,11 +181,45 @@ func TestFromRecord_LocalTimestampNamedTypes(t *testing.T) {
 	})
 }
 
+// runLocalTimeCasesNoRegistry runs the lossless part of Encoder.Encode (the
+// codec encode and verifyRoundTrip) on schema text directly, without
+// registering it. Used for schemas the Go codec and Conduit's built-in
+// registry accept but the Confluent registry, which parses with Java Avro,
+// refuses at registration (a reference by alias, a union wrapped in
+// {"type": [...]}); the integration build runs every registry test against
+// Confluent.
+func runLocalTimeCasesNoRegistry(t *testing.T, text string, cases []localTimeCase) {
+	t.Helper()
+	s := schema.Schema{Type: schema.TypeAvro, Bytes: []byte(text)}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := &Encoder{lossless: true}
+			data, err := s.Marshal(tc.in)
+			if err != nil {
+				t.Fatalf("codec refused the record: %v", err)
+			}
+			err = e.verifyRoundTrip(s, tc.in, data)
+			if tc.field == "" {
+				if err != nil {
+					t.Fatalf("want no error, got %v", err)
+				}
+				return
+			}
+			wantCode(t, err, CodeSchemaMismatch)
+			ce, _ := conduiterr.Get(err)
+			if want := `field "` + tc.field + `"`; !strings.Contains(ce.Message, want) {
+				t.Fatalf("message %q does not name %s", ce.Message, want)
+			}
+		})
+	}
+}
+
 // TestFromRecord_LocalTimestampCodecSpellings: valid schema spellings whose
 // names or logical types the codec resolves in ways a reading of the JSON can
 // miss. The check must see each local-timestamp field exactly where the codec
-// writes one, or a changed wall clock is encoded. Not parallel: it sets
-// time.Local.
+// writes one, or a changed wall clock is encoded. It tests the check on the
+// codec's parse, so it runs without a registry (see
+// runLocalTimeCasesNoRegistry). Not parallel: it sets time.Local.
 func TestFromRecord_LocalTimestampCodecSpellings(t *testing.T) {
 	setLocal(t, time.UTC)
 	ts := func(v time.Time) map[string]any { return map[string]any{"t": v} }
@@ -236,7 +270,7 @@ func TestFromRecord_LocalTimestampCodecSpellings(t *testing.T) {
 	}}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			runLocalTimeCases(t, tc.schema, []localTimeCase{
+			runLocalTimeCasesNoRegistry(t, tc.schema, []localTimeCase{
 				{"UTC", tc.row(ltUTC), ""},
 				{"non-UTC", tc.row(ltPlus5), "x"},
 			})
