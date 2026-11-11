@@ -40,6 +40,11 @@ type Dispenser struct {
 	// decorate, when not nil, adds engine-owned values to the context of every
 	// source/destination call (see WithContextDecorator).
 	decorate func(context.Context) context.Context
+	// spec is the specification of the plugin version the registry resolved
+	// for this dispenser; hasSpec is false for a dispenser built outside the
+	// registry. See connector.DispenserSpecification.
+	spec    pconnector.Specification
+	hasSpec bool
 }
 
 func NewDispenser(
@@ -56,6 +61,12 @@ func NewDispenser(
 		sourcePlugin:      sourcePlugin,
 		destinationPlugin: destinationPlugin,
 	}
+}
+
+// Specification returns the specification the registry attached, if any (see
+// connector.DispenserSpecification).
+func (d *Dispenser) Specification() (pconnector.Specification, bool) {
+	return d.spec, d.hasSpec
 }
 
 func (d *Dispenser) DispenseSpecifier() (connector.SpecifierPlugin, error) {

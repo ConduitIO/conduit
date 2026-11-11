@@ -1,9 +1,76 @@
-# Arch-v2 refuses destinations with SDK batching
+# Arch-v2 destination batching
 
-On the preview pipeline engine (`--preview.pipeline-arch-v2`), a pipeline whose destination connector, or
-dead-letter-queue connector, sets `sdk.batch.size` above 1 does not start. The default engine is not affected.
+On the preview pipeline engine (`--preview.pipeline-arch-v2`) the engine batches destination writes itself and
+configures the destination connector not to batch. This page covers what that means for operators, the one
+batching configuration arch-v2 still refuses (on the dead-letter queue), and the failure modes around it. The
+default engine is not affected: there the connector SDK batches, as it always has.
 
-## Symptom
+## How arch-v2 batches a destination
+
+For each destination the engine resolves the effective `sdk.batch.size` and `sdk.batch.delay`, per key:
+
+1. the value in the pipeline config, if it is set and parses;
+2. otherwise the default the connector declares in its specification;
+3. otherwise 0 (off).
+
+It batches with the result (size, byte cap, the `sdk.batch.delay` timer, a stop), and hands the connector `0` for
+each of those keys whose value would otherwise turn the connector's own batcher on. Without that, the connector
+would hold every acknowledgement back behind its own batch, and arch-v2, which waits for the acknowledgements of a
+write before it reads more, would slow to one record per connector delay.
+
+Consequences:
+
+- A connector that batches by default, such as the S3 destination (1000 records / 1 s), is batched by the engine
+  at that default even when the pipeline sets nothing. It writes fewer, larger objects than v0.21 arch-v2 did, the
+  same layout the default engine produces.
+- Setting `sdk.batch.*` on such a destination no longer leaves the connector batching a second time behind the
+  engine.
+- A value that does not parse, or is negative, is passed to the connector unchanged, which rejects it at start.
+- The start logs `destination batching taken over from connector defaults` (INFO) for a destination whose batching
+  came at least partly from the connector's defaults, with the resolved size and delay and where each came from
+  (`pipeline_config` or `connector_default`).
+- `conduit_funnel_destination_plugin_batching_neutralised_total` counts each start where at least one key was
+  handed to the connector as `0`. File, Kafka, log and Postgres destinations declare `0` defaults and are not
+  counted unless the pipeline turns batching on.
+
+## A destination is slow behind a 1-record source
+
+Applies to arch-v2 from the release that contains #3321 (design
+`docs/design-documents/20261103-archv2-destination-batch-timing.md`, Decision 2).
+
+### Symptom
+
+A pipeline whose source returns one record per read (for example a Kafka source without `sdk.batch.*`) delivers
+about one record per second, or per some other fixed interval, to the destination. The pipeline reports
+**running** and CPU use is low. Before the fix this was what a default S3 destination did on arch-v2 (#3321).
+
+### Diagnosis
+
+The destination's connector is batching inside its plugin and holding acknowledgements until its own delay
+passes. Check, for that destination:
+
+- `conduit_funnel_destination_plugin_batching_neutralised_total`. If it counts the destination, the engine already
+  hands the connector `0` for its declared batch settings, and the slowness is elsewhere (check
+  `conduit_connector_execution_duration_seconds`).
+- If it does not count the destination, the connector either declares no batching default, or batches
+  internally without declaring `sdk.batch.*` in its specification (a connector not built on the Go connector SDK,
+  or one whose code default disagrees with its specification). The engine cannot see that kind of batching.
+
+### Remediation
+
+Set `sdk.batch.size` and `sdk.batch.delay` on the destination in the pipeline config. The engine then batches the
+writes itself and reads ahead, so the connector receives larger writes. If the connector still holds
+acknowledgements, report it to the connector's maintainers. No data is at risk: nothing is acknowledged to the
+source before the destination acknowledges it.
+
+## Arch-v2 refuses SDK batching on the dead-letter queue
+
+The dead-letter queue is not batched by the engine. A pipeline whose dead-letter-queue connector sets
+`sdk.batch.size` above 1, or `sdk.batch.delay` above 0, does not start on arch-v2. A dead-letter queue that batches
+only by its connector's default (S3 used as a dead-letter queue) is handed `0` instead and writes each nacked record
+synchronously.
+
+### Symptom
 
 `conduit run`, a pipeline start through the API, or provisioning fails with the code
 `pipeline.archv2_destination_batching_unsupported` (FailedPrecondition). A live apply (`pipelines deploy` against a
@@ -11,62 +78,105 @@ running server) that adds the setting to a running pipeline is refused with the 
 stopped, so the pipeline keeps running with its old config:
 
 ```text
-can't start pipeline <pipeline-id> on pipeline architecture v2: destination connector "<connector-id>" (name "<name>")
-sets sdk.batch.size=100 (/connectors/1/settings/sdk.batch.size); v2 waits for every ack before the next read, and a
-destination batch larger than the records per write withholds its acks until it flushes, so the pipeline can stall
-(sdk.batch.delay 0) or slow sharply
+can't start pipeline <pipeline-id> on pipeline architecture v2: the dead letter queue sets sdk.batch.size=50
+(/dead-letter-queue/settings/sdk.batch.size); v2 waits for every ack before the next read, and a DLQ batch larger
+than the records per write withholds its acks until it flushes, so the pipeline can stall (sdk.batch.delay 0) or
+slow sharply
 ```
 
-The error names every offending destination in the message. Its config path and structured fix point at the first
-one, as a JSON pointer into the pipeline config document: `/connectors/<index>/settings/sdk.batch.size`, where
-`<index>` is the connector's position in `connectors:`, or `/dead-letter-queue/settings/sdk.batch.size` when the
-dead-letter queue is the offender. Fix it and re-run to see the next one, if any.
+The config path and structured fix point at the first offending setting, as a JSON pointer into the pipeline
+config document: `/dead-letter-queue/settings/sdk.batch.size` or `/dead-letter-queue/settings/sdk.batch.delay`.
+Fix it and re-run to see the next one, if any.
 
-A pipeline created through the API (rather than a pipeline config file) has no config document to point into, so for
-it the error carries no config path and no structured fix. The message still names the connector id and name and the
-setting; remove `sdk.batch.size` from that connector's settings through the API.
+A pipeline created through the API (rather than a pipeline config file) has no config document to point into, so
+for it the error carries no config path and no structured fix. The message still names the setting; remove it
+from the dead-letter queue's settings through the API.
 
 The pipeline is not started. Nothing is read from the source and nothing is acknowledged upstream.
 
-Before this check (v0.20.0) the same configuration started and then, depending on write size and delay, either
-delivered nothing while reporting **running** (`sdk.batch.delay` left at 0), or ran far slower than the default
-engine (measured at 83 rec/s against 56.7k rec/s with one-record reads and a 10ms delay).
+From the release that contains #3321, `sdk.batch.delay` above 0 on the dead-letter queue is refused too. An arch-v2
+pipeline that set it started before and now does not: the SDK batches on a delay alone, with a size of its own
+(1000 in SDK v0.17.2), so every nacked record waited for that delay before its acknowledgement.
 
-## Diagnosis
+### Diagnosis
 
-The arch-v2 destination task writes a batch and then waits for every ack of it before the source is read again. With
-`sdk.batch.size` above 1 the connector SDK's destination only queues a write, and sends the acks when the batch
-flushes: when it is full, or `sdk.batch.delay` after its first record. With the default delay of 0 a partial batch is
-never flushed by time, so the ack never comes. The default engine reads destination acks on their own goroutine and
-keeps sending records, so it is not affected.
+The arch-v2 engine writes to the dead-letter queue and then waits for the acknowledgement before it acknowledges
+the nacked record to the source. With `sdk.batch.size` above 1, or `sdk.batch.delay` above 0, the connector SDK only
+queues the write and sends the acknowledgement when its batch flushes: when it is full, or `sdk.batch.delay` after
+its first record. With no delay a partial batch is never flushed by time, so the acknowledgement never comes. The
+default engine reads acknowledgements on their own goroutine, so it is not affected.
 
-Check which settings are set on each destination (and the DLQ):
+Check the dead-letter queue's settings:
 
 ```bash
-grep -n -B2 -A6 "sdk.batch" pipeline.yaml
+grep -n -A6 "dead-letter-queue" pipeline.yaml
 ```
 
-The check is conservative: any `sdk.batch.size` above 1 is refused, including a configuration where the write size
-happens to line up with the batch and would have worked. Size 0 or 1, and `sdk.batch.delay` on its own, are safe and
-accepted (the SDK flushes synchronously when the batch reaches its size). The SDK trims whitespace around keys and
-values, so the check does too. A value that does not parse as an integer is not refused here; the connector rejects
-it itself.
+The check is conservative: any `sdk.batch.size` above 1 and any `sdk.batch.delay` above 0 is refused. Size 0 or 1
+with no delay is accepted. The SDK trims whitespace around keys and values, so the check does too. A value that
+does not parse is not refused here; the connector rejects it itself.
 
-A destination that is not built on the connector SDK, or a standalone connector that buffers internally, is not
-detected by this check and can still stall arch-v2.
-
-## Remediation
+### Remediation
 
 Pick one:
 
-- Remove `sdk.batch.size` and `sdk.batch.delay` from the destination (or DLQ) settings. This is the supported
-  configuration on arch-v2. Larger source batches (`sdk.batch.size` on the **source**) are fine and are what raises
-  arch-v2 throughput.
-- If the pipeline does not need record fan-out (a processor that splits one record into several, such as `ai.chunk`),
-  run without `--preview.pipeline-arch-v2` and keep the destination batching.
+- Remove `sdk.batch.size` and `sdk.batch.delay` from the dead-letter queue's settings.
+- If the pipeline does not need record fan-out (a processor that splits one record into several, such as
+  `ai.chunk`), run without `--preview.pipeline-arch-v2` and keep the batching.
 
-A pipeline that was running slowly with a non-zero delay now refuses to start with this error until one of the above
-is applied. No data is at risk: the pipeline never started, and its stored position is unchanged.
+No data is at risk: the pipeline never started, and its stored position is unchanged.
+
+## Arch-v2 refuses an environment reference in `sdk.batch.*`
+
+On arch-v2, a destination's or the dead-letter queue's `sdk.batch.size` and `sdk.batch.delay` must be literal
+values. A value that contains `$`, such as `${S3_BATCH}`, is refused.
+
+### Symptom
+
+`conduit run`, a pipeline start through the API, or provisioning fails with the code
+`pipeline.archv2_destination_batching_not_literal` (FailedPrecondition). A live apply that adds such a value is
+refused with the same code before the running pipeline is stopped. `conduit pipelines validate --preview.pipeline-arch-v2`
+and `conduit doctor` (with arch-v2 enabled) report the same code offline.
+
+```text
+can't start pipeline <pipeline-id> on pipeline architecture v2: destination connector "<pipeline-id>:s3-out" sets
+sdk.batch.size=${S3_BATCH} (/connectors/1/settings/sdk.batch.size); v2 batches a destination itself and configures
+the connector not to batch, which it decides from the value as written, while an environment reference is
+expanded only for the connector, so the connector could batch behind the engine and withhold acks
+```
+
+The config path points at the first offending setting (`/connectors/<index>/settings/<key>` or
+`/dead-letter-queue/settings/<key>`). A pipeline created through the API has no config document, so the error then
+carries no config path; the message still names the connector and the setting. The message shows the reference as
+written, never its value.
+
+The pipeline is not started. Nothing is read from the source and nothing is acknowledged upstream.
+
+### Diagnosis
+
+The engine decides how to batch a destination, and which `sdk.batch.*` keys to hand the connector as `0`, from the
+settings as stored. `${VAR}` references are expanded later, only for the connector (see
+[env-allowlist.md](env-allowlist.md)). To the engine `${S3_BATCH}` is not a number, so it would batch with the
+connector's default (S3: 1000 / 1 s) and leave the size key alone, while the connector gets the expanded value.
+With `S3_BATCH=10000` the connector would batch 10000 records with no delay behind the engine, and hold the
+acknowledgements of every engine flush until records the engine never sends fill its batch: the pipeline stalls
+while it reports running. A `sdk.batch.delay` reference makes the connector batch on a delay behind the engine
+instead, so every write waits that much longer. On the dead-letter queue a reference would also get past the
+refusal above.
+
+Find the reference:
+
+```bash
+grep -n 'sdk.batch.*\$' pipeline.yaml
+```
+
+### Remediation
+
+- Write the value in the pipeline config, for example `sdk.batch.size: "1000"` and `sdk.batch.delay: "1s"`. To
+  vary it per environment, template the pipeline file before Conduit reads it rather than through `${VAR}`.
+- Or remove the setting: the engine then uses the connector's own default.
+- Or run without `--preview.pipeline-arch-v2`. The default engine hands the settings to the connector as they are,
+  and the connector does all the batching.
 
 ## Fan-out: a nack waits for the batching destination
 
@@ -176,10 +286,10 @@ write. No data is at risk: nothing is acknowledged to the source before it is wr
 ### Symptom
 
 The start of a pipeline on `--preview.pipeline-arch-v2` logs a warning with the code
-`pipeline.archv2_destination_batch_unbounded_wait`, naming a destination connector that sets
-`sdk.batch.size` above 1 and no `sdk.batch.delay`. The pipeline starts and runs. The warning is logged again on
-every start, including each restart after an error recovery, so a repeat is the same configuration, not a new
-problem.
+`pipeline.archv2_destination_batch_unbounded_wait`, naming a destination connector whose effective
+`sdk.batch.size` is above 1 with no `sdk.batch.delay`, from the pipeline config or the connector's defaults.
+The pipeline starts and runs. The warning is logged again on every start, including each restart after an
+error recovery, so a repeat is the same configuration, not a new problem.
 
 ### Diagnosis
 
@@ -197,6 +307,8 @@ Set `sdk.batch.delay` on the destination (for example `1s`), or accept the wait 
 ## Related
 
 - Issue #2979
+- Issue #3321: arch-v2 owns destination batching (design
+  `docs/design-documents/20261103-archv2-destination-batch-timing.md`, Decision 2)
 - Issue #3323, PR #3324: a fan-out nack waits for every destination's vote
 - Issue #3231: flush timer for destination batches (design
   `docs/design-documents/20261103-archv2-destination-batch-timing.md`)

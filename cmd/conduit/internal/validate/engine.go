@@ -85,11 +85,13 @@ type Options struct {
 	// consulted when ResolvePlugins.
 	BuiltinProcessors map[string]struct{}
 
-	// ArchV2 checks, on top of parse -> enrich -> validate, that no destination
-	// or dead-letter-queue sets sdk.batch.size above 1: architecture v2's
-	// stop-and-wait destination task waits for every ack before the next read,
-	// so it cannot batch, and the engine refuses such a pipeline at start with
-	// pipeline.archv2_destination_batching_unsupported. The offline engine has
+	// ArchV2 checks, on top of parse -> enrich -> validate, what the engine
+	// refuses at start under architecture v2: a dead-letter-queue with
+	// sdk.batch.size above 1 or sdk.batch.delay above 0
+	// (pipeline.archv2_destination_batching_unsupported), and a destination or
+	// dead-letter-queue sdk.batch.* value that is not a literal
+	// (pipeline.archv2_destination_batching_not_literal). Regular destinations'
+	// batching is not refused: the engine batches them itself. The offline engine has
 	// no runtime config, so the command passes this from
 	// preview.pipeline-arch-v2.
 	ArchV2 bool
@@ -316,15 +318,23 @@ func builtinRefFinding(pluginRef, id, configPath, code, kind string, builtins ma
 // keep it in sync with that registration.
 const codeArchV2DestinationBatchingUnsupported = "pipeline.archv2_destination_batching_unsupported"
 
-// archV2BatchingFindings is the --preview.pipeline-arch-v2 check: arch-v2's
-// stop-and-wait destination task waits for every ack before the next read, so
-// a destination (or the dead-letter queue) with sdk.batch.size above 1 is
-// refused at start with pipeline.archv2_destination_batching_unsupported. The
-// engine guard in pkg/lifecycle-poc enforces it at runtime; this surfaces the
-// same refusal offline, sharing config.SDKBatchSizeAboveOne with that guard so
-// the two agree. The code string must stay in sync with
-// lifecycle.CodeArchV2DestinationBatchingUnsupported (a literal here keeps the
-// offline engine from importing the whole lifecycle package).
+// codeArchV2DestinationBatchingNotLiteral is the runtime engine's error code
+// for a destination/DLQ sdk.batch.* value that is not a literal under arch-v2
+// (lifecycle.CodeArchV2DestinationBatchingNotLiteral). A literal for the same
+// reason as codeArchV2DestinationBatchingUnsupported; keep it in sync.
+const codeArchV2DestinationBatchingNotLiteral = "pipeline.archv2_destination_batching_not_literal"
+
+// archV2BatchingFindings is the --preview.pipeline-arch-v2 check. It reports
+// what the engine refuses at start (and PreflightPipelineConfig refuses on a
+// live apply): a dead-letter-queue with sdk.batch.size above 1 or
+// sdk.batch.delay above 0 (pipeline.archv2_destination_batching_unsupported;
+// the engine does not batch the DLQ), and a destination or DLQ sdk.batch.*
+// value that is not a literal (pipeline.archv2_destination_batching_not_literal,
+// config.SDKBatchNonLiteral). A batched destination is not reported: the
+// engine batches it itself. It shares config.SDKBatchSizeAboveOne and
+// config.SDKBatchDelayAboveZero with the runtime guard so the two agree. The
+// code strings must stay in sync with the lifecycle constants (literals here
+// keep the offline engine from importing the whole lifecycle package).
 func archV2BatchingFindings(p config.Pipeline) []Finding {
 	add := func(findings []Finding, configPath, msg string) []Finding {
 		return append(findings, Finding{
@@ -337,25 +347,54 @@ func archV2BatchingFindings(p config.Pipeline) []Finding {
 		})
 	}
 
+	// A value that is not a literal (an environment reference) is refused at
+	// start, by the guard and the live-apply preflight alike: the engine reads
+	// it as written and the plugin gets it expanded, so they would disagree on
+	// who batches. config.SDKBatchNonLiteral is shared with both.
+	nonLiteral := func(findings []Finding, label, pointerPrefix string, settings map[string]string) []Finding {
+		for _, k := range config.SDKBatchNonLiteral(settings) {
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Code:     codeArchV2DestinationBatchingNotLiteral,
+				Message: fmt.Sprintf("architecture v2 needs a literal %s on %s (sets %s=%s): "+
+					"the engine batches with the value as written, and an environment reference is expanded only for the connector",
+					strings.TrimSpace(k), label, strings.TrimSpace(k), strings.TrimSpace(settings[k])),
+				ConfigPath: pointerPrefix + k,
+				Suggestion: "set sdk.batch.size and sdk.batch.delay to literal values (for example 1000 and 1s) instead of an environment reference, or run the pipeline without architecture v2",
+			})
+		}
+		return findings
+	}
+
 	var findings []Finding
 	for ci, conn := range p.Connectors {
 		if conn.Type != config.TypeDestination {
 			continue
 		}
-		_, value, bad := config.SDKBatchSizeAboveOne(conn.Settings)
-		if !bad {
-			continue
-		}
-		findings = add(findings,
-			fmt.Sprintf("/pipelines/connectors/%d/settings/%s", ci, config.SDKBatchSizeSetting),
-			fmt.Sprintf("destination connector %q (sets %s=%s)", conn.ID, config.SDKBatchSizeSetting, value),
-		)
+		findings = nonLiteral(findings, fmt.Sprintf("destination connector %q", conn.ID),
+			fmt.Sprintf("/pipelines/connectors/%d/settings/", ci), conn.Settings)
 	}
+	findings = nonLiteral(findings, "the dead letter queue", "/pipelines/dead-letter-queue/settings/", p.DLQ.Settings)
+
+	// A destination's sdk.batch.size/delay is not refused: the engine batches
+	// destinations itself, so only the DLQ is checked here (same as Start).
 	if _, value, bad := config.SDKBatchSizeAboveOne(p.DLQ.Settings); bad {
 		findings = add(findings,
 			"/pipelines/dead-letter-queue/settings/"+config.SDKBatchSizeSetting,
 			fmt.Sprintf("the dead letter queue (sets %s=%s)", config.SDKBatchSizeSetting, value),
 		)
+	}
+	// #3321: the runtime guard refuses a DLQ delay above 0 too (the SDK
+	// batches on a delay alone); config.SDKBatchDelayAboveZero is shared.
+	if _, value, bad := config.SDKBatchDelayAboveZero(p.DLQ.Settings); bad {
+		findings = append(findings, Finding{
+			Severity:   SeverityError,
+			Code:       codeArchV2DestinationBatchingUnsupported,
+			Message:    fmt.Sprintf("architecture v2 does not support the dead letter queue (sets %s=%s)", config.SDKBatchDelaySetting, value),
+			ConfigPath: "/pipelines/dead-letter-queue/settings/" + config.SDKBatchDelaySetting,
+			Suggestion: "remove sdk.batch.delay from the dead letter queue, or run the pipeline without architecture v2",
+			Fix:        &conduiterr.Fix{ConfigPath: "/pipelines/dead-letter-queue/settings/" + config.SDKBatchDelaySetting, Op: "remove"},
+		})
 	}
 	return findings
 }

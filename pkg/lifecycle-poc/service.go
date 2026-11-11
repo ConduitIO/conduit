@@ -34,7 +34,6 @@ import (
 	"github.com/conduitio/conduit/pkg/plugin"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/processor"
-	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/jpillora/backoff"
 	"gopkg.in/tomb.v2"
 )
@@ -562,7 +561,13 @@ func (s *Service) startRun(ctx context.Context, pipelineID string, predecessor *
 	// nothing from the source and acks nothing (invariants 1 and 3). Destinations
 	// are no longer refused — they batch in the engine itself
 	// (docs/design-documents/20261017-funnel-destination-batching.md) — but the
-	// DLQ is not wired through that path and is still refused.
+	// DLQ is not wired through that path and is still refused. A destination
+	// or DLQ sdk.batch.* value that is not a literal is refused first: the
+	// engine reads the value as written and the plugin gets it expanded, so the
+	// two would disagree on who batches (#3321 review).
+	if err := s.checkBatchingLiterals(ctx, pl); err != nil {
+		return err
+	}
 	if err := s.checkDLQBatching(pl); err != nil {
 		return err
 	}
@@ -1611,23 +1616,34 @@ func (s *Service) buildDestinationTasks(
 			return nil, err
 		}
 
-		// Destination-write batching (docs/design-documents/
-		// 20261017-funnel-destination-batching.md): the funnel batches writes
-		// itself using the destination's sdk.batch.size/sdk.batch.delay, so the
-		// SDK must not also batch (which would withhold acks and stall the
-		// stop-and-wait loop). Read the settings, mark the connector adapter to
-		// strip them, and hand them to the destination task.
+		// Arch-v2 owns destination batching (docs/design-documents/
+		// 20261103-archv2-destination-batch-timing.md, Decision 2, #3321):
+		// resolve the effective sdk.batch.size/sdk.batch.delay per key
+		// (pipeline config first, then the connector spec's default), batch
+		// with them in the funnel, and configure the plugin with "0" for each
+		// key that would otherwise turn its batcher on. Without that, a
+		// connector that batches by default (S3: 1000 / 1 s) withholds every
+		// ack behind its own batcher and the stop-and-wait loop runs at one
+		// record per delay; deleting the keys instead brought that default
+		// back behind the engine's own batch.
+		destConn := dest.(*connector.Destination)
 		instance.RLock()
 		destSettings := instance.Config.Settings
 		instance.RUnlock()
-		batchSize, batchDelay, batching := config.SDKBatchSettings(destSettings)
-		if batching {
-			dest.(*connector.Destination).SetEngineBatches()
+		spec, haveSpec := destConn.Specification()
+		resolved := resolveDestinationBatching(destSettings, spec.DestinationParams, haveSpec)
+		batchSize, batchDelay, batching := resolved.size, resolved.delay, resolved.enabled()
+		if len(resolved.overrides) > 0 {
+			destConn.SetPluginBatchingOverrides(resolved.overrides...)
+			s.countPluginBatchingNeutralised(pl.Config.Name, instance.Plugin, instance.ID)
+		}
+		if batching && resolved.fromConnectorDefault() {
+			logBatchingFromConnectorDefault(ctx, logger, instance, resolved)
 		}
 
 		destTask := funnel.NewBatchingDestinationTask(
 			instance.ID,
-			dest.(*connector.Destination),
+			destConn,
 			logger,
 			s.newConnectorMetrics(pl.Config.Name, instance),
 			batchSize,
@@ -1876,9 +1892,21 @@ func (s *Service) buildDLQ(
 		return nil, err
 	}
 
+	// The DLQ is not engine-batched (batching_guard.go refuses an explicit
+	// DLQ sdk.batch.size > 1 or sdk.batch.delay > 0), but a connector whose
+	// spec batches by default (S3 as a DLQ) would withhold each nack's ack
+	// behind its own batcher. Configure those keys "0" as for a destination,
+	// so every nack is written and acked synchronously (#3321).
+	dlqConn := dest.(*connector.Destination)
+	dlqSpec, haveDLQSpec := dlqConn.Specification()
+	if b := resolveDestinationBatching(pl.DLQ.Settings, dlqSpec.DestinationParams, haveDLQSpec); len(b.overrides) > 0 {
+		dlqConn.SetPluginBatchingOverrides(b.overrides...)
+		s.countPluginBatchingNeutralised(pl.Config.Name, conn.Plugin, conn.ID)
+	}
+
 	dlq := funnel.NewDLQ(
 		"dlq-"+sourceID,
-		dest.(*connector.Destination),
+		dlqConn,
 		logger,
 		s.newDLQMetrics(pl.Config.Name, conn.Plugin),
 		pl.DLQ.WindowSize,
@@ -2841,6 +2869,17 @@ func (s *Service) newFlushMetrics(pipelineName string, instance *connector.Insta
 		return funnel.NoOpFlushMetrics{}
 	}
 	return funnel.NewFlushMetrics(pipelineName, instance.Plugin, instance.ID)
+}
+
+// countPluginBatchingNeutralised counts a destination (or DLQ) built with at
+// least one sdk.batch.* key configured "0" so its plugin does not batch behind
+// the engine (#3321). It is counted when the run is built, which is once per
+// open of that destination.
+func (s *Service) countPluginBatchingNeutralised(pipelineName, plugin, componentID string) {
+	if s.metricsDisabled {
+		return
+	}
+	measure.FunnelDestinationPluginBatchingNeutralisedCounter.WithValues(pipelineName, plugin, componentID).Inc()
 }
 
 func (s *Service) newProcessorMetrics(pipelineName, plugin, componentID string) funnel.ProcessorMetrics {

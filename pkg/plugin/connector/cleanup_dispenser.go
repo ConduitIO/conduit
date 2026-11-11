@@ -41,6 +41,12 @@ func DispenserWithCleanup(d Dispenser, cleanup func()) Dispenser {
 	return &cleanupDispenser{target: d, cleanup: cleanup}
 }
 
+// Specification forwards the wrapped dispenser's specification (see
+// DispenserSpecification).
+func (c *cleanupDispenser) Specification() (pconnector.Specification, bool) {
+	return DispenserSpecification(c.target)
+}
+
 func (c *cleanupDispenser) DispenseSpecifier() (SpecifierPlugin, error) {
 	return c.target.DispenseSpecifier()
 }
