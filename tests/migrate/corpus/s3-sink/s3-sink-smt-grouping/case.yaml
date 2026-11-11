@@ -4,9 +4,10 @@ family: s3-sink
 description: >-
   An S3 sink whose SMT configuration Kafka Connect itself rejects: an alias
   listed twice, a listed alias with no type, and a transform that names an
-  undefined predicate. Every SMT key blocks with the reason, and the settings
-  of an alias transforms= does not list (one a config-provider reference) are
-  no-ops, as Kafka Connect ignores them.
+  undefined predicate. Every SMT key blocks with the reason. The settings of
+  an alias transforms= does not list are no-ops, as Kafka Connect ignores
+  them, except a config-provider reference, which Kafka Connect still
+  resolves and migrate cannot read offline: it blocks.
 provenance:
   source: synthetic
   ref: written for the SMT chain framework (design 20261110-kafka-connect-smt-pack.md)
@@ -21,7 +22,7 @@ expect:
     - {key: transforms.drop.type, status: unsupported, blocking: true, code: kc.smt_unsupported}
     - {key: transforms.drop.predicate, status: unsupported, blocking: true, code: kc.smt_unsupported}
     - {key: transforms.hoist.type, status: translated, blocking: false}
-    - {key: transforms.hoist.field, status: translated, blocking: false}
+    - {key: transforms.hoist.field, status: unsupported, blocking: true, code: kc.smt_unsupported}
     - {key: s3.bucket.name, status: translated}
 covers:
   - class: io.confluent.connect.s3.S3SinkConnector

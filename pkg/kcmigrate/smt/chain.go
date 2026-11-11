@@ -58,8 +58,16 @@ type Env struct {
 	// ByteArrayConverter is translated, so it is false there.
 	SchemaMode bool
 	// KeyShape and ValueShape are what the record sides hold where the
-	// chain starts.
+	// chain starts, as Kafka Connect's SMTs see them: unknown unless the
+	// connector and converter make it certain.
 	KeyShape, ValueShape Shape
+	// KeySchema and ValueSchema are true when the side's effective Kafka
+	// Connect converter carries a schema (Avro, Protobuf, JSON Schema,
+	// JsonConverter with schemas.enable=true), and also when the converter
+	// is unknown, so the check fails closed. Decision 8 refuses an SMT that
+	// reshapes such a side: Kafka Connect derives a type-preserving schema
+	// for the new shape, and Conduit would register one with widened types.
+	KeySchema, ValueSchema bool
 	// DebeziumOutput is true when the pipeline writes Debezium-compatible
 	// output (decision 5: SMTs that reshape the envelope are refused then).
 	DebeziumOutput bool
@@ -144,6 +152,8 @@ type applier struct {
 	chainErrs              []string // reasons that refuse the chain as a whole
 	predErrs               []string // the subset about the predicates list
 	predsRead              bool     // false when predicates= is a config-provider reference
+	nested                 map[string][]string
+	deciding               bool // set once the chain's verdict is taken
 	chain                  Chain
 }
 
@@ -212,6 +222,8 @@ func (a *applier) run() error {
 	a.out.Consulted = len(a.aliases)+len(a.predAliases)+len(tkeys)+len(pkeys)+len(a.chainErrs)+len(a.predErrs) > 0
 	a.groupPredicates(pkeys, a.predsRead)
 	a.groupTransforms(tkeys, tRead)
+	a.recordPredicateUsers()
+	a.unusedPredicateReferences()
 	for _, l := range a.links {
 		if err := a.translate(l); err != nil {
 			return err
@@ -228,7 +240,16 @@ func (a *applier) run() error {
 	return nil
 }
 
-var listSplit = regexp.MustCompile(`\s*,\s*`)
+// listSplit is Kafka Connect's LIST split, \s*,\s* with Java's \s, which
+// includes \x0B where Go's does not.
+var listSplit = regexp.MustCompile(`[ \t\n\x0B\f\r]*,[ \t\n\x0B\f\r]*`)
+
+// javaTrim is Java's String.trim: it strips the characters up to U+0020 at
+// both ends, and keeps U+0085 and U+00A0, which strings.TrimSpace strips.
+// Kafka Connect trims LIST, CLASS, STRING and BOOLEAN values this way.
+func javaTrim(s string) string {
+	return strings.TrimFunc(s, func(r rune) bool { return r <= ' ' })
+}
 
 // parseList reads transforms= or predicates= as Kafka Connect's LIST type
 // does (trimmed, split on commas with surrounding whitespace; an empty value
@@ -238,7 +259,7 @@ func (a *applier) parseList(idx int, name string, into *[]string, errs *[]string
 	if idx < 0 {
 		return true
 	}
-	raw := strings.TrimSpace(a.ds[idx].KV.Value.Reveal()) // parsed, never copied into the report
+	raw := javaTrim(a.ds[idx].KV.Value.Reveal()) // parsed, never copied into the report
 	if rules.IsReference(raw) {
 		*errs = append(*errs, name+" is a config-provider reference, so which "+aliasNoun(name)+" it lists cannot be read offline")
 		return false
@@ -295,7 +316,7 @@ func (a *applier) groupPredicates(pkeys []int, listRead bool) {
 		}
 		al, opt, ok := owner(strings.TrimPrefix(key, prefixPredicates), a.predAliases)
 		if !ok {
-			a.translated(i, "Kafka Connect ignores predicate settings for an alias predicates does not list.", "")
+			a.unlisted(i, "Kafka Connect ignores predicate settings for an alias predicates does not list.")
 			continue
 		}
 		p := a.preds[al]
@@ -306,15 +327,78 @@ func (a *applier) groupPredicates(pkeys []int, listRead bool) {
 			p.options = append(p.options, i)
 		}
 	}
+	nested := nestedAliases(a.predAliases)
 	for _, al := range a.predOrder {
 		p := a.preds[al]
 		if p.typeKey < 0 {
 			a.predErrs = append(a.predErrs, fmt.Sprintf("predicates lists %q but predicates.%s.type is not set, and Kafka Connect rejects the config", al, al))
 		}
+		if others := nested[al]; len(others) > 0 {
+			why := nestedReason(keyPredicates, al, others)
+			a.predErrs = append(a.predErrs, strings.TrimSuffix(why, "."))
+			p.done, p.refusedAt = true, p.typeKey
+			p.refusal = &Refusal{Code: kcmigrate.CodeSMTUnsupported.Reason(), Reason: why, Fix: "Rename the predicates so that no alias is a dotted prefix of another, then re-run."}
+		}
+	}
+}
+
+// nestedAliases returns, per alias, the other listed aliases it is a dotted
+// prefix of or that are a dotted prefix of it. Kafka Connect configures
+// alias a with every key under transforms.a., so with a and a.b listed it
+// hands transforms.a.b.* to both: as a's options b.* and as a.b's own keys.
+// One key reported under one alias would hide that the other SMT reads it
+// too, so both are refused.
+func nestedAliases(aliases []string) map[string][]string {
+	out := map[string][]string{}
+	for _, x := range aliases {
+		for _, y := range aliases {
+			if x != y && strings.HasPrefix(y, x+".") {
+				out[x] = append(out[x], y)
+				out[y] = append(out[y], x)
+			}
+		}
+	}
+	return out
+}
+
+func nestedReason(list, alias string, others []string) string {
+	return fmt.Sprintf("%s lists %s together with %s; Kafka Connect hands the settings under the longer alias to both, as options of the shorter one too, so the SMTs share settings and migrate does not translate them.",
+		list, alias, strings.Join(others, ", "))
+}
+
+// recordPredicateUsers notes, before any refusal, which transforms name each
+// predicate, in chain order, so a predicate whose only users are refused is
+// reported as used by them, never as unused.
+func (a *applier) recordPredicateUsers() {
+	for _, l := range a.links {
+		if l.predKey < 0 {
+			continue
+		}
+		if p, ok := a.preds[javaTrim(a.ds[l.predKey].KV.Value.Reveal())]; ok {
+			p.used = append(p.used, l.alias)
+		}
+	}
+}
+
+// unusedPredicateReferences refuses the chain for a config-provider
+// reference in a predicate no transform names (see unlisted), before the
+// chain's verdict; the keys themselves are decided with the predicates.
+func (a *applier) unusedPredicateReferences() {
+	for _, al := range a.predOrder {
+		p := a.preds[al]
+		if len(p.used) > 0 {
+			continue
+		}
+		for _, i := range p.keys {
+			if rules.IsReference(a.ds[i].KV.Value.Reveal()) {
+				a.chainErrs = append(a.chainErrs, a.ds[i].KV.Key+" is a config-provider reference migrate cannot read offline")
+			}
+		}
 	}
 }
 
 func (a *applier) groupTransforms(tkeys []int, listRead bool) {
+	a.nested = nestedAliases(a.aliases)
 	byAlias := map[string]*link{}
 	for _, al := range a.aliases {
 		l := &link{alias: al, typeKey: -1, predKey: -1, negateKey: -1, refusedAt: -1}
@@ -331,7 +415,7 @@ func (a *applier) groupTransforms(tkeys []int, listRead bool) {
 		}
 		al, opt, ok := owner(strings.TrimPrefix(key, prefixTransforms), a.aliases)
 		if !ok {
-			a.translated(i, "Kafka Connect ignores transform settings for an alias transforms does not list.", "")
+			a.unlisted(i, "Kafka Connect ignores transform settings for an alias transforms does not list.")
 			continue
 		}
 		l := byAlias[al]
@@ -361,6 +445,13 @@ func (l *link) refuse(r Refusal, at int) {
 // itself decides: no or empty type, a config-provider reference, a bad
 // negate, an unusable predicate. It returns nil when l is refused.
 func (a *applier) prepare(l *link) (*SMT, error) {
+	if others := a.nested[l.alias]; len(others) > 0 {
+		l.refuse(Refusal{
+			Code: kcmigrate.CodeSMTUnsupported.Reason(), Reason: nestedReason(keyTransforms, l.alias, others),
+			Fix: "Rename the aliases so that no alias is a dotted prefix of another, then re-run.",
+		}, l.typeKey)
+		return nil, nil
+	}
 	if l.typeKey < 0 {
 		l.refuse(Refusal{
 			Code:   kcmigrate.CodeSMTUnsupported.Reason(),
@@ -375,7 +466,7 @@ func (a *applier) prepare(l *link) (*SMT, error) {
 			return nil, nil
 		}
 	}
-	class := strings.TrimSpace(a.ds[l.typeKey].KV.Value.Reveal())
+	class := javaTrim(a.ds[l.typeKey].KV.Value.Reveal())
 	base, side := splitClass(class)
 	t := &SMT{Alias: l.alias, Class: class, Base: base, Side: side}
 	l.smt = t
@@ -390,7 +481,7 @@ func (a *applier) prepare(l *link) (*SMT, error) {
 		return nil, nil
 	}
 	if l.negateKey >= 0 {
-		switch v := strings.ToLower(strings.TrimSpace(a.ds[l.negateKey].KV.Value.Reveal())); v {
+		switch v := strings.ToLower(javaTrim(a.ds[l.negateKey].KV.Value.Reveal())); v {
 		case "true", "false":
 			t.Negate = v == "true"
 		default:
@@ -502,6 +593,24 @@ func (a *applier) checkLaterWrites() {
 	}
 }
 
+// unlisted decides a key Kafka Connect does not apply as a no-op, unless
+// its value is a config-provider reference: Kafka Connect resolves those for
+// every key and fails the connector when it cannot, which migrate cannot
+// check offline, so it blocks (design, "Grouping and per-key outcomes").
+func (a *applier) unlisted(i int, reason string) {
+	if rules.IsReference(a.ds[i].KV.Value.Reveal()) {
+		r := referenceRefusal()
+		a.refuse(i, r.Code, r.Reason+" Kafka Connect resolves it even where the setting is not used, and fails the connector when it cannot.", r.Fix)
+		// The connector may not start at all, so no part of the chain is
+		// known to run as written: the chain is refused with it.
+		if !a.deciding {
+			a.chainErrs = append(a.chainErrs, a.ds[i].KV.Key+" is a config-provider reference migrate cannot read offline")
+		}
+		return
+	}
+	a.translated(i, reason, "")
+}
+
 func referenceRefusal() Refusal {
 	return Refusal{
 		Code:   kcmigrate.CodeSMTUnsupported.Reason(),
@@ -583,7 +692,7 @@ func keysOf(ds []rules.Decision, idx []int) string {
 // usePredicate translates the predicate l names (once per predicate) and
 // returns a refusal for l if it cannot be used.
 func (a *applier) usePredicate(l *link) (*Refusal, error) {
-	name := strings.TrimSpace(a.ds[l.predKey].KV.Value.Reveal())
+	name := javaTrim(a.ds[l.predKey].KV.Value.Reveal())
 	l.smt.Predicate = name
 	p, ok := a.preds[name]
 	if !ok && !a.predsRead {
@@ -600,7 +709,6 @@ func (a *applier) usePredicate(l *link) (*Refusal, error) {
 			Fix:    "Define the predicate in predicates, or remove transforms." + l.alias + ".predicate, then re-run.",
 		}, nil
 	}
-	p.used = append(p.used, l.alias)
 	if !p.done {
 		p.done = true
 		if err := a.translatePredicate(p); err != nil {
@@ -636,7 +744,7 @@ func (a *applier) translatePredicate(p *predState) error {
 			return nil
 		}
 	}
-	class := strings.TrimSpace(a.ds[p.typeKey].KV.Value.Reveal())
+	class := javaTrim(a.ds[p.typeKey].KV.Value.Reveal())
 	base, _ := splitClass(class)
 	p.pred = &Predicate{Alias: p.alias, Class: class, Base: base}
 	prefix := prefixPredicates + p.alias + "."
@@ -763,6 +871,7 @@ func schemaFields(s Side) string {
 }
 
 func (a *applier) decide(refused []string) {
+	a.deciding = true
 	ok := len(a.chainErrs) == 0 && len(refused) == 0
 	chainWhy := a.chainReason()
 	chainFix := "Make every transform of the chain translatable (see the entries of each), or keep this connector on Kafka Connect. With --accept-gaps the pipeline runs without any of the chain's transforms."
@@ -911,12 +1020,16 @@ func (a *applier) decideTranslatedLink(l *link) {
 func (a *applier) decidePredicate(p *predState, ok bool, chainFix string) {
 	if len(p.used) == 0 {
 		for _, i := range p.keys {
+			if p.refusal != nil {
+				a.refuse(i, p.refusal.Code, p.refusal.Reason, p.refusal.Fix)
+				continue
+			}
 			if p.typeKey < 0 {
 				a.refuse(i, kcmigrate.CodeSMTUnsupported.Reason(),
 					"predicates lists "+p.alias+" without a type, and Kafka Connect rejects the config.", "Set predicates."+p.alias+".type or remove "+p.alias+" from predicates, then re-run.")
 				continue
 			}
-			a.translated(i, "No transform names the predicate "+p.alias+", and Kafka Connect evaluates a predicate only for the transforms that name it.", "")
+			a.unlisted(i, "No transform names the predicate "+p.alias+", and Kafka Connect evaluates a predicate only for the transforms that name it.")
 		}
 		return
 	}

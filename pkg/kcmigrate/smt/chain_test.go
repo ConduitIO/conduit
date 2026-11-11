@@ -222,9 +222,43 @@ func TestApply_Grouping(t *testing.T) {
 			map[string]want{"transforms": refused, "transforms.a.type": refused, "transforms.a.newer.option": unknown},
 		},
 		{
-			"a longer alias owns its keys",
+			// Kafka Connect hands transforms.a.b.* to a (as options b.*) and
+			// to a.b: both are refused.
+			"an alias that is a dotted prefix of another refuses both",
 			[]string{"transforms", "a,a.b", "transforms.a.type", smttest.Drop, "transforms.a.b.type", smttest.Drop},
-			map[string]want{"transforms": ok, "transforms.a.type": ok, "transforms.a.b.type": ok},
+			map[string]want{"transforms": refused, "transforms.a.type": refused, "transforms.a.b.type": refused},
+		},
+		{
+			"aliases that only share a prefix are not nested",
+			[]string{"transforms", "a,ab", "transforms.a.type", smttest.Drop, "transforms.ab.type", smttest.Drop},
+			map[string]want{"transforms": ok, "transforms.a.type": ok, "transforms.ab.type": ok},
+		},
+		{
+			"a nested predicate pair refuses both, used or not",
+			[]string{
+				"transforms", "a", "transforms.a.type", smttest.Drop, "transforms.a.predicate", "p",
+				"predicates", "p,p.k", "predicates.p.type", smttest.Always, "predicates.p.k.type", smttest.Always,
+			},
+			map[string]want{"transforms": refused, "transforms.a.predicate": refused, "predicates": refused, "predicates.p.type": refused, "predicates.p.k.type": refused},
+		},
+		{
+			// Recorded before any refusal: a predicate whose only user is
+			// refused early is not reported as unused.
+			"predicate of an early-refused link is not unused",
+			[]string{"transforms", "a", "transforms.a.predicate", "p", "predicates", "p", "predicates.p.type", smttest.Always},
+			map[string]want{"transforms": refused, "transforms.a.predicate": refused, "predicates": refused, "predicates.p.type": refused},
+		},
+		{
+			// Java's String.trim keeps U+00A0, so the alias is "a\u00a0" and
+			// transforms.a.type belongs to an unlisted alias.
+			"Java trim keeps a no-break space",
+			[]string{"transforms", "a\u00a0", "transforms.a.type", smttest.Drop},
+			map[string]want{"transforms": refused, "transforms.a.type": ok},
+		},
+		{
+			"Java \\s includes the vertical tab",
+			[]string{"transforms", "a\v,b", "transforms.a.type", smttest.Drop, "transforms.b.type", smttest.Drop},
+			map[string]want{"transforms": ok, "transforms.a.type": ok, "transforms.b.type": ok},
 		},
 	}
 	for _, tt := range tests {
@@ -250,8 +284,8 @@ func TestApply_RefusalsFromData(t *testing.T) {
 		class, code, mention string
 	}{
 		{"io.debezium.transforms.partitions.PartitionRouting", "kc.target_capability_missing", "partitions by key only"},
-		{"org.apache.kafka.connect.transforms.Filter", "kc.smt_unsupported", "v0.22"},
-		{"org.apache.kafka.connect.transforms.ExtractField$Key", "kc.smt_unsupported", "v0.22"},
+		{"org.apache.kafka.connect.transforms.Filter", "kc.smt_unsupported", "until a migrate release translates it"},
+		{"org.apache.kafka.connect.transforms.ExtractField$Key", "kc.smt_unsupported", "until a migrate release translates it"},
 		{"org.apache.kafka.connect.transforms.Cast$Value", "kc.smt_unsupported", "v0.23"},
 		{"org.apache.kafka.connect.transforms.DropHeaders", "kc.smt_unsupported", "v0.23"},
 		{"com.example.CustomTransform", "kc.smt_unsupported", "processor SDK"},
@@ -529,5 +563,65 @@ func TestRegexRoute(t *testing.T) {
 		if b.String() != tt.want {
 			t.Errorf("RegexRoute(%q, %q) on %q = %q, want %q", tt.pattern, tt.repl, tt.topic, b.String(), tt.want)
 		}
+	}
+}
+
+// TestApply_SchemaExcludePerCondition: a record that skips the first
+// reshaping processor (its predicate is false) but matches a later one
+// must lose its subject too, so each distinct condition gets its own
+// exclude; a key-side reshape excludes the key's subject and version.
+func TestApply_SchemaExcludePerCondition(t *testing.T) {
+	is := is.New(t)
+	out, _ := apply(t, smttest.Registry(), sourceEnv,
+		"transforms", "s1,s2,s3",
+		"transforms.s1.type", smttest.Split, "transforms.s1.a", "x", "transforms.s1.predicate", "p",
+		"transforms.s2.type", smttest.Split, "transforms.s2.a", "y",
+		"transforms.s3.type", smttest.Split, "transforms.s3.a", "z", // same condition as s2: no third exclude
+		"predicates", "p", "predicates.p.type", smttest.Always)
+	var ids []string
+	for _, p := range out.Processors {
+		ids = append(ids, p.ID)
+	}
+	is.Equal(ids, []string{"smt-schema-value", "smt-s1", "smt-schema-value-2", "smt-s2", "smt-s3"})
+	is.Equal(out.Processors[0].Condition, out.Processors[1].Condition)
+	is.Equal(out.Processors[2].Condition, out.Processors[3].Condition)
+	is.True(out.Processors[0].Condition != out.Processors[2].Condition)
+
+	out, _ = apply(t, smttest.Registry(), sourceEnv, "transforms", "k", "transforms.k.type", smttest.Split+"$Key", "transforms.k.a", "id")
+	is.Equal(out.Processors[0].ID, "smt-schema-key")
+	is.Equal(out.Processors[0].Settings["fields"], `.Metadata["opencdc.key.schema.subject"],.Metadata["opencdc.key.schema.version"]`)
+	is.Equal(out.Processors[1].Settings["fields"], ".Key.id")
+}
+
+// TestRefusalTexts_NameNoUnshippedRelease: no refusal promises v0.22, a
+// release whose translators may miss the cut (design decision 21).
+func TestRefusalTexts_NameNoUnshippedRelease(t *testing.T) {
+	for _, class := range []string{
+		"org.apache.kafka.connect.transforms.Filter", "org.apache.kafka.connect.transforms.InsertField$Value",
+		"org.apache.kafka.connect.transforms.predicates.TopicNameMatches", "io.debezium.transforms.ExtractNewRecordState",
+	} {
+		_, ds := apply(t, smt.Builtin(), sourceEnv, "transforms", "t", "transforms.t.type", class)
+		if e := entry(ds, "transforms.t.type"); strings.Contains(e.Reason+e.Fix, "v0.22") {
+			t.Errorf("%s: refusal names v0.22: %s %s", class, e.Reason, e.Fix)
+		}
+	}
+}
+
+// TestApply_ReferenceWhereUnused: Kafka Connect resolves a config-provider
+// reference even under an unlisted alias or an unused predicate, and fails
+// the connector when it cannot; migrate cannot read it, so the key blocks
+// and the chain is refused with it.
+func TestApply_ReferenceWhereUnused(t *testing.T) {
+	for name, kvs := range map[string][]string{
+		"unlisted alias":   {"transforms", "a", "transforms.a.type", smttest.Drop, "transforms.z.x", "${env:X}"},
+		"unused predicate": {"transforms", "a", "transforms.a.type", smttest.Drop, "predicates", "p", "predicates.p.type", smttest.Always, "predicates.p.x", "${env:X}"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			out, ds := apply(t, smttest.Registry(), sourceEnv, kvs...)
+			is.Equal(len(out.Processors), 0)
+			is.Equal(got(entry(ds, kvs[len(kvs)-2])), refused)
+			is.Equal(got(entry(ds, "transforms")), refused)
+		})
 	}
 }

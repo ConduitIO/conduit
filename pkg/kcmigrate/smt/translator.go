@@ -272,6 +272,30 @@ func (c *Chain) SchemaMode() bool { return c.env.SchemaMode }
 // output.
 func (c *Chain) DebeziumOutput() bool { return c.env.DebeziumOutput }
 
+// SchemaCarrying reports whether the side's Kafka Connect converter
+// carries a schema, or is unknown (Env.KeySchema). A translator whose
+// processors reshape the side refuses with SchemaRefusal when it does.
+func (c *Chain) SchemaCarrying(s Side) bool {
+	switch s {
+	case SideKey:
+		return c.env.KeySchema
+	case SideValue:
+		return c.env.ValueSchema
+	case SideNone:
+	}
+	return c.env.KeySchema || c.env.ValueSchema
+}
+
+// SchemaRefusal is decision 8's refusal of an SMT that reshapes a side
+// whose converter carries a schema.
+func SchemaRefusal() *Refusal {
+	return &Refusal{
+		Code:   kcmigrate.CodeSMTUnsupported.Reason(),
+		Reason: "A schema-carrying converter needs a type-preserving schema for the reshaped data; Conduit would register one with widened types, so this is refused until v0.23.",
+		Fix:    "Keep this connector on Kafka Connect until v0.23.",
+	}
+}
+
 // Shape returns what the side holds where the chain starts.
 func (c *Chain) Shape(s Side) Shape {
 	switch s {

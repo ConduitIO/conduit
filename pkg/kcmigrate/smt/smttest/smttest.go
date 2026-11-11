@@ -43,6 +43,10 @@ const (
 	// unknown or the destination has no topic setting.
 	Route = "test.smt.Route"
 
+	// Wrap stands for a reshaping SMT that needs a known shape: it refuses
+	// on a side whose converter carries a schema (decision 8) or whose shape
+	// is unknown, and otherwise reshapes the side.
+	Wrap = "test.smt.Wrap"
 	// Unwrap is an unwrap point that writes no processor.
 	Unwrap = "test.smt.Unwrap"
 	// Clobber writes opencdc.collection, which the topic reads.
@@ -59,7 +63,7 @@ const (
 // Registry returns the fixture translators.
 func Registry() *smt.Registry {
 	return &smt.Registry{
-		Transforms: map[string]smt.Translator{Drop: drop, Split: split, Refuse: refuse, Route: route, Unwrap: unwrap, Clobber: clobber},
+		Transforms: map[string]smt.Translator{Drop: drop, Split: split, Refuse: refuse, Route: route, Unwrap: unwrap, Clobber: clobber, Wrap: wrap},
 		Predicates: map[string]smt.PredicateTranslator{Always: always, HasMeta: hasMeta, Never: never},
 	}
 }
@@ -83,7 +87,7 @@ func split(_ *smt.Chain, t *smt.SMT) (smt.Result, error) {
 		field := side.Field() + "." + v
 		res.Writes = append(res.Writes, smt.Path(field))
 		res.Processors = append(res.Processors, smt.Processor{
-			Plugin: "field.exclude", Settings: map[string]string{"fields": field},
+			Plugin: fieldExclude, Settings: map[string]string{settingFields: field},
 			Condition: smt.NilGuard(side), From: []string{name}, Reshapes: side,
 		})
 	}
@@ -115,7 +119,30 @@ func route(c *smt.Chain, _ *smt.SMT) (smt.Result, error) {
 	return smt.Result{Reason: "Route rewrites the topic.", Reads: []smt.Path{collection}}, nil
 }
 
+const (
+	fieldExclude  = "field.exclude"
+	settingFields = "fields"
+)
+
 const collection = smt.Path(`.Metadata["opencdc.collection"]`)
+
+func wrap(c *smt.Chain, t *smt.SMT) (smt.Result, error) {
+	side := t.Side
+	if side == smt.SideNone {
+		side = smt.SideValue
+	}
+	switch {
+	case c.SchemaCarrying(side):
+		return smt.Result{Refusal: smt.SchemaRefusal()}, nil
+	case c.Shape(side) == smt.ShapeUnknown:
+		return smt.Result{Refusal: &smt.Refusal{
+			Code: kcmigrate.CodeSMTUnsupported.Reason(), Reason: "Wrap needs a known shape.", Fix: "Use ByteArrayConverter.",
+		}}, nil
+	}
+	return smt.Result{Processors: []smt.Processor{{
+		Plugin: fieldExclude, Settings: map[string]string{settingFields: side.Field() + ".x"}, Reshapes: side,
+	}}}, nil
+}
 
 func unwrap(*smt.Chain, *smt.SMT) (smt.Result, error) {
 	return smt.Result{Unwraps: true, Reason: "Unwrap is a no-op here."}, nil
@@ -123,7 +150,7 @@ func unwrap(*smt.Chain, *smt.SMT) (smt.Result, error) {
 
 func clobber(*smt.Chain, *smt.SMT) (smt.Result, error) {
 	return smt.Result{
-		Processors: []smt.Processor{{Plugin: "field.exclude", Settings: map[string]string{"fields": string(collection)}}},
+		Processors: []smt.Processor{{Plugin: fieldExclude, Settings: map[string]string{settingFields: string(collection)}}},
 		Writes:     []smt.Path{collection},
 	}, nil
 }

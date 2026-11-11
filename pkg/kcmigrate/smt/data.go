@@ -98,7 +98,7 @@ var refusalGroups = []refusalGroup{
 		refusal: Refusal{
 			Code:   kcmigrate.CodeSMTUnsupported.Reason(),
 			Reason: "This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
-			Fix:    "Keep this connector on Kafka Connect until the v0.22 SMT compatibility pack (#2960) translates it, or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+			Fix:    "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
 		},
 		classes: []string{
 			"org.apache.kafka.connect.transforms.ExtractField",

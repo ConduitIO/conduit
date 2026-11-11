@@ -39,8 +39,9 @@
 //     none yet: a translator ships with the Kafka Connect oracle output that
 //     proves it exact. Package smttest holds fixtures for tests only.
 //   - [Chain] is what a translator reads: chain side, schema mode, record
-//     shapes, plugin [Capability] rows, the topic expression and whether an
-//     unwrap point came earlier.
+//     shapes and whether each side's converter carries a schema (both from
+//     the effective converter, connector over worker), plugin [Capability]
+//     rows, the topic expression and whether an unwrap point came earlier.
 //   - [Data] holds the capability table and the refusal of every class
 //     without a translator (Go tables, not rule data).
 //
@@ -52,6 +53,11 @@
 //   - Emit-if-exact: a translator refuses every configuration outside the
 //     subset where its processors behave as the SMT does. Every refusal
 //     blocks (invariant 6: transforms change data).
+//   - Grouping follows Kafka Connect: aliases from transforms= and
+//     predicates= (Java trim and \s), keys by alias. Two aliases of which
+//     one is a dotted prefix of the other share keys in Kafka Connect, so
+//     both are refused. A config-provider reference blocks wherever it is,
+//     under an unlisted alias or an unused predicate too.
 //   - All or nothing: one refused link means no processor of the chain is
 //     written, and every other link's entries name it. Under --accept-gaps
 //     the pipeline runs with none of the chain's processors.
@@ -60,8 +66,8 @@
 //     (#3147); every Before copy of a value-side processor is nil-guarded.
 //   - Schema metadata: before a processor that reshapes a side, the chain
 //     removes that side's schema subject and version under the same
-//     condition, so no widened schema is registered under the source's
-//     subject.
+//     condition, once per distinct condition, so no widened schema is
+//     registered under the source's subject.
 //   - Topic: the topic expression is evaluated against the final record, so
 //     an SMT whose topic reads what a later SMT writes is refused.
 //   - Determinism: output depends only on the keys and values, in

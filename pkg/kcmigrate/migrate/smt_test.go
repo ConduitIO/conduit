@@ -162,3 +162,53 @@ func TestSMT_NoPlaceholderLeft(t *testing.T) {
 		})
 	}
 }
+
+// TestSMT_ConverterDecidesShapeAndSchema: a sink's SMTs see what its
+// effective converter (the connector's, else the worker's) produced, so the
+// chain knows a side's shape only for ByteArrayConverter, and a side whose
+// converter carries a schema (or is unknown) refuses reshaping SMTs
+// (decision 8).
+func TestSMT_ConverterDecidesShapeAndSchema(t *testing.T) {
+	e, err := rules.Builtin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const sink = "name=s\nconnector.class=io.confluent.connect.s3.S3SinkConnector\ntopics=t\ns3.bucket.name=example-b\n" +
+		"transforms=w\ntransforms.w.type=" + smttest.Wrap + "$Value\n"
+	const byteArray = "org.apache.kafka.connect.converters.ByteArrayConverter"
+	tests := []struct {
+		name, connector, worker string
+		want                    string // "" for translated, else part of the reason
+	}{
+		{"avro", "value.converter=io.confluent.connect.avro.AvroConverter\n", "", "schema-carrying converter"},
+		{"json with schemas (default)", "value.converter=org.apache.kafka.connect.json.JsonConverter\n", "", "schema-carrying converter"},
+		{"json schemas.enable=true", "value.converter=org.apache.kafka.connect.json.JsonConverter\nvalue.converter.schemas.enable=true\n", "", "schema-carrying converter"},
+		{"json without schemas: not bytes", "value.converter=org.apache.kafka.connect.json.JsonConverter\nvalue.converter.schemas.enable=false\n", "", "known shape"},
+		{"unknown converter fails closed", "", "", "schema-carrying converter"},
+		{"byte array", "value.converter=" + byteArray + "\n", "", ""},
+		{"byte array from the worker", "", "value.converter=" + byteArray + "\n", ""},
+		{"connector converter wins over the worker's", "value.converter=io.confluent.connect.avro.AvroConverter\n", "value.converter=" + byteArray + "\n", "schema-carrying converter"},
+		{"worker schemas.enable does not reach a connector's converter", "value.converter=org.apache.kafka.connect.json.JsonConverter\n", "value.converter.schemas.enable=false\n", "schema-carrying converter"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+			req := Request{Inputs: []kcmigrate.Input{in("s.properties", sink+tt.connector)}, ConduitVersion: "v", Translators: smttest.Registry()}
+			if tt.worker != "" {
+				w := in("worker.properties", tt.worker)
+				req.Worker = &w
+			}
+			res, err := Run(context.Background(), e, withValidator(req))
+			is.NoErr(err)
+			rc := res.Report.Connectors[len(res.Report.Connectors)-1]
+			en := entryFor(rc, "transforms.w.type")
+			if tt.want == "" {
+				is.Equal(en.Status, kcmigrate.StatusTranslated)
+				is.True(strings.Contains(file(res, "pipelines/s.yaml"), "id: smt-w"))
+				return
+			}
+			is.Equal(en.Status, kcmigrate.StatusUnsupported)
+			is.True(strings.Contains(en.Reason, tt.want)) // reason
+		})
+	}
+}

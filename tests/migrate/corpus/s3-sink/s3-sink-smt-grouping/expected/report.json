@@ -24,10 +24,10 @@
   "summary": {
     "connectors": 1,
     "keys": 15,
-    "translated": 10,
+    "translated": 9,
     "approximated": 1,
-    "unsupported": 4,
-    "blocking": 7
+    "unsupported": 5,
+    "blocking": 8
   },
   "connectors": [
     {
@@ -164,7 +164,7 @@
             "pointer": "/config/transforms"
           },
           "code": "kc.smt_unsupported",
-          "reason": "The transform chain is not translated, so no processor of it is written: transforms lists \"drop\" twice, and Kafka Connect rejects duplicate aliases; transform drop: The transform names the predicate \"nowhere\", which predicates does not list, and Kafka Connect rejects the config; transform missing: transforms lists \"missing\" but transforms.missing.type is not set, and Kafka Connect rejects the config.",
+          "reason": "The transform chain is not translated, so no processor of it is written: transforms lists \"drop\" twice, and Kafka Connect rejects duplicate aliases; transforms.hoist.field is a config-provider reference migrate cannot read offline; transform drop: The transform names the predicate \"nowhere\", which predicates does not list, and Kafka Connect rejects the config; transform missing: transforms lists \"missing\" but transforms.missing.type is not set, and Kafka Connect rejects the config.",
           "fix": "Make every transform of the chain translatable (see the entries of each), or keep this connector on Kafka Connect. With --accept-gaps the pipeline runs without any of the chain's transforms.",
           "blocking": true
         },
@@ -204,13 +204,15 @@
         },
         {
           "key": "transforms.hoist.field",
-          "status": "translated",
+          "status": "unsupported",
           "origin": {
             "file": "sink-s3-events.json",
             "pointer": "/config/transforms.hoist.field"
           },
-          "reason": "Kafka Connect ignores transform settings for an alias transforms does not list.",
-          "blocking": false
+          "code": "kc.smt_unsupported",
+          "reason": "The value is a config-provider reference. A transform's behavior depends on its settings, which migrate cannot read offline. Kafka Connect resolves it even where the setting is not used, and fails the connector when it cannot.",
+          "fix": "Set the literal value in the Kafka Connect config, or resolve the reference and re-run.",
+          "blocking": true
         }
       ],
       "notes": [

@@ -301,7 +301,7 @@ func migrateConnector(cl rules.Classified, state string, workerDs []rules.Decisi
 	}
 	// After every other key and finisher: the chain reads the topic and the
 	// plugins they settled.
-	transforms, err := ct.apply(plan, cl.Decisions)
+	transforms, err := ct.apply(plan, cl.Decisions, workerDs)
 	if err != nil {
 		return run, err
 	}
@@ -599,7 +599,7 @@ func newChainTranslator(reg *smt.Registry) (chainTranslator, error) {
 // transforms on (a source connector's source, a sink's destination), and
 // writes the topic the chain ends with. It returns the report's transform
 // index.
-func (ct chainTranslator) apply(plan *emit.Plan, ds []rules.Decision) ([]kcmigrate.Transform, error) {
+func (ct chainTranslator) apply(plan *emit.Plan, ds, worker []rules.Decision) ([]kcmigrate.Transform, error) {
 	side := emit.SideSource
 	if plan.Scope() == rules.ScopeSink {
 		side = emit.SideDestination
@@ -608,7 +608,7 @@ func (ct chainTranslator) apply(plan *emit.Plan, ds []rules.Decision) ([]kcmigra
 	if err != nil {
 		return nil, err
 	}
-	env := ct.env(plan, path, offset)
+	env := ct.env(plan, path, offset, ds, worker)
 	topicSide, topicSetting := ct.topicSetting(plan)
 	out, err := smt.Apply(ct.data, ct.reg, env, ds)
 	if err != nil {
@@ -637,7 +637,7 @@ func (ct chainTranslator) apply(plan *emit.Plan, ds []rules.Decision) ([]kcmigra
 }
 
 // env describes the chain of plan's connector to the translators.
-func (ct chainTranslator) env(plan *emit.Plan, path string, offset int) smt.Env {
+func (ct chainTranslator) env(plan *emit.Plan, path string, offset int, ds, worker []rules.Decision) smt.Env {
 	env := smt.Env{
 		Scope: plan.Scope(), Source: plan.Plugin(emit.SideSource), Destination: plan.Plugin(emit.SideDestination),
 		ProcessorPath: path, ProcessorOffset: offset,
@@ -645,6 +645,8 @@ func (ct chainTranslator) env(plan *emit.Plan, path string, offset int) smt.Env 
 		DebeziumOutput: false,
 	}
 	source, sink := plan.Scope() == rules.ScopeSource, plan.Scope() == rules.ScopeSink
+	keyConv, valueConv := effectiveConverter(ds, worker, "key"), effectiveConverter(ds, worker, "value")
+	env.KeySchema, env.ValueSchema = keyConv.carriesSchema(), valueConv.carriesSchema()
 	if topicSide, topicSetting := ct.topicSetting(plan); topicSetting != "" {
 		env.Topic, _ = plan.Setting(topicSide, topicSetting)
 	}
@@ -662,12 +664,16 @@ func (ct chainTranslator) env(plan *emit.Plan, path string, offset int) smt.Env 
 		// Connect topic of both.
 		env.Topic = ""
 	case sink && env.Source == kafkaPlugin:
-		// The Kafka source emits raw bytes; only ByteArrayConverter is
-		// translated, so a sink's SMTs see bytes in Kafka Connect too. It
-		// names each record's topic in opencdc.collection.
-		env.KeyShape, env.ValueShape = smt.ShapeRaw, smt.ShapeRaw
+		// A sink's SMTs run after its converter: they see bytes only with
+		// ByteArrayConverter (a Struct, map or String with any other), and
+		// the Kafka source emits raw bytes, so only then is the shape the
+		// same. It names each record's topic in opencdc.collection.
+		env.KeyShape, env.ValueShape = keyConv.sinkShape(), valueConv.sinkShape()
 		env.Topic = collectionTopic
 	case source && env.Source == kafkaPlugin:
+		// A source's SMTs run before its converter, over what the connector
+		// produced: MirrorMaker's records are the replicated bytes.
+		env.KeyShape, env.ValueShape = smt.ShapeRaw, smt.ShapeRaw
 		// MirrorMaker: its SMTs see the remote topic name after the
 		// replication policy, which a finisher writes; the topic is
 		// undefined in this version, so topic-reading and -writing SMTs
@@ -675,6 +681,68 @@ func (ct chainTranslator) env(plan *emit.Plan, path string, offset int) smt.Env 
 		env.Topic = ""
 	}
 	return env
+}
+
+// converter is the Kafka Connect converter a side of a connector uses.
+type converter struct {
+	class string // empty when neither the connector nor the worker sets it
+	// schemasEnable is JsonConverter's schemas.enable from the same layer as
+	// the class: Kafka Connect configures the converter from the connector's
+	// <side>.converter.* keys when the connector names it, else from the
+	// worker's.
+	schemasEnable string
+}
+
+// Converter classes the SMT pass knows the schema behaviour of.
+const (
+	byteArrayConverter = "org.apache.kafka.connect.converters.ByteArrayConverter"
+	stringConverter    = "org.apache.kafka.connect.storage.StringConverter"
+	jsonConverter      = "org.apache.kafka.connect.json.JsonConverter"
+)
+
+// effectiveConverter returns side's ("key" or "value") converter: the
+// connector's, else the worker's.
+func effectiveConverter(connector, worker []rules.Decision, side string) converter {
+	for _, layer := range [][]rules.Decision{connector, worker} {
+		if c, ok := lastValue(layer, side+".converter"); ok {
+			enable, _ := lastValue(layer, side+".converter.schemas.enable")
+			return converter{class: c, schemasEnable: enable}
+		}
+	}
+	return converter{}
+}
+
+func lastValue(ds []rules.Decision, key string) (string, bool) {
+	val, ok := "", false
+	for _, d := range ds {
+		if d.KV.Key == key {
+			val, ok = strings.TrimFunc(d.KV.Value.Reveal(), func(r rune) bool { return r <= ' ' }), true // compared only
+		}
+	}
+	return val, ok
+}
+
+// carriesSchema is true for a converter that writes a schema (Avro,
+// Protobuf, JSON Schema, JsonConverter with schemas.enable, its default)
+// and for an unknown one, so decision 8 fails closed.
+func (c converter) carriesSchema() bool {
+	switch c.class {
+	case byteArrayConverter, stringConverter:
+		return false
+	case jsonConverter:
+		return !strings.EqualFold(c.schemasEnable, "false")
+	}
+	return true
+}
+
+// sinkShape is what a sink's SMTs see after the converter, as far as the
+// SMT pass can match it in Conduit: raw bytes with ByteArrayConverter, else
+// unknown.
+func (c converter) sinkShape() smt.Shape {
+	if c.class == byteArrayConverter {
+		return smt.ShapeRaw
+	}
+	return smt.ShapeUnknown
 }
 
 // Plugins the SMT pass knows the record shape of.

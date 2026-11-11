@@ -210,7 +210,7 @@
           },
           "code": "kc.smt_unsupported",
           "reason": "This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
-          "fix": "Keep this connector on Kafka Connect until the v0.22 SMT compatibility pack (#2960) translates it, or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
           "blocking": true
         },
         {
@@ -222,7 +222,7 @@
           },
           "code": "kc.smt_unsupported",
           "reason": "Part of the transform unwrap (io.debezium.transforms.ExtractNewRecordState), which is not translated. This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
-          "fix": "Keep this connector on Kafka Connect until the v0.22 SMT compatibility pack (#2960) translates it, or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
           "blocking": true
         },
         {
@@ -234,7 +234,7 @@
           },
           "code": "kc.smt_unsupported",
           "reason": "Part of the transform onlyOrders (org.apache.kafka.connect.transforms.Filter), which is not translated. Its predicate \"isOrders\" is not translated. This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
-          "fix": "Keep this connector on Kafka Connect until the v0.22 SMT compatibility pack (#2960) translates it, or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
           "blocking": true
         },
         {
@@ -246,7 +246,7 @@
           },
           "code": "kc.smt_unsupported",
           "reason": "Its predicate \"isOrders\" is not translated. This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
-          "fix": "Keep this connector on Kafka Connect until the v0.22 SMT compatibility pack (#2960) translates it, or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
           "blocking": true
         },
         {
@@ -258,7 +258,7 @@
           },
           "code": "kc.smt_unsupported",
           "reason": "Part of the transform onlyOrders (org.apache.kafka.connect.transforms.Filter), which is not translated. Its predicate \"isOrders\" is not translated. This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
-          "fix": "Keep this connector on Kafka Connect until the v0.22 SMT compatibility pack (#2960) translates it, or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
           "blocking": true
         },
         {
@@ -328,7 +328,7 @@
           },
           "code": "kc.smt_unsupported",
           "reason": "This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
-          "fix": "Keep this connector on Kafka Connect until the v0.22 SMT compatibility pack (#2960) translates it, or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
           "blocking": true
         },
         {
@@ -340,7 +340,7 @@
           },
           "code": "kc.smt_unsupported",
           "reason": "Part of the predicate isOrders, which is not translated. This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
-          "fix": "Keep this connector on Kafka Connect until the v0.22 SMT compatibility pack (#2960) translates it, or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
           "blocking": true
         },
         {

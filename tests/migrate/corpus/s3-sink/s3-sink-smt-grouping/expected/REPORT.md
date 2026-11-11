@@ -1,6 +1,6 @@
 # Kafka Connect migration report
 
-1 connectors, 15 keys: 10 translated, 1 approximated, 4 unsupported, 7 blocking.
+1 connectors, 15 keys: 9 translated, 1 approximated, 5 unsupported, 8 blocking.
 
 ## sink-s3-events
 
@@ -8,15 +8,16 @@
 - Role: sink
 - Pipeline: `pipelines/sink-s3-events.yaml`, written stopped
 
-10 of 15 keys translated with no remark.
+9 of 15 keys translated with no remark.
 
 | | Key | Location | Code | Reason | Fix |
 | --- | --- | --- | --- | --- | --- |
 | approximated | `flush.size` | sink-s3-events.json#/config/flush.size | `kc.key_approximated` | Kafka Connect rotates a file after flush.size records; Conduit writes one object per batch, so sdk.batch.size bounds the records per object instead. | - |
 | blocking | `format.class` | sink-s3-events.json#/config/format.class | `kc.key_unsupported` | Conduit has no Avro object format; AvroFormat stores an Avro container file. | Use JsonFormat or ParquetFormat, or keep this connector on Kafka Connect. |
-| blocking | `transforms` | sink-s3-events.json#/config/transforms | `kc.smt_unsupported` | The transform chain is not translated, so no processor of it is written: transforms lists "drop" twice, and Kafka Connect rejects duplicate aliases; transform drop: The transform names the predicate "nowhere", which predicates does not list, and Kafka Connect rejects the config; transform missing: transforms lists "missing" but transforms.missing.type is not set, and Kafka Connect rejects the config. | Make every transform of the chain translatable (see the entries of each), or keep this connector on Kafka Connect. With --accept-gaps the pipeline runs without any of the chain's transforms. |
+| blocking | `transforms` | sink-s3-events.json#/config/transforms | `kc.smt_unsupported` | The transform chain is not translated, so no processor of it is written: transforms lists "drop" twice, and Kafka Connect rejects duplicate aliases; transforms.hoist.field is a config-provider reference migrate cannot read offline; transform drop: The transform names the predicate "nowhere", which predicates does not list, and Kafka Connect rejects the config; transform missing: transforms lists "missing" but transforms.missing.type is not set, and Kafka Connect rejects the config. | Make every transform of the chain translatable (see the entries of each), or keep this connector on Kafka Connect. With --accept-gaps the pipeline runs without any of the chain's transforms. |
 | blocking | `transforms.drop.type` | sink-s3-events.json#/config/transforms.drop.type | `kc.smt_unsupported` | Part of the transform drop (org.apache.kafka.connect.transforms.Filter), which is not translated. The transform names the predicate "nowhere", which predicates does not list, and Kafka Connect rejects the config. | Define the predicate in predicates, or remove transforms.drop.predicate, then re-run. |
 | blocking | `transforms.drop.predicate` | sink-s3-events.json#/config/transforms.drop.predicate | `kc.smt_unsupported` | The transform names the predicate "nowhere", which predicates does not list, and Kafka Connect rejects the config. | Define the predicate in predicates, or remove transforms.drop.predicate, then re-run. |
+| blocking | `transforms.hoist.field` | sink-s3-events.json#/config/transforms.hoist.field | `kc.smt_unsupported` | The value is a config-provider reference. A transform's behavior depends on its settings, which migrate cannot read offline. Kafka Connect resolves it even where the setting is not used, and fails the connector when it cannot. | Set the literal value in the Kafka Connect config, or resolve the reference and re-run. |
 
 ## Before you deploy
 
