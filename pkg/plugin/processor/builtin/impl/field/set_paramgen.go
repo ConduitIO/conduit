@@ -9,6 +9,8 @@ import (
 
 const (
 	setConfigField = "field"
+	setConfigFrom  = "from"
+	setConfigType  = "type"
 	setConfigValue = "value"
 )
 
@@ -23,13 +25,25 @@ func (setConfig) Parameters() map[string]config.Parameter {
 				config.ValidationExclusion{List: []string{".Position"}},
 			},
 		},
-		setConfigValue: {
+		setConfigFrom: {
 			Default:     "",
-			Description: "Value is a Go template expression which will be evaluated and stored in `field` (e.g. `{{ .Payload.After }}`).",
+			Description: "From is a reference to a field whose value is copied into `field`, with\nits type kept (e.g. `.Payload.After.id`). Nested data is deep-copied, so\nthe two fields never share data. A field that holds null is copied as\nnull; a missing field fails the record. It is a reference, not a\ntemplate.\nExactly one of `value` and `from` must be set.\n\nFor more information about the format, see [Referencing fields](https://conduitdata.io/docs/using/processors/referencing-fields).",
+			Type:        config.ParameterTypeString,
+			Validations: []config.Validation{},
+		},
+		setConfigType: {
+			Default:     "string",
+			Description: "Type is the type the output of the `value` template is converted to\nbefore it is stored: `string`, `int`, `float`, `bool` or `time`. The\nconversion is the one `field.convert` uses. It cannot be combined with\n`from`, which keeps the type of the copied field.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
-				config.ValidationRequired{},
+				config.ValidationInclusion{List: []string{"string", "int", "float", "bool", "time"}},
 			},
+		},
+		setConfigValue: {
+			Default:     "",
+			Description: "Value is a Go template expression which will be evaluated and stored in `field` (e.g. `{{ .Payload.After }}`).\nExactly one of `value` and `from` must be set.",
+			Type:        config.ParameterTypeString,
+			Validations: []config.Validation{},
 		},
 	}
 }

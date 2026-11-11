@@ -2,8 +2,8 @@
   "specification": {
     "name": "field.set",
     "summary": "Set the value of a certain field.",
-    "description": "Set the value of a certain field to any value. It is not allowed to set the `.Position` field.\nThe new value can be a Go template expression, the processor will evaluate the output and assign the value to the target field.\nIf the provided `field` doesn't exist, the processor will create that field and assign its value.\nThis processor can be used for multiple purposes, like extracting fields, hoisting data, inserting fields, copying fields, masking fields, etc.\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor\n[`json.decode`](/docs/using/processors/builtin/json.decode) to parse it into structured data first.",
-    "version": "v0.1.0",
+    "description": "Set the value of a certain field to any value. It is not allowed to set the `.Position` field.\nThe new value can be a Go template expression, the processor will evaluate the output and assign the value to the target field.\nIf the provided `field` doesn't exist, the processor will create that field and assign its value.\nThis processor can be used for multiple purposes, like extracting fields, hoisting data, inserting fields, copying fields, masking fields, etc.\nNote that this processor only runs on structured data, if the record contains raw JSON data, then use the processor\n[`json.decode`](/docs/using/processors/builtin/json.decode) to parse it into structured data first.\n\nThe output of the `value` template is a string. Set `type` to convert it to an `int`, `float`,\n`bool` or `time` before it is stored, with the same conversion as\n[`field.convert`](/docs/using/processors/builtin/field.convert). To copy a field with its type kept, set\n`from` to a field reference instead of `value`; nested data is deep-copied. Exactly one of `value`\nand `from` must be set. A field that holds null is copied as null; when `field` is a whole side, the side\nbecomes nil, never an empty map. A field that does not exist fails the record with `field.set.from_missing`, and\nreading it creates nothing in the record.\n\nWith `from` or `type`, a whole `.Key`, `.Payload.Before` or `.Payload.After` can only be set\nto structured data or null, and a field can only be read from or written into a side that holds structured data\n(or nil, when writing). Anything else fails the record with `field.set.side_not_structured`; a value is never\nconverted to fit.\n\nWhen `from` or a `type` other than `string` changes a field under `.Key` or `.Payload`, the\nprocessor removes the schema subject and version of that side (`opencdc.key.schema.*` or\n`opencdc.payload.schema.*`), because the side no longer matches the schema the source attached. The record then\nleaves the processor as structured data without a schema, instead of being encoded with a schema extracted from its\nvalues. With only `value` set, the metadata is kept, as in earlier versions.",
+    "version": "v0.2.0",
     "author": "Meroxa, Inc.",
     "parameters": {
       "field": {
@@ -20,6 +20,12 @@
             "value": ".Position"
           }
         ]
+      },
+      "from": {
+        "default": "",
+        "description": "From is a reference to a field whose value is copied into `field`, with\nits type kept (e.g. `.Payload.After.id`). Nested data is deep-copied, so\nthe two fields never share data. A field that holds null is copied as\nnull; a missing field fails the record. It is a reference, not a\ntemplate.\nExactly one of `value` and `from` must be set.\n\nFor more information about the format, see [Referencing fields](https://conduitdata.io/docs/using/processors/referencing-fields).",
+        "type": "string",
+        "validations": []
       },
       "sdk.schema.decode.key.enabled": {
         "default": "true",
@@ -39,44 +45,28 @@
         "type": "bool",
         "validations": null
       },
-      "sdk.schema.encode.key.strategy": {
-        "default": "infer",
-        "description": "How to build a new key schema when the processed key no longer fits the schema the record carried. \"infer\" extracts a schema from the values (Avro int becomes long, date becomes timestamp-micros, decimals become decimal(31,10)). \"extend\" keeps the carried type of every field still present, adds new top-level fields as nullable with a null default, leaves out removed top-level fields, and fails the record if a value does not fit its carried type.",
-        "type": "string",
-        "validations": [
-          {
-            "type": "inclusion",
-            "value": "infer,extend"
-          }
-        ]
-      },
       "sdk.schema.encode.payload.enabled": {
         "default": "true",
         "description": "Whether to encode the record payload using its corresponding schema from the schema registry.",
         "type": "bool",
         "validations": null
       },
-      "sdk.schema.encode.payload.strategy": {
-        "default": "infer",
-        "description": "How to build a new payload schema when the processed payload no longer fits the schema the record carried. \"infer\" extracts a schema from the values (Avro int becomes long, date becomes timestamp-micros, decimals become decimal(31,10)). \"extend\" keeps the carried type of every field still present, adds new top-level fields as nullable with a null default, leaves out removed top-level fields, and fails the record if a value does not fit its carried type.",
+      "type": {
+        "default": "string",
+        "description": "Type is the type the output of the `value` template is converted to\nbefore it is stored: `string`, `int`, `float`, `bool` or `time`. The\nconversion is the one `field.convert` uses. It cannot be combined with\n`from`, which keeps the type of the copied field.",
         "type": "string",
         "validations": [
           {
             "type": "inclusion",
-            "value": "infer,extend"
+            "value": "string,int,float,bool,time"
           }
         ]
       },
       "value": {
         "default": "",
-        "description": "Value is a Go template expression which will be evaluated and stored in `field` (e.g. `{{ .Payload.After }}`).",
+        "description": "Value is a Go template expression which will be evaluated and stored in `field` (e.g. `{{ .Payload.After }}`).\nExactly one of `value` and `from` must be set.",
         "type": "string",
-        "validations": [
-          {
-            "type": "required",
-            "value": ""
-          }
-        ]
+        "validations": []
       }
     }
   },
@@ -86,6 +76,7 @@
       "description": "This example adds a new field to the record. The field is\nadded to `.Payload.After` and is set to `bar`.",
       "config": {
         "field": ".Payload.After.foo",
+        "type": "string",
         "value": "bar"
       },
       "have": {
@@ -116,10 +107,89 @@
       }
     },
     {
+      "summary": "Copy a field with its type",
+      "description": "This example copies the structured `.Payload.After.customer` field into the key, the\nway Kafka Connect's `ValueToKey` does. `from` is a field reference, not a template, so the copy keeps the\ntype of the field (here structured data) and shares no data with it.",
+      "config": {
+        "field": ".Key",
+        "from": ".Payload.After.customer",
+        "type": "string"
+      },
+      "have": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": "1",
+        "payload": {
+          "before": null,
+          "after": {
+            "customer": {
+              "id": 7,
+              "region": "eu"
+            },
+            "total": 9.5
+          }
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": {
+          "id": 7,
+          "region": "eu"
+        },
+        "payload": {
+          "before": null,
+          "after": {
+            "customer": {
+              "id": 7,
+              "region": "eu"
+            },
+            "total": 9.5
+          }
+        }
+      }
+    },
+    {
+      "summary": "Set a typed field from a template",
+      "description": "This example sets `.Payload.After.version` to the integer `2`, instead of the\nstring `\"2\"` a template renders. The conversion is the one `field.convert` uses.",
+      "config": {
+        "field": ".Payload.After.version",
+        "type": "int",
+        "value": "{{ add 1 1 }}"
+      },
+      "have": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": {
+            "id": 1
+          }
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": {
+            "id": 1,
+            "version": 2
+          }
+        }
+      }
+    },
+    {
       "summary": "Sets the record operation to `update`",
       "description": "This example sets the `.Operation` field to `update` for all records.",
       "config": {
         "field": ".Operation",
+        "type": "string",
         "value": "update"
       },
       "have": {
@@ -148,6 +218,7 @@
       "description": "This example sets the `.Payload.After.postgres` field to `true` if the `.Metadata.table` field contains `postgres`.",
       "config": {
         "field": ".Payload.After.postgres",
+        "type": "string",
         "value": "{{ eq .Metadata.table \"postgres\" }}"
       },
       "have": {
