@@ -15,6 +15,7 @@
 package field
 
 import (
+	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"google.golang.org/grpc/codes"
 )
@@ -48,9 +49,10 @@ var (
 	// be converted to "type". The value is never coerced (invariant 6).
 	CodeSetTypeConversion = conduiterr.Register("field.set.type_conversion", codes.InvalidArgument)
 	// CodeSetValueNotSettable is raised for a record when a typed value or a
-	// copied value cannot be stored in a field outside the key and payload
-	// (for example a map or an int into a metadata field). It is never
-	// coerced (invariant 6).
+	// copied value cannot be stored in "field": a map, an int or null into
+	// metadata (null would delete the key, or reset the map), or raw data,
+	// the metadata map, the position or the operation into a field inside
+	// structured data. It is never coerced (invariant 6).
 	CodeSetValueNotSettable = conduiterr.Register("field.set.value_not_settable", codes.FailedPrecondition)
 )
 
@@ -60,4 +62,24 @@ func newSetConfigError(code conduiterr.Code, msg, param, suggestion string) erro
 	e.ConfigPath = "settings." + param
 	e.Suggestion = suggestion
 	return e
+}
+
+// setV010Parameters are the parameters of field.set before `from` and `type`
+// existed. Configure validates a configuration that sets neither of them
+// against these, so it fails exactly as v0.1.0 did, with the same error.
+// TestSetField_ConfigureIsUnchanged compares the two.
+func setV010Parameters() config.Parameters {
+	return config.Parameters{
+		setConfigField: {
+			Type: config.ParameterTypeString,
+			Validations: []config.Validation{
+				config.ValidationRequired{},
+				config.ValidationExclusion{List: []string{".Position"}},
+			},
+		},
+		setConfigValue: {
+			Type:        config.ParameterTypeString,
+			Validations: []config.Validation{config.ValidationRequired{}},
+		},
+	}
 }

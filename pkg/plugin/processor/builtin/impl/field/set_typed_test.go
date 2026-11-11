@@ -383,6 +383,47 @@ func TestSetField_TypedErrors(t *testing.T) {
 		wantCode: CodeSetFromMissing,
 		secret:   "SECRET",
 	}, {
+		name:     "a null into a metadata key does not delete it (review M2)",
+		config:   config.Config{"field": ".Metadata.x", "from": ".Payload.After.n"},
+		record:   opencdc.Record{Metadata: opencdc.Metadata{"x": "SECRET"}, Payload: opencdc.Change{After: opencdc.StructuredData{"n": nil}}},
+		wantCode: CodeSetValueNotSettable,
+		secret:   "SECRET",
+	}, {
+		name:     "a null into the metadata map does not reset it (review M2)",
+		config:   config.Config{"field": ".Metadata", "from": ".Payload.After.n"},
+		record:   opencdc.Record{Metadata: opencdc.Metadata{"opencdc.collection": "SECRET"}, Payload: opencdc.Change{After: opencdc.StructuredData{"n": nil}}},
+		wantCode: CodeSetValueNotSettable,
+		secret:   "SECRET",
+	}, {
+		name:     "a nil side into a metadata key",
+		config:   config.Config{"field": `.Metadata["x"]`, "from": ".Key"},
+		record:   opencdc.Record{Metadata: opencdc.Metadata{"x": "SECRET"}},
+		wantCode: CodeSetValueNotSettable,
+		secret:   "SECRET",
+	}, {
+		name:     "raw data cannot go into a nested field (review L1)",
+		config:   config.Config{"field": ".Payload.After.copy", "from": ".Payload.Before"},
+		record:   opencdc.Record{Payload: opencdc.Change{Before: opencdc.RawData("SECRET"), After: opencdc.StructuredData{}}},
+		wantCode: CodeSetValueNotSettable,
+		secret:   "SECRET",
+	}, {
+		name:     "the metadata map cannot go into a nested field (review L1)",
+		config:   config.Config{"field": ".Payload.After.md", "from": ".Metadata"},
+		record:   opencdc.Record{Metadata: opencdc.Metadata{"k": "SECRET"}, Payload: opencdc.Change{After: opencdc.StructuredData{}}},
+		wantCode: CodeSetValueNotSettable,
+		secret:   "SECRET",
+	}, {
+		name:     "the position cannot go into a nested field (review L1)",
+		config:   config.Config{"field": ".Key.pos", "from": ".Position"},
+		record:   opencdc.Record{Position: opencdc.Position("SECRET"), Key: opencdc.StructuredData{}},
+		wantCode: CodeSetValueNotSettable,
+		secret:   "SECRET",
+	}, {
+		name:     "the operation cannot go into a nested field (review L1)",
+		config:   config.Config{"field": ".Key.op", "from": ".Operation"},
+		record:   opencdc.Record{Operation: opencdc.OperationCreate, Key: opencdc.StructuredData{}},
+		wantCode: CodeSetValueNotSettable,
+	}, {
 		name:     "a missing metadata key",
 		config:   config.Config{"field": ".Payload.After.k", "from": ".Metadata.nope"},
 		record:   opencdc.Record{Metadata: opencdc.Metadata{"other": "SECRET"}, Payload: opencdc.Change{After: opencdc.StructuredData{}}},
@@ -442,8 +483,10 @@ func TestSetField_ConfigureCodes(t *testing.T) {
 		wantPath string
 	}{
 		{"value and from", config.Config{"field": ".Key", "value": "x", "from": ".Payload.After"}, CodeSetValueAndFrom, "settings.from"},
-		{"neither value nor from", config.Config{"field": ".Key"}, CodeSetValueRequired, "settings.value"},
-		{"empty value and no from", config.Config{"field": ".Key", "value": ""}, CodeSetValueRequired, "settings.value"},
+		// Without "from" and "type" the v0.1.0 validation error is kept
+		// (TestSetField_ConfigureIsUnchanged); with "type" the code applies.
+		{"type without value or from", config.Config{"field": ".Key", "type": "int"}, CodeSetValueRequired, "settings.value"},
+		{"type with an empty value", config.Config{"field": ".Key", "value": "", "type": "int"}, CodeSetValueRequired, "settings.value"},
 		{"type with from", config.Config{"field": ".Key", "from": ".Payload.After", "type": "int"}, CodeSetTypeWithFrom, "settings.type"},
 		{"explicit string type with from", config.Config{"field": ".Key", "from": ".Payload.After", "type": "string"}, CodeSetTypeWithFrom, "settings.type"},
 		{"from is a template", config.Config{"field": ".Key", "from": "{{ .Payload.After.id }}"}, CodeSetFromInvalid, "settings.from"},
@@ -487,14 +530,102 @@ func TestSetField_ReconfigureResets(t *testing.T) {
 	}})
 }
 
-func TestSchemaSideOf(t *testing.T) {
-	for ref, want := range map[string]schemaSide{
-		".Key": schemaSideKey, ".key.a": schemaSideKey, "$.Key.a": schemaSideKey, `.Key["a b"]`: schemaSideKey,
-		".Payload.After": schemaSidePayload, ".payload.before.x": schemaSidePayload, "$.Payload.After.x": schemaSidePayload,
-		".Metadata.x": schemaSideNone, ".Operation": schemaSideNone, `.Metadata["opencdc.key.x"]`: schemaSideNone,
+func TestClassifyTarget(t *testing.T) {
+	type want struct {
+		side     schemaSide
+		whole    bool
+		metadata bool
+	}
+	for ref, w := range map[string]want{
+		".Key":                       {schemaSideKey, true, false},
+		".key":                       {schemaSideKey, true, false},
+		"$.Key":                      {schemaSideKey, true, false},
+		".key.a":                     {schemaSideKey, false, false},
+		`.Key["a b"]`:                {schemaSideKey, false, false},
+		".Payload.After":             {schemaSidePayload, true, false},
+		".payload.after":             {schemaSidePayload, true, false},
+		".Payload.after":             {schemaSidePayload, true, false},
+		`.Payload["After"]`:          {schemaSidePayload, true, false},
+		`.Payload["Before"]`:         {schemaSidePayload, true, false},
+		"$.Payload.Before":           {schemaSidePayload, true, false},
+		".payload.before.x":          {schemaSidePayload, false, false},
+		`.Payload["After"]["x"]`:     {schemaSidePayload, false, false},
+		".Metadata":                  {schemaSideNone, false, true},
+		".metadata.x":                {schemaSideNone, false, true},
+		`.Metadata["opencdc.key.x"]`: {schemaSideNone, false, true},
+		".Operation":                 {schemaSideNone, false, false},
 	} {
-		if got := schemaSideOf(ref); got != want {
-			t.Errorf("schemaSideOf(%q) = %v, want %v", ref, got, want)
+		if _, err := sdk.NewReferenceResolver(ref); err != nil {
+			t.Fatalf("invalid test reference %q: %v", ref, err)
 		}
+		side, whole, metadata := classifyTarget(ref)
+		if (want{side, whole, metadata}) != w {
+			t.Errorf("classifyTarget(%q) = %v, %v, %v; want %+v", ref, side, whole, metadata, w)
+		}
+	}
+}
+
+// Every spelling of a whole side hits the side guard (review M1).
+func TestSetField_WholeSideSpellings(t *testing.T) {
+	ctx := context.Background()
+	for _, field := range []string{".Payload.After", ".payload.after", ".Payload.after", `.Payload["After"]`, "$.Payload.After"} {
+		t.Run(field, func(t *testing.T) {
+			is := is.New(t)
+			p := NewSetProcessor(log.Nop())
+			is.NoErr(p.Configure(ctx, config.Config{"field": field, "from": ".Payload.After.s"}))
+			rec := opencdc.Record{Metadata: schemaMD(), Payload: opencdc.Change{After: opencdc.StructuredData{"s": "str"}}}
+			out := p.Process(ctx, []opencdc.Record{rec})
+			er, ok := out[0].(sdk.ErrorRecord)
+			if !ok {
+				t.Fatalf("expected an ErrorRecord, got %#v", out[0])
+			}
+			var ce *conduiterr.ConduitError
+			is.True(cerrors.As(er.Error, &ce))
+			is.Equal(ce.Code, CodeSetSideNotStructured)
+		})
+	}
+	for _, field := range []string{`.Payload["Before"]`, ".payload.before", "$.Key", ".key"} {
+		t.Run(field+" from bytes", func(t *testing.T) {
+			is := is.New(t)
+			p := NewSetProcessor(log.Nop())
+			is.NoErr(p.Configure(ctx, config.Config{"field": field, "from": ".Payload.After.b"}))
+			out := p.Process(ctx, []opencdc.Record{{Payload: opencdc.Change{After: opencdc.StructuredData{"b": []byte("x")}}}})
+			er, ok := out[0].(sdk.ErrorRecord)
+			if !ok {
+				t.Fatalf("expected an ErrorRecord, got %#v", out[0])
+			}
+			var ce *conduiterr.ConduitError
+			is.True(cerrors.As(er.Error, &ce))
+			is.Equal(ce.Code, CodeSetSideNotStructured)
+		})
+	}
+	t.Run(`.Payload["After"] drops the payload schema keys`, func(t *testing.T) {
+		is := is.New(t)
+		p := NewSetProcessor(log.Nop())
+		is.NoErr(p.Configure(ctx, config.Config{"field": `.Payload["After"]`, "from": ".Payload.After.row"}))
+		out := p.Process(ctx, []opencdc.Record{{Metadata: schemaMD(), Payload: opencdc.Change{After: opencdc.StructuredData{"row": map[string]any{"id": 1}}}}})
+		is.Equal(out, []sdk.ProcessedRecord{sdk.SingleRecord{
+			Metadata: opencdc.Metadata{opencdc.MetadataKeySchemaSubject: "k", opencdc.MetadataKeySchemaVersion: "1", "other": "kept"},
+			Payload:  opencdc.Change{After: opencdc.StructuredData{"id": 1}},
+		}})
+	})
+}
+
+// A typed nil map is no data: copied into a side, the side becomes nil
+// (review L2).
+func TestSetField_TypedNilIntoSide(t *testing.T) {
+	ctx := context.Background()
+	for name, v := range map[string]any{"StructuredData": opencdc.StructuredData(nil), "map": map[string]any(nil)} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			p := NewSetProcessor(log.Nop())
+			is.NoErr(p.Configure(ctx, config.Config{"field": ".Key", "from": ".Payload.After.k"}))
+			out := p.Process(ctx, []opencdc.Record{{Key: opencdc.StructuredData{"id": 1}, Payload: opencdc.Change{After: opencdc.StructuredData{"k": v}}}})
+			got, ok := out[0].(sdk.SingleRecord)
+			if !ok {
+				t.Fatalf("expected a SingleRecord, got %#v", out[0])
+			}
+			is.True(got.Key == nil) // a nil interface, not a typed nil
+		})
 	}
 }

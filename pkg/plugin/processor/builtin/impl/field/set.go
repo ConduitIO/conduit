@@ -20,7 +20,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"strings"
+	"maps"
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
@@ -57,7 +57,9 @@ type SetProcessor struct {
 	// wholeSide reports whether field is a whole side (.Key,
 	// .Payload.Before or .Payload.After) rather than a field inside one.
 	wholeSide bool
-	cfg       setConfig
+	// metadataTarget reports whether field is .Metadata or a metadata key.
+	metadataTarget bool
+	cfg            setConfig
 
 	sdk.UnimplementedProcessor
 }
@@ -114,7 +116,9 @@ reading it creates nothing in the record.
 With ` + "`from`" + ` or ` + "`type`" + `, a whole ` + "`.Key`" + `, ` + "`.Payload.Before`" + ` or ` + "`.Payload.After`" + ` can only be set
 to structured data or null, and a field can only be read from or written into a side that holds structured data
 (or nil, when writing). Anything else fails the record with ` + "`field.set.side_not_structured`" + `; a value is never
-converted to fit.
+converted to fit. A null copied into ` + "`.Metadata`" + ` or a metadata key fails with ` + "`field.set.value_not_settable`" + `
+instead of deleting metadata, and so does copying raw data, the metadata map, the position or the operation into a
+field inside structured data.
 
 When ` + "`from`" + ` or a ` + "`type`" + ` other than ` + "`string`" + ` changes a field under ` + "`.Key`" + ` or ` + "`.Payload`" + `, the
 processor removes the schema subject and version of that side (` + "`opencdc.key.schema.*`" + ` or
@@ -130,6 +134,15 @@ values. With only ` + "`value`" + ` set, the metadata is kept, as in earlier ver
 func (p *SetProcessor) Configure(ctx context.Context, c config.Config) error {
 	// Read before ParseConfig, which fills in the default of "type".
 	_, typeSet := c[setConfigType]
+	_, fromSet := c[setConfigFrom]
+	if !typeSet && !fromSet {
+		// A v0.1.0 configuration is validated with the v0.1.0 parameters,
+		// so an invalid one fails with the same error as before (a missing
+		// "value" included).
+		if err := sdk.ParseConfig(ctx, maps.Clone(c), &setConfig{}, setV010Parameters()); err != nil {
+			return cerrors.Errorf("failed to parse configuration: %w", err)
+		}
+	}
 	cfg := setConfig{}
 	err := sdk.ParseConfig(ctx, c, &cfg, setConfig{}.Parameters())
 	if err != nil {
@@ -154,6 +167,16 @@ func (p *SetProcessor) Configure(ctx context.Context, c config.Config) error {
 	// Reset everything a previous Configure set.
 	*p = SetProcessor{cfg: cfg}
 
+	if cfg.From == "" {
+		// v0.1.0 parsed the template before the field reference; keep that
+		// order so a config with both invalid reports the same error.
+		tmpl, err := template.New("").Funcs(sprig.FuncMap()).Parse(cfg.Value)
+		if err != nil {
+			return cerrors.Errorf("failed to parse the %q param template: %w", "value", err)
+		}
+		p.tmpl = tmpl
+	}
+
 	resolver, err := sdk.NewReferenceResolver(cfg.Field)
 	if err != nil {
 		return cerrors.Errorf("failed to parse the %q param: %w", "field", err)
@@ -161,37 +184,17 @@ func (p *SetProcessor) Configure(ctx context.Context, c config.Config) error {
 	p.referenceResolver = resolver
 
 	if cfg.From != "" {
-		_, err := sdk.NewReferenceResolver(cfg.From)
-		if err == nil {
-			// The whole record or the whole payload (before and after
-			// together) is not a value a field can hold.
-			if f := referenceFields(cfg.From); len(f) == 0 || (len(f) == 1 && f[0] == "Payload") {
-				err = cerrors.New(`"from" must name a field, .Key, .Payload.Before or .Payload.After, not the whole record or payload`)
-			}
-		}
-		if err != nil {
-			// A template ("{{ .Payload.After.id }}") lands here: from is a
-			// reference, never a template.
-			e := conduiterr.Wrap(CodeSetFromInvalid, fmt.Sprintf("%q is not a valid field reference", setConfigFrom), err)
-			e.ConfigPath = "settings." + setConfigFrom
-			e.Suggestion = `Set "from" to a field reference such as .Payload.After.id, without {{ }}.`
-			return e
+		if err := validateFrom(cfg.From); err != nil {
+			return err
 		}
 		p.fromFields = referenceFields(cfg.From)
-		p.side = schemaSideOf(cfg.Field)
-		p.wholeSide = isWholeSide(cfg.Field)
+		p.side, p.wholeSide, p.metadataTarget = classifyTarget(cfg.Field)
 		return nil
 	}
 
-	tmpl, err := template.New("").Funcs(sprig.FuncMap()).Parse(cfg.Value)
-	if err != nil {
-		return cerrors.Errorf("failed to parse the %q param template: %w", "value", err)
-	}
-	p.tmpl = tmpl
 	if cfg.Type != "string" {
 		p.typ = cfg.Type
-		p.side = schemaSideOf(cfg.Field)
-		p.wholeSide = isWholeSide(cfg.Field)
+		p.side, p.wholeSide, p.metadataTarget = classifyTarget(cfg.Field)
 	}
 	return nil
 }
@@ -209,6 +212,28 @@ func (p *SetProcessor) Process(_ context.Context, records []opencdc.Record) []sd
 		out = append(out, sdk.SingleRecord(rec))
 	}
 	return out
+}
+
+// validateFrom checks that from is a field reference (not a template) that
+// names a value a field can hold.
+func validateFrom(from string) error {
+	_, err := sdk.NewReferenceResolver(from)
+	if err == nil {
+		// The whole record or the whole payload (before and after together)
+		// is not a value a field can hold.
+		if f := referenceFields(from); len(f) == 0 || (len(f) == 1 && f[0] == "Payload") {
+			err = cerrors.New(`"from" must name a field, .Key, .Payload.Before or .Payload.After, not the whole record or payload`)
+		}
+	}
+	if err != nil {
+		// A template ("{{ .Payload.After.id }}") lands here: from is a
+		// reference, never a template.
+		e := conduiterr.Wrap(CodeSetFromInvalid, fmt.Sprintf("%q is not a valid field reference", setConfigFrom), err)
+		e.ConfigPath = "settings." + setConfigFrom
+		e.Suggestion = `Set "from" to a field reference such as .Payload.After.id, without {{ }}.`
+		return e
+	}
+	return nil
 }
 
 // processTemplate is the v0.1.0 behaviour: the template output is stored as a
@@ -264,11 +289,40 @@ func (p *SetProcessor) processTyped(rec opencdc.Record) (opencdc.Record, error) 
 		value = v
 	}
 
+	switch {
+	case p.metadataTarget && value == nil:
+		// The SDK deletes a metadata key set to nil, and resets the whole
+		// map for .Metadata. A null must not silently remove metadata
+		// (routing and schema keys included).
+		e := conduiterr.New(CodeSetValueNotSettable,
+			fmt.Sprintf("%s cannot be set to null: metadata holds strings", p.cfg.Field))
+		e.ConfigPath = "settings." + setConfigField
+		e.Suggestion = "Route records whose field is null elsewhere with a condition, or copy into a structured field."
+		return opencdc.Record{}, e
+	case !p.wholeSide && !p.metadataTarget && isOpenCDCValue(value):
+		// RawData, Metadata, Position and Operation have their own
+		// encodings; inside structured data the encoders and the schema
+		// extraction do not know them. Refuse instead of storing them.
+		e := conduiterr.New(CodeSetValueNotSettable,
+			fmt.Sprintf("field %s cannot hold a value of type %T copied from %s", p.cfg.Field, value, p.cfg.From))
+		e.ConfigPath = "settings." + setConfigFrom
+		e.Suggestion = "Copy a field inside a structured key or payload, or a metadata key, instead of a raw side, the metadata map, the position or the operation."
+		return opencdc.Record{}, e
+	}
+
 	if p.wholeSide {
 		switch v := value.(type) {
-		case nil, opencdc.StructuredData:
+		case nil:
+		case opencdc.StructuredData:
+			if v == nil {
+				value = nil // a typed nil is no data: the side becomes nil
+			}
 		case map[string]any:
-			value = opencdc.StructuredData(v)
+			if v == nil {
+				value = nil
+			} else {
+				value = opencdc.StructuredData(v)
+			}
 		default:
 			// Invariant 6: a side written by a copy or a typed set holds
 			// structured data or nothing. Anything else (a string would
@@ -341,33 +395,34 @@ const (
 	schemaSidePayload
 )
 
-// schemaSideOf returns the side a valid field reference points into. It
-// accepts the spellings the reference resolver accepts (`.Key`, `.key`,
-// `$.Key`, and the same for `.Payload`); a lower-case spelling after `$` is not a valid reference.
-func schemaSideOf(ref string) schemaSide {
-	ref = strings.TrimPrefix(ref, "$")
-	for _, s := range []struct {
-		prefix string
-		side   schemaSide
-	}{
-		{".Key", schemaSideKey},
-		{".key", schemaSideKey},
-		{".Payload", schemaSidePayload},
-		{".payload", schemaSidePayload},
-	} {
-		if rest, ok := strings.CutPrefix(ref, s.prefix); ok && (rest == "" || rest[0] == '.' || rest[0] == '[') {
-			return s.side
-		}
+// classifyTarget returns, for a valid field reference, the side whose schema
+// metadata a reshape invalidates, whether the reference is a whole side
+// (.Key, .Payload.Before, .Payload.After), and whether it is .Metadata or a
+// metadata key. It works on the parsed field names, so every spelling the
+// resolver accepts (.payload.after, $.Key, .Payload["After"]) is classified
+// the same way.
+func classifyTarget(ref string) (side schemaSide, whole, metadata bool) {
+	f := referenceFields(ref)
+	if len(f) == 0 {
+		return schemaSideNone, false, false
 	}
-	return schemaSideNone
+	switch f[0] {
+	case "Key":
+		return schemaSideKey, len(f) == 1, false
+	case "Payload":
+		whole = len(f) == 2 && (f[1] == "Before" || f[1] == "After")
+		return schemaSidePayload, whole, false
+	case "Metadata":
+		return schemaSideNone, false, true
+	}
+	return schemaSideNone, false, false
 }
 
-// isWholeSide reports whether a valid field reference names a whole side:
-// .Key, .Payload.Before or .Payload.After, in any spelling the reference
-// resolver accepts.
-func isWholeSide(ref string) bool {
-	switch strings.ToLower(strings.TrimPrefix(ref, "$")) {
-	case ".key", ".payload.before", ".payload.after":
+// isOpenCDCValue reports whether v is one of the opencdc types that are not
+// plain data: raw data, metadata, a position or an operation.
+func isOpenCDCValue(v any) bool {
+	switch v.(type) {
+	case opencdc.RawData, opencdc.Metadata, opencdc.Position, opencdc.Operation, opencdc.Change:
 		return true
 	}
 	return false

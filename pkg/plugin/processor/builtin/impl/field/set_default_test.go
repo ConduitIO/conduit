@@ -18,6 +18,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"maps"
+	"sort"
+	"strings"
 	"testing"
 	"text/template"
 
@@ -40,6 +43,25 @@ import (
 type setV010 struct {
 	referenceResolver sdk.ReferenceResolver
 	tmpl              *template.Template
+}
+
+// configureV010 is v0.1.0's Configure, parameters included.
+func (p *setV010) configureV010(ctx context.Context, c config.Config) error {
+	cfg := struct {
+		Field string `json:"field"`
+		Value string `json:"value"`
+	}{}
+	params := config.Parameters{
+		"field": {Type: config.ParameterTypeString, Validations: []config.Validation{
+			config.ValidationRequired{}, config.ValidationExclusion{List: []string{".Position"}},
+		}},
+		"value": {Type: config.ParameterTypeString, Validations: []config.Validation{config.ValidationRequired{}}},
+	}
+	err := sdk.ParseConfig(ctx, c, &cfg, params)
+	if err != nil {
+		return fmt.Errorf("failed to parse configuration: %w", err)
+	}
+	return p.configure(cfg.Field, cfg.Value)
 }
 
 func (p *setV010) configure(field, value string) error {
@@ -86,6 +108,8 @@ var (
 	defaultFields = []string{
 		".Metadata.table", ".Operation", ".Key", ".Key.id", ".Payload.After",
 		".Payload.After.id", ".Payload.Before.a.b", `.Payload.After["x y"]`,
+		".Payload.Before", ".Metadata", ".payload.after.id", ".key", "$.Key.id",
+		`.Payload["After"]`, `.metadata["opencdc.collection"]`,
 	}
 	defaultValues = []string{
 		"postgres",
@@ -185,6 +209,47 @@ func defaultPair(t interface{ Fatalf(string, ...any) }, field, value string) (*s
 		t.Fatalf("configure: %v", err)
 	}
 	return ref, p
+}
+
+// TestSetField_ConfigureIsUnchanged: for v0.1.0 configurations, valid and
+// invalid, Configure accepts and rejects the same ones as v0.1.0, with the
+// same error text, also when several parameters are invalid at once.
+func TestSetField_ConfigureIsUnchanged(t *testing.T) {
+	ctx := context.Background()
+	for name, cfg := range map[string]config.Config{
+		"valid":                         {"field": ".Payload.After.x", "value": "{{ .Key }}"},
+		"value missing":                 {"field": ".Key"},
+		"value empty":                   {"field": ".Key", "value": ""},
+		"field missing":                 {"value": "x"},
+		"both missing":                  {},
+		"position":                      {"field": ".Position", "value": "x"},
+		"position and no value":         {"field": ".Position"},
+		"invalid template":              {"field": ".Key", "value": "{{ invalid }}"},
+		"invalid field":                 {"field": ".Payload.Middle", "value": "x"},
+		"invalid field and template":    {"field": ".Payload.Middle", "value": "{{ invalid }}"},
+		"unclosed template":             {"field": ".Key", "value": "{{ .Key"},
+		"field with a space":            {"field": ".Key. a", "value": "x"},
+		"lower-case and $ spellings ok": {"field": "$.Payload.After.x", "value": "x"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			wantErr := (&setV010{}).configureV010(ctx, maps.Clone(cfg))
+			gotErr := NewSetProcessor(log.Nop()).Configure(ctx, maps.Clone(cfg))
+			if (wantErr == nil) != (gotErr == nil) || (wantErr != nil && errLines(wantErr) != errLines(gotErr)) {
+				t.Fatalf("Configure differs from v0.1.0:\nv0.1.0: %v\nnow:    %v", wantErr, gotErr)
+			}
+		})
+	}
+}
+
+// errLines returns the lines of err's text in sorted order. The SDK joins
+// several validation errors in map order, so v0.1.0 itself reports them in
+// varying order; the set of errors is what must not change.
+func errLines(err error) string {
+	text := err.Error()
+	prefix, rest, _ := strings.Cut(text, "error validating")
+	parts := strings.Split("error validating"+rest, "\n")
+	sort.Strings(parts)
+	return prefix + "|" + strings.Join(parts, "\n")
 }
 
 // TestSetField_LiteralThatLooksLikeAReference is the explicit case of the
