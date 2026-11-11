@@ -33,6 +33,8 @@ import (
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	"github.com/conduitio/conduit/pkg/foundation/metrics"
+	condprom "github.com/conduitio/conduit/pkg/foundation/metrics/prometheus"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	connectorPlugin "github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/plugin/connector/builtin"
@@ -40,6 +42,7 @@ import (
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/google/uuid"
 	"github.com/matryer/is"
+	promclient "github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog"
 	"go.uber.org/mock/gomock"
 )
@@ -325,21 +328,31 @@ func TestArchV2_PipelineBatching_PluginDefaultDoesNotComeBack(t *testing.T) {
 
 // TestArchV2_OwnershipLogsAndCounts: a destination batched from its connector
 // default logs the INFO line with the origin of each value; one with nothing
-// to neutralise logs nothing.
+// to neutralise logs nothing. Every destination whose plugin batching was
+// neutralised is counted once in
+// conduit_funnel_destination_plugin_batching_neutralised_total, read back
+// through a metrics registry (removing the engine's increment fails it).
 func TestArchV2_OwnershipLogsAndCounts(t *testing.T) {
 	for name, tc := range map[string]struct {
-		settings map[string]string
-		wantLog  bool
+		settings  map[string]string
+		wantLog   bool
+		wantCount float64
 	}{
-		"spec default":       {settings: nil, wantLog: true},
-		"pipeline size only": {settings: map[string]string{"sdk.batch.size": "500"}, wantLog: true}, // delay from the spec
-		"pipeline sets both": {settings: map[string]string{"sdk.batch.size": "500", "sdk.batch.delay": "200ms"}},
+		"spec default":       {settings: nil, wantLog: true, wantCount: 1},
+		"pipeline size only": {settings: map[string]string{"sdk.batch.size": "500"}, wantLog: true, wantCount: 1}, // delay from the spec
+		"pipeline sets both": {settings: map[string]string{"sdk.batch.size": "500", "sdk.batch.delay": "200ms"}, wantCount: 1},
 		"pipeline turns off": {settings: map[string]string{"sdk.batch.size": "0", "sdk.batch.delay": "0"}},
 	} {
 		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			// Registered before anything calls WithValues: a registry only
+			// sees the values recorded after it is attached.
+			promReg := registerMetricsBackend(t)
+			var destID string
 			synctest.Test(t, func(t *testing.T) {
 				is := is.New(t)
 				h := newOwnershipHarness(t, tc.settings, 5)
+				destID = h.pl.ConnectorIDs[1]
 				logs := &syncBuffer{}
 				h.ls.logger = log.New(zerolog.New(logs).Level(zerolog.InfoLevel))
 
@@ -356,8 +369,46 @@ func TestArchV2_OwnershipLogsAndCounts(t *testing.T) {
 					is.Equal(got, 0)
 				}
 			})
+			is.Equal(neutralisedCount(t, promReg, destID), tc.wantCount)
 		})
 	}
+}
+
+// registerMetricsBackend attaches a fresh metrics backend to the global
+// measure specs, as pkg/conduit/runtime.go does at startup, and returns a
+// Prometheus registry that scrapes only it.
+func registerMetricsBackend(t *testing.T) *promclient.Registry {
+	t.Helper()
+	reg := condprom.NewRegistry(nil)
+	metrics.Register(reg)
+	promReg := promclient.NewRegistry()
+	if err := promReg.Register(reg); err != nil {
+		t.Fatalf("register metrics backend: %v", err)
+	}
+	return promReg
+}
+
+// neutralisedCount returns the value of the neutralised-plugin-batching
+// counter for the destination componentID (0 when it was never incremented).
+func neutralisedCount(t *testing.T, promReg *promclient.Registry, componentID string) float64 {
+	t.Helper()
+	families, err := promReg.Gather()
+	if err != nil {
+		t.Fatalf("gather metrics: %v", err)
+	}
+	for _, f := range families {
+		if f.GetName() != "conduit_funnel_destination_plugin_batching_neutralised_total" {
+			continue
+		}
+		for _, m := range f.GetMetric() {
+			for _, l := range m.GetLabel() {
+				if l.GetName() == "component_id" && l.GetValue() == componentID {
+					return m.GetCounter().GetValue()
+				}
+			}
+		}
+	}
+	return 0
 }
 
 // TestResolveDestinationBatching is the table of the per-key resolution and
@@ -529,6 +580,7 @@ func TestBatchingGuard_RefusesDLQDelay(t *testing.T) {
 		path     string
 	}{
 		"delay 1s":        {settings: map[string]string{"sdk.batch.delay": "1s"}, refused: true, path: "/dead-letter-queue/settings/sdk.batch.delay"},
+		"delay 1ns":       {settings: map[string]string{"sdk.batch.delay": "1ns"}, refused: true, path: "/dead-letter-queue/settings/sdk.batch.delay"}, // any delay above 0, not above some threshold
 		"padded delay":    {settings: map[string]string{" sdk.batch.delay": " 10ms "}, refused: true, path: dlqSettingPointer(" sdk.batch.delay")},
 		"size and delay":  {settings: map[string]string{"sdk.batch.size": "5", "sdk.batch.delay": "1s"}, refused: true, path: "/dead-letter-queue/settings/sdk.batch.size"},
 		"delay 0":         {settings: map[string]string{"sdk.batch.delay": "0"}},
