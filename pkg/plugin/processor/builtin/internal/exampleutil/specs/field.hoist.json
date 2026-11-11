@@ -1,0 +1,125 @@
+{
+  "specification": {
+    "name": "field.hoist",
+    "summary": "Wrap the key or payload in a structure under one field name.",
+    "description": "Hoist replaces the whole `field` (`.Key`, `.Payload.Before` or `.Payload.After`)\nwith structured data that holds the old value under `name`: `{\"id\": 1}` becomes\n`{\"\u003cname\u003e\": {\"id\": 1}}`. It is the equivalent of the Kafka Connect `HoistField$Value` and\n`HoistField$Key` single message transforms.\n\nStructured data is deep-copied. Raw data is stored as bytes. A nil key or payload becomes `{\"\u003cname\u003e\": null}`,\nas Kafka Connect wraps a null value: a tombstone or a delete's after-image therefore gets a value. Use a\n`condition` to skip such records if that is not wanted.\n\nThe processor removes the schema subject and version of the side it hoists (`opencdc.key.schema.*` for the key,\n`opencdc.payload.schema.*` for the payload), because the new shape no longer matches the schema the source\nattached. The record then leaves the processor as structured data without a schema.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "field": {
+        "default": ".Payload.After",
+        "description": "Field is the side of the record to hoist: `.Key`, `.Payload.Before` or\n`.Payload.After`. The default `.Payload.After` matches Kafka Connect's\n`HoistField$Value`; `.Key` matches `HoistField$Key`.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "inclusion",
+            "value": ".Key,.Payload.Before,.Payload.After"
+          }
+        ]
+      },
+      "name": {
+        "default": "",
+        "description": "Name is the field name the old key or payload is stored under. It is\nused as written: a `.` in it is part of the name, not a path.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "required",
+            "value": ""
+          }
+        ]
+      },
+      "sdk.schema.decode.key.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.decode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.key.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "Wrap the payload under a field name",
+      "description": "This example wraps `.Payload.After` under the field `row`, as Kafka Connect's `HoistField$Value` with `field=row` does.",
+      "config": {
+        "field": ".Payload.After",
+        "name": "row"
+      },
+      "have": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": {
+            "id": 1,
+            "name": "Wong"
+          }
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": {
+            "row": {
+              "id": 1,
+              "name": "Wong"
+            }
+          }
+        }
+      }
+    },
+    {
+      "summary": "Wrap a raw key",
+      "description": "This example wraps a raw `.Key` under the field `id`. Raw data is stored as bytes, as Kafka Connect wraps a byte array; JSON shows the bytes in base64.",
+      "config": {
+        "field": ".Key",
+        "name": "id"
+      },
+      "have": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": "42",
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": {
+          "id": "NDI="
+        },
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      }
+    }
+  ]
+}
