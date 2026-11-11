@@ -53,6 +53,11 @@ func (p *ExcludeProcessor) Specification() (sdk.Specification, error) {
 If a field is excluded that contains nested data, the whole tree will be removed.
 It is not allowed to exclude ` + "`.Position`" + ` or ` + "`.Operation`" + ` fields.
 
+On a record that carries a schema and has both a before and an after image (for example a Postgres update
+with ` + "`REPLICA IDENTITY FULL`" + `), exclude the field from both parts, for example
+` + "`.Payload.Before.x,.Payload.After.x`" + `. Excluding it from ` + "`.Payload.After`" + ` only fails the record with
+` + "`ErrFieldNotInSchema`" + `.
+
 Note that this processor only runs on structured data, if the record contains
 raw JSON data, then use the processor [` + "`json.decode`" + `](/docs/using/processors/builtin/json.decode)
 to parse it into structured data first.`,

@@ -19,7 +19,7 @@ require (
 	github.com/conduitio/conduit-connector-protocol v0.12.0
 	github.com/conduitio/conduit-connector-s3 v0.13.0
 	github.com/conduitio/conduit-connector-sdk v0.18.1
-	github.com/conduitio/conduit-processor-sdk v0.9.2
+	github.com/conduitio/conduit-processor-sdk v0.10.0
 	github.com/conduitio/conduit-schema-registry v0.2.7
 	github.com/conduitio/ecdysis v0.6.0
 	github.com/conduitio/yaml/v3 v3.3.0
@@ -37,7 +37,7 @@ require (
 	github.com/hashicorp/go-hclog v1.6.3
 	github.com/hashicorp/go-plugin v1.8.0
 	github.com/in-toto/attestation v1.2.0
-	github.com/iskorotkov/avro/v2 v2.34.0
+	github.com/iskorotkov/avro/v2 v2.35.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/jpillora/backoff v1.1.0
 	github.com/klauspost/compress v1.20.3
@@ -106,6 +106,7 @@ require (
 	github.com/bufbuild/protocompile v0.14.2-0.20260127163740-a85d2ef77713 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/conduitio/evolviconf v0.1.1 // indirect
 	github.com/conduitio/evolviconf/evolviyaml v0.1.0 // indirect
 	github.com/dgraph-io/badger/v4 v4.9.6 // indirect
@@ -160,29 +161,26 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jedisct1/go-minisign v0.0.0-20211028175153-1c139d1cc84b // indirect
-	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
 	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect
 	github.com/letsencrypt/boulder v0.20260309.0 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
-	github.com/mattn/go-runewidth v0.0.16 // indirect
+	github.com/mattn/go-runewidth v0.0.24 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
-	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/oklog/run v1.2.0 // indirect
 	github.com/oklog/ulid/v2 v2.1.2 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
+	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	github.com/petermattis/goid v0.0.0-20250319124200-ccd6737f222a // indirect
 	github.com/pierrec/lz4/v4 v4.1.33 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/procfs v0.21.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sagikazarmark/locafero v0.11.0 // indirect
 	github.com/samber/lo v1.53.0 // indirect
 	github.com/samber/slog-common v0.21.0 // indirect

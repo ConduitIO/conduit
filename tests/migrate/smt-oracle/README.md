@@ -124,15 +124,16 @@ line is why the fixture database is split the way it is.
 - It renders `numeric` as a fraction (`"25/2"` for 12.50) and trims trailing zeros of a
   `timestamptz` (`...20Z` against Debezium's `...20.000000Z`).
 
-**A processor SDK bug the replay found** (`ConduitIO/conduit-processor-sdk#193`, TODO: replace with the
-issue number). Replaying `field.exclude` over `items@7` (an update where `qty` goes from 7 to NULL) fails
-with `failed to encode before payload` (`unknown union type int`): when a processor changes the after
-payload, the SDK's encode middleware (v0.9.2) extracts a new schema from the after values alone, and the
-before payload no longer fits it. Production runs processors through the same middleware, so a real
-pipeline fails that record too; Kafka Connect delivers it. Until it is fixed, a translation that
-reshapes the value of a schema-attached table with nullable columns is **not exact**, and its case
-correctly does not diff clean on `items@7`. Translator tests must not filter this failure. `replay_test.go`
-pins it in its own package only, and fails if it stops reproducing so the fix is noticed.
+**A processor SDK bug the replay found, fixed in processor-sdk v0.10.0** (`ConduitIO/conduit-processor-sdk#193`,
+fixed by #195). Replaying `field.exclude` over `items@7` (an update where `qty` goes from 7 to NULL) failed
+with `failed to encode before payload` (`unknown union type int`) on v0.9.2: when a processor changed the
+after payload, the SDK's encode middleware extracted a new schema from the after values alone, and the before
+payload no longer fit it. v0.10.0 builds the schema from both images, and the replay now diffs `items@7`
+clean. The same release changed two things the replay depends on: a field removed from After only now fails
+the record (`ErrFieldNotInSchema`) instead of being silently dropped from Before, so a translated exclude
+removes the field from both images; and a delete's nil after stays nil, so the unguarded chain no longer
+turns a delete into `{}`. `replay_test.go` keeps a negative control for the first: an After-only exclude must
+fail every update with `ErrFieldNotInSchema`.
 
 **Kafka Connect 4.2 behaviours the design depends on** (`goldens/`):
 
@@ -216,9 +217,9 @@ record that carries schema metadata is Avro-encoded with its registered schema b
 as the connector does before the record leaves it, and decoded again for `Compare`. A processor that
 resolves schemas (`avro.encode`, `error`, a registry assertion) reads the in-memory registry, which
 holds the captured schemas at the versions they had. Filtered and failed records are reported as
-such. `replay_test.go` shows the pattern, including chains that must differ (a delete turned into
-`{}`, #3147; an empty chain against the routing and header goldens) so the harness is known to be
-able to fail.
+such. `replay_test.go` shows the pattern, including chains that must differ (an After-only exclude that
+processor-sdk v0.10.0 refuses on updates; an empty chain against the routing and header goldens) so the
+harness is known to be able to fail.
 
 ### What `Compare` compares
 
