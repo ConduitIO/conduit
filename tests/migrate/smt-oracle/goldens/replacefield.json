@@ -1,0 +1,2552 @@
+{
+  "caseSha256": "dcc303617af0e0f8f7350d21f10b4e7e219d749d350463ddf7da8cb7650a68a3",
+  "description": "ReplaceField exclude, renames and include over schemaless and schema'd values; include is refused by the translator but captured here.",
+  "fixtureSha256": {},
+  "recordType": "sink",
+  "runs": [
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "r",
+            "config": {
+              "exclude": "secret,extra"
+            },
+            "type": "ReplaceField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": "n"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": {
+                  "city": "c",
+                  "zip": "z"
+                },
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "nested",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "other": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "missing-fields",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": null,
+                "name": null
+              },
+              "schema": null
+            }
+          },
+          "record": "null-field-values",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "label": "l",
+                "name": "n"
+              },
+              "schema": null
+            }
+          },
+          "record": "rename-target-exists",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {},
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": {
+                  "city": "c",
+                  "zip": "z"
+                },
+                "id": 1,
+                "name": "n"
+              },
+              "schema": "s-f6952249903e"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": null,
+                "id": 1,
+                "name": null
+              },
+              "schema": "s-f6952249903e"
+            }
+          },
+          "record": "struct-null-optional",
+          "result": "record"
+        }
+      ],
+      "run": "exclude"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "r",
+            "config": {
+              "renames": "id:order_id,name:label"
+            },
+            "type": "ReplaceField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "extra": 9,
+                "label": "n",
+                "order_id": 1,
+                "secret": "s"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": {
+                  "city": "c",
+                  "zip": "z"
+                },
+                "order_id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "nested",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "other": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "missing-fields",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "label": null,
+                "order_id": null,
+                "secret": null
+              },
+              "schema": null
+            }
+          },
+          "record": "null-field-values",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "label": "l",
+                "order_id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "rename-target-exists",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {},
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": {
+                  "city": "c",
+                  "zip": "z"
+                },
+                "label": "n",
+                "order_id": 1,
+                "secret": "s"
+              },
+              "schema": "s-f1d5fc8d35ff"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": null,
+                "label": null,
+                "order_id": 1,
+                "secret": null
+              },
+              "schema": "s-f1d5fc8d35ff"
+            }
+          },
+          "record": "struct-null-optional",
+          "result": "record"
+        }
+      ],
+      "run": "rename"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "r",
+            "config": {
+              "exclude": "secret",
+              "renames": "id:order_id"
+            },
+            "type": "ReplaceField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "extra": 9,
+                "name": "n",
+                "order_id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": {
+                  "city": "c",
+                  "zip": "z"
+                },
+                "order_id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "nested",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "other": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "missing-fields",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "name": null,
+                "order_id": null
+              },
+              "schema": null
+            }
+          },
+          "record": "null-field-values",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "label": "l",
+                "name": "n",
+                "order_id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "rename-target-exists",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {},
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": {
+                  "city": "c",
+                  "zip": "z"
+                },
+                "name": "n",
+                "order_id": 1
+              },
+              "schema": "s-33d61082f029"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": null,
+                "name": null,
+                "order_id": 1
+              },
+              "schema": "s-33d61082f029"
+            }
+          },
+          "record": "struct-null-optional",
+          "result": "record"
+        }
+      ],
+      "run": "exclude-and-rename"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "r",
+            "config": {
+              "exclude": "name",
+              "renames": "name:label"
+            },
+            "type": "ReplaceField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "extra": 9,
+                "id": 1,
+                "secret": "s"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": {
+                  "city": "c",
+                  "zip": "z"
+                },
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "nested",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "other": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "missing-fields",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": null,
+                "secret": null
+              },
+              "schema": null
+            }
+          },
+          "record": "null-field-values",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "label": "l"
+              },
+              "schema": null
+            }
+          },
+          "record": "rename-target-exists",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {},
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": {
+                  "city": "c",
+                  "zip": "z"
+                },
+                "id": 1,
+                "secret": "s"
+              },
+              "schema": "s-802c705301b3"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": null,
+                "id": 1,
+                "secret": null
+              },
+              "schema": "s-802c705301b3"
+            }
+          },
+          "record": "struct-null-optional",
+          "result": "record"
+        }
+      ],
+      "run": "rename-of-excluded"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "r",
+            "config": {
+              "renames": "name:label"
+            },
+            "type": "ReplaceField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "extra": 9,
+                "id": 1,
+                "label": "n",
+                "secret": "s"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": {
+                  "city": "c",
+                  "zip": "z"
+                },
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "nested",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "other": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "missing-fields",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": null,
+                "label": null,
+                "secret": null
+              },
+              "schema": null
+            }
+          },
+          "record": "null-field-values",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "label": "l"
+              },
+              "schema": null
+            }
+          },
+          "record": "rename-target-exists",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {},
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": {
+                  "city": "c",
+                  "zip": "z"
+                },
+                "id": 1,
+                "label": "n",
+                "secret": "s"
+              },
+              "schema": "s-90846eaa9226"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": null,
+                "id": 1,
+                "label": null,
+                "secret": null
+              },
+              "schema": "s-90846eaa9226"
+            }
+          },
+          "record": "struct-null-optional",
+          "result": "record"
+        }
+      ],
+      "run": "rename-onto-existing"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "r",
+            "config": {
+              "renames": "id:name,name:id"
+            },
+            "type": "ReplaceField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "extra": 9,
+                "id": "n",
+                "name": 1,
+                "secret": "s"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": {
+                  "city": "c",
+                  "zip": "z"
+                },
+                "name": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "nested",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "other": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "missing-fields",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": null,
+                "name": null,
+                "secret": null
+              },
+              "schema": null
+            }
+          },
+          "record": "null-field-values",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": "n",
+                "label": "l",
+                "name": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "rename-target-exists",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {},
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": {
+                  "city": "c",
+                  "zip": "z"
+                },
+                "id": "n",
+                "name": 1,
+                "secret": "s"
+              },
+              "schema": "s-f99a494f0ba8"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": null,
+                "id": null,
+                "name": 1,
+                "secret": null
+              },
+              "schema": "s-f99a494f0ba8"
+            }
+          },
+          "record": "struct-null-optional",
+          "result": "record"
+        }
+      ],
+      "run": "rename-swap"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "r",
+            "config": {
+              "renames": "id:name,name:label"
+            },
+            "type": "ReplaceField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "extra": 9,
+                "label": "n",
+                "name": 1,
+                "secret": "s"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": {
+                  "city": "c",
+                  "zip": "z"
+                },
+                "name": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "nested",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "other": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "missing-fields",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "label": null,
+                "name": null,
+                "secret": null
+              },
+              "schema": null
+            }
+          },
+          "record": "null-field-values",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "label": "l",
+                "name": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "rename-target-exists",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {},
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": {
+                  "city": "c",
+                  "zip": "z"
+                },
+                "label": "n",
+                "name": 1,
+                "secret": "s"
+              },
+              "schema": "s-b526be9f8a06"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": null,
+                "label": null,
+                "name": 1,
+                "secret": null
+              },
+              "schema": "s-b526be9f8a06"
+            }
+          },
+          "record": "struct-null-optional",
+          "result": "record"
+        }
+      ],
+      "run": "rename-chain"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "r",
+            "config": {
+              "include": "id,name"
+            },
+            "type": "ReplaceField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": "n"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "nested",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {},
+              "schema": null
+            }
+          },
+          "record": "missing-fields",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": null,
+                "name": null
+              },
+              "schema": null
+            }
+          },
+          "record": "null-field-values",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": "n"
+              },
+              "schema": null
+            }
+          },
+          "record": "rename-target-exists",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {},
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": "n"
+              },
+              "schema": "s-9f4a2f600605"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": null
+              },
+              "schema": "s-9f4a2f600605"
+            }
+          },
+          "record": "struct-null-optional",
+          "result": "record"
+        }
+      ],
+      "run": "include"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "r",
+            "config": {
+              "exclude": "name",
+              "include": "id,name"
+            },
+            "type": "ReplaceField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "nested",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {},
+              "schema": null
+            }
+          },
+          "record": "missing-fields",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": null
+              },
+              "schema": null
+            }
+          },
+          "record": "null-field-values",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "rename-target-exists",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {},
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-9a2665856d95"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-9a2665856d95"
+            }
+          },
+          "record": "struct-null-optional",
+          "result": "record"
+        }
+      ],
+      "run": "include-and-exclude"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "r",
+            "config": {
+              "exclude": ""
+            },
+            "type": "ReplaceField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "extra": 9,
+                "id": 1,
+                "name": "n",
+                "secret": "s"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": {
+                  "city": "c",
+                  "zip": "z"
+                },
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "nested",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "other": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "missing-fields",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": null,
+                "name": null,
+                "secret": null
+              },
+              "schema": null
+            }
+          },
+          "record": "null-field-values",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "label": "l",
+                "name": "n"
+              },
+              "schema": null
+            }
+          },
+          "record": "rename-target-exists",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {},
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": {
+                  "city": "c",
+                  "zip": "z"
+                },
+                "id": 1,
+                "name": "n",
+                "secret": "s"
+              },
+              "schema": "s-f9e151ef17cc"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": null,
+                "id": 1,
+                "name": null,
+                "secret": null
+              },
+              "schema": "s-f9e151ef17cc"
+            }
+          },
+          "record": "struct-null-optional",
+          "result": "record"
+        }
+      ],
+      "run": "exclude-nothing-listed"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "r",
+            "config": {
+              "exclude": "id"
+            },
+            "type": "ReplaceField$Key"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "tenant": "t"
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "map-key",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": null,
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "null-key",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field replacement], found: java.lang.String"
+          },
+          "record": "string-key",
+          "result": "error"
+        }
+      ],
+      "run": "exclude-key-variant"
+    }
+  ],
+  "schemas": {
+    "s-33d61082f029": {
+      "fields": [
+        {
+          "field": "order_id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "name",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "addr",
+          "fields": [
+            {
+              "field": "city",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "field": "zip",
+              "optional": true,
+              "type": "string"
+            }
+          ],
+          "optional": true,
+          "type": "struct"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-802c705301b3": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "secret",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "addr",
+          "fields": [
+            {
+              "field": "city",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "field": "zip",
+              "optional": true,
+              "type": "string"
+            }
+          ],
+          "optional": true,
+          "type": "struct"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-90846eaa9226": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "label",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "secret",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "addr",
+          "fields": [
+            {
+              "field": "city",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "field": "zip",
+              "optional": true,
+              "type": "string"
+            }
+          ],
+          "optional": true,
+          "type": "struct"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-9a2665856d95": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-9f4a2f600605": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "name",
+          "optional": true,
+          "type": "string"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-b526be9f8a06": {
+      "fields": [
+        {
+          "field": "name",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "label",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "secret",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "addr",
+          "fields": [
+            {
+              "field": "city",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "field": "zip",
+              "optional": true,
+              "type": "string"
+            }
+          ],
+          "optional": true,
+          "type": "struct"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-f1d5fc8d35ff": {
+      "fields": [
+        {
+          "field": "order_id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "label",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "secret",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "addr",
+          "fields": [
+            {
+              "field": "city",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "field": "zip",
+              "optional": true,
+              "type": "string"
+            }
+          ],
+          "optional": true,
+          "type": "struct"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-f6952249903e": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "name",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "addr",
+          "fields": [
+            {
+              "field": "city",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "field": "zip",
+              "optional": true,
+              "type": "string"
+            }
+          ],
+          "optional": true,
+          "type": "struct"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-f99a494f0ba8": {
+      "fields": [
+        {
+          "field": "name",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "id",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "secret",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "addr",
+          "fields": [
+            {
+              "field": "city",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "field": "zip",
+              "optional": true,
+              "type": "string"
+            }
+          ],
+          "optional": true,
+          "type": "struct"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-f9e151ef17cc": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "name",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "secret",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "addr",
+          "fields": [
+            {
+              "field": "city",
+              "optional": true,
+              "type": "string"
+            },
+            {
+              "field": "zip",
+              "optional": true,
+              "type": "string"
+            }
+          ],
+          "optional": true,
+          "type": "struct"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    }
+  },
+  "suite": "replacefield"
+}

@@ -1,0 +1,1335 @@
+{
+  "caseSha256": "6a8e674001b232e4ace075d51db01cd36fd34d9f6dad3e1f8dba84d6a248f92a",
+  "description": "ExtractField with the V1 and V2 field syntax over maps, structs, nulls and missing fields.",
+  "fixtureSha256": {},
+  "recordType": "sink",
+  "runs": [
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "e",
+            "config": {
+              "field": "id"
+            },
+            "type": "ExtractField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": 1,
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": 1,
+              "schema": null
+            }
+          },
+          "record": "nested-map",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "missing",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "null-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "dotted-literal-name",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field extraction], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": 7,
+              "schema": "s-2775d0a84699"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": 7,
+              "schema": "s-2775d0a84699"
+            }
+          },
+          "record": "struct-null-nested",
+          "result": "record"
+        }
+      ],
+      "run": "id"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "e",
+            "config": {
+              "field": "name"
+            },
+            "type": "ExtractField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": "n",
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "nested-map",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "missing",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "null-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "dotted-literal-name",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field extraction], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": "n",
+              "schema": "s-355f38644293"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-355f38644293"
+            }
+          },
+          "record": "struct-null-nested",
+          "result": "record"
+        }
+      ],
+      "run": "name"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "e",
+            "config": {
+              "field": "addr"
+            },
+            "type": "ExtractField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "city": "c"
+              },
+              "schema": null
+            }
+          },
+          "record": "nested-map",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "missing",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "null-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "city": "nested"
+              },
+              "schema": null
+            }
+          },
+          "record": "dotted-literal-name",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field extraction], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "city": "c"
+              },
+              "schema": "s-500e09999131"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-500e09999131"
+            }
+          },
+          "record": "struct-null-nested",
+          "result": "record"
+        }
+      ],
+      "run": "nested-object"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "e",
+            "config": {
+              "field": "addr.city",
+              "field.syntax.version": "V2"
+            },
+            "type": "ExtractField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": "c",
+              "schema": null
+            }
+          },
+          "record": "nested-map",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "missing",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "null-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": "nested",
+              "schema": null
+            }
+          },
+          "record": "dotted-literal-name",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field extraction], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": "c",
+              "schema": "s-355f38644293"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-355f38644293"
+            }
+          },
+          "record": "struct-null-nested",
+          "result": "record"
+        }
+      ],
+      "run": "v2-dotted"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "e",
+            "config": {
+              "field": "id",
+              "field.syntax.version": "V2"
+            },
+            "type": "ExtractField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": 1,
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": 1,
+              "schema": null
+            }
+          },
+          "record": "nested-map",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "missing",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "null-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "dotted-literal-name",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field extraction], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": 7,
+              "schema": "s-2775d0a84699"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": 7,
+              "schema": "s-2775d0a84699"
+            }
+          },
+          "record": "struct-null-nested",
+          "result": "record"
+        }
+      ],
+      "run": "v2-top-level"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "e",
+            "config": {
+              "field": "addr\\.city",
+              "field.syntax.version": "V2"
+            },
+            "type": "ExtractField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "nested-map",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "missing",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "null-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "dotted-literal-name",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field extraction], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "java.lang.IllegalArgumentException",
+            "message": "Unknown field: addr\\.city"
+          },
+          "record": "struct",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "java.lang.IllegalArgumentException",
+            "message": "Unknown field: addr\\.city"
+          },
+          "record": "struct-null-nested",
+          "result": "error"
+        }
+      ],
+      "run": "v2-escaped-dot"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "e",
+            "config": {
+              "field": "addr.city"
+            },
+            "type": "ExtractField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "nested-map",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "missing",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "null-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": "lit",
+              "schema": null
+            }
+          },
+          "record": "dotted-literal-name",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field extraction], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "java.lang.IllegalArgumentException",
+            "message": "Unknown field: addr.city"
+          },
+          "record": "struct",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "java.lang.IllegalArgumentException",
+            "message": "Unknown field: addr.city"
+          },
+          "record": "struct-null-nested",
+          "result": "error"
+        }
+      ],
+      "run": "v1-dotted"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "e",
+            "config": {
+              "field": "id"
+            },
+            "type": "ExtractField$Key"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": 1,
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "map-key",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": null,
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "missing",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": null,
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "null-key",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field extraction], found: java.lang.String"
+          },
+          "record": "string-key",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": 3,
+              "schema": "s-2775d0a84699"
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "struct-key",
+          "result": "record"
+        }
+      ],
+      "run": "key-variant"
+    }
+  ],
+  "schemas": {
+    "s-2775d0a84699": {
+      "optional": false,
+      "type": "int32"
+    },
+    "s-355f38644293": {
+      "optional": true,
+      "type": "string"
+    },
+    "s-500e09999131": {
+      "fields": [
+        {
+          "field": "city",
+          "optional": true,
+          "type": "string"
+        }
+      ],
+      "optional": true,
+      "type": "struct"
+    }
+  },
+  "suite": "extractfield"
+}

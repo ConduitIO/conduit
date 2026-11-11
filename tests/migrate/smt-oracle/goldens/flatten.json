@@ -1,0 +1,1600 @@
+{
+  "caseSha256": "547be483b5c92e296c32055ea7695dee313864feeb0ffa2d927c340d578be66c",
+  "description": "Flatten with the default and custom delimiters over nested maps and structs, nulls, empties, arrays and key collisions.",
+  "fixtureSha256": {},
+  "recordType": "sink",
+  "runs": [
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "f",
+            "config": {},
+            "type": "Flatten$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr.city": "c",
+                "addr.geo.lat": 1.5,
+                "addr.geo.lon": 2.5,
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "nested",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": "n"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat-unchanged",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "n.xs": [
+                  1,
+                  2
+                ],
+                "tags": [
+                  "a",
+                  "b"
+                ]
+              },
+              "schema": null
+            }
+          },
+          "record": "arrays-kept",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": null,
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "nested-null",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr.city": null,
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "null-leaf-in-nested",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "empty-nested-map",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a.b": 2
+              },
+              "schema": null
+            }
+          },
+          "record": "collision",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a.b.c.d": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "deep",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {},
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [flattening], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Flatten transformation was passed a value of type class java.util.Date which is not supported by Connect's data API"
+          },
+          "record": "typed-leaves",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr.city": "c",
+                "addr.geo.lat": 1.5,
+                "addr.geo.lon": 2.5,
+                "id": 1,
+                "note": "n",
+                "tags": [
+                  "a"
+                ]
+              },
+              "schema": "s-0755d3e354a0"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr.city": null,
+                "addr.geo.lat": null,
+                "addr.geo.lon": null,
+                "id": 1,
+                "note": null,
+                "tags": null
+              },
+              "schema": "s-0755d3e354a0"
+            }
+          },
+          "record": "struct-nulls",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr.city": "c",
+                "addr.geo.lat": null,
+                "addr.geo.lon": null,
+                "id": 1,
+                "note": null,
+                "tags": null
+              },
+              "schema": "s-0755d3e354a0"
+            }
+          },
+          "record": "struct-partial-nested-null",
+          "result": "record"
+        }
+      ],
+      "run": "default-delimiter"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "f",
+            "config": {
+              "delimiter": "_"
+            },
+            "type": "Flatten$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr_city": "c",
+                "addr_geo_lat": 1.5,
+                "addr_geo_lon": 2.5,
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "nested",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": "n"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat-unchanged",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "n_xs": [
+                  1,
+                  2
+                ],
+                "tags": [
+                  "a",
+                  "b"
+                ]
+              },
+              "schema": null
+            }
+          },
+          "record": "arrays-kept",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": null,
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "nested-null",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr_city": null,
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "null-leaf-in-nested",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "empty-nested-map",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a.b": 1,
+                "a_b": 2
+              },
+              "schema": null
+            }
+          },
+          "record": "collision",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a_b_c_d": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "deep",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {},
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [flattening], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Flatten transformation was passed a value of type class java.util.Date which is not supported by Connect's data API"
+          },
+          "record": "typed-leaves",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr_city": "c",
+                "addr_geo_lat": 1.5,
+                "addr_geo_lon": 2.5,
+                "id": 1,
+                "note": "n",
+                "tags": [
+                  "a"
+                ]
+              },
+              "schema": "s-af12f815d1f8"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr_city": null,
+                "addr_geo_lat": null,
+                "addr_geo_lon": null,
+                "id": 1,
+                "note": null,
+                "tags": null
+              },
+              "schema": "s-af12f815d1f8"
+            }
+          },
+          "record": "struct-nulls",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr_city": "c",
+                "addr_geo_lat": null,
+                "addr_geo_lon": null,
+                "id": 1,
+                "note": null,
+                "tags": null
+              },
+              "schema": "s-af12f815d1f8"
+            }
+          },
+          "record": "struct-partial-nested-null",
+          "result": "record"
+        }
+      ],
+      "run": "underscore"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "f",
+            "config": {
+              "delimiter": "::"
+            },
+            "type": "Flatten$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr::city": "c",
+                "addr::geo::lat": 1.5,
+                "addr::geo::lon": 2.5,
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "nested",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": "n"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat-unchanged",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "n::xs": [
+                  1,
+                  2
+                ],
+                "tags": [
+                  "a",
+                  "b"
+                ]
+              },
+              "schema": null
+            }
+          },
+          "record": "arrays-kept",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": null,
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "nested-null",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr::city": null,
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "null-leaf-in-nested",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "empty-nested-map",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a.b": 1,
+                "a::b": 2
+              },
+              "schema": null
+            }
+          },
+          "record": "collision",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a::b::c::d": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "deep",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {},
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [flattening], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Flatten transformation was passed a value of type class java.util.Date which is not supported by Connect's data API"
+          },
+          "record": "typed-leaves",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr::city": "c",
+                "addr::geo::lat": 1.5,
+                "addr::geo::lon": 2.5,
+                "id": 1,
+                "note": "n",
+                "tags": [
+                  "a"
+                ]
+              },
+              "schema": "s-f05c717eec69"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr::city": null,
+                "addr::geo::lat": null,
+                "addr::geo::lon": null,
+                "id": 1,
+                "note": null,
+                "tags": null
+              },
+              "schema": "s-f05c717eec69"
+            }
+          },
+          "record": "struct-nulls",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr::city": "c",
+                "addr::geo::lat": null,
+                "addr::geo::lon": null,
+                "id": 1,
+                "note": null,
+                "tags": null
+              },
+              "schema": "s-f05c717eec69"
+            }
+          },
+          "record": "struct-partial-nested-null",
+          "result": "record"
+        }
+      ],
+      "run": "multi-char-delimiter"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "f",
+            "config": {
+              "delimiter": ""
+            },
+            "type": "Flatten$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addrcity": "c",
+                "addrgeolat": 1.5,
+                "addrgeolon": 2.5,
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "nested",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": "n"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat-unchanged",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "nxs": [
+                  1,
+                  2
+                ],
+                "tags": [
+                  "a",
+                  "b"
+                ]
+              },
+              "schema": null
+            }
+          },
+          "record": "arrays-kept",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addr": null,
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "nested-null",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addrcity": null,
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "null-leaf-in-nested",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "empty-nested-map",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a.b": 1,
+                "ab": 2
+              },
+              "schema": null
+            }
+          },
+          "record": "collision",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "abcd": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "deep",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {},
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [flattening], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Flatten transformation was passed a value of type class java.util.Date which is not supported by Connect's data API"
+          },
+          "record": "typed-leaves",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addrcity": "c",
+                "addrgeolat": 1.5,
+                "addrgeolon": 2.5,
+                "id": 1,
+                "note": "n",
+                "tags": [
+                  "a"
+                ]
+              },
+              "schema": "s-6b6296963483"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addrcity": null,
+                "addrgeolat": null,
+                "addrgeolon": null,
+                "id": 1,
+                "note": null,
+                "tags": null
+              },
+              "schema": "s-6b6296963483"
+            }
+          },
+          "record": "struct-nulls",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "addrcity": "c",
+                "addrgeolat": null,
+                "addrgeolon": null,
+                "id": 1,
+                "note": null,
+                "tags": null
+              },
+              "schema": "s-6b6296963483"
+            }
+          },
+          "record": "struct-partial-nested-null",
+          "result": "record"
+        }
+      ],
+      "run": "empty-delimiter"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "f",
+            "config": {},
+            "type": "Flatten$Key"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "a.b": 1
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "x": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "map-key",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": null,
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "x": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "null-key",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [flattening], found: java.lang.String"
+          },
+          "record": "string-key",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "a.b": 1
+              },
+              "schema": "s-7131c0a52cb3"
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "x": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "struct-key",
+          "result": "record"
+        }
+      ],
+      "run": "key-variant"
+    }
+  ],
+  "schemas": {
+    "s-0755d3e354a0": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "addr.city",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "addr.geo.lat",
+          "optional": true,
+          "type": "double"
+        },
+        {
+          "field": "addr.geo.lon",
+          "optional": true,
+          "type": "double"
+        },
+        {
+          "field": "tags",
+          "items": {
+            "optional": false,
+            "type": "string"
+          },
+          "optional": true,
+          "type": "array"
+        },
+        {
+          "field": "note",
+          "optional": true,
+          "type": "string"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-6b6296963483": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "addrcity",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "addrgeolat",
+          "optional": true,
+          "type": "double"
+        },
+        {
+          "field": "addrgeolon",
+          "optional": true,
+          "type": "double"
+        },
+        {
+          "field": "tags",
+          "items": {
+            "optional": false,
+            "type": "string"
+          },
+          "optional": true,
+          "type": "array"
+        },
+        {
+          "field": "note",
+          "optional": true,
+          "type": "string"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-7131c0a52cb3": {
+      "fields": [
+        {
+          "field": "a.b",
+          "optional": false,
+          "type": "int32"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-af12f815d1f8": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "addr_city",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "addr_geo_lat",
+          "optional": true,
+          "type": "double"
+        },
+        {
+          "field": "addr_geo_lon",
+          "optional": true,
+          "type": "double"
+        },
+        {
+          "field": "tags",
+          "items": {
+            "optional": false,
+            "type": "string"
+          },
+          "optional": true,
+          "type": "array"
+        },
+        {
+          "field": "note",
+          "optional": true,
+          "type": "string"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-f05c717eec69": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "addr::city",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "addr::geo::lat",
+          "optional": true,
+          "type": "double"
+        },
+        {
+          "field": "addr::geo::lon",
+          "optional": true,
+          "type": "double"
+        },
+        {
+          "field": "tags",
+          "items": {
+            "optional": false,
+            "type": "string"
+          },
+          "optional": true,
+          "type": "array"
+        },
+        {
+          "field": "note",
+          "optional": true,
+          "type": "string"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    }
+  },
+  "suite": "flatten"
+}

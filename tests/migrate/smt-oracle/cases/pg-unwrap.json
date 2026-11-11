@@ -1,0 +1,27 @@
+{
+  "suite": "pg-unwrap",
+  "description": "Debezium ExtractNewRecordState over what real Debezium Postgres wrote for the fixture database: defaults, delete handling modes, add.fields and add.headers, and the tombstone interplay with Filter.",
+  "recordType": "source",
+  "recordsFrom": "debezium-postgres.json",
+  "runs": [
+    {"run": "defaults", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {}}]},
+    {"run": "defaults-enrs-null-false", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"replace.null.with.default": "false"}}]},
+    {"run": "delete-rewrite-enrs-null-false", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"replace.null.with.default": "false", "delete.tombstone.handling.mode": "rewrite"}}]},
+    {"run": "delete-rewrite-with-tombstone-enrs-null-false", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"replace.null.with.default": "false", "delete.tombstone.handling.mode": "rewrite-with-tombstone"}}]},
+    {"run": "add-fields-enrs-null-false", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"replace.null.with.default": "false", "add.fields": "op,table,lsn,source.ts_ms"}}]},
+    {"run": "add-headers-enrs-null-false", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"replace.null.with.default": "false", "add.headers": "op,table"}}]},
+    {"run": "default-then-drop-tombstones-enrs-null-false", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"replace.null.with.default": "false"}}, {"alias": "f", "type": "Filter", "config": {}, "predicate": "t"}], "predicates": {"t": {"type": "RecordIsTombstone", "config": {}}}},
+    {"run": "add-fields", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"add.fields": "op,table,lsn,source.ts_ms"}}]},
+    {"run": "add-headers", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"add.headers": "op,table"}}]},
+    {"run": "delete-drop", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"delete.tombstone.handling.mode": "drop"}}]},
+    {"run": "delete-tombstone", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"delete.tombstone.handling.mode": "tombstone"}}]},
+    {"run": "delete-rewrite", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"delete.tombstone.handling.mode": "rewrite"}}]},
+    {"run": "delete-rewrite-with-tombstone", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"delete.tombstone.handling.mode": "rewrite-with-tombstone"}}]},
+    {"run": "default-then-drop-tombstones", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {}}, {"alias": "f", "type": "Filter", "config": {}, "predicate": "t"}], "predicates": {"t": {"type": "RecordIsTombstone", "config": {}}}},
+    {"run": "default-then-keep-tombstones-only", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {}}, {"alias": "f", "type": "Filter", "config": {}, "predicate": "t", "negate": true}], "predicates": {"t": {"type": "RecordIsTombstone", "config": {}}}},
+    {"run": "drop-mode-then-drop-tombstones", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"delete.tombstone.handling.mode": "drop"}}, {"alias": "f", "type": "Filter", "config": {}, "predicate": "t"}], "predicates": {"t": {"type": "RecordIsTombstone", "config": {}}}},
+    {"run": "rewrite-then-drop-tombstones", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"delete.tombstone.handling.mode": "rewrite"}}, {"alias": "f", "type": "Filter", "config": {}, "predicate": "t"}], "predicates": {"t": {"type": "RecordIsTombstone", "config": {}}}},
+    {"run": "default-then-drop-tombstones-sink-side", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {}}, {"alias": "f", "type": "Filter", "config": {}, "predicate": "t"}], "predicates": {"t": {"type": "RecordIsTombstone", "config": {}}}, "recordType": "sink"},
+    {"run": "topic-predicate-before-unwrap", "chain": [{"alias": "f", "type": "Filter", "config": {}, "predicate": "t", "negate": true}, {"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {}}], "predicates": {"t": {"type": "TopicNameMatches", "config": {"pattern": "dbz\\.public\\.items"}}}}
+  ]
+}

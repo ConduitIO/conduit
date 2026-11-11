@@ -1,0 +1,116 @@
+name: smt oracle
+
+# Re-captures the SMT oracle (tests/migrate/smt-oracle): real Debezium Postgres
+# and real Conduit Postgres over the same fixture database, and the Kafka
+# Connect 4.2 and Debezium 3.7 SMT output over both. It fails when the fresh
+# capture differs from the committed fixtures and goldens.
+#
+# Those files are the specification the kcmigrate SMT translators are tested
+# against (docs/design-documents/20261110-kafka-connect-smt-pack.md, B11, #2960).
+# A capture that cannot be reproduced is not a specification, and a change in
+# Conduit's own Postgres source output is a change to what the translators see.
+#
+# Not a required check: it needs Docker and runs a JVM stack. PR CI runs only
+# the Docker-free Go side (`go test ./tests/migrate/smt-oracle/...`, in `test`).
+
+on:
+  schedule:
+    # 06:50 UTC, clear of govulncheck (05:15), the release-branch job (06:30)
+    # and the link check (06:40).
+    - cron: '50 6 * * *'
+  workflow_dispatch:
+
+env:
+  # Resolve ConduitIO modules directly from GitHub (skips proxy.golang.org +
+  # sum.golang.org index lag on fresh tags); third-party deps still use both.
+  GOPRIVATE: github.com/conduitio/*
+  GONOSUMDB: github.com/conduitio/*
+
+permissions:
+  contents: read
+
+jobs:
+  recapture:
+    name: tests/migrate/smt-oracle recapture
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Capture
+        run: tests/migrate/smt-oracle/capture.sh
+
+      - name: Compare with the committed files
+        run: |
+          # --porcelain lists untracked files too, so a new golden or fixture is a difference.
+          changes=$(git status --porcelain -- tests/migrate/smt-oracle)
+          if [[ -n $changes ]]; then
+            echo "the fresh capture differs from the committed files:" >&2
+            echo "$changes" >&2
+            git diff --stat -- tests/migrate/smt-oracle >&2
+            exit 1
+          fi
+
+      - name: Offline tests over the fresh files
+        run: go test ./tests/migrate/smt-oracle/...
+
+      - name: Upload the fresh capture
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: smt-oracle-capture
+          path: |
+            tests/migrate/smt-oracle/goldens
+            tests/migrate/smt-oracle/fixtures
+
+      - name: File an issue on failure
+        if: failure() && github.event_name == 'schedule'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const title = 'SMT oracle no longer reproduces';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              `The nightly re-capture of the SMT oracle failed: ${runUrl}`,
+              '',
+              'The run log shows the diff against the committed fixtures and goldens, and the fresh',
+              'capture is attached as an artifact. Possible causes:',
+              '- a pinned image can no longer be pulled (see "If an image disappears" in',
+              '  tests/migrate/smt-oracle/README.md);',
+              '- Conduit\'s Postgres source now produces different records (a real change to what the',
+              '  translators see; update the translators or the fixture on purpose, never to go green);',
+              '- the stack did not converge (Debezium and Conduit disagree on how many changes happened).',
+            ].join('\n');
+            // Dedupe on title rather than a label, as debezium-golden.yml does.
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const existing = open.find((i) => !i.pull_request && i.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+              });
+            }

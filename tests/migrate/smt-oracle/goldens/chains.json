@@ -1,0 +1,1948 @@
+{
+  "caseSha256": "75595ebeab2d384c16c78c3a15e41b4817790936af76ea885407210003377039",
+  "description": "Multi-SMT chains: predicates evaluated per stage after earlier stages ran, negate, drops mid-chain, errors mid-chain, and stage interactions.",
+  "fixtureSha256": {},
+  "recordType": "sink",
+  "runs": [
+    {
+      "chain": {
+        "predicates": {
+          "p": {
+            "config": {
+              "pattern": "orders-.*"
+            },
+            "type": "TopicNameMatches"
+          }
+        },
+        "transforms": [
+          {
+            "alias": "c",
+            "config": {
+              "static.field": "tag",
+              "static.value": "x"
+            },
+            "predicate": "p",
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "tenant",
+                "schema": "string",
+                "value": "t1"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k1",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-1",
+            "value": {
+              "payload": {
+                "a": 7,
+                "n": {
+                  "x": 1
+                },
+                "s": "keep",
+                "tag": "x"
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-ints",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k2",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-1",
+            "value": {
+              "payload": {
+                "a": 8,
+                "n": {
+                  "x": 2
+                }
+              },
+              "schema": null
+            }
+          },
+          "record": "audit-ints",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k3",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-2",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "orders-tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k4",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-3",
+            "value": {
+              "payload": {
+                "a": "9",
+                "n": null,
+                "tag": "x"
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-no-header",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k5",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-4",
+            "value": {
+              "payload": {
+                "a": {
+                  "x": 2
+                },
+                "a.x": 1,
+                "tag": "x"
+              },
+              "schema": null
+            }
+          },
+          "record": "collision",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k6",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-5",
+            "value": {
+              "payload": {
+                "a": "oops",
+                "tag": "x"
+              },
+              "schema": null
+            }
+          },
+          "record": "bad-cast",
+          "result": "record"
+        }
+      ],
+      "run": "insert-if-topic-matches"
+    },
+    {
+      "chain": {
+        "predicates": {
+          "p": {
+            "config": {
+              "pattern": "orders-.*"
+            },
+            "type": "TopicNameMatches"
+          }
+        },
+        "transforms": [
+          {
+            "alias": "c",
+            "config": {
+              "static.field": "tag",
+              "static.value": "x"
+            },
+            "negate": true,
+            "predicate": "p",
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "tenant",
+                "schema": "string",
+                "value": "t1"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k1",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-1",
+            "value": {
+              "payload": {
+                "a": 7,
+                "n": {
+                  "x": 1
+                },
+                "s": "keep"
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-ints",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k2",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-1",
+            "value": {
+              "payload": {
+                "a": 8,
+                "n": {
+                  "x": 2
+                },
+                "tag": "x"
+              },
+              "schema": null
+            }
+          },
+          "record": "audit-ints",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k3",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-2",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "orders-tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k4",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-3",
+            "value": {
+              "payload": {
+                "a": "9",
+                "n": null
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-no-header",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k5",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-4",
+            "value": {
+              "payload": {
+                "a": {
+                  "x": 2
+                },
+                "a.x": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "collision",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k6",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-5",
+            "value": {
+              "payload": {
+                "a": "oops"
+              },
+              "schema": null
+            }
+          },
+          "record": "bad-cast",
+          "result": "record"
+        }
+      ],
+      "run": "insert-if-topic-matches-negate"
+    },
+    {
+      "chain": {
+        "predicates": {
+          "t": {
+            "config": {},
+            "type": "RecordIsTombstone"
+          }
+        },
+        "transforms": [
+          {
+            "alias": "d",
+            "config": {},
+            "predicate": "t",
+            "type": "Filter"
+          },
+          {
+            "alias": "f",
+            "config": {
+              "delimiter": "_"
+            },
+            "type": "Flatten$Value"
+          },
+          {
+            "alias": "e",
+            "config": {
+              "exclude": "s"
+            },
+            "type": "ReplaceField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "tenant",
+                "schema": "string",
+                "value": "t1"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k1",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-1",
+            "value": {
+              "payload": {
+                "a": 7,
+                "n_x": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-ints",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k2",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-1",
+            "value": {
+              "payload": {
+                "a": 8,
+                "n_x": 2
+              },
+              "schema": null
+            }
+          },
+          "record": "audit-ints",
+          "result": "record"
+        },
+        {
+          "record": "orders-tombstone",
+          "result": "dropped"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k4",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-3",
+            "value": {
+              "payload": {
+                "a": "9",
+                "n": null
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-no-header",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k5",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-4",
+            "value": {
+              "payload": {
+                "a.x": 1,
+                "a_x": 2
+              },
+              "schema": null
+            }
+          },
+          "record": "collision",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k6",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-5",
+            "value": {
+              "payload": {
+                "a": "oops"
+              },
+              "schema": null
+            }
+          },
+          "record": "bad-cast",
+          "result": "record"
+        }
+      ],
+      "run": "drop-tombstones-then-flatten-then-exclude"
+    },
+    {
+      "chain": {
+        "predicates": {
+          "p": {
+            "config": {
+              "pattern": "o\\d+"
+            },
+            "type": "TopicNameMatches"
+          }
+        },
+        "transforms": [
+          {
+            "alias": "r",
+            "config": {
+              "regex": "orders-(\\d+)",
+              "replacement": "o$1"
+            },
+            "type": "RegexRouter"
+          },
+          {
+            "alias": "c",
+            "config": {
+              "static.field": "tag",
+              "static.value": "x"
+            },
+            "predicate": "p",
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "tenant",
+                "schema": "string",
+                "value": "t1"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k1",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "o1",
+            "value": {
+              "payload": {
+                "a": 7,
+                "n": {
+                  "x": 1
+                },
+                "s": "keep",
+                "tag": "x"
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-ints",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k2",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-1",
+            "value": {
+              "payload": {
+                "a": 8,
+                "n": {
+                  "x": 2
+                }
+              },
+              "schema": null
+            }
+          },
+          "record": "audit-ints",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k3",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "o2",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "orders-tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k4",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "o3",
+            "value": {
+              "payload": {
+                "a": "9",
+                "n": null,
+                "tag": "x"
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-no-header",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k5",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "o4",
+            "value": {
+              "payload": {
+                "a": {
+                  "x": 2
+                },
+                "a.x": 1,
+                "tag": "x"
+              },
+              "schema": null
+            }
+          },
+          "record": "collision",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k6",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "o5",
+            "value": {
+              "payload": {
+                "a": "oops",
+                "tag": "x"
+              },
+              "schema": null
+            }
+          },
+          "record": "bad-cast",
+          "result": "record"
+        }
+      ],
+      "run": "router-then-topic-predicate"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "r",
+            "config": {
+              "regex": "orders-(\\d+)",
+              "replacement": "o$1"
+            },
+            "type": "RegexRouter"
+          },
+          {
+            "alias": "i",
+            "config": {
+              "topic.field": "t"
+            },
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "tenant",
+                "schema": "string",
+                "value": "t1"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k1",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "o1",
+            "value": {
+              "payload": {
+                "a": 7,
+                "n": {
+                  "x": 1
+                },
+                "s": "keep",
+                "t": "o1"
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-ints",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k2",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-1",
+            "value": {
+              "payload": {
+                "a": 8,
+                "n": {
+                  "x": 2
+                },
+                "t": "audit-1"
+              },
+              "schema": null
+            }
+          },
+          "record": "audit-ints",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k3",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "o2",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "orders-tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k4",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "o3",
+            "value": {
+              "payload": {
+                "a": "9",
+                "n": null,
+                "t": "o3"
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-no-header",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k5",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "o4",
+            "value": {
+              "payload": {
+                "a": {
+                  "x": 2
+                },
+                "a.x": 1,
+                "t": "o4"
+              },
+              "schema": null
+            }
+          },
+          "record": "collision",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k6",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "o5",
+            "value": {
+              "payload": {
+                "a": "oops",
+                "t": "o5"
+              },
+              "schema": null
+            }
+          },
+          "record": "bad-cast",
+          "result": "record"
+        }
+      ],
+      "run": "router-then-insert-topic"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "i",
+            "config": {
+              "static.field": "src",
+              "static.value": "kc"
+            },
+            "type": "InsertField$Value"
+          },
+          {
+            "alias": "v",
+            "config": {
+              "fields": "src"
+            },
+            "type": "ValueToKey"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "tenant",
+                "schema": "string",
+                "value": "t1"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "src": "kc"
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-1",
+            "value": {
+              "payload": {
+                "a": 7,
+                "n": {
+                  "x": 1
+                },
+                "s": "keep",
+                "src": "kc"
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-ints",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "src": "kc"
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-1",
+            "value": {
+              "payload": {
+                "a": 8,
+                "n": {
+                  "x": 2
+                },
+                "src": "kc"
+              },
+              "schema": null
+            }
+          },
+          "record": "audit-ints",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [copying fields from value to key], found: null"
+          },
+          "record": "orders-tombstone",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "src": "kc"
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-3",
+            "value": {
+              "payload": {
+                "a": "9",
+                "n": null,
+                "src": "kc"
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-no-header",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "src": "kc"
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-4",
+            "value": {
+              "payload": {
+                "a": {
+                  "x": 2
+                },
+                "a.x": 1,
+                "src": "kc"
+              },
+              "schema": null
+            }
+          },
+          "record": "collision",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "src": "kc"
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-5",
+            "value": {
+              "payload": {
+                "a": "oops",
+                "src": "kc"
+              },
+              "schema": null
+            }
+          },
+          "record": "bad-cast",
+          "result": "record"
+        }
+      ],
+      "run": "insert-then-value-to-key"
+    },
+    {
+      "chain": {
+        "predicates": {
+          "h": {
+            "config": {
+              "name": "tenant"
+            },
+            "type": "HasHeaderKey"
+          }
+        },
+        "transforms": [
+          {
+            "alias": "i",
+            "config": {
+              "static.field": "untagged",
+              "static.value": "yes"
+            },
+            "negate": true,
+            "predicate": "h",
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "tenant",
+                "schema": "string",
+                "value": "t1"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k1",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-1",
+            "value": {
+              "payload": {
+                "a": 7,
+                "n": {
+                  "x": 1
+                },
+                "s": "keep"
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-ints",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k2",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-1",
+            "value": {
+              "payload": {
+                "a": 8,
+                "n": {
+                  "x": 2
+                },
+                "untagged": "yes"
+              },
+              "schema": null
+            }
+          },
+          "record": "audit-ints",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k3",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-2",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "orders-tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k4",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-3",
+            "value": {
+              "payload": {
+                "a": "9",
+                "n": null,
+                "untagged": "yes"
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-no-header",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k5",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-4",
+            "value": {
+              "payload": {
+                "a": {
+                  "x": 2
+                },
+                "a.x": 1,
+                "untagged": "yes"
+              },
+              "schema": null
+            }
+          },
+          "record": "collision",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k6",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-5",
+            "value": {
+              "payload": {
+                "a": "oops",
+                "untagged": "yes"
+              },
+              "schema": null
+            }
+          },
+          "record": "bad-cast",
+          "result": "record"
+        }
+      ],
+      "run": "header-predicate-negate"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "e",
+            "config": {
+              "field": "n"
+            },
+            "type": "ExtractField$Value"
+          },
+          {
+            "alias": "h",
+            "config": {
+              "field": "wrapped"
+            },
+            "type": "HoistField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "tenant",
+                "schema": "string",
+                "value": "t1"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k1",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-1",
+            "value": {
+              "payload": {
+                "wrapped": {
+                  "x": 1
+                }
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-ints",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k2",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-1",
+            "value": {
+              "payload": {
+                "wrapped": {
+                  "x": 2
+                }
+              },
+              "schema": null
+            }
+          },
+          "record": "audit-ints",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k3",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-2",
+            "value": {
+              "payload": {
+                "wrapped": null
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k4",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-3",
+            "value": {
+              "payload": {
+                "wrapped": null
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-no-header",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k5",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-4",
+            "value": {
+              "payload": {
+                "wrapped": null
+              },
+              "schema": null
+            }
+          },
+          "record": "collision",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k6",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-5",
+            "value": {
+              "payload": {
+                "wrapped": null
+              },
+              "schema": null
+            }
+          },
+          "record": "bad-cast",
+          "result": "record"
+        }
+      ],
+      "run": "extract-then-hoist"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "r",
+            "config": {
+              "renames": "a:b"
+            },
+            "type": "ReplaceField$Value"
+          },
+          {
+            "alias": "i",
+            "config": {
+              "static.field": "a",
+              "static.value": "new"
+            },
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "tenant",
+                "schema": "string",
+                "value": "t1"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k1",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-1",
+            "value": {
+              "payload": {
+                "a": "new",
+                "b": 7,
+                "n": {
+                  "x": 1
+                },
+                "s": "keep"
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-ints",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k2",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-1",
+            "value": {
+              "payload": {
+                "a": "new",
+                "b": 8,
+                "n": {
+                  "x": 2
+                }
+              },
+              "schema": null
+            }
+          },
+          "record": "audit-ints",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k3",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-2",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "orders-tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k4",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-3",
+            "value": {
+              "payload": {
+                "a": "new",
+                "b": "9",
+                "n": null
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-no-header",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k5",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-4",
+            "value": {
+              "payload": {
+                "a": "new",
+                "a.x": 1,
+                "b": {
+                  "x": 2
+                }
+              },
+              "schema": null
+            }
+          },
+          "record": "collision",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k6",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-5",
+            "value": {
+              "payload": {
+                "a": "new",
+                "b": "oops"
+              },
+              "schema": null
+            }
+          },
+          "record": "bad-cast",
+          "result": "record"
+        }
+      ],
+      "run": "rename-then-insert-same-name"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "c",
+            "config": {
+              "fields": "absent"
+            },
+            "type": "ValueToKey"
+          },
+          {
+            "alias": "i",
+            "config": {
+              "static.field": "after",
+              "static.value": "cast"
+            },
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "tenant",
+                "schema": "string",
+                "value": "t1"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "absent": null
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-1",
+            "value": {
+              "payload": {
+                "a": 7,
+                "after": "cast",
+                "n": {
+                  "x": 1
+                },
+                "s": "keep"
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-ints",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "absent": null
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-1",
+            "value": {
+              "payload": {
+                "a": 8,
+                "after": "cast",
+                "n": {
+                  "x": 2
+                }
+              },
+              "schema": null
+            }
+          },
+          "record": "audit-ints",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [copying fields from value to key], found: null"
+          },
+          "record": "orders-tombstone",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "absent": null
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-3",
+            "value": {
+              "payload": {
+                "a": "9",
+                "after": "cast",
+                "n": null
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-no-header",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "absent": null
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-4",
+            "value": {
+              "payload": {
+                "a": {
+                  "x": 2
+                },
+                "a.x": 1,
+                "after": "cast"
+              },
+              "schema": null
+            }
+          },
+          "record": "collision",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "absent": null
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-5",
+            "value": {
+              "payload": {
+                "a": "oops",
+                "after": "cast"
+              },
+              "schema": null
+            }
+          },
+          "record": "bad-cast",
+          "result": "record"
+        }
+      ],
+      "run": "error-mid-chain-stops"
+    },
+    {
+      "chain": {
+        "predicates": {
+          "p1": {
+            "config": {
+              "pattern": "orders-.*"
+            },
+            "type": "TopicNameMatches"
+          },
+          "p2": {
+            "config": {
+              "pattern": "audit-.*"
+            },
+            "type": "TopicNameMatches"
+          }
+        },
+        "transforms": [
+          {
+            "alias": "c",
+            "config": {
+              "static.field": "tag",
+              "static.value": "x"
+            },
+            "predicate": "p1",
+            "type": "InsertField$Value"
+          },
+          {
+            "alias": "i",
+            "config": {
+              "static.field": "audited",
+              "static.value": "y"
+            },
+            "predicate": "p2",
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "tenant",
+                "schema": "string",
+                "value": "t1"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k1",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-1",
+            "value": {
+              "payload": {
+                "a": 7,
+                "n": {
+                  "x": 1
+                },
+                "s": "keep",
+                "tag": "x"
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-ints",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k2",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-1",
+            "value": {
+              "payload": {
+                "a": 8,
+                "audited": "y",
+                "n": {
+                  "x": 2
+                }
+              },
+              "schema": null
+            }
+          },
+          "record": "audit-ints",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k3",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-2",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "orders-tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k4",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-3",
+            "value": {
+              "payload": {
+                "a": "9",
+                "n": null,
+                "tag": "x"
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-no-header",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k5",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-4",
+            "value": {
+              "payload": {
+                "a": {
+                  "x": 2
+                },
+                "a.x": 1,
+                "tag": "x"
+              },
+              "schema": null
+            }
+          },
+          "record": "collision",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k6",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-5",
+            "value": {
+              "payload": {
+                "a": "oops",
+                "tag": "x"
+              },
+              "schema": null
+            }
+          },
+          "record": "bad-cast",
+          "result": "record"
+        }
+      ],
+      "run": "two-predicates"
+    },
+    {
+      "chain": {
+        "predicates": {
+          "t": {
+            "config": {},
+            "type": "RecordIsTombstone"
+          }
+        },
+        "transforms": [
+          {
+            "alias": "d",
+            "config": {},
+            "negate": true,
+            "predicate": "t",
+            "type": "Filter"
+          },
+          {
+            "alias": "i",
+            "config": {
+              "static.field": "seen",
+              "static.value": "y"
+            },
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "record": "orders-ints",
+          "result": "dropped"
+        },
+        {
+          "record": "audit-ints",
+          "result": "dropped"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k3",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders-2",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "orders-tombstone",
+          "result": "record"
+        },
+        {
+          "record": "orders-no-header",
+          "result": "dropped"
+        },
+        {
+          "record": "collision",
+          "result": "dropped"
+        },
+        {
+          "record": "bad-cast",
+          "result": "dropped"
+        }
+      ],
+      "run": "drop-then-later-stage-not-run"
+    }
+  ],
+  "schemas": {},
+  "suite": "chains"
+}

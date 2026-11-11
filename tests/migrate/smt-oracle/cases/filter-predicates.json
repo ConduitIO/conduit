@@ -1,0 +1,28 @@
+{
+  "suite": "filter-predicates",
+  "description": "Filter with TopicNameMatches, HasHeaderKey and RecordIsTombstone, with and without negate, and an unconditional Filter.",
+  "records": [
+    {"name": "audit-with-trace", "topic": "audit-1", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k1", "value": {"a": 1}, "headers": [{"key": "x-trace", "value": "abc", "schema": "string"}]},
+    {"name": "orders-plain", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k2", "value": {"a": 2}},
+    {"name": "audit-bare", "topic": "audit", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k3", "value": {"a": 3}},
+    {"name": "xaudit-prefix-match", "topic": "xaudit-1", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k4", "value": {"a": 4}},
+    {"name": "tombstone", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k5", "value": null},
+    {"name": "tombstone-with-header", "topic": "audit-2", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k6", "value": null, "headers": [{"key": "x-trace", "value": "", "schema": "string"}]},
+    {"name": "empty-header-value", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k7", "value": {"a": 7}, "headers": [{"key": "x-trace", "value": "", "schema": "string"}]},
+    {"name": "null-header-value", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k8", "value": {"a": 8}, "headers": [{"key": "x-trace", "value": null}]},
+    {"name": "other-header", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k9", "value": {"a": 9}, "headers": [{"key": "X-Trace", "value": "upper", "schema": "string"}]},
+    {"name": "null-key-empty-struct-value", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": null, "value": {}}
+  ],
+  "runs": [
+    {"run": "filter-no-predicate", "chain": [{"alias": "f", "type": "Filter", "config": {}}]},
+    {"run": "topic-matches", "chain": [{"alias": "f", "type": "Filter", "config": {}, "predicate": "p"}], "predicates": {"p": {"type": "TopicNameMatches", "config": {"pattern": "audit-.*"}}}},
+    {"run": "topic-matches-negate", "chain": [{"alias": "f", "type": "Filter", "config": {}, "predicate": "p", "negate": true}], "predicates": {"p": {"type": "TopicNameMatches", "config": {"pattern": "audit-.*"}}}},
+    {"run": "topic-matches-bare-pattern", "chain": [{"alias": "f", "type": "Filter", "config": {}, "predicate": "p"}], "predicates": {"p": {"type": "TopicNameMatches", "config": {"pattern": "audit"}}}},
+    {"run": "topic-matches-alternation", "chain": [{"alias": "f", "type": "Filter", "config": {}, "predicate": "p"}], "predicates": {"p": {"type": "TopicNameMatches", "config": {"pattern": "orders|audit"}}}},
+    {"run": "has-header-key", "chain": [{"alias": "f", "type": "Filter", "config": {}, "predicate": "p"}], "predicates": {"p": {"type": "HasHeaderKey", "config": {"name": "x-trace"}}}},
+    {"run": "has-header-key-negate", "chain": [{"alias": "f", "type": "Filter", "config": {}, "predicate": "p", "negate": true}], "predicates": {"p": {"type": "HasHeaderKey", "config": {"name": "x-trace"}}}},
+    {"run": "is-tombstone", "chain": [{"alias": "f", "type": "Filter", "config": {}, "predicate": "p"}], "predicates": {"p": {"type": "RecordIsTombstone", "config": {}}}},
+    {"run": "is-tombstone-negate", "chain": [{"alias": "f", "type": "Filter", "config": {}, "predicate": "p", "negate": true}], "predicates": {"p": {"type": "RecordIsTombstone", "config": {}}}},
+    {"run": "two-stage-chain", "chain": [{"alias": "f1", "type": "Filter", "config": {}, "predicate": "p1", "negate": true}, {"alias": "f2", "type": "Filter", "config": {}, "predicate": "p2"}], "predicates": {"p1": {"type": "TopicNameMatches", "config": {"pattern": "audit-.*"}}, "p2": {"type": "RecordIsTombstone", "config": {}}}}
+  ]
+}

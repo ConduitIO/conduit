@@ -1,0 +1,1484 @@
+{
+  "caseSha256": "a1b157bf35082c218b2ecae76286ea45ecb04ffbdb5a47310fb73cedd6fb5ddf",
+  "description": "Filter with TopicNameMatches, HasHeaderKey and RecordIsTombstone, with and without negate, and an unconditional Filter.",
+  "fixtureSha256": {},
+  "recordType": "sink",
+  "runs": [
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "f",
+            "config": {},
+            "type": "Filter"
+          }
+        ]
+      },
+      "results": [
+        {
+          "record": "audit-with-trace",
+          "result": "dropped"
+        },
+        {
+          "record": "orders-plain",
+          "result": "dropped"
+        },
+        {
+          "record": "audit-bare",
+          "result": "dropped"
+        },
+        {
+          "record": "xaudit-prefix-match",
+          "result": "dropped"
+        },
+        {
+          "record": "tombstone",
+          "result": "dropped"
+        },
+        {
+          "record": "tombstone-with-header",
+          "result": "dropped"
+        },
+        {
+          "record": "empty-header-value",
+          "result": "dropped"
+        },
+        {
+          "record": "null-header-value",
+          "result": "dropped"
+        },
+        {
+          "record": "other-header",
+          "result": "dropped"
+        },
+        {
+          "record": "null-key-empty-struct-value",
+          "result": "dropped"
+        }
+      ],
+      "run": "filter-no-predicate"
+    },
+    {
+      "chain": {
+        "predicates": {
+          "p": {
+            "config": {
+              "pattern": "audit-.*"
+            },
+            "type": "TopicNameMatches"
+          }
+        },
+        "transforms": [
+          {
+            "alias": "f",
+            "config": {},
+            "predicate": "p",
+            "type": "Filter"
+          }
+        ]
+      },
+      "results": [
+        {
+          "record": "audit-with-trace",
+          "result": "dropped"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k2",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 2
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-plain",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k3",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit",
+            "value": {
+              "payload": {
+                "a": 3
+              },
+              "schema": null
+            }
+          },
+          "record": "audit-bare",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k4",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "xaudit-1",
+            "value": {
+              "payload": {
+                "a": 4
+              },
+              "schema": null
+            }
+          },
+          "record": "xaudit-prefix-match",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k5",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "record": "tombstone-with-header",
+          "result": "dropped"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "x-trace",
+                "schema": "string",
+                "value": ""
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k7",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 7
+              },
+              "schema": null
+            }
+          },
+          "record": "empty-header-value",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "x-trace",
+                "schema": null,
+                "value": null
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k8",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 8
+              },
+              "schema": null
+            }
+          },
+          "record": "null-header-value",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "X-Trace",
+                "schema": "string",
+                "value": "upper"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k9",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 9
+              },
+              "schema": null
+            }
+          },
+          "record": "other-header",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": null,
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {},
+              "schema": null
+            }
+          },
+          "record": "null-key-empty-struct-value",
+          "result": "record"
+        }
+      ],
+      "run": "topic-matches"
+    },
+    {
+      "chain": {
+        "predicates": {
+          "p": {
+            "config": {
+              "pattern": "audit-.*"
+            },
+            "type": "TopicNameMatches"
+          }
+        },
+        "transforms": [
+          {
+            "alias": "f",
+            "config": {},
+            "negate": true,
+            "predicate": "p",
+            "type": "Filter"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "x-trace",
+                "schema": "string",
+                "value": "abc"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k1",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-1",
+            "value": {
+              "payload": {
+                "a": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "audit-with-trace",
+          "result": "record"
+        },
+        {
+          "record": "orders-plain",
+          "result": "dropped"
+        },
+        {
+          "record": "audit-bare",
+          "result": "dropped"
+        },
+        {
+          "record": "xaudit-prefix-match",
+          "result": "dropped"
+        },
+        {
+          "record": "tombstone",
+          "result": "dropped"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "x-trace",
+                "schema": "string",
+                "value": ""
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k6",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-2",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone-with-header",
+          "result": "record"
+        },
+        {
+          "record": "empty-header-value",
+          "result": "dropped"
+        },
+        {
+          "record": "null-header-value",
+          "result": "dropped"
+        },
+        {
+          "record": "other-header",
+          "result": "dropped"
+        },
+        {
+          "record": "null-key-empty-struct-value",
+          "result": "dropped"
+        }
+      ],
+      "run": "topic-matches-negate"
+    },
+    {
+      "chain": {
+        "predicates": {
+          "p": {
+            "config": {
+              "pattern": "audit"
+            },
+            "type": "TopicNameMatches"
+          }
+        },
+        "transforms": [
+          {
+            "alias": "f",
+            "config": {},
+            "predicate": "p",
+            "type": "Filter"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "x-trace",
+                "schema": "string",
+                "value": "abc"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k1",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-1",
+            "value": {
+              "payload": {
+                "a": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "audit-with-trace",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k2",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 2
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-plain",
+          "result": "record"
+        },
+        {
+          "record": "audit-bare",
+          "result": "dropped"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k4",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "xaudit-1",
+            "value": {
+              "payload": {
+                "a": 4
+              },
+              "schema": null
+            }
+          },
+          "record": "xaudit-prefix-match",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k5",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "x-trace",
+                "schema": "string",
+                "value": ""
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k6",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-2",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone-with-header",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "x-trace",
+                "schema": "string",
+                "value": ""
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k7",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 7
+              },
+              "schema": null
+            }
+          },
+          "record": "empty-header-value",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "x-trace",
+                "schema": null,
+                "value": null
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k8",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 8
+              },
+              "schema": null
+            }
+          },
+          "record": "null-header-value",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "X-Trace",
+                "schema": "string",
+                "value": "upper"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k9",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 9
+              },
+              "schema": null
+            }
+          },
+          "record": "other-header",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": null,
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {},
+              "schema": null
+            }
+          },
+          "record": "null-key-empty-struct-value",
+          "result": "record"
+        }
+      ],
+      "run": "topic-matches-bare-pattern"
+    },
+    {
+      "chain": {
+        "predicates": {
+          "p": {
+            "config": {
+              "pattern": "orders|audit"
+            },
+            "type": "TopicNameMatches"
+          }
+        },
+        "transforms": [
+          {
+            "alias": "f",
+            "config": {},
+            "predicate": "p",
+            "type": "Filter"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "x-trace",
+                "schema": "string",
+                "value": "abc"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k1",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-1",
+            "value": {
+              "payload": {
+                "a": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "audit-with-trace",
+          "result": "record"
+        },
+        {
+          "record": "orders-plain",
+          "result": "dropped"
+        },
+        {
+          "record": "audit-bare",
+          "result": "dropped"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k4",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "xaudit-1",
+            "value": {
+              "payload": {
+                "a": 4
+              },
+              "schema": null
+            }
+          },
+          "record": "xaudit-prefix-match",
+          "result": "record"
+        },
+        {
+          "record": "tombstone",
+          "result": "dropped"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "x-trace",
+                "schema": "string",
+                "value": ""
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k6",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-2",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone-with-header",
+          "result": "record"
+        },
+        {
+          "record": "empty-header-value",
+          "result": "dropped"
+        },
+        {
+          "record": "null-header-value",
+          "result": "dropped"
+        },
+        {
+          "record": "other-header",
+          "result": "dropped"
+        },
+        {
+          "record": "null-key-empty-struct-value",
+          "result": "dropped"
+        }
+      ],
+      "run": "topic-matches-alternation"
+    },
+    {
+      "chain": {
+        "predicates": {
+          "p": {
+            "config": {
+              "name": "x-trace"
+            },
+            "type": "HasHeaderKey"
+          }
+        },
+        "transforms": [
+          {
+            "alias": "f",
+            "config": {},
+            "predicate": "p",
+            "type": "Filter"
+          }
+        ]
+      },
+      "results": [
+        {
+          "record": "audit-with-trace",
+          "result": "dropped"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k2",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 2
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-plain",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k3",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit",
+            "value": {
+              "payload": {
+                "a": 3
+              },
+              "schema": null
+            }
+          },
+          "record": "audit-bare",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k4",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "xaudit-1",
+            "value": {
+              "payload": {
+                "a": 4
+              },
+              "schema": null
+            }
+          },
+          "record": "xaudit-prefix-match",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k5",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "record": "tombstone-with-header",
+          "result": "dropped"
+        },
+        {
+          "record": "empty-header-value",
+          "result": "dropped"
+        },
+        {
+          "record": "null-header-value",
+          "result": "dropped"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "X-Trace",
+                "schema": "string",
+                "value": "upper"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k9",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 9
+              },
+              "schema": null
+            }
+          },
+          "record": "other-header",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": null,
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {},
+              "schema": null
+            }
+          },
+          "record": "null-key-empty-struct-value",
+          "result": "record"
+        }
+      ],
+      "run": "has-header-key"
+    },
+    {
+      "chain": {
+        "predicates": {
+          "p": {
+            "config": {
+              "name": "x-trace"
+            },
+            "type": "HasHeaderKey"
+          }
+        },
+        "transforms": [
+          {
+            "alias": "f",
+            "config": {},
+            "negate": true,
+            "predicate": "p",
+            "type": "Filter"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "x-trace",
+                "schema": "string",
+                "value": "abc"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k1",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-1",
+            "value": {
+              "payload": {
+                "a": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "audit-with-trace",
+          "result": "record"
+        },
+        {
+          "record": "orders-plain",
+          "result": "dropped"
+        },
+        {
+          "record": "audit-bare",
+          "result": "dropped"
+        },
+        {
+          "record": "xaudit-prefix-match",
+          "result": "dropped"
+        },
+        {
+          "record": "tombstone",
+          "result": "dropped"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "x-trace",
+                "schema": "string",
+                "value": ""
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k6",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-2",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone-with-header",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "x-trace",
+                "schema": "string",
+                "value": ""
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k7",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 7
+              },
+              "schema": null
+            }
+          },
+          "record": "empty-header-value",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "x-trace",
+                "schema": null,
+                "value": null
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k8",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 8
+              },
+              "schema": null
+            }
+          },
+          "record": "null-header-value",
+          "result": "record"
+        },
+        {
+          "record": "other-header",
+          "result": "dropped"
+        },
+        {
+          "record": "null-key-empty-struct-value",
+          "result": "dropped"
+        }
+      ],
+      "run": "has-header-key-negate"
+    },
+    {
+      "chain": {
+        "predicates": {
+          "p": {
+            "config": {},
+            "type": "RecordIsTombstone"
+          }
+        },
+        "transforms": [
+          {
+            "alias": "f",
+            "config": {},
+            "predicate": "p",
+            "type": "Filter"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "x-trace",
+                "schema": "string",
+                "value": "abc"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k1",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-1",
+            "value": {
+              "payload": {
+                "a": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "audit-with-trace",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k2",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 2
+              },
+              "schema": null
+            }
+          },
+          "record": "orders-plain",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k3",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit",
+            "value": {
+              "payload": {
+                "a": 3
+              },
+              "schema": null
+            }
+          },
+          "record": "audit-bare",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k4",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "xaudit-1",
+            "value": {
+              "payload": {
+                "a": 4
+              },
+              "schema": null
+            }
+          },
+          "record": "xaudit-prefix-match",
+          "result": "record"
+        },
+        {
+          "record": "tombstone",
+          "result": "dropped"
+        },
+        {
+          "record": "tombstone-with-header",
+          "result": "dropped"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "x-trace",
+                "schema": "string",
+                "value": ""
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k7",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 7
+              },
+              "schema": null
+            }
+          },
+          "record": "empty-header-value",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "x-trace",
+                "schema": null,
+                "value": null
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k8",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 8
+              },
+              "schema": null
+            }
+          },
+          "record": "null-header-value",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "X-Trace",
+                "schema": "string",
+                "value": "upper"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k9",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 9
+              },
+              "schema": null
+            }
+          },
+          "record": "other-header",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": null,
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {},
+              "schema": null
+            }
+          },
+          "record": "null-key-empty-struct-value",
+          "result": "record"
+        }
+      ],
+      "run": "is-tombstone"
+    },
+    {
+      "chain": {
+        "predicates": {
+          "p": {
+            "config": {},
+            "type": "RecordIsTombstone"
+          }
+        },
+        "transforms": [
+          {
+            "alias": "f",
+            "config": {},
+            "negate": true,
+            "predicate": "p",
+            "type": "Filter"
+          }
+        ]
+      },
+      "results": [
+        {
+          "record": "audit-with-trace",
+          "result": "dropped"
+        },
+        {
+          "record": "orders-plain",
+          "result": "dropped"
+        },
+        {
+          "record": "audit-bare",
+          "result": "dropped"
+        },
+        {
+          "record": "xaudit-prefix-match",
+          "result": "dropped"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k5",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "x-trace",
+                "schema": "string",
+                "value": ""
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k6",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-2",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone-with-header",
+          "result": "record"
+        },
+        {
+          "record": "empty-header-value",
+          "result": "dropped"
+        },
+        {
+          "record": "null-header-value",
+          "result": "dropped"
+        },
+        {
+          "record": "other-header",
+          "result": "dropped"
+        },
+        {
+          "record": "null-key-empty-struct-value",
+          "result": "dropped"
+        }
+      ],
+      "run": "is-tombstone-negate"
+    },
+    {
+      "chain": {
+        "predicates": {
+          "p1": {
+            "config": {
+              "pattern": "audit-.*"
+            },
+            "type": "TopicNameMatches"
+          },
+          "p2": {
+            "config": {},
+            "type": "RecordIsTombstone"
+          }
+        },
+        "transforms": [
+          {
+            "alias": "f1",
+            "config": {},
+            "negate": true,
+            "predicate": "p1",
+            "type": "Filter"
+          },
+          {
+            "alias": "f2",
+            "config": {},
+            "predicate": "p2",
+            "type": "Filter"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "x-trace",
+                "schema": "string",
+                "value": "abc"
+              }
+            ],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k1",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "audit-1",
+            "value": {
+              "payload": {
+                "a": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "audit-with-trace",
+          "result": "record"
+        },
+        {
+          "record": "orders-plain",
+          "result": "dropped"
+        },
+        {
+          "record": "audit-bare",
+          "result": "dropped"
+        },
+        {
+          "record": "xaudit-prefix-match",
+          "result": "dropped"
+        },
+        {
+          "record": "tombstone",
+          "result": "dropped"
+        },
+        {
+          "record": "tombstone-with-header",
+          "result": "dropped"
+        },
+        {
+          "record": "empty-header-value",
+          "result": "dropped"
+        },
+        {
+          "record": "null-header-value",
+          "result": "dropped"
+        },
+        {
+          "record": "other-header",
+          "result": "dropped"
+        },
+        {
+          "record": "null-key-empty-struct-value",
+          "result": "dropped"
+        }
+      ],
+      "run": "two-stage-chain"
+    }
+  ],
+  "schemas": {},
+  "suite": "filter-predicates"
+}

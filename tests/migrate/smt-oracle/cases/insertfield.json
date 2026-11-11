@@ -1,0 +1,30 @@
+{
+  "suite": "insertfield",
+  "description": "InsertField static values and the record metadata fields (topic, partition, offset, timestamp), on a sink record.",
+  "records": [
+    {"name": "flat", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1}},
+    {"name": "existing-field", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "src": "old"}},
+    {"name": "no-timestamp", "topic": "orders", "partition": 3, "offset": 42, "timestamp": null, "key": "k", "value": {"id": 1}},
+    {"name": "empty", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {}},
+    {"name": "tombstone", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": null},
+    {"name": "primitive", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": 5},
+    {"name": "struct", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1}, "valueSchema": {"type": "struct", "optional": false, "fields": [{"field": "id", "type": "int32", "optional": false}]}},
+    {"name": "struct-optional-null-value", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": null, "valueSchema": {"type": "struct", "optional": true, "fields": [{"field": "id", "type": "int32", "optional": false}]}}
+  ],
+  "runs": [
+    {"run": "static", "chain": [{"alias": "i", "type": "InsertField$Value", "config": {"static.field": "src", "static.value": "conduit"}}]},
+    {"run": "static-optional-suffix", "chain": [{"alias": "i", "type": "InsertField$Value", "config": {"static.field": "src?", "static.value": "conduit"}}]},
+    {"run": "static-required-suffix", "chain": [{"alias": "i", "type": "InsertField$Value", "config": {"static.field": "src!", "static.value": "conduit"}}]},
+    {"run": "static-no-value", "chain": [{"alias": "i", "type": "InsertField$Value", "config": {"static.field": "src"}}], "records": [{"name": "flat", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1}}]},
+    {"run": "topic", "chain": [{"alias": "i", "type": "InsertField$Value", "config": {"topic.field": "t"}}]},
+    {"run": "partition", "chain": [{"alias": "i", "type": "InsertField$Value", "config": {"partition.field": "p"}}]},
+    {"run": "offset", "chain": [{"alias": "i", "type": "InsertField$Value", "config": {"offset.field": "o"}}]},
+    {"run": "timestamp", "chain": [{"alias": "i", "type": "InsertField$Value", "config": {"timestamp.field": "ts"}}]},
+    {"run": "all-fields", "chain": [{"alias": "i", "type": "InsertField$Value", "config": {"topic.field": "t", "partition.field": "p", "offset.field": "o", "timestamp.field": "ts", "static.field": "s", "static.value": "v"}}]},
+    {"run": "all-optional-suffixes", "chain": [{"alias": "i", "type": "InsertField$Value", "config": {"topic.field": "t?", "partition.field": "p?", "offset.field": "o?", "timestamp.field": "ts?"}}]},
+    {"run": "key-variant", "chain": [{"alias": "i", "type": "InsertField$Key", "config": {"topic.field": "t", "static.field": "s", "static.value": "v"}}], "records": [{"name": "map-key", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": {"id": 1}, "value": {"a": 1}}, {"name": "null-key", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": null, "value": {"a": 1}}, {"name": "string-key", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}}]},
+    {"run": "source-record-topic", "chain": [{"alias": "i", "type": "InsertField$Value", "config": {"topic.field": "t", "static.field": "s", "static.value": "v"}}], "recordType": "source"},
+    {"run": "source-record-offset", "chain": [{"alias": "i", "type": "InsertField$Value", "config": {"offset.field": "o"}}], "recordType": "source"},
+    {"run": "source-record-partition-timestamp", "chain": [{"alias": "i", "type": "InsertField$Value", "config": {"partition.field": "p", "timestamp.field": "ts"}}], "recordType": "source"}
+  ]
+}

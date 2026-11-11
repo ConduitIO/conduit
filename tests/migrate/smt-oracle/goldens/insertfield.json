@@ -1,0 +1,2397 @@
+{
+  "caseSha256": "3600462c2cd3b5ac218ccafbd8352e9ff24619dacbc3aeaee1edf8fbf5696c59",
+  "description": "InsertField static values and the record metadata fields (topic, partition, offset, timestamp), on a sink record.",
+  "fixtureSha256": {},
+  "recordType": "sink",
+  "runs": [
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "i",
+            "config": {
+              "static.field": "src",
+              "static.value": "conduit"
+            },
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "src": "conduit"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "src": "conduit"
+              },
+              "schema": null
+            }
+          },
+          "record": "existing-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 0,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "src": "conduit"
+              },
+              "schema": null
+            }
+          },
+          "record": "no-timestamp",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "src": "conduit"
+              },
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field insertion], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "src": "conduit"
+              },
+              "schema": "s-00c7a24e7615"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-ff8cd32a897d"
+            }
+          },
+          "record": "struct-optional-null-value",
+          "result": "record"
+        }
+      ],
+      "run": "static"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "i",
+            "config": {
+              "static.field": "src?",
+              "static.value": "conduit"
+            },
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "src": "conduit"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "src": "conduit"
+              },
+              "schema": null
+            }
+          },
+          "record": "existing-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 0,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "src": "conduit"
+              },
+              "schema": null
+            }
+          },
+          "record": "no-timestamp",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "src": "conduit"
+              },
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field insertion], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "src": "conduit"
+              },
+              "schema": "s-00c7a24e7615"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-ff8cd32a897d"
+            }
+          },
+          "record": "struct-optional-null-value",
+          "result": "record"
+        }
+      ],
+      "run": "static-optional-suffix"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "i",
+            "config": {
+              "static.field": "src!",
+              "static.value": "conduit"
+            },
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "src": "conduit"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "src": "conduit"
+              },
+              "schema": null
+            }
+          },
+          "record": "existing-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 0,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "src": "conduit"
+              },
+              "schema": null
+            }
+          },
+          "record": "no-timestamp",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "src": "conduit"
+              },
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field insertion], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "src": "conduit"
+              },
+              "schema": "s-205c4e4fa3cf"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-ff8cd32a897d"
+            }
+          },
+          "record": "struct-optional-null-value",
+          "result": "record"
+        }
+      ],
+      "run": "static-required-suffix"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "i",
+            "config": {
+              "static.field": "src"
+            },
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "error": {
+            "class": "org.apache.kafka.common.config.ConfigException",
+            "message": "Invalid value null for configuration static.value: No value specified for static field: org.apache.kafka.connect.transforms.InsertField$InsertionSpec@<id>"
+          },
+          "record": "flat",
+          "result": "error"
+        }
+      ],
+      "run": "static-no-value"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "i",
+            "config": {
+              "topic.field": "t"
+            },
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "t": "orders"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "src": "old",
+                "t": "orders"
+              },
+              "schema": null
+            }
+          },
+          "record": "existing-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 0,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "t": "orders"
+              },
+              "schema": null
+            }
+          },
+          "record": "no-timestamp",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "t": "orders"
+              },
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field insertion], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "t": "orders"
+              },
+              "schema": "s-7e5961659dc1"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-ff8cd32a897d"
+            }
+          },
+          "record": "struct-optional-null-value",
+          "result": "record"
+        }
+      ],
+      "run": "topic"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "i",
+            "config": {
+              "partition.field": "p"
+            },
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "p": {
+                  "$int32": 3
+                }
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "p": {
+                  "$int32": 3
+                },
+                "src": "old"
+              },
+              "schema": null
+            }
+          },
+          "record": "existing-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 0,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "p": {
+                  "$int32": 3
+                }
+              },
+              "schema": null
+            }
+          },
+          "record": "no-timestamp",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "p": {
+                  "$int32": 3
+                }
+              },
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field insertion], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "p": 3
+              },
+              "schema": "s-1898e1619482"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-ff8cd32a897d"
+            }
+          },
+          "record": "struct-optional-null-value",
+          "result": "record"
+        }
+      ],
+      "run": "partition"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "i",
+            "config": {
+              "offset.field": "o"
+            },
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "o": 42
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "o": 42,
+                "src": "old"
+              },
+              "schema": null
+            }
+          },
+          "record": "existing-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 0,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "o": 42
+              },
+              "schema": null
+            }
+          },
+          "record": "no-timestamp",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "o": 42
+              },
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field insertion], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "o": 42
+              },
+              "schema": "s-38c84843474c"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-ff8cd32a897d"
+            }
+          },
+          "record": "struct-optional-null-value",
+          "result": "record"
+        }
+      ],
+      "run": "offset"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "i",
+            "config": {
+              "timestamp.field": "ts"
+            },
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "ts": 1700000000000
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "src": "old",
+                "ts": 1700000000000
+              },
+              "schema": null
+            }
+          },
+          "record": "existing-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 0,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "ts": 0
+              },
+              "schema": null
+            }
+          },
+          "record": "no-timestamp",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "ts": 1700000000000
+              },
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field insertion], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "ts": 1700000000000
+              },
+              "schema": "s-c6b9b23a3fab"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-ff8cd32a897d"
+            }
+          },
+          "record": "struct-optional-null-value",
+          "result": "record"
+        }
+      ],
+      "run": "timestamp"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "i",
+            "config": {
+              "offset.field": "o",
+              "partition.field": "p",
+              "static.field": "s",
+              "static.value": "v",
+              "timestamp.field": "ts",
+              "topic.field": "t"
+            },
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "o": 42,
+                "p": {
+                  "$int32": 3
+                },
+                "s": "v",
+                "t": "orders",
+                "ts": 1700000000000
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "o": 42,
+                "p": {
+                  "$int32": 3
+                },
+                "s": "v",
+                "src": "old",
+                "t": "orders",
+                "ts": 1700000000000
+              },
+              "schema": null
+            }
+          },
+          "record": "existing-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 0,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "o": 42,
+                "p": {
+                  "$int32": 3
+                },
+                "s": "v",
+                "t": "orders",
+                "ts": 0
+              },
+              "schema": null
+            }
+          },
+          "record": "no-timestamp",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "o": 42,
+                "p": {
+                  "$int32": 3
+                },
+                "s": "v",
+                "t": "orders",
+                "ts": 1700000000000
+              },
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field insertion], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "o": 42,
+                "p": 3,
+                "s": "v",
+                "t": "orders",
+                "ts": 1700000000000
+              },
+              "schema": "s-1495fc27717d"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-ff8cd32a897d"
+            }
+          },
+          "record": "struct-optional-null-value",
+          "result": "record"
+        }
+      ],
+      "run": "all-fields"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "i",
+            "config": {
+              "offset.field": "o?",
+              "partition.field": "p?",
+              "timestamp.field": "ts?",
+              "topic.field": "t?"
+            },
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "o": 42,
+                "p": {
+                  "$int32": 3
+                },
+                "t": "orders",
+                "ts": 1700000000000
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "o": 42,
+                "p": {
+                  "$int32": 3
+                },
+                "src": "old",
+                "t": "orders",
+                "ts": 1700000000000
+              },
+              "schema": null
+            }
+          },
+          "record": "existing-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 0,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "o": 42,
+                "p": {
+                  "$int32": 3
+                },
+                "t": "orders",
+                "ts": 0
+              },
+              "schema": null
+            }
+          },
+          "record": "no-timestamp",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "o": 42,
+                "p": {
+                  "$int32": 3
+                },
+                "t": "orders",
+                "ts": 1700000000000
+              },
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field insertion], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "o": 42,
+                "p": 3,
+                "t": "orders",
+                "ts": 1700000000000
+              },
+              "schema": "s-a11528b82f53"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-ff8cd32a897d"
+            }
+          },
+          "record": "struct-optional-null-value",
+          "result": "record"
+        }
+      ],
+      "run": "all-optional-suffixes"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "i",
+            "config": {
+              "static.field": "s",
+              "static.value": "v",
+              "topic.field": "t"
+            },
+            "type": "InsertField$Key"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": 1,
+                "s": "v",
+                "t": "orders"
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "map-key",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": null,
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "null-key",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field insertion], found: java.lang.String"
+          },
+          "record": "string-key",
+          "result": "error"
+        }
+      ],
+      "run": "key-variant"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "i",
+            "config": {
+              "static.field": "s",
+              "static.value": "v",
+              "topic.field": "t"
+            },
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "s": "v",
+                "t": "orders"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "s": "v",
+                "src": "old",
+                "t": "orders"
+              },
+              "schema": null
+            }
+          },
+          "record": "existing-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 0,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "s": "v",
+                "t": "orders"
+              },
+              "schema": null
+            }
+          },
+          "record": "no-timestamp",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "s": "v",
+                "t": "orders"
+              },
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field insertion], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "s": "v",
+                "t": "orders"
+              },
+              "schema": "s-791f510a76ee"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-ff8cd32a897d"
+            }
+          },
+          "record": "struct-optional-null-value",
+          "result": "record"
+        }
+      ],
+      "run": "source-record-topic"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "i",
+            "config": {
+              "offset.field": "o"
+            },
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only SinkRecord supported for [field insertion], found: org.apache.kafka.connect.source.SourceRecord"
+          },
+          "record": "flat",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only SinkRecord supported for [field insertion], found: org.apache.kafka.connect.source.SourceRecord"
+          },
+          "record": "existing-field",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only SinkRecord supported for [field insertion], found: org.apache.kafka.connect.source.SourceRecord"
+          },
+          "record": "no-timestamp",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only SinkRecord supported for [field insertion], found: org.apache.kafka.connect.source.SourceRecord"
+          },
+          "record": "empty",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field insertion], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only SinkRecord supported for [field insertion], found: org.apache.kafka.connect.source.SourceRecord"
+          },
+          "record": "struct",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-ff8cd32a897d"
+            }
+          },
+          "record": "struct-optional-null-value",
+          "result": "record"
+        }
+      ],
+      "run": "source-record-offset"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "i",
+            "config": {
+              "partition.field": "p",
+              "timestamp.field": "ts"
+            },
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "p": {
+                  "$int32": 3
+                },
+                "ts": 1700000000000
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "p": {
+                  "$int32": 3
+                },
+                "src": "old",
+                "ts": 1700000000000
+              },
+              "schema": null
+            }
+          },
+          "record": "existing-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 0,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "p": {
+                  "$int32": 3
+                },
+                "ts": 0
+              },
+              "schema": null
+            }
+          },
+          "record": "no-timestamp",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "p": {
+                  "$int32": 3
+                },
+                "ts": 1700000000000
+              },
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [field insertion], found: java.lang.Long"
+          },
+          "record": "primitive",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "p": 3,
+                "ts": 1700000000000
+              },
+              "schema": "s-a9ccd2071fd2"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-ff8cd32a897d"
+            }
+          },
+          "record": "struct-optional-null-value",
+          "result": "record"
+        }
+      ],
+      "run": "source-record-partition-timestamp"
+    }
+  ],
+  "schemas": {
+    "s-00c7a24e7615": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "src",
+          "optional": true,
+          "type": "string"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-1495fc27717d": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "t",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "p",
+          "optional": true,
+          "type": "int32"
+        },
+        {
+          "field": "o",
+          "optional": true,
+          "type": "int64"
+        },
+        {
+          "field": "ts",
+          "name": "org.apache.kafka.connect.data.Timestamp",
+          "optional": true,
+          "type": "int64",
+          "version": 1
+        },
+        {
+          "field": "s",
+          "optional": true,
+          "type": "string"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-1898e1619482": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "p",
+          "optional": true,
+          "type": "int32"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-205c4e4fa3cf": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "src",
+          "optional": false,
+          "type": "string"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-38c84843474c": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "o",
+          "optional": true,
+          "type": "int64"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-791f510a76ee": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "t",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "s",
+          "optional": true,
+          "type": "string"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-7e5961659dc1": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "t",
+          "optional": true,
+          "type": "string"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-a11528b82f53": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "t",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "p",
+          "optional": true,
+          "type": "int32"
+        },
+        {
+          "field": "o",
+          "optional": true,
+          "type": "int64"
+        },
+        {
+          "field": "ts",
+          "name": "org.apache.kafka.connect.data.Timestamp",
+          "optional": true,
+          "type": "int64",
+          "version": 1
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-a9ccd2071fd2": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "p",
+          "optional": true,
+          "type": "int32"
+        },
+        {
+          "field": "ts",
+          "name": "org.apache.kafka.connect.data.Timestamp",
+          "optional": true,
+          "type": "int64",
+          "version": 1
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-c6b9b23a3fab": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "ts",
+          "name": "org.apache.kafka.connect.data.Timestamp",
+          "optional": true,
+          "type": "int64",
+          "version": 1
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-ff8cd32a897d": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        }
+      ],
+      "optional": true,
+      "type": "struct"
+    }
+  },
+  "suite": "insertfield"
+}

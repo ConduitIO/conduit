@@ -1,0 +1,8 @@
+{
+  "kafka": {"version": "4.2.0", "image": "sha256:9516fb7634bad307d17c33b589fde9023003b0cb761374f500002b980a3149b9"},
+  "debezium": {"version": "3.7.0.Final", "image": "sha256:b9b983eda59570c526ddffa86ff73e56c53180d2676158ba5a5184cfd1b59a79"},
+  "postgres": {"version": "16", "image": "sha256:16f982a4ae010d1795db1974a0c995292869755ec2902586512a274d8d9971bd"},
+  "jdk": {"version": "21", "image": "sha256:ebfbb18d11ff163ee83b21258acf12248af48d22a0fdfdc68fa1a1516c05976a"},
+  "conduit": {"postgresConnector": "v0.21.0", "fileConnector": "v0.13.0"},
+  "timezone": "Asia/Kolkata"
+}

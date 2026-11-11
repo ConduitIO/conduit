@@ -1,0 +1,449 @@
+{
+  "caseSha256": "12083693b685ae3afb714d8acafef622ca29ea87a73707177063017aeb2f6c63",
+  "description": "HoistField wraps a value in a new single-field record, including null and primitive sides.",
+  "fixtureSha256": {},
+  "recordType": "sink",
+  "runs": [
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "h",
+            "config": {
+              "field": "payload"
+            },
+            "type": "HoistField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "payload": {
+                  "id": 1,
+                  "n": {
+                    "x": 2
+                  }
+                }
+              },
+              "schema": null
+            }
+          },
+          "record": "map",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "payload": "plain"
+              },
+              "schema": null
+            }
+          },
+          "record": "string",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "payload": 5
+              },
+              "schema": null
+            }
+          },
+          "record": "int",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "payload": {
+                  "$bytes": "AQID"
+                }
+              },
+              "schema": null
+            }
+          },
+          "record": "bytes",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "payload": [
+                  1,
+                  2
+                ]
+              },
+              "schema": null
+            }
+          },
+          "record": "list",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "payload": {}
+              },
+              "schema": null
+            }
+          },
+          "record": "empty",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "payload": null
+              },
+              "schema": null
+            }
+          },
+          "record": "tombstone",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "payload": {
+                  "id": 1
+                }
+              },
+              "schema": "s-ea7ef506f9df"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "payload": null
+              },
+              "schema": "s-cd7c06ff52d1"
+            }
+          },
+          "record": "optional-struct-null",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "payload": "s"
+              },
+              "schema": "s-5c550d11394c"
+            }
+          },
+          "record": "primitive-schema",
+          "result": "record"
+        }
+      ],
+      "run": "value"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "h",
+            "config": {
+              "field": "id"
+            },
+            "type": "HoistField$Key"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": "k1"
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "string-key",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": 7
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "int-key",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": {
+                  "id": 1
+                }
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "map-key",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": null
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "null-key",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": {
+                  "id": 3
+                }
+              },
+              "schema": "s-4d2f27b9a1d8"
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "a": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "struct-key",
+          "result": "record"
+        }
+      ],
+      "run": "key"
+    }
+  ],
+  "schemas": {
+    "s-4d2f27b9a1d8": {
+      "fields": [
+        {
+          "field": "id",
+          "fields": [
+            {
+              "field": "id",
+              "optional": false,
+              "type": "int32"
+            }
+          ],
+          "optional": false,
+          "type": "struct"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-5c550d11394c": {
+      "fields": [
+        {
+          "field": "payload",
+          "optional": false,
+          "type": "string"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-cd7c06ff52d1": {
+      "fields": [
+        {
+          "field": "payload",
+          "fields": [
+            {
+              "field": "id",
+              "optional": false,
+              "type": "int32"
+            }
+          ],
+          "optional": true,
+          "type": "struct"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-ea7ef506f9df": {
+      "fields": [
+        {
+          "field": "payload",
+          "fields": [
+            {
+              "field": "id",
+              "optional": false,
+              "type": "int32"
+            }
+          ],
+          "optional": false,
+          "type": "struct"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    }
+  },
+  "suite": "hoistfield"
+}

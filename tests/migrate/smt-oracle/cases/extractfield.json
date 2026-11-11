@@ -1,0 +1,25 @@
+{
+  "suite": "extractfield",
+  "description": "ExtractField with the V1 and V2 field syntax over maps, structs, nulls and missing fields.",
+  "records": [
+    {"name": "flat", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "name": "n"}},
+    {"name": "nested-map", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "addr": {"city": "c"}}},
+    {"name": "missing", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"other": 1}},
+    {"name": "null-field", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": null}},
+    {"name": "dotted-literal-name", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"addr.city": "lit", "addr": {"city": "nested"}}},
+    {"name": "tombstone", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": null},
+    {"name": "primitive", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": 5},
+    {"name": "struct", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 7, "name": "n", "addr": {"city": "c"}, "tags": ["a", "b"]}, "valueSchema": {"type": "struct", "optional": false, "fields": [{"field": "id", "type": "int32", "optional": false}, {"field": "name", "type": "string", "optional": true}, {"type": "struct", "optional": true, "fields": [{"field": "city", "type": "string", "optional": true}], "field": "addr"}, {"field": "tags", "type": "array", "items": {"type": "string", "optional": false}, "optional": true}]}},
+    {"name": "struct-null-nested", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 7, "name": null, "addr": null, "tags": null}, "valueSchema": {"type": "struct", "optional": false, "fields": [{"field": "id", "type": "int32", "optional": false}, {"field": "name", "type": "string", "optional": true}, {"type": "struct", "optional": true, "fields": [{"field": "city", "type": "string", "optional": true}], "field": "addr"}, {"field": "tags", "type": "array", "items": {"type": "string", "optional": false}, "optional": true}]}}
+  ],
+  "runs": [
+    {"run": "id", "chain": [{"alias": "e", "type": "ExtractField$Value", "config": {"field": "id"}}]},
+    {"run": "name", "chain": [{"alias": "e", "type": "ExtractField$Value", "config": {"field": "name"}}]},
+    {"run": "nested-object", "chain": [{"alias": "e", "type": "ExtractField$Value", "config": {"field": "addr"}}]},
+    {"run": "v2-dotted", "chain": [{"alias": "e", "type": "ExtractField$Value", "config": {"field": "addr.city", "field.syntax.version": "V2"}}]},
+    {"run": "v2-top-level", "chain": [{"alias": "e", "type": "ExtractField$Value", "config": {"field": "id", "field.syntax.version": "V2"}}]},
+    {"run": "v2-escaped-dot", "chain": [{"alias": "e", "type": "ExtractField$Value", "config": {"field": "addr\\.city", "field.syntax.version": "V2"}}]},
+    {"run": "v1-dotted", "chain": [{"alias": "e", "type": "ExtractField$Value", "config": {"field": "addr.city"}}]},
+    {"run": "key-variant", "chain": [{"alias": "e", "type": "ExtractField$Key", "config": {"field": "id"}}], "records": [{"name": "map-key", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": {"id": 1, "t": "x"}, "value": {"a": 1}}, {"name": "missing", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": {"t": "x"}, "value": {"a": 1}}, {"name": "null-key", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": null, "value": {"a": 1}}, {"name": "string-key", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}}, {"name": "struct-key", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": {"id": 3}, "value": {"a": 1}, "keySchema": {"type": "struct", "optional": false, "fields": [{"field": "id", "type": "int32", "optional": false}]}}]}
+  ]
+}

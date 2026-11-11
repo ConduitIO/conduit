@@ -1,0 +1,75 @@
+# Source stack for the SMT oracle: real Debezium Postgres writing to a real
+# Kafka broker. Always start it through capture.sh, which sets a unique project
+# name and the pinned images. The only published port is Postgres on an ephemeral
+# 127.0.0.1 port (Conduit's source runs on the host).
+name: ${COMPOSE_PROJECT_NAME:?set COMPOSE_PROJECT_NAME through capture.sh}
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:?}
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: oracle
+      POSTGRES_DB: oracle
+      TZ: America/Los_Angeles
+    ports:
+      - "127.0.0.1::5432" # Conduit's Postgres source runs on the host
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d oracle"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  kafka:
+    image: ${KAFKA_IMAGE:?}
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 1
+      KAFKA_HEAP_OPTS: -Xms128m -Xmx512m
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 3s
+      timeout: 10s
+      retries: 40
+
+  connect:
+    image: ${DEBEZIUM_IMAGE:?}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - mkdir -p /tmp/plugins && ln -sfn /kafka/connect/debezium-connector-postgres /tmp/plugins/debezium-connector-postgres && exec /docker-entrypoint.sh start
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: smt-oracle
+      # Only the Postgres connector is loaded: scanning every connector in the image takes
+      # minutes and enough memory to be OOM-killed on a busy host.
+      KAFKA_CONNECT_PLUGINS_DIR: /tmp/plugins
+      CONFIG_STORAGE_TOPIC: _connect_configs
+      OFFSET_STORAGE_TOPIC: _connect_offsets
+      STATUS_STORAGE_TOPIC: _connect_status
+      TZ: Asia/Kolkata
+      # Bounded so the stack fits on a small CI runner or a busy laptop.
+      KAFKA_HEAP_OPTS: -Xms128m -Xmx512m
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8083/connectors"]
+      interval: 3s
+      timeout: 5s
+      retries: 100

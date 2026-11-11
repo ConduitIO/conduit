@@ -1,0 +1,26 @@
+{
+  "suite": "pg-envelope",
+  "description": "SMTs applied to the Debezium envelope itself, before any unwrap: top-level field addressing, inserts with no before-image, and ExtractField after followed by Filter on RecordIsTombstone.",
+  "recordType": "source",
+  "recordsFrom": "debezium-postgres.json",
+  "runs": [
+    {"run": "extract-after", "chain": [{"alias": "x", "type": "ExtractField$Value", "config": {"field": "after", "replace.null.with.default": "false"}}]},
+    {"run": "extract-after-then-drop-tombstones", "chain": [{"alias": "x", "type": "ExtractField$Value", "config": {"field": "after", "replace.null.with.default": "false"}}, {"alias": "f", "type": "Filter", "config": {}, "predicate": "t"}], "predicates": {"t": {"type": "RecordIsTombstone", "config": {}}}},
+    {"run": "extract-after-then-keep-tombstones-only", "chain": [{"alias": "x", "type": "ExtractField$Value", "config": {"field": "after", "replace.null.with.default": "false"}}, {"alias": "f", "type": "Filter", "config": {}, "predicate": "t", "negate": true}], "predicates": {"t": {"type": "RecordIsTombstone", "config": {}}}},
+    {"run": "extract-before", "chain": [{"alias": "x", "type": "ExtractField$Value", "config": {"field": "before", "replace.null.with.default": "false"}}]},
+    {"run": "extract-op", "chain": [{"alias": "x", "type": "ExtractField$Value", "config": {"field": "op"}}]},
+    {"run": "hoist-envelope", "chain": [{"alias": "h", "type": "HoistField$Value", "config": {"field": "env"}}]},
+    {"run": "flatten-envelope", "chain": [{"alias": "f", "type": "Flatten$Value", "config": {}}]},
+    {"run": "exclude-source", "chain": [{"alias": "r", "type": "ReplaceField$Value", "config": {"exclude": "source", "replace.null.with.default": "false"}}]},
+    {"run": "exclude-before-and-source", "chain": [{"alias": "r", "type": "ReplaceField$Value", "config": {"exclude": "before,source", "replace.null.with.default": "false"}}]},
+    {"run": "rename-after-then-unwrap", "chain": [{"alias": "r", "type": "ReplaceField$Value", "config": {"renames": "after:row", "replace.null.with.default": "false"}}, {"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"replace.null.with.default": "false"}}]},
+    {"run": "insert-static-envelope", "chain": [{"alias": "i", "type": "InsertField$Value", "config": {"static.field": "src", "static.value": "pg", "replace.null.with.default": "false"}}]},
+    {"run": "insert-topic-envelope", "chain": [{"alias": "i", "type": "InsertField$Value", "config": {"topic.field": "t", "replace.null.with.default": "false"}}]},
+    {"run": "key-extract-id", "chain": [{"alias": "x", "type": "ExtractField$Key", "config": {"field": "id"}}]},
+    {"run": "key-hoist", "chain": [{"alias": "h", "type": "HoistField$Key", "config": {"field": "pk"}}]},
+    {"run": "key-flatten", "chain": [{"alias": "f", "type": "Flatten$Key", "config": {}}]},
+    {"run": "key-insert-static", "chain": [{"alias": "i", "type": "InsertField$Key", "config": {"static.field": "src", "static.value": "pg", "replace.null.with.default": "false"}}]},
+    {"run": "value-to-key-after-unwrap-name", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"replace.null.with.default": "false"}}, {"alias": "v", "type": "ValueToKey", "config": {"fields": "name", "replace.null.with.default": "false"}}]},
+    {"run": "value-to-key-on-envelope", "chain": [{"alias": "v", "type": "ValueToKey", "config": {"fields": "op"}}]}
+  ]
+}

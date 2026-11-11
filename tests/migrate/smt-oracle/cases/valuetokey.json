@@ -1,0 +1,21 @@
+{
+  "suite": "valuetokey",
+  "description": "ValueToKey replaces the key with a record of the named value fields.",
+  "records": [
+    {"name": "flat", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "old-key", "value": {"id": 1, "tenant": "t", "name": "n"}},
+    {"name": "null-key", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": null, "value": {"id": 1, "tenant": "t"}},
+    {"name": "missing-field", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "old-key", "value": {"id": 1}},
+    {"name": "null-field", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "old-key", "value": {"id": null, "tenant": "t"}},
+    {"name": "nested-value", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "old-key", "value": {"id": {"x": 1}, "tenant": "t"}},
+    {"name": "tombstone", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "old-key", "value": null},
+    {"name": "primitive-value", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "old-key", "value": 5},
+    {"name": "struct", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": {"id": 99}, "value": {"id": 1, "tenant": "t", "name": "n"}, "keySchema": {"type": "struct", "optional": false, "fields": [{"field": "id", "type": "int32", "optional": false}]}, "valueSchema": {"type": "struct", "optional": false, "fields": [{"field": "id", "type": "int32", "optional": false}, {"field": "tenant", "type": "string", "optional": true}, {"field": "name", "type": "string", "optional": true}]}},
+    {"name": "struct-null-optional", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "tenant": null, "name": null}, "valueSchema": {"type": "struct", "optional": false, "fields": [{"field": "id", "type": "int32", "optional": false}, {"field": "tenant", "type": "string", "optional": true}, {"field": "name", "type": "string", "optional": true}]}}
+  ],
+  "runs": [
+    {"run": "one-field", "chain": [{"alias": "v", "type": "ValueToKey", "config": {"fields": "id"}}]},
+    {"run": "two-fields", "chain": [{"alias": "v", "type": "ValueToKey", "config": {"fields": "id,tenant"}}]},
+    {"run": "field-order-reversed", "chain": [{"alias": "v", "type": "ValueToKey", "config": {"fields": "tenant,id"}}]},
+    {"run": "missing-field-listed", "chain": [{"alias": "v", "type": "ValueToKey", "config": {"fields": "id,absent"}}]}
+  ]
+}

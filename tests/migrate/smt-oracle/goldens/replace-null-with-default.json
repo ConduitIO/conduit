@@ -1,0 +1,985 @@
+{
+  "caseSha256": "b6a98bad6a8109765644442af231e1c593f7f55b1bcec6c0a9422f7530d25ff8",
+  "description": "replace.null.with.default true (the default) and false over schemas whose optional fields carry defaults, for each SMT that has the option.",
+  "fixtureSha256": {},
+  "recordType": "sink",
+  "runs": [
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "r",
+            "config": {
+              "renames": "name:label",
+              "replace.null.with.default": "true"
+            },
+            "type": "ReplaceField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "cnt": 0,
+                "id": 1,
+                "label": "anon",
+                "tenant": "t0"
+              },
+              "schema": "s-b17d3b1fb8fb"
+            }
+          },
+          "record": "nulls-with-defaults",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "cnt": 5,
+                "id": 1,
+                "label": "n",
+                "tenant": "t"
+              },
+              "schema": "s-b17d3b1fb8fb"
+            }
+          },
+          "record": "values-present",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-ff8cd32a897d"
+            }
+          },
+          "record": "tombstone-with-schema",
+          "result": "record"
+        }
+      ],
+      "run": "replacefield-rename-true"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "r",
+            "config": {
+              "renames": "name:label",
+              "replace.null.with.default": "false"
+            },
+            "type": "ReplaceField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "cnt": null,
+                "id": 1,
+                "label": null,
+                "tenant": null
+              },
+              "payloadDefaultConverter": {
+                "cnt": 0,
+                "id": 1,
+                "label": "anon",
+                "tenant": "t0"
+              },
+              "schema": "s-b17d3b1fb8fb"
+            }
+          },
+          "record": "nulls-with-defaults",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "cnt": 5,
+                "id": 1,
+                "label": "n",
+                "tenant": "t"
+              },
+              "schema": "s-b17d3b1fb8fb"
+            }
+          },
+          "record": "values-present",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-ff8cd32a897d"
+            }
+          },
+          "record": "tombstone-with-schema",
+          "result": "record"
+        }
+      ],
+      "run": "replacefield-rename-false"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "r",
+            "config": {
+              "exclude": "cnt",
+              "replace.null.with.default": "true"
+            },
+            "type": "ReplaceField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": "anon",
+                "tenant": "t0"
+              },
+              "schema": "s-539fe9869d01"
+            }
+          },
+          "record": "nulls-with-defaults",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": "n",
+                "tenant": "t"
+              },
+              "schema": "s-539fe9869d01"
+            }
+          },
+          "record": "values-present",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-ff8cd32a897d"
+            }
+          },
+          "record": "tombstone-with-schema",
+          "result": "record"
+        }
+      ],
+      "run": "replacefield-exclude-true"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "r",
+            "config": {
+              "exclude": "cnt",
+              "replace.null.with.default": "false"
+            },
+            "type": "ReplaceField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": null,
+                "tenant": null
+              },
+              "payloadDefaultConverter": {
+                "id": 1,
+                "name": "anon",
+                "tenant": "t0"
+              },
+              "schema": "s-539fe9869d01"
+            }
+          },
+          "record": "nulls-with-defaults",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": "n",
+                "tenant": "t"
+              },
+              "schema": "s-539fe9869d01"
+            }
+          },
+          "record": "values-present",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-ff8cd32a897d"
+            }
+          },
+          "record": "tombstone-with-schema",
+          "result": "record"
+        }
+      ],
+      "run": "replacefield-exclude-false"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "i",
+            "config": {
+              "replace.null.with.default": "true",
+              "static.field": "s",
+              "static.value": "v"
+            },
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "cnt": 0,
+                "id": 1,
+                "name": "anon",
+                "s": "v",
+                "tenant": "t0"
+              },
+              "schema": "s-23102ed87d0b"
+            }
+          },
+          "record": "nulls-with-defaults",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "cnt": 5,
+                "id": 1,
+                "name": "n",
+                "s": "v",
+                "tenant": "t"
+              },
+              "schema": "s-23102ed87d0b"
+            }
+          },
+          "record": "values-present",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-ff8cd32a897d"
+            }
+          },
+          "record": "tombstone-with-schema",
+          "result": "record"
+        }
+      ],
+      "run": "insertfield-true"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "i",
+            "config": {
+              "replace.null.with.default": "false",
+              "static.field": "s",
+              "static.value": "v"
+            },
+            "type": "InsertField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "cnt": null,
+                "id": 1,
+                "name": null,
+                "s": "v",
+                "tenant": null
+              },
+              "payloadDefaultConverter": {
+                "cnt": 0,
+                "id": 1,
+                "name": "anon",
+                "s": "v",
+                "tenant": "t0"
+              },
+              "schema": "s-23102ed87d0b"
+            }
+          },
+          "record": "nulls-with-defaults",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "cnt": 5,
+                "id": 1,
+                "name": "n",
+                "s": "v",
+                "tenant": "t"
+              },
+              "schema": "s-23102ed87d0b"
+            }
+          },
+          "record": "values-present",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "schema": "s-ff8cd32a897d"
+            }
+          },
+          "record": "tombstone-with-schema",
+          "result": "record"
+        }
+      ],
+      "run": "insertfield-false"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "e",
+            "config": {
+              "field": "name",
+              "replace.null.with.default": "true"
+            },
+            "type": "ExtractField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": "anon",
+              "schema": "s-7e9293d7adf0"
+            }
+          },
+          "record": "nulls-with-defaults",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": "n",
+              "schema": "s-7e9293d7adf0"
+            }
+          },
+          "record": "values-present",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "java.lang.IllegalArgumentException",
+            "message": "Unknown field: name"
+          },
+          "record": "tombstone-with-schema",
+          "result": "error"
+        }
+      ],
+      "run": "extractfield-name-true"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "e",
+            "config": {
+              "field": "name",
+              "replace.null.with.default": "false"
+            },
+            "type": "ExtractField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": null,
+              "payloadDefaultConverter": "anon",
+              "schema": "s-7e9293d7adf0"
+            }
+          },
+          "record": "nulls-with-defaults",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": "k",
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": "n",
+              "schema": "s-7e9293d7adf0"
+            }
+          },
+          "record": "values-present",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "java.lang.IllegalArgumentException",
+            "message": "Unknown field: name"
+          },
+          "record": "tombstone-with-schema",
+          "result": "error"
+        }
+      ],
+      "run": "extractfield-name-false"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "v",
+            "config": {
+              "fields": "name,cnt",
+              "replace.null.with.default": "true"
+            },
+            "type": "ValueToKey"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "cnt": 0,
+                "name": "anon"
+              },
+              "schema": "s-32efad1c583e"
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "cnt": null,
+                "id": 1,
+                "name": null,
+                "tenant": null
+              },
+              "payloadDefaultConverter": {
+                "cnt": 0,
+                "id": 1,
+                "name": "anon",
+                "tenant": "t0"
+              },
+              "schema": "s-29583bb4d7ae"
+            }
+          },
+          "record": "nulls-with-defaults",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "cnt": 5,
+                "name": "n"
+              },
+              "schema": "s-32efad1c583e"
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "cnt": 5,
+                "id": 1,
+                "name": "n",
+                "tenant": "t"
+              },
+              "schema": "s-29583bb4d7ae"
+            }
+          },
+          "record": "values-present",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Struct objects supported for [copying fields from value to key], found: null"
+          },
+          "record": "tombstone-with-schema",
+          "result": "error"
+        }
+      ],
+      "run": "valuetokey-true"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "v",
+            "config": {
+              "fields": "name,cnt",
+              "replace.null.with.default": "false"
+            },
+            "type": "ValueToKey"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "cnt": null,
+                "name": null
+              },
+              "payloadDefaultConverter": {
+                "cnt": 0,
+                "name": "anon"
+              },
+              "schema": "s-32efad1c583e"
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "cnt": null,
+                "id": 1,
+                "name": null,
+                "tenant": null
+              },
+              "payloadDefaultConverter": {
+                "cnt": 0,
+                "id": 1,
+                "name": "anon",
+                "tenant": "t0"
+              },
+              "schema": "s-29583bb4d7ae"
+            }
+          },
+          "record": "nulls-with-defaults",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "cnt": 5,
+                "name": "n"
+              },
+              "schema": "s-32efad1c583e"
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "cnt": 5,
+                "id": 1,
+                "name": "n",
+                "tenant": "t"
+              },
+              "schema": "s-29583bb4d7ae"
+            }
+          },
+          "record": "values-present",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Struct objects supported for [copying fields from value to key], found: null"
+          },
+          "record": "tombstone-with-schema",
+          "result": "error"
+        }
+      ],
+      "run": "valuetokey-false"
+    }
+  ],
+  "schemas": {
+    "s-23102ed87d0b": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "default": "anon",
+          "field": "name",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "default": "t0",
+          "field": "tenant",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "default": 0,
+          "field": "cnt",
+          "optional": true,
+          "type": "int32"
+        },
+        {
+          "field": "s",
+          "optional": true,
+          "type": "string"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-29583bb4d7ae": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "default": "anon",
+          "field": "name",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "default": "t0",
+          "field": "tenant",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "default": 0,
+          "field": "cnt",
+          "optional": true,
+          "type": "int32"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-32efad1c583e": {
+      "fields": [
+        {
+          "default": "anon",
+          "field": "name",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "default": 0,
+          "field": "cnt",
+          "optional": true,
+          "type": "int32"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-539fe9869d01": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "default": "anon",
+          "field": "name",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "default": "t0",
+          "field": "tenant",
+          "optional": true,
+          "type": "string"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-7e9293d7adf0": {
+      "default": "anon",
+      "optional": true,
+      "type": "string"
+    },
+    "s-b17d3b1fb8fb": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "default": "anon",
+          "field": "label",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "default": "t0",
+          "field": "tenant",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "default": 0,
+          "field": "cnt",
+          "optional": true,
+          "type": "int32"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-ff8cd32a897d": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        }
+      ],
+      "optional": true,
+      "type": "struct"
+    }
+  },
+  "suite": "replace-null-with-default"
+}

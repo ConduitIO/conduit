@@ -1,0 +1,50 @@
+[
+  {
+    "subject": "oracle:pg:a_key",
+    "version": 1,
+    "type": "AVRO",
+    "schema": "{\"name\":\"a_key\",\"type\":\"record\",\"fields\":[{\"name\":\"id\",\"type\":\"int\"}]}"
+  },
+  {
+    "subject": "oracle:pg:a_payload",
+    "version": 1,
+    "type": "AVRO",
+    "schema": "{\"name\":\"a_payload\",\"type\":\"record\",\"fields\":[{\"name\":\"id\",\"type\":\"int\"},{\"name\":\"v\",\"type\":[\"null\",\"string\"],\"default\":null}]}"
+  },
+  {
+    "subject": "oracle:pg:ab_key",
+    "version": 1,
+    "type": "AVRO",
+    "schema": "{\"name\":\"ab_key\",\"type\":\"record\",\"fields\":[{\"name\":\"id\",\"type\":\"int\"}]}"
+  },
+  {
+    "subject": "oracle:pg:ab_payload",
+    "version": 1,
+    "type": "AVRO",
+    "schema": "{\"name\":\"ab_payload\",\"type\":\"record\",\"fields\":[{\"name\":\"id\",\"type\":\"int\"},{\"name\":\"v\",\"type\":[\"null\",\"string\"],\"default\":null}]}"
+  },
+  {
+    "subject": "oracle:pg:items_key",
+    "version": 1,
+    "type": "AVRO",
+    "schema": "{\"name\":\"items_key\",\"type\":\"record\",\"fields\":[{\"name\":\"id\",\"type\":\"int\"}]}"
+  },
+  {
+    "subject": "oracle:pg:items_payload",
+    "version": 1,
+    "type": "AVRO",
+    "schema": "{\"name\":\"items_payload\",\"type\":\"record\",\"fields\":[{\"name\":\"a\",\"type\":[\"null\",\"string\"],\"default\":null},{\"name\":\"attrs\",\"type\":[\"null\",{\"type\":\"string\",\"connect.name\":\"io.debezium.data.Json\",\"connect.version\":1}],\"default\":null},{\"name\":\"b\",\"type\":[\"null\",\"string\"],\"default\":null},{\"name\":\"big\",\"type\":[\"null\",\"string\"],\"default\":null},{\"name\":\"created\",\"type\":[\"null\",{\"type\":\"long\",\"logicalType\":\"timestamp-micros\"}],\"default\":null},{\"name\":\"id\",\"type\":\"int\"},{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"note\",\"type\":[\"null\",\"string\"],\"default\":null},{\"name\":\"price\",\"type\":[\"null\",{\"type\":\"bytes\",\"logicalType\":\"decimal\",\"precision\":10,\"scale\":2}],\"default\":null},{\"name\":\"qty\",\"type\":[\"null\",\"int\"],\"default\":null}]}"
+  },
+  {
+    "subject": "oracle:pg:strict_key",
+    "version": 1,
+    "type": "AVRO",
+    "schema": "{\"name\":\"strict_key\",\"type\":\"record\",\"fields\":[{\"name\":\"id\",\"type\":\"int\"}]}"
+  },
+  {
+    "subject": "oracle:pg:strict_payload",
+    "version": 1,
+    "type": "AVRO",
+    "schema": "{\"name\":\"strict_payload\",\"type\":\"record\",\"fields\":[{\"name\":\"attrs\",\"type\":{\"type\":\"string\",\"connect.name\":\"io.debezium.data.Json\",\"connect.version\":1}},{\"name\":\"big\",\"type\":\"string\"},{\"name\":\"created\",\"type\":{\"type\":\"long\",\"logicalType\":\"timestamp-micros\"}},{\"name\":\"flag\",\"type\":\"boolean\"},{\"name\":\"id\",\"type\":\"int\"},{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"price\",\"type\":{\"type\":\"bytes\",\"logicalType\":\"decimal\",\"precision\":10,\"scale\":2}},{\"name\":\"qty\",\"type\":\"int\"}]}"
+  }
+]

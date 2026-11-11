@@ -1,0 +1,884 @@
+{
+  "caseSha256": "664929470ebaf24e43e06ade32fea8c5b3ceed8dd8fee3ea47d3a76c8f91d580",
+  "description": "ValueToKey replaces the key with a record of the named value fields.",
+  "fixtureSha256": {},
+  "recordType": "sink",
+  "runs": [
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "v",
+            "config": {
+              "fields": "id"
+            },
+            "type": "ValueToKey"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": "n",
+                "tenant": "t"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "tenant": "t"
+              },
+              "schema": null
+            }
+          },
+          "record": "null-key",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "missing-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": null
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": null,
+                "tenant": "t"
+              },
+              "schema": null
+            }
+          },
+          "record": "null-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": {
+                  "x": 1
+                }
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": {
+                  "x": 1
+                },
+                "tenant": "t"
+              },
+              "schema": null
+            }
+          },
+          "record": "nested-value",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [copying fields from value to key], found: null"
+          },
+          "record": "tombstone",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [copying fields from value to key], found: java.lang.Long"
+          },
+          "record": "primitive-value",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-9a2665856d95"
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": "n",
+                "tenant": "t"
+              },
+              "schema": "s-80e299f1d961"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-9a2665856d95"
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": null,
+                "tenant": null
+              },
+              "schema": "s-80e299f1d961"
+            }
+          },
+          "record": "struct-null-optional",
+          "result": "record"
+        }
+      ],
+      "run": "one-field"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "v",
+            "config": {
+              "fields": "id,tenant"
+            },
+            "type": "ValueToKey"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": 1,
+                "tenant": "t"
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": "n",
+                "tenant": "t"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": 1,
+                "tenant": "t"
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "tenant": "t"
+              },
+              "schema": null
+            }
+          },
+          "record": "null-key",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": 1,
+                "tenant": null
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "missing-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": null,
+                "tenant": "t"
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": null,
+                "tenant": "t"
+              },
+              "schema": null
+            }
+          },
+          "record": "null-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": {
+                  "x": 1
+                },
+                "tenant": "t"
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": {
+                  "x": 1
+                },
+                "tenant": "t"
+              },
+              "schema": null
+            }
+          },
+          "record": "nested-value",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [copying fields from value to key], found: null"
+          },
+          "record": "tombstone",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [copying fields from value to key], found: java.lang.Long"
+          },
+          "record": "primitive-value",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": 1,
+                "tenant": "t"
+              },
+              "schema": "s-ff9f84d6b792"
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": "n",
+                "tenant": "t"
+              },
+              "schema": "s-80e299f1d961"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": 1,
+                "tenant": null
+              },
+              "schema": "s-ff9f84d6b792"
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": null,
+                "tenant": null
+              },
+              "schema": "s-80e299f1d961"
+            }
+          },
+          "record": "struct-null-optional",
+          "result": "record"
+        }
+      ],
+      "run": "two-fields"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "v",
+            "config": {
+              "fields": "tenant,id"
+            },
+            "type": "ValueToKey"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": 1,
+                "tenant": "t"
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": "n",
+                "tenant": "t"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": 1,
+                "tenant": "t"
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "tenant": "t"
+              },
+              "schema": null
+            }
+          },
+          "record": "null-key",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": 1,
+                "tenant": null
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "missing-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": null,
+                "tenant": "t"
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": null,
+                "tenant": "t"
+              },
+              "schema": null
+            }
+          },
+          "record": "null-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": {
+                  "x": 1
+                },
+                "tenant": "t"
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": {
+                  "x": 1
+                },
+                "tenant": "t"
+              },
+              "schema": null
+            }
+          },
+          "record": "nested-value",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [copying fields from value to key], found: null"
+          },
+          "record": "tombstone",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [copying fields from value to key], found: java.lang.Long"
+          },
+          "record": "primitive-value",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": 1,
+                "tenant": "t"
+              },
+              "schema": "s-70539d47bfe7"
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": "n",
+                "tenant": "t"
+              },
+              "schema": "s-80e299f1d961"
+            }
+          },
+          "record": "struct",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "id": 1,
+                "tenant": null
+              },
+              "schema": "s-70539d47bfe7"
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": null,
+                "tenant": null
+              },
+              "schema": "s-80e299f1d961"
+            }
+          },
+          "record": "struct-null-optional",
+          "result": "record"
+        }
+      ],
+      "run": "field-order-reversed"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "v",
+            "config": {
+              "fields": "id,absent"
+            },
+            "type": "ValueToKey"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "absent": null,
+                "id": 1
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "name": "n",
+                "tenant": "t"
+              },
+              "schema": null
+            }
+          },
+          "record": "flat",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "absent": null,
+                "id": 1
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1,
+                "tenant": "t"
+              },
+              "schema": null
+            }
+          },
+          "record": "null-key",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "absent": null,
+                "id": 1
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": 1
+              },
+              "schema": null
+            }
+          },
+          "record": "missing-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "absent": null,
+                "id": null
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": null,
+                "tenant": "t"
+              },
+              "schema": null
+            }
+          },
+          "record": "null-field",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [],
+            "kafkaOffset": 42,
+            "key": {
+              "payload": {
+                "absent": null,
+                "id": {
+                  "x": 1
+                }
+              },
+              "schema": null
+            },
+            "partition": 3,
+            "timestamp": 1700000000000,
+            "topic": "orders",
+            "value": {
+              "payload": {
+                "id": {
+                  "x": 1
+                },
+                "tenant": "t"
+              },
+              "schema": null
+            }
+          },
+          "record": "nested-value",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [copying fields from value to key], found: null"
+          },
+          "record": "tombstone",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Only Map objects supported in absence of schema for [copying fields from value to key], found: java.lang.Long"
+          },
+          "record": "primitive-value",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Field does not exist: absent"
+          },
+          "record": "struct",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "Field does not exist: absent"
+          },
+          "record": "struct-null-optional",
+          "result": "error"
+        }
+      ],
+      "run": "missing-field-listed"
+    }
+  ],
+  "schemas": {
+    "s-70539d47bfe7": {
+      "fields": [
+        {
+          "field": "tenant",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-80e299f1d961": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "tenant",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "name",
+          "optional": true,
+          "type": "string"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-9a2665856d95": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    },
+    "s-ff9f84d6b792": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "tenant",
+          "optional": true,
+          "type": "string"
+        }
+      ],
+      "optional": false,
+      "type": "struct"
+    }
+  },
+  "suite": "valuetokey"
+}

@@ -1,0 +1,21 @@
+{
+  "suite": "replace-null-with-default",
+  "description": "replace.null.with.default true (the default) and false over schemas whose optional fields carry defaults, for each SMT that has the option.",
+  "records": [
+    {"name": "nulls-with-defaults", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "name": null, "tenant": null, "cnt": null}, "valueSchema": {"type": "struct", "optional": false, "fields": [{"field": "id", "type": "int32", "optional": false}, {"field": "name", "type": "string", "optional": true, "default": "anon"}, {"field": "tenant", "type": "string", "optional": true, "default": "t0"}, {"field": "cnt", "type": "int32", "optional": true, "default": 0}]}},
+    {"name": "values-present", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "name": "n", "tenant": "t", "cnt": 5}, "valueSchema": {"type": "struct", "optional": false, "fields": [{"field": "id", "type": "int32", "optional": false}, {"field": "name", "type": "string", "optional": true, "default": "anon"}, {"field": "tenant", "type": "string", "optional": true, "default": "t0"}, {"field": "cnt", "type": "int32", "optional": true, "default": 0}]}},
+    {"name": "tombstone-with-schema", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": null, "valueSchema": {"type": "struct", "optional": true, "fields": [{"field": "id", "type": "int32", "optional": false}]}}
+  ],
+  "runs": [
+    {"run": "replacefield-rename-true", "chain": [{"alias": "r", "type": "ReplaceField$Value", "config": {"renames": "name:label", "replace.null.with.default": "true"}}]},
+    {"run": "replacefield-rename-false", "chain": [{"alias": "r", "type": "ReplaceField$Value", "config": {"renames": "name:label", "replace.null.with.default": "false"}}]},
+    {"run": "replacefield-exclude-true", "chain": [{"alias": "r", "type": "ReplaceField$Value", "config": {"exclude": "cnt", "replace.null.with.default": "true"}}]},
+    {"run": "replacefield-exclude-false", "chain": [{"alias": "r", "type": "ReplaceField$Value", "config": {"exclude": "cnt", "replace.null.with.default": "false"}}]},
+    {"run": "insertfield-true", "chain": [{"alias": "i", "type": "InsertField$Value", "config": {"static.field": "s", "static.value": "v", "replace.null.with.default": "true"}}]},
+    {"run": "insertfield-false", "chain": [{"alias": "i", "type": "InsertField$Value", "config": {"static.field": "s", "static.value": "v", "replace.null.with.default": "false"}}]},
+    {"run": "extractfield-name-true", "chain": [{"alias": "e", "type": "ExtractField$Value", "config": {"field": "name", "replace.null.with.default": "true"}}]},
+    {"run": "extractfield-name-false", "chain": [{"alias": "e", "type": "ExtractField$Value", "config": {"field": "name", "replace.null.with.default": "false"}}]},
+    {"run": "valuetokey-true", "chain": [{"alias": "v", "type": "ValueToKey", "config": {"fields": "name,cnt", "replace.null.with.default": "true"}}]},
+    {"run": "valuetokey-false", "chain": [{"alias": "v", "type": "ValueToKey", "config": {"fields": "name,cnt", "replace.null.with.default": "false"}}]}
+  ]
+}
