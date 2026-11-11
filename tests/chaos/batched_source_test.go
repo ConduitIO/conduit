@@ -151,6 +151,10 @@ func batchedDir(t *testing.T, o batchedOpts) string {
 		}
 		fmt.Fprintf(&p, "      - id: src%d\n        type: source\n        plugin: builtin:file\n        settings:\n          path: %q\n", k, inputPath(dir, k))
 	}
+	// builtin:file v0.13.0 defaults the destination to sdk.batch.size 1000 and
+	// sdk.batch.delay 100ms. Both engines run that shipped default: the classic
+	// engine through the SDK batcher, arch-v2 by adopting the declared defaults
+	// itself and handing the plugin "0" (#3339).
 	fmt.Fprintf(&p, "      - id: dst\n        type: destination\n        plugin: builtin:file\n        settings:\n          path: %q\n", dest)
 	if err := os.WriteFile(filepath.Join(dir, "pipelines", "p.yaml"), []byte(p.String()), 0o600); err != nil {
 		t.Fatal(err)

@@ -119,14 +119,15 @@ func TestRegistry_NewDispenser_PluginNotFound(t *testing.T) {
 // the specification of the version the registry resolved, through the
 // cleanup wrapper the plugin service adds, so the arch-v2 engine reads the
 // connector's sdk.batch.* defaults without starting a plugin. The S3 default
-// (1000 / 1 s) is what made a 1-record pipeline run at 1 record/s; the other
-// built-in destinations declare "0".
+// (1000 / 1 s) is what made a 1-record pipeline run at 1 record/s. File
+// v0.13.0 declares 1000 / 100ms (every write pays for two fsyncs); Postgres
+// declares "0".
 func TestRegistry_NewDispenser_CarriesSpecification(t *testing.T) {
 	r := NewRegistry(log.Nop(), DefaultBuiltinConnectors, nil)
 	r.Init(context.Background())
 	for name, want := range map[string][2]string{
 		"builtin:s3":       {"1000", "1s"},
-		"builtin:file":     {"0", "0"},
+		"builtin:file":     {"1000", "100ms"},
 		"builtin:postgres": {"0", "0"},
 	} {
 		t.Run(name, func(t *testing.T) {

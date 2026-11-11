@@ -13,6 +13,9 @@ Decision: [ADR](../architecture-decision-records/20261021-deny-by-default-settin
 | `connectors.file.allowed-dirs` | `CONDUIT_CONNECTORS_FILE_ALLOWED_DIRS` | `<data dir>/files` | Directories the file connector may read and write. Setting it replaces the default |
 | `processors.javascript.allowed-dirs` | `CONDUIT_PROCESSORS_JAVASCRIPT_ALLOWED_DIRS` | empty | Directories `custom.javascript` may load `script.path` and `require()` modules from |
 
+The file destination (`file` v0.13.0 and later) also keeps `<path>.committed` next to its output, so that file lives
+in the same allowed directory and needs no setting of its own. Back it up and restore it together with the output.
+
 `<data dir>` is the working directory `conduit run` uses (the directory holding `conduit.db`).
 The default is the `files` directory under it, not the data dir itself, so a pipeline cannot read
 `conduit.db` or `conduit.yaml`. `script.path` defaults to `<data dir>/scripts`.
