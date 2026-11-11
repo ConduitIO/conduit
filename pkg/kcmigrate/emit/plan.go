@@ -98,10 +98,86 @@ type dlqDef struct {
 }
 
 type connectorDef struct {
-	ID       string            `yaml:"id"`
-	Type     string            `yaml:"type"`
-	Plugin   string            `yaml:"plugin"`
-	Settings map[string]string `yaml:"settings,omitempty"`
+	ID         string            `yaml:"id"`
+	Type       string            `yaml:"type"`
+	Plugin     string            `yaml:"plugin"`
+	Settings   map[string]string `yaml:"settings,omitempty"`
+	Processors []ProcessorDef    `yaml:"processors,omitempty"`
+}
+
+// ProcessorDef is a connector processor of the generated pipeline.
+type ProcessorDef struct {
+	ID        string            `yaml:"id"`
+	Plugin    string            `yaml:"plugin"`
+	Condition string            `yaml:"condition,omitempty"`
+	Settings  map[string]string `yaml:"settings,omitempty"`
+}
+
+// AppendProcessor appends a processor to the connector of side (source or
+// destination) and returns its JSON pointer. Processors keep the order they
+// are appended in, which for SMTs is transforms= order. Converter rules
+// that emit a decode processor (sink) or an encode processor (source) must
+// place it before or after the SMT processors respectively, as Kafka Connect
+// runs the converter after a source's transforms and before a sink's; no
+// converter rule emits a processor yet.
+func (p *Plan) AppendProcessor(side string, def ProcessorDef) (string, error) {
+	if side != SideSource && side != SideDestination {
+		return "", cerrors.Errorf("processors go on the source or destination connector, not %q", side)
+	}
+	idx, err := p.sides(side)
+	if err != nil {
+		return "", err
+	}
+	c := &p.connectors[idx[0]]
+	for _, q := range c.Processors {
+		if q.ID == def.ID {
+			return "", cerrors.Errorf("processor id %q is already used on the %s connector", def.ID, side)
+		}
+	}
+	c.Processors = append(c.Processors, def)
+	return fmt.Sprintf("/pipelines/0/connectors/%d/processors/%d", idx[0], len(c.Processors)-1), nil
+}
+
+// Processors returns the JSON pointer of side's processors list and the
+// number of processors on it.
+func (p *Plan) Processors(side string) (string, int, error) {
+	idx, err := p.sides(side)
+	if err != nil {
+		return "", 0, err
+	}
+	return fmt.Sprintf("/pipelines/0/connectors/%d/processors", idx[0]), len(p.connectors[idx[0]].Processors), nil
+}
+
+// Setting returns the value of a setting of side's first connector.
+func (p *Plan) Setting(side, name string) (string, bool) {
+	idx, err := p.sides(side)
+	if err != nil {
+		return "", false
+	}
+	v, ok := p.connectors[idx[0]].Settings[name]
+	return v, ok
+}
+
+// Scope is the class's Kafka Connect connector type, rules.ScopeSource or
+// rules.ScopeSink.
+func (p *Plan) Scope() string { return p.scope }
+
+// layerTransforms is above every key layer: a transform chain runs after
+// the connector's own configuration, so the topic it ends with replaces the
+// one the connector rules wrote.
+const layerTransforms = 90
+
+// SetTransformedTopic writes the topic a translated transform chain ends
+// with to setting name of side, above every key's layer, and returns its
+// JSON pointer. The key that wrote the topic before keeps its entry, which
+// the run marks overridden.
+func (p *Plan) SetTransformedTopic(side, name, value string) (string, error) {
+	p.origin, p.layer = OriginConnector, layerTransforms
+	path, _, err := p.Set(side, name, value, "transforms")
+	if err != nil {
+		return "", cerrors.Errorf("write the transformed topic: %w", err)
+	}
+	return path, nil
 }
 
 var fileUnsafe = regexp.MustCompile(`[^A-Za-z0-9._-]`)

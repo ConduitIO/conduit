@@ -270,6 +270,9 @@ func (f *File) validate() error {
 		for _, err := range r.validateBlockSinks(f.Scope) {
 			fail("key %s: %v", id, err)
 		}
+		for _, err := range r.validateSMTChain(f.Scope) {
+			fail("key %s: %v", id, err)
+		}
 	}
 	errs = append(errs, f.validateDefaults()...)
 	for _, r := range f.Keys {
@@ -365,6 +368,27 @@ func (r *Rule) validateBlockSinks(scope string) []error {
 	}
 	for _, b := range r.Values {
 		check(b.Outcome, branchEmit(r, b))
+	}
+	return errs
+}
+
+// validateSMTChain checks the smt emit kind: only the shared file
+// claims transform and predicate keys, with one fail-closed outcome
+// (unsupported, blocking) that the chain translator replaces.
+func (r *Rule) validateSMTChain(scope string) []error {
+	uses := r.Emit != nil && r.Emit.Kind == SMTKind
+	for _, b := range r.Values {
+		uses = uses || (b.Emit != nil && b.Emit.Kind == SMTKind)
+	}
+	if !uses {
+		return nil
+	}
+	var errs []error
+	if scope != ScopeShared {
+		errs = append(errs, cerrors.New(SMTKind+" is only for the shared rule file"))
+	}
+	if len(r.Values) > 0 || r.Status != kcmigrate.StatusUnsupported || !r.Blocking {
+		errs = append(errs, cerrors.New(SMTKind+" needs one outcome, unsupported and blocking, as the fail-closed placeholder the chain translator replaces"))
 	}
 	return errs
 }

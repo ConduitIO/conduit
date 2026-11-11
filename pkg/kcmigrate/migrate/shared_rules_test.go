@@ -92,8 +92,13 @@ func TestSharedRules(t *testing.T) {
 		{"default boundary", "transaction.boundary", "poll", kcmigrate.StatusTranslated, "", false, ""},
 		{"other boundary", "transaction.boundary", "connector", kcmigrate.StatusUnsupported, "kc.key_unsupported", true, ""},
 		{"no transforms", "transforms", "", kcmigrate.StatusTranslated, "", false, ""},
-		{"transforms", "transforms", "route", kcmigrate.StatusUnsupported, "kc.key_unsupported", true, ""},
-		{"transform setting", "transforms.route.type", "org.apache.kafka.connect.transforms.RegexRouter", kcmigrate.StatusUnsupported, "kc.smt_unsupported", true, ""},
+		// The chain translator decides the SMT keys (pkg/kcmigrate/smt): an
+		// alias with no type blocks, and Kafka Connect ignores the settings
+		// of an alias transforms= does not list.
+		{"transforms", "transforms", "route", kcmigrate.StatusUnsupported, "kc.smt_unsupported", true, ""},
+		{"transform setting of an unlisted alias", "transforms.route.type", "org.apache.kafka.connect.transforms.RegexRouter", kcmigrate.StatusTranslated, "", false, ""},
+		{"no predicates", "predicates", "", kcmigrate.StatusTranslated, "", false, ""},
+		{"predicate without a type", "predicates", "p", kcmigrate.StatusUnsupported, "kc.smt_unsupported", true, ""},
 		{"exactly once required", "exactly.once.support", "required", kcmigrate.StatusUnsupported, "kc.key_unsupported", true, ""},
 		{"exactly once requested", "exactly.once.support", "requested", kcmigrate.StatusTranslated, "", false, ""},
 		{"json converter", keyConverter, "org.apache.kafka.connect.json.JsonConverter", kcmigrate.StatusUnsupported, "kc.key_unsupported", true, ""},

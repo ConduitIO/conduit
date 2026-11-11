@@ -1,0 +1,42 @@
+schemaVersion: 1
+id: dbz-pg-smt-chain
+family: debezium-postgres
+description: >-
+  A Debezium Postgres connector with an SMT chain: ExtractNewRecordState, a
+  negated Filter on a TopicNameMatches predicate, and PartitionRouting, plus
+  settings of an alias transforms= does not list and a predicate no transform
+  names. No SMT is translated before its translator ships with oracle goldens,
+  and PartitionRouting needs explicit partition writing (v0.23), so the chain
+  is refused as a whole and every SMT key blocks with its reason. The unlisted
+  alias and the unused predicate are no-ops, as in Kafka Connect.
+provenance:
+  source: synthetic
+  ref: written for the SMT chain framework (design 20261110-kafka-connect-smt-pack.md)
+  license: Apache-2.0
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {debezium: "3.7.0.Final", connect: "4.2"}
+command: {args: [migrate, kafka-connect, input/connector.json]}
+expect:
+  exitCode: 2
+  notes: [kc.output_shape_differs]
+  entries:
+    - {key: transforms, status: unsupported, blocking: true, code: kc.smt_unsupported}
+    - {key: transforms.unwrap.type, status: unsupported, blocking: true, code: kc.smt_unsupported}
+    - {key: transforms.unwrap.replace.null.with.default, status: unsupported, blocking: true, code: kc.smt_unsupported}
+    - {key: transforms.onlyOrders.type, status: unsupported, blocking: true, code: kc.smt_unsupported}
+    - {key: transforms.onlyOrders.predicate, status: unsupported, blocking: true, code: kc.smt_unsupported}
+    - {key: transforms.onlyOrders.negate, status: unsupported, blocking: true, code: kc.smt_unsupported}
+    - {key: transforms.route.type, status: unsupported, blocking: true, code: kc.target_capability_missing}
+    - {key: transforms.route.partition.topic.num, status: unsupported, blocking: true, code: kc.target_capability_missing}
+    - {key: transforms.old.type, status: translated, blocking: false}
+    - {key: predicates, status: unsupported, blocking: true, code: kc.smt_unsupported}
+    - {key: predicates.isOrders.type, status: unsupported, blocking: true, code: kc.smt_unsupported}
+    - {key: predicates.isOrders.pattern, status: unsupported, blocking: true, code: kc.smt_unsupported}
+    - {key: predicates.unused.type, status: translated, blocking: false}
+covers:
+  - class: io.debezium.connector.postgresql.PostgresConnector
+    keys: [database.hostname, table.include.list, topic.prefix]
+emits:
+  - {plugin: builtin:postgres, role: source}
+  - {plugin: builtin:kafka, role: destination}
+run: {tier: offline}

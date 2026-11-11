@@ -1,0 +1,22 @@
+version: "2.2"
+pipelines:
+  - id: sink-s3-events
+    status: stopped
+    description: Migrated from Kafka Connect connector "sink-s3-events" (io.confluent.connect.s3.S3SinkConnector) by conduit <VERSION>; report sha256:<REPORT_SHA256>
+    connectors:
+      - id: source
+        type: source
+        plugin: builtin:kafka
+        settings:
+          groupID: connect-sink-s3-events
+          readFromBeginning: "true"
+          servers: ${KC_SINK_S3_EVENTS_SOURCE_SERVERS}
+          topics: events
+      - id: destination
+        type: destination
+        plugin: builtin:s3
+        settings:
+          aws.bucket: example-events-bucket
+          aws.region: us-east-1
+          format: ${KC_SINK_S3_EVENTS_DESTINATION_FORMAT}
+          sdk.batch.size: "1000"
