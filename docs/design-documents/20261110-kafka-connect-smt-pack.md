@@ -181,7 +181,8 @@ The translators live in a new package, `pkg/kcmigrate/smt`. It has no I/O.
 - **Context.** `ctx` carries:
   - the chain side: source or sink;
   - the reference mode: schema mode on Debezium source chains; on sink chains, decided by the converter;
-  - the shape of each record side;
+  - the shape of each record side, taken from that side's effective converter (the worker's converter
+    with the connector's override applied), plus a per-side schema-carrying flag that enforces decision 8;
   - the initial topic expression;
   - the target plugins and their capabilities;
   - whether the pipeline uses Debezium output mode.
@@ -195,6 +196,7 @@ The pass parses `transforms=` and `predicates=` into ordered alias lists and gro
 | Alias listed with no `.type` | Every key of that alias is blocking (KC rejects the config) |
 | `transforms.<a>.*` for an alias that is not listed | Translated as a no-op ("Kafka Connect ignores it"), not blocking |
 | Alias listed twice | The second occurrence is blocking |
+| One alias or predicate name is a dotted prefix of another (`a` and `a.b`) | Both are refused, because Kafka Connect hands the longer alias's keys to both |
 | `.predicate` names an undefined predicate | Blocking |
 | Predicate used by no transform | Translated as a no-op |
 | Predicate whose only users are refused or not emitted | Unsupported and blocking: "used only by transform(s) `<a>`, which are not translated" |
@@ -304,7 +306,7 @@ not by itself make a pipeline runnable.
 
 | Class | Converter | Reachable SMTs in v0.22 | Refused |
 | --- | --- | --- | --- |
-| debezium-postgres (source, schema mode) | any; JsonConverter schemaless is the oracle target | `Filter` + `TopicNameMatches`, `RecordIsTombstone`; `RegexRouter` (single schema, below); `ReplaceField` exclude/rename, `InsertField` static/topic, `ValueToKey`, `HoistField`, `Flatten`, `ExtractNewRecordState`, `ExtractField after` | `HasHeaderKey` (Debezium headers are v0.23); everything else (v0.23) |
+| debezium-postgres (source, schema mode) | any; JsonConverter schemaless is the oracle target | `Filter` + `TopicNameMatches`, `RecordIsTombstone`; `RegexRouter` and `TopicNameMatches` once T is defined (B4, below); `ReplaceField` exclude/rename, `InsertField` static/topic, `ValueToKey`, `HoistField`, `Flatten`, `ExtractNewRecordState`, `ExtractField after` | `HasHeaderKey` (Debezium headers are v0.23); everything else (v0.23) |
 | s3-sink (sink) | `ByteArrayConverter` | `Filter` + `TopicNameMatches`, `HasHeaderKey`; `RegexRouter` if the S3 destination names objects from `opencdc.collection` (checked in B3); `HoistField` on bytes | `RecordIsTombstone` unless B3 shows that the Kafka source distinguishes a null value from an empty one; every SMT that needs a map or struct (KC fails it on bytes) |
 | s3-sink | any other | none (the converter is blocking) | all |
 | mirror-source (source of records from Kafka) | `ByteArrayConverter` | `Filter` without a topic predicate; `HoistField` on bytes | `TopicNameMatches` (T is not defined for mirror-source: its SMTs see the remote topic name after the replication policy, not `opencdc.collection`; v0.23, decision 20); `HasHeaderKey` (mirror mode omits headers that are not UTF-8); `RegexRouter` (MirrorMaker topic naming is a finisher; combining the two is v0.23) |
@@ -342,9 +344,11 @@ The topic is a Go-template pipeline expression, T, carried through the chain. It
 records.
 
 - **Initial T.**
-  - debezium-postgres: `<topic.prefix>.<schema>.<collection>`, but only when every captured table is in one
-    schema named by `table.include.list` or `schema.include.list`, and `topic.delimiter` is the default. B3
-    pins that the Postgres source's `opencdc.collection` is the bare relation name. Otherwise T is unknown.
+  - debezium-postgres: undefined until the Postgres connector emits the same `opencdc.collection` in
+    snapshot and in CDC. A fix for that is in progress. Once it lands, B4 defines T as
+    `<topic.prefix>.<schema>.<collection>`, and only when every captured table is in one schema named by
+    `table.include.list` or `schema.include.list` and `topic.delimiter` is the default. Until then, the
+    topic-reading and topic-writing SMTs on debezium-postgres are refused.
   - Sink chains: `(index .Metadata "opencdc.collection")`.
   - mirror-source: undefined in v0.22. Its SMTs see the remote topic name after the replication policy, so
     the sink-chain T would match the wrong name. Topic-reading and topic-writing SMTs there are refused
@@ -395,7 +399,10 @@ records.
 ### Schema metadata after reshaping
 
 When a chain reshapes a side that carries `opencdc.<side>.schema.subject`/`.version`, a `field.exclude` of
-those two keys goes **before the first reshaping processor** of the chain. Placed after, it would come too
+those two keys is emitted **once per distinct condition, immediately before the first reshaping processor
+under that condition**. It covers only the reshaped side, not the whole chain. A record that skips every
+reshaping processor because of its condition keeps its schema metadata, as it keeps its shape. Placed after
+the reshaping processor, the exclude would come too
 late: each built-in processor's encode middleware would already have registered a widened schema as a new
 version of the source subject and encoded the data with it.
 
@@ -550,7 +557,7 @@ It lost to decision 12, which keeps the before-image consistent for CDC consumer
   - `flatten`: every leaf appears exactly once, or the record fails with a collision;
   - `field.set from` never aliases its source;
   - the byte-identical `field.set` default.
-- **Fuzz** targets on the regex classifier and the replacement translator. Their seed corpora run in `test`.
+- **Fuzz** targets on the regex classifier and the replacement translator, in B4. Their seed corpora run in `test`.
 - **Processor unit tests** over raw, structured, nil and error records, with `Example*` functions.
 
 ## Docs
@@ -593,9 +600,9 @@ v0.22 cuts on 2026-11-20.
 | --- | --- | --- | --- | --- |
 | B1 | `field.set`: `from`, `type`, the runtime rules above, schema-key drop, byte-identical test, v0.2.0 | - | 2 | v0.22 (required) |
 | B2 | `flatten` and `field.hoist` per the requirements above; registration; doc pages | - | 2 | v0.22 (required) |
-| B3 | SMT pass in `migrateConnector`; placeholder rule data and the `smt` kind; `processors` in the pipeline model; grouping and per-key outcomes; capability and sub-key tables in Go; T and the regex translator; predicates, nil, field and `error` guards; schema-key exclude placement; all-or-nothing; `report.Transform`; MCP parity; `Filter` and the predicates; the `PartitionRouting` and v0.23 refusals | - | 2 | v0.22 (required) |
+| B3 | Framework only: SMT pass in `migrateConnector`; placeholder rule data and the `smt` kind; `processors` in the pipeline model; grouping and per-key outcomes, including dotted-prefix aliases; per-side converter shape and the schema-carrying flag; capability and sub-key tables in Go; nil, field and `error` guards; schema-key exclude placement per condition; all-or-nothing; `report.Transform`; MCP parity; the `PartitionRouting` and v0.23 refusals | - | 2 | v0.22 (required) |
 | B11 | KC oracle: capture program, pinned and mirrored images, manual and nightly workflow; committed input records and KC outputs; the Go diff helper and normalizations; the offline replay harness the `test` job uses | - | 3 | v0.22 (required; if it slips, B4 and B5 do not merge) |
-| B4 | Translators over existing processors: `RegexRouter`, `ReplaceField` exclude/rename, `ExtractNewRecordState`, `ExtractField after` | B3, B11 | 2 | v0.22, per SMT, if its case diffs clean in `test` |
+| B4 | `Filter` and the predicates; the regex translator and `RegexRouter`; the debezium-postgres T (after the Postgres `opencdc.collection` fix); the regex fuzz targets; `ReplaceField` exclude/rename, `ExtractNewRecordState`, `ExtractField after` | B3, B11 | 2 | v0.22, per SMT, if its case diffs clean in `test` |
 | B5 | Translators over new processors: `InsertField` static/topic, `ValueToKey`, `HoistField`, `Flatten` | B1, B2, B3, B11 | 2 | v0.22, per SMT, if its case diffs clean in `test` |
 | B10 | Cross-cutting docs | B4, B5 | 3 | v0.22 |
 | B6 | `ExtractChangedRecordState` | header-writing destination | 2 | v0.23 |
