@@ -124,7 +124,7 @@ line is why the fixture database is split the way it is.
 - It renders `numeric` as a fraction (`"25/2"` for 12.50) and trims trailing zeros of a
   `timestamptz` (`...20Z` against Debezium's `...20.000000Z`).
 
-**A processor SDK bug the replay found** (`ConduitIO/conduit-processor-sdk#TBD`, TODO: replace with the
+**A processor SDK bug the replay found** (`ConduitIO/conduit-processor-sdk#193`, TODO: replace with the
 issue number). Replaying `field.exclude` over `items@7` (an update where `qty` goes from 7 to NULL) fails
 with `failed to encode before payload` (`unknown union type int`): when a processor changes the after
 payload, the SDK's encode middleware (v0.9.2) extracts a new schema from the after values alone, and the

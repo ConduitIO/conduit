@@ -236,7 +236,7 @@ func TestReplay_SchemaBearingRecords(t *testing.T) {
 // ("unknown union type int"). Production runs processors through the same middleware, so a real pipeline
 // fails this record too, and Kafka Connect does not.
 //
-// TODO(ConduitIO/conduit-processor-sdk#TBD): remove this when the SDK is fixed.
+// TODO(ConduitIO/conduit-processor-sdk#193): remove this when the SDK is fixed.
 //
 // It is pinned here, not hidden, and only in this package: the helper is unexported and matches one record and
 // one text. Translator tests must NOT filter it. Until it is fixed, a translation that reshapes the value of a
