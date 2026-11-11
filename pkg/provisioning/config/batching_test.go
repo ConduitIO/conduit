@@ -148,3 +148,34 @@ func TestSDKSettingValue(t *testing.T) {
 	is.True(ok)
 	is.Equal(v, "1") // the sorted-first key, as settingValue
 }
+
+// TestSDKBatchNonLiteral pins the predicate behind
+// pipeline.archv2_destination_batching_not_literal (the Start guard, the
+// live-apply preflight, validate and doctor share it): any "$" in an
+// sdk.batch.* value is something the settings resolver would expand or
+// collapse, so the engine and the plugin could read different values.
+func TestSDKBatchNonLiteral(t *testing.T) {
+	for name, tc := range map[string]struct {
+		settings map[string]string
+		want     []string
+	}{
+		"braced reference":       {settings: map[string]string{"sdk.batch.size": "${S3_BATCH}"}, want: []string{"sdk.batch.size"}},
+		"bare reference":         {settings: map[string]string{"sdk.batch.delay": "$D"}, want: []string{"sdk.batch.delay"}},
+		"reference inside value": {settings: map[string]string{"sdk.batch.delay": "${N}ms"}, want: []string{"sdk.batch.delay"}},
+		"escaped dollar":         {settings: map[string]string{"sdk.batch.size": "$$5"}, want: []string{"sdk.batch.size"}},
+		"padded key":             {settings: map[string]string{paddedBatchKey: "${N}"}, want: []string{paddedBatchKey}},
+		"both, sorted": {
+			settings: map[string]string{"sdk.batch.size": "${N}", "sdk.batch.delay": "${D}"},
+			want:     []string{"sdk.batch.delay", "sdk.batch.size"},
+		},
+		"literals":                {settings: map[string]string{"sdk.batch.size": "1000", "sdk.batch.delay": "1s"}},
+		"other setting reference": {settings: map[string]string{"url": "${URL}", "sdk.batch.size": "10"}},
+		"wrong-case key":          {settings: map[string]string{"SDK.BATCH.SIZE": "${N}"}},
+		"unset":                   {settings: nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			is.Equal(SDKBatchNonLiteral(tc.settings), tc.want)
+		})
+	}
+}

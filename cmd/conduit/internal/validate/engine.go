@@ -316,6 +316,12 @@ func builtinRefFinding(pluginRef, id, configPath, code, kind string, builtins ma
 // keep it in sync with that registration.
 const codeArchV2DestinationBatchingUnsupported = "pipeline.archv2_destination_batching_unsupported"
 
+// codeArchV2DestinationBatchingNotLiteral is the runtime engine's error code
+// for a destination/DLQ sdk.batch.* value that is not a literal under arch-v2
+// (lifecycle.CodeArchV2DestinationBatchingNotLiteral). A literal for the same
+// reason as codeArchV2DestinationBatchingUnsupported; keep it in sync.
+const codeArchV2DestinationBatchingNotLiteral = "pipeline.archv2_destination_batching_not_literal"
+
 // archV2BatchingFindings is the --preview.pipeline-arch-v2 check: arch-v2's
 // stop-and-wait destination task waits for every ack before the next read, so
 // a destination (or the dead-letter queue) with sdk.batch.size above 1 is
@@ -324,7 +330,10 @@ const codeArchV2DestinationBatchingUnsupported = "pipeline.archv2_destination_ba
 // same refusal offline, sharing config.SDKBatchSizeAboveOne with that guard so
 // the two agree. The code string must stay in sync with
 // lifecycle.CodeArchV2DestinationBatchingUnsupported (a literal here keeps the
-// offline engine from importing the whole lifecycle package).
+// offline engine from importing the whole lifecycle package). It also reports
+// a destination or DLQ sdk.batch.* value that is not a literal with
+// pipeline.archv2_destination_batching_not_literal (config.SDKBatchNonLiteral,
+// shared with the runtime guard and the live-apply preflight).
 func archV2BatchingFindings(p config.Pipeline) []Finding {
 	add := func(findings []Finding, configPath, msg string) []Finding {
 		return append(findings, Finding{
@@ -337,7 +346,35 @@ func archV2BatchingFindings(p config.Pipeline) []Finding {
 		})
 	}
 
+	// A value that is not a literal (an environment reference) is refused at
+	// start, by the guard and the live-apply preflight alike: the engine reads
+	// it as written and the plugin gets it expanded, so they would disagree on
+	// who batches. config.SDKBatchNonLiteral is shared with both.
+	nonLiteral := func(findings []Finding, label, pointerPrefix string, settings map[string]string) []Finding {
+		for _, k := range config.SDKBatchNonLiteral(settings) {
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Code:     codeArchV2DestinationBatchingNotLiteral,
+				Message: fmt.Sprintf("architecture v2 needs a literal %s on %s (sets %s=%s): "+
+					"the engine batches with the value as written, and an environment reference is expanded only for the connector",
+					strings.TrimSpace(k), label, strings.TrimSpace(k), strings.TrimSpace(settings[k])),
+				ConfigPath: pointerPrefix + k,
+				Suggestion: "set sdk.batch.size and sdk.batch.delay to literal values (for example 1000 and 1s) instead of an environment reference, or run the pipeline without architecture v2",
+			})
+		}
+		return findings
+	}
+
 	var findings []Finding
+	for ci, conn := range p.Connectors {
+		if conn.Type != config.TypeDestination {
+			continue
+		}
+		findings = nonLiteral(findings, fmt.Sprintf("destination connector %q", conn.ID),
+			fmt.Sprintf("/pipelines/connectors/%d/settings/", ci), conn.Settings)
+	}
+	findings = nonLiteral(findings, "the dead letter queue", "/pipelines/dead-letter-queue/settings/", p.DLQ.Settings)
+
 	for ci, conn := range p.Connectors {
 		if conn.Type != config.TypeDestination {
 			continue

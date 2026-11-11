@@ -126,6 +126,58 @@ Pick one:
 
 No data is at risk: the pipeline never started, and its stored position is unchanged.
 
+## Arch-v2 refuses an environment reference in `sdk.batch.*`
+
+On arch-v2, a destination's or the dead-letter queue's `sdk.batch.size` and `sdk.batch.delay` must be literal
+values. A value that contains `$`, such as `${S3_BATCH}`, is refused.
+
+### Symptom
+
+`conduit run`, a pipeline start through the API, or provisioning fails with the code
+`pipeline.archv2_destination_batching_not_literal` (FailedPrecondition). A live apply that adds such a value is
+refused with the same code before the running pipeline is stopped. `conduit pipelines validate --preview.pipeline-arch-v2`
+and `conduit doctor` (with arch-v2 enabled) report the same code offline.
+
+```text
+can't start pipeline <pipeline-id> on pipeline architecture v2: destination connector "<pipeline-id>:s3-out" sets
+sdk.batch.size=${S3_BATCH} (/connectors/1/settings/sdk.batch.size); v2 batches a destination itself and configures
+the connector not to batch, which it decides from the value as written, while an environment reference is
+expanded only for the connector, so the connector could batch behind the engine and withhold acks
+```
+
+The config path points at the first offending setting (`/connectors/<index>/settings/<key>` or
+`/dead-letter-queue/settings/<key>`). A pipeline created through the API has no config document, so the error then
+carries no config path; the message still names the connector and the setting. The message shows the reference as
+written, never its value.
+
+The pipeline is not started. Nothing is read from the source and nothing is acknowledged upstream.
+
+### Diagnosis
+
+The engine decides how to batch a destination, and which `sdk.batch.*` keys to hand the connector as `0`, from the
+settings as stored. `${VAR}` references are expanded later, only for the connector (see
+[env-allowlist.md](env-allowlist.md)). To the engine `${S3_BATCH}` is not a number, so it would batch with the
+connector's default (S3: 1000 / 1 s) and leave the size key alone, while the connector gets the expanded value.
+With `S3_BATCH=10000` the connector would batch 10000 records with no delay behind the engine, and hold the
+acknowledgements of every engine flush until records the engine never sends fill its batch: the pipeline stalls
+while it reports running. A `sdk.batch.delay` reference makes the connector batch on a delay behind the engine
+instead, so every write waits that much longer. On the dead-letter queue a reference would also get past the
+refusal above.
+
+Find the reference:
+
+```bash
+grep -n 'sdk.batch.*\$' pipeline.yaml
+```
+
+### Remediation
+
+- Write the value in the pipeline config, for example `sdk.batch.size: "1000"` and `sdk.batch.delay: "1s"`. To
+  vary it per environment, template the pipeline file before Conduit reads it rather than through `${VAR}`.
+- Or remove the setting: the engine then uses the connector's own default.
+- Or run without `--preview.pipeline-arch-v2`. The default engine hands the settings to the connector as they are,
+  and the connector does all the batching.
+
 ## Fan-out: a nack waits for the batching destination
 
 Applies from the release that contains #3324. A pipeline with one source and several destinations, where one

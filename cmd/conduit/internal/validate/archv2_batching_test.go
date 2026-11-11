@@ -16,6 +16,7 @@ package validate
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/matryer/is"
@@ -176,5 +177,50 @@ pipelines:
 			is.Equal(got[0].ConfigPath, "/pipelines/dead-letter-queue/settings/sdk.batch.delay")
 			is.Equal(got[0].Fix.Op, "remove")
 		})
+	}
+}
+
+// TestArchV2BatchingFindings_NotLiteral (#3321 review): a destination or DLQ
+// sdk.batch.* value that is not a literal is refused at start under arch-v2,
+// so validate reports it offline with the same code and the setting's path.
+func TestArchV2BatchingFindings_NotLiteral(t *testing.T) {
+	doc := `version: 2.2
+pipelines:
+  - id: p
+    status: running
+    connectors:
+      - id: src
+        type: source
+        plugin: builtin:generator
+        settings:
+          sdk.batch.size: "${SRC_BATCH}"
+      - id: dst
+        type: destination
+        plugin: builtin:log
+        settings:
+          sdk.batch.size: "${S3_BATCH}"
+    dead-letter-queue:
+      plugin: builtin:log
+      settings:
+        sdk.batch.delay: "${DLQ_DELAY}"
+`
+	is := is.New(t)
+	report := RunBytes(context.Background(), "p.yaml", []byte(doc), Options{ArchV2: true})
+	is.Equal(len(report.Files), 1)
+	var got []Finding
+	for _, f := range report.Files[0].Findings {
+		if f.Code == codeArchV2DestinationBatchingNotLiteral {
+			got = append(got, f)
+		}
+	}
+	is.Equal(len(got), 2) // the destination and the DLQ; a source is not engine-batched
+	is.Equal(got[0].ConfigPath, "/pipelines/connectors/1/settings/sdk.batch.size")
+	is.True(strings.Contains(got[0].Message, "sdk.batch.size=${S3_BATCH}"))
+	is.True(strings.Contains(got[0].Suggestion, "literal"))
+	is.Equal(got[1].ConfigPath, "/pipelines/dead-letter-queue/settings/sdk.batch.delay")
+
+	off := RunBytes(context.Background(), "p.yaml", []byte(doc), Options{ArchV2: false})
+	for _, f := range off.Files[0].Findings {
+		is.True(f.Code != codeArchV2DestinationBatchingNotLiteral) // classic is unchanged
 	}
 }

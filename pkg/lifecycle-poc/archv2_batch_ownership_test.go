@@ -32,6 +32,8 @@ import (
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/conduitio/conduit/pkg/connector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/foundation/env"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/foundation/metrics"
 	condprom "github.com/conduitio/conduit/pkg/foundation/metrics/prometheus"
@@ -649,4 +651,160 @@ func TestArchV2_DestinationSettingsVerbatimWithoutBatching(t *testing.T) {
 	destTask := tasks[0][len(tasks[0])-1]
 	is.True(cerrors.Is(destTask.Open(ctx), errStopHere))
 	is.Equal(got, map[string]string{"foo": "bar"})
+}
+
+// TestArchV2_RefusesNonLiteralBatching (#3321 review, Medium 1): the engine
+// resolves batching from the stored settings, and the connector's settings
+// resolver expands ${VAR} only for the plugin. With S3_BATCH=10000 allowlisted
+// and sdk.batch.size: ${S3_BATCH} on an S3-shaped destination, the engine
+// would batch 1000 / 1 s (the spec default) and configure only the delay "0",
+// so the plugin would run a 10000-record size-only batcher and hold the acks
+// of every engine flush until records the engine never sends fill it: a stall
+// ("mechanism" pins that arithmetic). With sdk.batch.delay: $S3_DELAY (5s) the
+// plugin would run a delay-only batcher behind the engine and every flush
+// would wait 5 s more (double batching). Start now refuses both before
+// anything is dispensed: every dispenser here fails the test if it is used, so
+// without the guard the test fails on the first dispense.
+func TestArchV2_RefusesNonLiteralBatching(t *testing.T) {
+	allow, err := env.NewAllowlist([]string{"S3_BATCH", "S3_DELAY"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("S3_BATCH", "10000")
+	t.Setenv("S3_DELAY", "5s")
+	resolver := connector.EnvSettingsResolver{Allow: allow}
+
+	t.Run("mechanism", func(t *testing.T) {
+		is := is.New(t)
+		raw := map[string]string{"sdk.batch.size": "${S3_BATCH}"}
+		engine := resolveDestinationBatching(raw, s3ShapedParams(), true)
+		is.Equal(engine.size, 1000)         // the reference reads as unset: spec default
+		is.Equal(engine.delay, time.Second) // engine flushes at most 1000 records, after 1 s
+		is.Equal(engine.overrides, []string{config.SDKBatchDelaySetting})
+
+		plugin, err := resolver.ResolveSettings("s3-shaped", raw)
+		is.NoErr(err)
+		plugin[config.SDKBatchDelaySetting] = "0" // the override the engine would apply
+		size, delay, enabled := config.SDKBatchSettings(plugin)
+		is.True(enabled)
+		is.Equal(size, 10000) // the plugin waits for 10000 records the engine never sends at once
+		is.Equal(delay, time.Duration(0))
+	})
+
+	for name, tc := range map[string]struct {
+		settings map[string]string
+		path     string
+		inMsg    string
+	}{
+		"size reference (stall)": {
+			settings: map[string]string{"sdk.batch.size": "${S3_BATCH}"},
+			path:     "/connectors/1/settings/sdk.batch.size",
+			inMsg:    "sdk.batch.size=${S3_BATCH}",
+		},
+		"delay reference (double batching)": {
+			settings: map[string]string{"sdk.batch.size": "500", "sdk.batch.delay": "$S3_DELAY"},
+			path:     "/connectors/1/settings/sdk.batch.delay",
+			inMsg:    "sdk.batch.delay=$S3_DELAY",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			h := newBatchingHarness(t, tc.settings, nil, false, func(h *batchingHarness) {
+				// Built by a connector.Service with the env resolver, as the
+				// runtime builds it, so a dispense would get ${S3_BATCH}
+				// expanded.
+				d, err := connector.NewService(log.Nop(), &inmemory.DB{}, nil, connector.WithSettingsResolver(resolver)).Create(
+					context.Background(), h.dest.ID, connector.TypeDestination, h.dest.Plugin, h.pl.ID, h.dest.Config, connector.ProvisionTypeConfig)
+				is.NoErr(err)
+				d.LastActiveConfig = d.Config
+				h.dest = d
+			})
+
+			ce, ok := conduiterr.Get(h.ls.Start(context.Background(), h.pl.ID))
+			is.True(ok) // the refusal is a coded error
+			is.Equal(ce.Code, CodeArchV2DestinationBatchingNotLiteral)
+			is.Equal(ce.Code.Reason(), "pipeline.archv2_destination_batching_not_literal")
+			is.Equal(ce.ConfigPath, tc.path)
+			is.True(strings.Contains(ce.Message, tc.inMsg))     // names the setting as written
+			is.True(!strings.Contains(ce.Message, "10000"))     // never the expansion
+			is.True(strings.Contains(ce.Suggestion, "literal")) // says how to fix it
+			is.True(ce.Fix == nil)
+		})
+	}
+}
+
+// TestBatchingGuard_NonLiteral covers the shared predicate on every surface the
+// engine owns: Start for an API-created pipeline (no config document, so no
+// ConfigPath) and for a DLQ reference that the numeric DLQ refusal cannot read,
+// and the live-apply preflight for destinations and the DLQ.
+func TestBatchingGuard_NonLiteral(t *testing.T) {
+	t.Run("start, DLQ reference", func(t *testing.T) {
+		is := is.New(t)
+		h := newBatchingHarness(t, nil, map[string]string{"sdk.batch.delay": "${DLQ_DELAY}"}, false)
+		ce, ok := conduiterr.Get(h.ls.Start(context.Background(), h.pl.ID))
+		is.True(ok)
+		is.Equal(ce.Code, CodeArchV2DestinationBatchingNotLiteral)
+		is.Equal(ce.ConfigPath, "/dead-letter-queue/settings/sdk.batch.delay")
+		is.True(strings.Contains(ce.Message, "the dead letter queue sets sdk.batch.delay=${DLQ_DELAY}"))
+	})
+	t.Run("start, API pipeline names the setting", func(t *testing.T) {
+		is := is.New(t)
+		h := newBatchingHarness(t, map[string]string{" sdk.batch.size": "$N"}, nil, false,
+			func(h *batchingHarness) { h.pl.ProvisionedBy = pipeline.ProvisionTypeAPI })
+		ce, ok := conduiterr.Get(h.ls.Start(context.Background(), h.pl.ID))
+		is.True(ok)
+		is.Equal(ce.Code, CodeArchV2DestinationBatchingNotLiteral)
+		is.Equal(ce.ConfigPath, "")
+		is.True(strings.Contains(ce.Message, h.dest.ID))
+		is.True(strings.Contains(ce.Message, "sdk.batch.size=$N"))
+	})
+
+	svc := &Service{}
+	dest := func(settings map[string]string) config.Connector {
+		return config.Connector{ID: "dest", Type: config.TypeDestination, Settings: settings}
+	}
+	for name, tc := range map[string]struct {
+		cfg  config.Pipeline
+		path string // empty: not refused
+	}{
+		"destination size reference": {
+			cfg:  config.Pipeline{Connectors: []config.Connector{{ID: "src", Type: config.TypeSource}, dest(map[string]string{"sdk.batch.size": "${S3_BATCH}"})}},
+			path: "/connectors/1/settings/sdk.batch.size",
+		},
+		"destination delay, padded key": {
+			cfg:  config.Pipeline{Connectors: []config.Connector{dest(map[string]string{"sdk.batch.delay ": "${D}s"})}},
+			path: "/connectors/0/settings/sdk.batch.delay ",
+		},
+		"escaped dollar": {
+			cfg:  config.Pipeline{Connectors: []config.Connector{dest(map[string]string{"sdk.batch.size": "$$1"})}},
+			path: "/connectors/0/settings/sdk.batch.size",
+		},
+		"DLQ size reference": {
+			cfg:  config.Pipeline{DLQ: config.DLQ{Settings: map[string]string{"sdk.batch.size": "${N}"}}},
+			path: "/dead-letter-queue/settings/sdk.batch.size",
+		},
+		"source reference is not batching the engine owns": {
+			cfg: config.Pipeline{Connectors: []config.Connector{{ID: "src", Type: config.TypeSource, Settings: map[string]string{"sdk.batch.size": "${N}"}}}},
+		},
+		"reference in another destination setting": {
+			cfg: config.Pipeline{Connectors: []config.Connector{dest(map[string]string{"url": "${URL}", "sdk.batch.size": "100"})}},
+		},
+		"literal values": {
+			cfg: config.Pipeline{Connectors: []config.Connector{dest(map[string]string{"sdk.batch.size": "100", "sdk.batch.delay": "1s"})}},
+		},
+	} {
+		t.Run("preflight "+name, func(t *testing.T) {
+			is := is.New(t)
+			tc.cfg.ID = "p1"
+			err := svc.PreflightPipelineConfig(tc.cfg)
+			if tc.path == "" {
+				is.NoErr(err)
+				return
+			}
+			ce, ok := conduiterr.Get(err)
+			is.True(ok)
+			is.Equal(ce.Code, CodeArchV2DestinationBatchingNotLiteral)
+			is.Equal(ce.ConfigPath, tc.path)
+		})
+	}
 }

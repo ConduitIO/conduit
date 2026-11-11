@@ -75,3 +75,32 @@ func checkByName(report check.Report, name string) check.CheckResult {
 	}
 	return check.CheckResult{}
 }
+
+// TestArchV2BatchingCheck_FailsOnNonLiteral: doctor reports a destination
+// sdk.batch.* environment reference with the runtime's not-literal code.
+func TestArchV2BatchingCheck_FailsOnNonLiteral(t *testing.T) {
+	is := is.New(t)
+	cfg := validConfig(t)
+	cfg.Preview.PipelineArchV2 = true
+	doc := `version: 2.2
+pipelines:
+  - id: p
+    status: running
+    connectors:
+      - id: src
+        type: source
+        plugin: builtin:generator
+      - id: dst
+        type: destination
+        plugin: builtin:log
+        settings:
+          sdk.batch.size: "${S3_BATCH}"
+`
+	is.NoErr(os.WriteFile(filepath.Join(cfg.Pipelines.Path, "p.yaml"), []byte(doc), 0o600))
+
+	report := runChecks(cfg, doctorcheck.Options{})
+	res := checkByName(report, doctorcheck.NameArchV2Batching)
+	is.Equal(res.Status, check.StatusFail)
+	is.Equal(res.Code, "pipeline.archv2_destination_batching_not_literal")
+	is.Equal(res.ConfigPath, "/pipelines/connectors/1/settings/sdk.batch.size")
+}

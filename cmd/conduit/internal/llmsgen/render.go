@@ -108,7 +108,10 @@ const destinationBatchingNote = "Destination batching on `--preview.pipeline-arc
 	"even when no further record arrives (a timer, as in the connector SDK). With `sdk.batch.size` alone a partial batch " +
 	"waits for more records or a stop, and the start logs `pipeline.archv2_destination_batch_unbounded_wait`. A " +
 	"dead-letter queue with `sdk.batch.size` above 1 or `sdk.batch.delay` above 0 is refused with " +
-	"`pipeline.archv2_destination_batching_unsupported`. Runbook: docs/operations/archv2-destination-batching.md."
+	"`pipeline.archv2_destination_batching_unsupported`. A destination or dead-letter-queue `sdk.batch.*` value " +
+	"must be a literal: one containing `$` (an environment reference such as `${S3_BATCH}`) is refused with " +
+	"`pipeline.archv2_destination_batching_not_literal`, because the engine batches with the value as written. " +
+	"Runbook: docs/operations/archv2-destination-batching.md."
 
 // renderLLMSTxt renders the concise, llmstxt.org-conformant index: one H1,
 // one blockquote summary immediately after, then ## sections of links and

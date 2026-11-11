@@ -132,3 +132,34 @@ func SDKSettingValue(settings map[string]string, target string) (value string, p
 	}
 	return "", false
 }
+
+// SDKBatchNonLiteral returns, sorted, every key of settings that names
+// sdk.batch.size or sdk.batch.delay (after trimming, as the SDK matches keys)
+// and whose value is not a literal, because it contains "$".
+//
+// The arch-v2 engine resolves a destination's batching from the stored
+// settings, before ${VAR} references are expanded for the plugin (see
+// pkg/foundation/env), and configures the plugin "0" only for the keys whose
+// stored value turns its batcher on. A reference such as "${S3_BATCH}" parses
+// as nothing for the engine but reaches the plugin expanded, so the plugin
+// would batch behind the engine: double batching, or an ack withheld until a
+// batch the engine never sends fills (a stall). The engine therefore refuses
+// a non-literal value under arch-v2 (lifecycle.CodeArchV2DestinationBatchingNotLiteral).
+//
+// "$" is exactly what the settings resolver acts on: env.ResolveEnv returns a
+// value without "$" unchanged, and expands or collapses ("$$") anything else.
+// No valid integer or duration contains "$", so the refusal costs no
+// literal configuration.
+func SDKBatchNonLiteral(settings map[string]string) []string {
+	var keys []string
+	for k, v := range settings {
+		switch strings.TrimSpace(k) {
+		case SDKBatchSizeSetting, SDKBatchDelaySetting:
+			if strings.Contains(v, "$") {
+				keys = append(keys, k)
+			}
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}

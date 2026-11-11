@@ -561,7 +561,13 @@ func (s *Service) startRun(ctx context.Context, pipelineID string, predecessor *
 	// nothing from the source and acks nothing (invariants 1 and 3). Destinations
 	// are no longer refused — they batch in the engine itself
 	// (docs/design-documents/20261017-funnel-destination-batching.md) — but the
-	// DLQ is not wired through that path and is still refused.
+	// DLQ is not wired through that path and is still refused. A destination
+	// or DLQ sdk.batch.* value that is not a literal is refused first: the
+	// engine reads the value as written and the plugin gets it expanded, so the
+	// two would disagree on who batches (#3321 review).
+	if err := s.checkBatchingLiterals(ctx, pl); err != nil {
+		return err
+	}
 	if err := s.checkDLQBatching(pl); err != nil {
 		return err
 	}

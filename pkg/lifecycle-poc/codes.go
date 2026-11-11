@@ -119,6 +119,41 @@ var (
 // connector id and name and the setting.
 var CodeArchV2DestinationBatchingUnsupported = conduiterr.Register("pipeline.archv2_destination_batching_unsupported", codes.FailedPrecondition)
 
+// CodeArchV2DestinationBatchingNotLiteral is returned by Start, and by the
+// live-apply preflight (PreflightPipelineConfig), when a pipeline would run on
+// the preview pipeline architecture v2 (--preview.pipeline-arch-v2) and a
+// destination or the dead-letter-queue sets sdk.batch.size or sdk.batch.delay
+// to a value that is not a literal: it contains "$", such as an environment
+// reference (${S3_BATCH}). `conduit pipelines validate` and `conduit doctor`
+// report the same finding offline (config.SDKBatchNonLiteral is shared).
+//
+// v2 batches a destination itself with its effective sdk.batch.* settings and
+// configures the plugin "0" for each key that would turn the plugin's own
+// batcher on (docs/design-documents/20261103-archv2-destination-batch-timing.md,
+// Decision 2). The engine decides that from the stored settings, and ${VAR}
+// references are expanded only for the plugin. A reference therefore reads as
+// unset to the engine (which adopts the connector default) while the plugin
+// gets the expanded value and batches behind the engine: each engine flush
+// waits up to the plugin's delay more, or, with a plugin size above the
+// engine's and no plugin delay, the plugin holds the acks of a flush until
+// records the engine never sends fill its batch, and the pipeline stalls while
+// reporting Running. On the dead-letter queue a reference would also slip past
+// CodeArchV2DestinationBatchingUnsupported. No record is lost either way (acks
+// are only withheld), but liveness is, so the value is refused before any
+// connector is built or opened: nothing is read and nothing is acked
+// (invariants 1 and 3).
+//
+// Set sdk.batch.size and sdk.batch.delay to literal values (for example 1000
+// and 1s). The classic engine passes the settings to the plugin and is not
+// affected. ConfigPath addresses the first offending setting as a JSON pointer
+// into the pipeline config document (/connectors/1/settings/sdk.batch.size or
+// /dead-letter-queue/settings/sdk.batch.delay); a pipeline created through the
+// API has no config document, so the error then carries no ConfigPath and the
+// message alone names the connector and the setting. There is no structured
+// Fix: the right literal is the operator's choice. See
+// docs/operations/archv2-destination-batching.md.
+var CodeArchV2DestinationBatchingNotLiteral = conduiterr.Register("pipeline.archv2_destination_batching_not_literal", codes.FailedPrecondition)
+
 // CodeArchV2DestinationBatchUnboundedWait is logged as a warning when a
 // pipeline starts on the preview engine (--preview.pipeline-arch-v2) with a
 // destination that batches by sdk.batch.size alone, with no sdk.batch.delay.

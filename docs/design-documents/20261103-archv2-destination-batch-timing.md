@@ -471,7 +471,9 @@ disagree, and no plugin process is started for it. (As implemented: the built-in
 dispensers carry the spec of the blueprint they were built from, the plugin service's cleanup wrapper
 forwards it, and `connector.Destination.Specification` reads it. A dispenser built outside the
 registries, which only tests do, carries none; then a key counts as declared only when the pipeline
-config sets it, so an enabling pipeline value is still replaced by `"0"` and no key is added.)
+config sets it, so an enabling pipeline value is still replaced by `"0"` and no key is added.
+`pkg/plugin/connector/external.Dispenser` carries none either and is not reachable from `newDispenser`;
+its package doc makes attaching the spec a prerequisite for wiring it in, and a test pins the gap.)
 
 **Take over.** The task is built with the resolved size and delay, so S3 v0.12.0 with no `sdk.batch.*`
 in the pipeline runs as an engine-batched 1000 / 1 s destination: the worker reads on, records
@@ -526,6 +528,21 @@ today. Same code, `pipeline.archv2_destination_batching_unsupported`
 `conduit pipelines validate` and `conduit doctor` shares the predicate (`config.SDKBatchDelayAboveZero`), so
 they report the same refusal. See open question 3.
 
+**Values must be literals (as implemented, from the #3321 review).** The resolution reads the stored
+settings, and `${VAR}` references are expanded afterwards, only for the plugin
+(`connector.Instance.resolveSettings`). A reference such as `sdk.batch.size: ${S3_BATCH}` would read as
+unset to the engine (which adopts the spec default and neutralises only the other key) while the
+plugin gets the expanded value: with `S3_BATCH=10000` a size-only plugin batcher behind 1000-record
+engine flushes, which stalls; with a delay reference, double batching. On the DLQ a reference would
+also get past the refusal above. Under arch-v2, a destination or DLQ `sdk.batch.*` value containing
+`$` (what the settings resolver acts on) is refused with
+`pipeline.archv2_destination_batching_not_literal`, at Start before anything is built, in
+`PreflightPipelineConfig`, and offline in `validate`/`doctor`, all through `config.SDKBatchNonLiteral`.
+The alternative, resolving the references before the batching resolution and the Start guard, keeps
+templated batch settings working but cannot be done in preflight or offline (they do not expand
+variables), so those surfaces would still need the refusal. Refusing everywhere is smaller and fails
+closed. Classic is unchanged.
+
 **Classic engine.** Nothing changes. `pkg/lifecycle` never calls the setter, settings reach the plugin
 verbatim, the SDK batches, and classic reads acks asynchronously. The resolution and neutralisation
 live in `pkg/lifecycle-poc` and in the `pkg/connector` setter that only arch-v2 calls.
@@ -567,6 +584,7 @@ unchanged: an S3 destination arrives with an explicit size of 1000.
 | Spec forbids `0` and its default is off | No injection; unchanged from today | none |
 | Plugin batches internally without declaring keys, or its code default disagrees with its spec | Not neutralised; still slow; documented workaround | 1 holds |
 | DLQ with a batching spec default | Neutralised; nacks written synchronously | 1, 3 |
+| Destination or DLQ `sdk.batch.*` is an environment reference | Refused at start, preflight, validate and doctor (`pipeline.archv2_destination_batching_not_literal`); nothing opened | 1, 3 |
 
 No path in either change acks a record that is not durable, drops a record without delivering it or
 routing it to the DLQ, or reorders records within a source.
