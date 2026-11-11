@@ -121,6 +121,44 @@ func TestFromRecord_LocalTimestampNamedTypes(t *testing.T) {
 		})
 	})
 
+	t.Run("records defined inside an array and a map", func(t *testing.T) {
+		// Item and Val are defined as array items and map values, and then
+		// referenced by name in later fields.
+		const s = `{"type":"record","name":"root","namespace":"a","fields":[` +
+			`{"name":"arr","type":{"type":"array","items":{"type":"record","name":"Item","fields":[{"name":"t","type":` + localMicros + `}]}}},` +
+			`{"name":"m","type":{"type":"map","values":{"type":"record","name":"Val","fields":[{"name":"t","type":` + localMicros + `}]}}},` +
+			`{"name":"itemRef","type":"Item"},` +
+			`{"name":"valRef","type":"a.Val"}]}`
+		row := func(arr, m, itemRef, valRef time.Time) opencdc.StructuredData {
+			return opencdc.StructuredData{
+				"arr": []any{ts(arr)}, "m": map[string]any{"k": ts(m)},
+				"itemRef": ts(itemRef), "valRef": ts(valRef),
+			}
+		}
+		runLocalTimeCases(t, s, []localTimeCase{
+			{"all UTC", row(ltUTC, ltUTC, ltUTC, ltUTC), ""},
+			{"non-UTC in a record inside an array", row(ltPlus5, ltUTC, ltUTC, ltUTC), "arr"},
+			{"non-UTC in a record inside a map", row(ltUTC, ltPlus5, ltUTC, ltUTC), "m"},
+			{"non-UTC through a reference to the array's record", row(ltUTC, ltUTC, ltPlus5, ltUTC), "itemRef"},
+			{"non-UTC through a reference to the map's record", row(ltUTC, ltUTC, ltUTC, ltPlus5), "valRef"},
+		})
+	})
+
+	t.Run("recursive record", func(t *testing.T) {
+		// Node refers to itself; the per-schema scan must end, and the value
+		// walk must follow the chain.
+		const s = `{"type":"record","name":"root","namespace":"a","fields":[` +
+			`{"name":"x","type":{"type":"record","name":"Node","fields":[{"name":"t","type":` + localMicros + `},` +
+			`{"name":"next","type":["null","Node"]}]}}]}`
+		row := func(second time.Time) opencdc.StructuredData {
+			return opencdc.StructuredData{"x": map[string]any{"t": ltUTC, "next": map[string]any{"t": second, "next": nil}}}
+		}
+		runLocalTimeCases(t, s, []localTimeCase{
+			{"all UTC", row(ltUTC), ""},
+			{"non-UTC in the second node", row(ltPlus5), "x"},
+		})
+	})
+
 	t.Run("names inside a referenced record resolve where it is defined", func(t *testing.T) {
 		// a.Outer's field "in" has type "Ts", which is a.Ts (local-timestamp)
 		// where Outer is defined, even when Outer is referenced from
@@ -141,6 +179,69 @@ func TestFromRecord_LocalTimestampNamedTypes(t *testing.T) {
 			{"non-UTC inside the referenced record", row(ltPlus5), "r"},
 		})
 	})
+}
+
+// TestFromRecord_LocalTimestampCodecSpellings: valid schema spellings whose
+// names or logical types the codec resolves in ways a reading of the JSON can
+// miss. The check must see each local-timestamp field exactly where the codec
+// writes one, or a changed wall clock is encoded. Not parallel: it sets
+// time.Local.
+func TestFromRecord_LocalTimestampCodecSpellings(t *testing.T) {
+	setLocal(t, time.UTC)
+	ts := func(v time.Time) map[string]any { return map[string]any{"t": v} }
+	localTs := `{"type":"record","name":"Ts","fields":[{"name":"t","type":` + localMicros + `}]}`
+	withY := func(v time.Time) opencdc.StructuredData {
+		return opencdc.StructuredData{"y": ts(ltUTC), "x": ts(v)}
+	}
+	onlyX := func(v time.Time) opencdc.StructuredData { return opencdc.StructuredData{"x": ts(v)} }
+	root := func(fields string) string {
+		return `{"type":"record","name":"root","namespace":"a","fields":[` + fields + `]}`
+	}
+
+	testCases := []struct {
+		name   string
+		schema string
+		row    func(time.Time) opencdc.StructuredData
+	}{{
+		name: "(a) reference by alias",
+		schema: root(`{"name":"y","type":{"type":"record","name":"Ts","aliases":["Old"],"fields":[{"name":"t","type":` + localMicros + `}]}},` +
+			`{"name":"x","type":"Old"}`),
+		row: withY,
+	}, {
+		// The codec treats an empty namespace as "inherit", so this is a.Ts.
+		name: "(b) empty namespace attribute",
+		schema: root(`{"name":"y","type":{"type":"record","name":"Ts","namespace":"","fields":[{"name":"t","type":` + localMicros + `}]}},` +
+			`{"name":"x","type":"Ts"}`),
+		row: withY,
+	}, {
+		name:   "(c) reference wrapped in an object",
+		schema: root(`{"name":"y","type":` + localTs + `},{"name":"x","type":{"type":"Ts"}}`),
+		row:    withY,
+	}, {
+		name:   "(d) union wrapped in an object",
+		schema: root(`{"name":"y","type":` + localTs + `},{"name":"x","type":{"type":["null","Ts"]}}`),
+		row:    withY,
+	}, {
+		name:   "(e) error type",
+		schema: root(`{"name":"x","type":{"type":"error","name":"Ts","fields":[{"name":"t","type":` + localMicros + `}]}}`),
+		row:    onlyX,
+	}, {
+		name:   "(f) escaped logical type",
+		schema: root(`{"name":"x","type":{"type":"record","name":"Ts","fields":[{"name":"t","type":{"type":"long","logicalType":"local\u002dtimestamp-micros"}}]}}`),
+		row:    onlyX,
+	}, {
+		name:   "(g) local-timestamp-nanos",
+		schema: root(`{"name":"x","type":{"type":"record","name":"Ts","fields":[{"name":"t","type":{"type":"long","logicalType":"local-timestamp-nanos"}}]}}`),
+		row:    onlyX,
+	}}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			runLocalTimeCases(t, tc.schema, []localTimeCase{
+				{"UTC", tc.row(ltUTC), ""},
+				{"non-UTC", tc.row(ltPlus5), "x"},
+			})
+		})
+	}
 }
 
 // TestFromRecord_LocalTimestampContainers pins each place the walk looks into:
@@ -212,37 +313,88 @@ func TestFromRecord_LocalTimestampDST(t *testing.T) {
 	})
 }
 
-// TestLocalTimeCheck_Cache: the parsed walk is cached by schema text, so two
-// schemas that alternate keep their own answers, and a schema without a
-// local-timestamp field is never parsed or cached. Not parallel: it sets
+// TestLocalTimeCheck_Cache: the parse is cached by schema text. Two schemas
+// that both have a local-timestamp field, under different names, alternate
+// and must keep their own answers (a cache that returned one schema's parse
+// for the other would name the wrong field, or none). Not parallel: it sets
 // time.Local.
 func TestLocalTimeCheck_Cache(t *testing.T) {
 	setLocal(t, time.UTC)
-	local := schema.Schema{Type: schema.TypeAvro, Bytes: []byte(`{"type":"record","name":"l","fields":[{"name":"a","type":` + localMicros + `}]}`)}
-	plain := schema.Schema{Type: schema.TypeAvro, Bytes: []byte(`{"type":"record","name":"l","fields":[{"name":"a","type":` + utcMicros + `}]}`)}
-	sd := opencdc.StructuredData{"a": ltPlus5}
+	avroSchema := func(fields string) schema.Schema {
+		return schema.Schema{Type: schema.TypeAvro, Bytes: []byte(`{"type":"record","name":"l","fields":[` + fields + `]}`)}
+	}
+	localA := avroSchema(`{"name":"a","type":` + localMicros + `},{"name":"b","type":` + utcMicros + `}`)
+	localB := avroSchema(`{"name":"a","type":` + utcMicros + `},{"name":"b","type":` + localMicros + `}`)
+	plain := avroSchema(`{"name":"a","type":` + utcMicros + `},{"name":"b","type":` + utcMicros + `}`)
+	sd := opencdc.StructuredData{"a": ltPlus5, "b": ltPlus5}
 
 	var c localTimeCheck
 	for i := range 3 {
-		if got := c.changed(local, sd); got != "a" {
-			t.Fatalf("round %d: local schema: want %q, got %q", i, "a", got)
-		}
-		if got := c.changed(plain, sd); got != "" {
-			t.Fatalf("round %d: plain schema: want no mismatch, got %q", i, got)
+		for _, want := range []struct {
+			s     schema.Schema
+			field string
+		}{{localA, "a"}, {localB, "b"}, {plain, ""}} {
+			if got := c.changed(want.s, sd); got != want.field {
+				t.Fatalf("round %d, schema %s: want %q, got %q", i, want.s.Bytes, want.field, got)
+			}
 		}
 	}
-	if len(c.walks) != 1 {
-		t.Fatalf("want 1 cached walk (the local schema), got %d", len(c.walks))
+	if len(c.entries) != 3 {
+		t.Fatalf("want 3 cached schemas, got %d", len(c.entries))
+	}
+}
+
+// TestLocalTimeCheck_CacheBounds: a schema text above maxLocalSchemaBytes is
+// checked but not kept, and the cache never holds more than maxLocalSchemas
+// entries or maxLocalCacheBytes of text. Not parallel: it sets time.Local.
+func TestLocalTimeCheck_CacheBounds(t *testing.T) {
+	setLocal(t, time.UTC)
+	// withDoc returns a schema with a local-timestamp field whose text is
+	// at least size bytes, distinct per n.
+	withDoc := func(n, size int) schema.Schema {
+		pad := strings.Repeat("x", max(size, 0))
+		return schema.Schema{Type: schema.TypeAvro, Bytes: []byte(`{"type":"record","name":"l` + strings.Repeat("y", n) +
+			`","doc":"` + pad + `","fields":[{"name":"a","type":` + localMicros + `}]}`)}
+	}
+	sd := opencdc.StructuredData{"a": ltPlus5}
+	check := func(c *localTimeCheck, s schema.Schema) {
+		t.Helper()
+		if got := c.changed(s, sd); got != "a" {
+			t.Fatalf("want %q, got %q", "a", got)
+		}
+		if len(c.entries) > maxLocalSchemas {
+			t.Fatalf("cache has %d entries, bound is %d", len(c.entries), maxLocalSchemas)
+		}
+		if c.bytes > maxLocalCacheBytes {
+			t.Fatalf("cache holds %d bytes of text, bound is %d", c.bytes, maxLocalCacheBytes)
+		}
+		total := 0
+		for k := range c.entries {
+			total += len(k)
+		}
+		if total != c.bytes {
+			t.Fatalf("byte count %d does not match the cached texts (%d)", c.bytes, total)
+		}
 	}
 
-	// A full cache is cleared, not grown.
-	for i := range maxLocalWalks + 1 {
-		s := schema.Schema{Type: schema.TypeAvro, Bytes: []byte(`{"type":"record","name":"l` + strings.Repeat("x", i) + `","fields":[{"name":"a","type":` + localMicros + `}]}`)}
-		if got := c.changed(s, sd); got != "a" {
-			t.Fatalf("schema %d: want %q, got %q", i, "a", got)
+	t.Run("a large schema is not kept", func(t *testing.T) {
+		var c localTimeCheck
+		check(&c, withDoc(0, maxLocalSchemaBytes+1))
+		if len(c.entries) != 0 {
+			t.Fatalf("want the large schema not cached, got %d entries", len(c.entries))
 		}
-	}
-	if len(c.walks) > maxLocalWalks {
-		t.Fatalf("cache grew to %d entries, bound is %d", len(c.walks), maxLocalWalks)
-	}
+	})
+	t.Run("entry bound", func(t *testing.T) {
+		var c localTimeCheck
+		for i := range maxLocalSchemas + 1 {
+			check(&c, withDoc(i, 0))
+		}
+	})
+	t.Run("byte bound", func(t *testing.T) {
+		var c localTimeCheck
+		// 200 KiB each: under the per-schema cap, and 41 of them pass 8 MiB.
+		for i := range 50 {
+			check(&c, withDoc(i, 200<<10))
+		}
+	})
 }

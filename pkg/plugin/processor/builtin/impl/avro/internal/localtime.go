@@ -15,20 +15,18 @@
 package internal
 
 import (
-	"bytes"
 	"reflect"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit-commons/schema"
-	"github.com/goccy/go-json"
+	"github.com/iskorotkov/avro/v2"
 )
 
-// localTimeCheck finds values in local-timestamp-millis/micros fields that the
-// codec would write with a different wall clock than the value has. The zero
-// value is ready to use and safe for concurrent use.
+// localTimeCheck finds values in local-timestamp-millis/micros/nanos fields
+// that the codec would write with a different wall clock than the value has.
+// The zero value is ready to use and safe for concurrent use.
 //
 // Invariant 6: a local-timestamp field holds a wall clock with no zone. The
 // codec writes the wall clock the instant has in time.Local, not the wall
@@ -38,253 +36,213 @@ import (
 // whose location offset differs from time.Local's at that instant would
 // change its wall clock, so it is reported as a mismatch.
 //
-// Limit: the walk follows the schema JSON (records, named references, arrays,
-// maps, unions). For a union it checks every branch the value could be, so a
-// union that lists both a timestamp-* and a local-timestamp-* branch is
-// checked as local-timestamp (fail closed). A schema it cannot parse is not
-// checked (the encode succeeded, so the schema is valid; only the extra check
-// is skipped).
+// The check walks the codec's own parse of the schema text, not the JSON, so
+// names, aliases, namespaces, wrapped types, escapes and error types resolve
+// exactly as they do when the record is encoded. For a union it checks every
+// branch the value could be, so a union that lists both a timestamp-* and a
+// local-timestamp-* branch is checked as local-timestamp (fail closed).
 //
-// Cost: a schema whose text has no "local-timestamp" is skipped with a byte
-// search. Otherwise the parsed walk is cached by schema text, so the schema
-// JSON is parsed once per schema, not once per record.
+// Cost: the parse is cached by schema text (see localTimeCheck.entry), along
+// with the top-level fields that can hold a local-timestamp value at any
+// depth. A schema with none costs one map lookup per record; only those
+// fields are walked otherwise.
 type localTimeCheck struct {
-	mu    sync.Mutex
-	walks map[string]*localWalk // by schema text; nil when there is nothing to check
+	mu      sync.Mutex
+	entries map[string]*localSchema // by schema text
+	bytes   int                     // total length of the cached texts
 }
 
-// maxLocalWalks bounds the cache. Each distinct schema version a processor
-// encodes with is one entry; when it is full the cache is cleared and refilled,
-// which only costs a parse per schema again.
-const maxLocalWalks = 256
+// Cache bounds. Each distinct schema version a processor encodes with is one
+// entry. A text above maxLocalSchemaBytes is parsed for each record and not
+// kept; when the cache reaches maxLocalSchemas entries or maxLocalCacheBytes
+// of text it is cleared and refilled, which only costs a parse per schema
+// again. A parsed schema takes memory roughly in proportion to its text.
+const (
+	maxLocalSchemas     = 256
+	maxLocalSchemaBytes = 256 << 10
+	maxLocalCacheBytes  = 8 << 20
+)
 
-var localTimestampMarker = []byte("local-timestamp")
+// localSchema is the parse of one schema text. It is read-only once built, so
+// one value serves concurrent records.
+type localSchema struct {
+	// fields are the top-level fields whose type contains a local-timestamp
+	// type at any depth; empty when there is nothing to check.
+	fields []*avro.Field
+	// failed is set when the codec cannot parse the text, or it is not a
+	// record. The encode with the same text succeeded, so this cannot happen;
+	// if it does, the record is refused rather than not checked.
+	failed bool
+}
 
-// changed returns the name of the first top-level key of sd, in name order,
-// whose value holds a time.Time in a local-timestamp field (at any depth)
-// that would change wall clock, or "" if there is none.
+// changed returns the name of the first top-level key of sd, in schema field
+// order, whose value holds a time.Time in a local-timestamp field (at any
+// depth) that would change wall clock, "(record)" if the schema cannot be
+// checked, or "" if there is none.
 func (c *localTimeCheck) changed(s schema.Schema, sd opencdc.StructuredData) string {
-	if !bytes.Contains(s.Bytes, localTimestampMarker) {
-		return ""
+	ls := c.entry(s.Bytes)
+	if ls.failed {
+		return "(record)"
 	}
-	w := c.walk(s.Bytes)
-	if w == nil {
-		return ""
-	}
-	for _, k := range sortedKeys(sd) {
-		if t, ok := w.fields[k]; ok && w.changed(t, sd[k], w.ns) {
-			return k
+	for _, f := range ls.fields {
+		if v, ok := sd[f.Name()]; ok && localChanged(f.Type(), v) {
+			return f.Name()
 		}
 	}
 	return ""
 }
 
-func (c *localTimeCheck) walk(text []byte) *localWalk {
+// entry returns the parse of text, from the cache when it is there.
+func (c *localTimeCheck) entry(text []byte) *localSchema {
 	c.mu.Lock()
-	w, ok := c.walks[string(text)]
+	ls, ok := c.entries[string(text)]
 	c.mu.Unlock()
 	if ok {
-		return w
+		return ls
 	}
-	w = newLocalWalk(text)
+	ls = parseLocalSchema(text)
+	if len(text) > maxLocalSchemaBytes {
+		return ls
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.walks == nil || len(c.walks) >= maxLocalWalks {
-		c.walks = make(map[string]*localWalk)
+	if _, ok := c.entries[string(text)]; ok {
+		return ls // another record stored it meanwhile
 	}
-	c.walks[string(text)] = w
-	return w
-}
-
-// localWalk is the parsed schema of one record type. It is read-only after
-// newLocalWalk returns, so one walk serves concurrent records.
-type localWalk struct {
-	named  map[string]namedRecord // record types by full name
-	fields map[string]any         // top-level field name -> Avro type
-	ns     string                 // namespace of the top-level record
-}
-
-// namedRecord is a record type and the namespace bare names inside it
-// resolve in, which is where it is defined, not where it is referenced.
-type namedRecord struct {
-	node map[string]any
-	ns   string
-}
-
-// newLocalWalk parses text, or returns nil when it is not a record schema.
-func newLocalWalk(text []byte) *localWalk {
-	var root any
-	if err := json.Unmarshal(text, &root); err != nil {
-		return nil
+	if c.entries == nil || len(c.entries) >= maxLocalSchemas || c.bytes+len(text) > maxLocalCacheBytes {
+		c.entries = make(map[string]*localSchema)
+		c.bytes = 0
 	}
-	rec, ok := root.(map[string]any)
+	c.entries[string(text)] = ls
+	c.bytes += len(text)
+	return ls
+}
+
+func parseLocalSchema(text []byte) *localSchema {
+	parsed, err := avro.ParseBytesWithCache(text, "", &avro.SchemaCache{}) //nolint:forbidigo // a fresh cache owned by this one schema, as conduit-commons schema/avro.Parse does
+	if err != nil {
+		return &localSchema{failed: true}
+	}
+	rec, ok := parsed.(*avro.RecordSchema)
 	if !ok {
-		return nil
+		return &localSchema{failed: true}
 	}
-	w := &localWalk{named: map[string]namedRecord{}, ns: recNamespace(rec, "")}
-	w.collect(root, "")
-	fields, _ := rec["fields"].([]any)
-	w.fields = make(map[string]any, len(fields))
-	for _, f := range fields {
-		if fm, ok := f.(map[string]any); ok {
-			if n, ok := fm["name"].(string); ok {
-				w.fields[n] = fm["type"]
-			}
+	ls := &localSchema{}
+	for _, f := range rec.Fields() {
+		if hasLocal(f.Type(), map[string]bool{}) {
+			ls.fields = append(ls.fields, f)
 		}
 	}
-	return w
+	return ls
 }
 
-// recNamespace returns the namespace a record defines for the names inside
-// it: the prefix of a dotted name, else its namespace attribute ("" is the
-// null namespace), else the enclosing namespace parent.
-func recNamespace(rec map[string]any, parent string) string {
-	if n, _ := rec["name"].(string); strings.Contains(n, ".") {
-		return n[:strings.LastIndex(n, ".")]
-	}
-	if ns, ok := rec["namespace"].(string); ok {
-		return ns
-	}
-	return parent
-}
-
-// fullName resolves an Avro type name as written at a place whose enclosing
-// namespace is ns: a name with a dot is already a full name, a bare name is
-// qualified with ns, and in the null namespace a bare name is its own full
-// name.
-func fullName(ns, name string) string {
-	if ns == "" || strings.Contains(name, ".") {
-		return name
-	}
-	return ns + "." + name
-}
-
-// collect registers every named record type in the schema JSON by its full
-// name. ns is the namespace enclosing node.
-func (w *localWalk) collect(node any, ns string) {
-	switch n := node.(type) {
-	case []any:
-		for _, b := range n {
-			w.collect(b, ns)
-		}
-	case map[string]any:
-		switch n["type"] {
-		case "record":
-			name, _ := n["name"].(string)
-			inner := recNamespace(n, ns)
-			w.named[fullName(inner, name[strings.LastIndex(name, ".")+1:])] = namedRecord{node: n, ns: inner}
-			fields, _ := n["fields"].([]any)
-			for _, f := range fields {
-				if fm, ok := f.(map[string]any); ok {
-					w.collect(fm["type"], inner)
-				}
-			}
-		case "array":
-			w.collect(n["items"], ns)
-		case "map":
-			w.collect(n["values"], ns)
-		default:
-			// {"type": {...}} wraps a type definition
-			if nested, ok := n["type"].(map[string]any); ok {
-				w.collect(nested, ns)
-			}
-		}
-	}
-}
-
-// changed reports whether v, in a position of Avro type typ, holds a time in
-// a local-timestamp field that would change wall clock.
-func (w *localWalk) changed(typ, v any, ns string) bool {
-	if isNil(v) {
+func isLocalTimestamp(s *avro.PrimitiveSchema) bool {
+	l := s.Logical()
+	if l == nil {
 		return false
 	}
-	switch t := typ.(type) {
-	case string:
-		// A reference to a named type. Primitive names are not in w.named.
-		if r, ok := w.named[fullName(ns, t)]; ok {
-			return w.changedRecord(r.node, v, r.ns)
+	lt := l.Type()
+	return lt == avro.LocalTimestampMillis || lt == avro.LocalTimestampMicros || lt == avro.LocalTimestampNanos
+}
+
+// hasLocal reports whether a value of type s can hold a local-timestamp value.
+// seen holds the records already being visited, so a recursive type ends.
+func hasLocal(s avro.Schema, seen map[string]bool) bool {
+	switch t := s.(type) {
+	case *avro.PrimitiveSchema:
+		return isLocalTimestamp(t)
+	case *avro.RefSchema:
+		return hasLocal(t.Schema(), seen)
+	case *avro.RecordSchema:
+		if seen[t.FullName()] {
+			return false
 		}
-	case []any:
-		for _, b := range t {
-			if w.changed(b, v, ns) {
+		seen[t.FullName()] = true
+		for _, f := range t.Fields() {
+			if hasLocal(f.Type(), seen) {
 				return true
 			}
 		}
-	case map[string]any:
-		return w.changedNode(t, v, ns)
+	case *avro.UnionSchema:
+		for _, b := range t.Types() {
+			if hasLocal(b, seen) {
+				return true
+			}
+		}
+	case *avro.ArraySchema:
+		return hasLocal(t.Items(), seen)
+	case *avro.MapSchema:
+		return hasLocal(t.Values(), seen)
 	}
 	return false
 }
 
-func (w *localWalk) changedNode(t map[string]any, v any, ns string) bool {
-	if lt, _ := t["logicalType"].(string); lt == "local-timestamp-millis" || lt == "local-timestamp-micros" {
+// localChanged reports whether v, in a position of Avro type s, holds a time
+// in a local-timestamp field that would change wall clock.
+func localChanged(s avro.Schema, v any) bool {
+	if isNil(v) {
+		return false
+	}
+	switch t := s.(type) {
+	case *avro.PrimitiveSchema:
 		tm, ok := v.(time.Time)
+		return ok && isLocalTimestamp(t) && wallClockChanges(tm)
+	case *avro.RefSchema:
+		return localChanged(t.Schema(), v)
+	case *avro.RecordSchema:
+		m, ok := asStringMap(v)
 		if !ok {
 			return false
 		}
-		_, own := tm.Zone()
-		_, local := tm.In(time.Local).Zone()
-		return own != local
-	}
-	switch t["type"] {
-	case "record":
-		return w.changedRecord(t, v, recNamespace(t, ns))
-	case "array":
-		return w.changedItems(t["items"], v, ns)
-	case "map":
-		return w.changedValues(t["values"], v, ns)
-	case "string", "int", "long", "float", "double", "boolean", "bytes", "null":
-		// primitives and logical types other than local-timestamp: nothing to check
-		return false
-	}
-	if nested, ok := t["type"].(map[string]any); ok {
-		return w.changedNode(nested, v, ns)
+		for _, f := range t.Fields() {
+			if fv, ok := m[f.Name()]; ok && localChanged(f.Type(), fv) {
+				return true
+			}
+		}
+	case *avro.UnionSchema:
+		for _, b := range t.Types() {
+			if localChanged(b, v) {
+				return true
+			}
+		}
+	case *avro.ArraySchema:
+		return localChangedItems(t.Items(), v)
+	case *avro.MapSchema:
+		return localChangedValues(t.Values(), v)
 	}
 	return false
 }
 
-// changedRecord checks the fields of record type t present in v. ns is the
-// namespace t defines for the names inside it.
-func (w *localWalk) changedRecord(t map[string]any, v any, ns string) bool {
-	m, ok := asStringMap(v)
-	if !ok {
-		return false
-	}
-	fields, _ := t["fields"].([]any)
-	for _, f := range fields {
-		fm, ok := f.(map[string]any)
-		if !ok {
-			continue
-		}
-		name, _ := fm["name"].(string)
-		if fv, ok := m[name]; ok && w.changed(fm["type"], fv, ns) {
-			return true
-		}
-	}
-	return false
+// wallClockChanges reports whether the codec, which writes the wall clock tm
+// has in time.Local, would write a different wall clock than tm's own: true
+// when tm's zone offset differs from time.Local's at that instant.
+func wallClockChanges(tm time.Time) bool {
+	_, own := tm.Zone()
+	_, local := tm.In(time.Local).Zone()
+	return own != local
 }
 
-func (w *localWalk) changedItems(items, v any, ns string) bool {
+func localChangedItems(items avro.Schema, v any) bool {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Slice && rv.Kind() != reflect.Array {
 		return false
 	}
 	for i := range rv.Len() {
-		if w.changed(items, rv.Index(i).Interface(), ns) {
+		if localChanged(items, rv.Index(i).Interface()) {
 			return true
 		}
 	}
 	return false
 }
 
-func (w *localWalk) changedValues(values, v any, ns string) bool {
+func localChangedValues(values avro.Schema, v any) bool {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Map || rv.Type().Key().Kind() != reflect.String {
 		return false
 	}
 	iter := rv.MapRange()
 	for iter.Next() {
-		if w.changed(values, iter.Value().Interface(), ns) {
+		if localChanged(values, iter.Value().Interface()) {
 			return true
 		}
 	}
