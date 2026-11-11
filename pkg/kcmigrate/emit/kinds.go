@@ -629,8 +629,8 @@ func pgTables(p *Plan, d *rules.Decision) error {
 				"Rename the table, or keep this connector on Kafka Connect.")
 		case schema != "" && s != schema:
 			return block(kcmigrate.CodeTargetCapabilityMissing.Reason(),
-				key+" lists tables in more than one schema ("+schema+", "+s+"). The builtin:postgres source finds bare table names through one search_path and does not accept schema-qualified names (conduit-connector-postgres#277), so with several schemas a same-name table of an earlier schema can be read instead.",
-				"Split the connector into one Kafka Connect connector per schema (each with its own slot.name and publication.name) and migrate each, or keep this connector on Kafka Connect until conduit-connector-postgres#277 ships.")
+				key+" lists tables in more than one schema ("+schema+", "+s+"). The builtin:postgres source finds bare table names through one search_path and does not accept schema-qualified names (Postgres connector issue #277), so with several schemas a same-name table of an earlier schema can be read instead.",
+				"Split the connector into one Kafka Connect connector per schema (each with its own slot.name and publication.name) and migrate each, or keep this connector on Kafka Connect until Postgres connector issue #277 ships.")
 		}
 		schema = s
 		if !slices.Contains(tables, t) {

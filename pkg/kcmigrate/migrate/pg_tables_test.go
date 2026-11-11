@@ -87,7 +87,7 @@ func TestPGTables(t *testing.T) {
 		// The legacy name is approximated (kc.key_deprecated) and translates the same.
 		{name: "legacy alias", key: "table.whitelist", list: "public.orders", tables: "orders", searchPath: "public"},
 		{name: "two schemas", list: "inventory.orders,sales.orders", code: "kc.target_capability_missing", reason: "more than one schema (inventory, sales)"},
-		{name: "two schemas, different tables", list: "public.orders,sales.customers", code: "kc.target_capability_missing", reason: "conduit-connector-postgres#277"},
+		{name: "two schemas, different tables", list: "public.orders,sales.customers", code: "kc.target_capability_missing", reason: "Postgres connector issue #277"},
 		{name: "bare name", list: "orders", code: "kc.key_unsupported", reason: "has no schema"},
 		{name: "bare name among qualified", list: "public.orders,customers", code: "kc.key_unsupported", reason: "customers has no schema"},
 		{name: "mixed-case table", list: "public.Orders", code: "kc.key_unsupported", reason: "uppercase"},
