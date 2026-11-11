@@ -1,0 +1,14 @@
+[
+  {
+    "subject": "oracle:strict:strict_key",
+    "version": 1,
+    "type": "AVRO",
+    "schema": "{\"name\":\"strict_key\",\"type\":\"record\",\"fields\":[{\"name\":\"id\",\"type\":\"int\"}]}"
+  },
+  {
+    "subject": "oracle:strict:strict_payload",
+    "version": 1,
+    "type": "AVRO",
+    "schema": "{\"name\":\"strict_payload\",\"type\":\"record\",\"fields\":[{\"name\":\"attrs\",\"type\":\"bytes\"},{\"name\":\"big\",\"type\":\"string\"},{\"name\":\"created\",\"type\":{\"type\":\"long\",\"logicalType\":\"timestamp-micros\"}},{\"name\":\"flag\",\"type\":\"boolean\"},{\"name\":\"id\",\"type\":\"int\"},{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"price\",\"type\":{\"type\":\"bytes\",\"logicalType\":\"decimal\",\"precision\":10,\"scale\":2}},{\"name\":\"qty\",\"type\":\"int\"}]}"
+  }
+]

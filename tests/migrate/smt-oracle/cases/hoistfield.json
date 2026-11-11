@@ -1,0 +1,20 @@
+{
+  "suite": "hoistfield",
+  "description": "HoistField wraps a value in a new single-field record, including null and primitive sides.",
+  "records": [
+    {"name": "map", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "n": {"x": 2}}},
+    {"name": "string", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": "plain"},
+    {"name": "int", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": 5},
+    {"name": "bytes", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"$bytes": "AQID"}},
+    {"name": "list", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": [1, 2]},
+    {"name": "empty", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {}},
+    {"name": "tombstone", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": null},
+    {"name": "struct", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1}, "valueSchema": {"type": "struct", "optional": false, "fields": [{"field": "id", "type": "int32", "optional": false}]}},
+    {"name": "optional-struct-null", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": null, "valueSchema": {"type": "struct", "optional": true, "fields": [{"field": "id", "type": "int32", "optional": false}]}},
+    {"name": "primitive-schema", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": "s", "valueSchema": {"type": "string", "optional": false}}
+  ],
+  "runs": [
+    {"run": "value", "chain": [{"alias": "h", "type": "HoistField$Value", "config": {"field": "payload"}}]},
+    {"run": "key", "chain": [{"alias": "h", "type": "HoistField$Key", "config": {"field": "id"}}], "records": [{"name": "string-key", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k1", "value": {"a": 1}}, {"name": "int-key", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": 7, "value": {"a": 1}}, {"name": "map-key", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": {"id": 1}, "value": {"a": 1}}, {"name": "null-key", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": null, "value": {"a": 1}}, {"name": "struct-key", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": {"id": 3}, "value": {"a": 1}, "keySchema": {"type": "struct", "optional": false, "fields": [{"field": "id", "type": "int32", "optional": false}]}}]}
+  ]
+}

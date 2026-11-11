@@ -1,0 +1,26 @@
+{
+  "suite": "chains",
+  "description": "Multi-SMT chains: predicates evaluated per stage after earlier stages ran, negate, drops mid-chain, errors mid-chain, and stage interactions.",
+  "records": [
+    {"name": "orders-ints", "topic": "orders-1", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k1", "value": {"a": 7, "n": {"x": 1}, "s": "keep"}, "headers": [{"key": "tenant", "value": "t1", "schema": "string"}]},
+    {"name": "audit-ints", "topic": "audit-1", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k2", "value": {"a": 8, "n": {"x": 2}}},
+    {"name": "orders-tombstone", "topic": "orders-2", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k3", "value": null},
+    {"name": "orders-no-header", "topic": "orders-3", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k4", "value": {"a": "9", "n": null}},
+    {"name": "collision", "topic": "orders-4", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k5", "value": {"a.x": 1, "a": {"x": 2}}},
+    {"name": "bad-cast", "topic": "orders-5", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k6", "value": {"a": "oops"}}
+  ],
+  "runs": [
+    {"run": "insert-if-topic-matches", "chain": [{"alias": "c", "type": "InsertField$Value", "config": {"static.field": "tag", "static.value": "x"}, "predicate": "p"}], "predicates": {"p": {"type": "TopicNameMatches", "config": {"pattern": "orders-.*"}}}},
+    {"run": "insert-if-topic-matches-negate", "chain": [{"alias": "c", "type": "InsertField$Value", "config": {"static.field": "tag", "static.value": "x"}, "predicate": "p", "negate": true}], "predicates": {"p": {"type": "TopicNameMatches", "config": {"pattern": "orders-.*"}}}},
+    {"run": "drop-tombstones-then-flatten-then-exclude", "chain": [{"alias": "d", "type": "Filter", "config": {}, "predicate": "t"}, {"alias": "f", "type": "Flatten$Value", "config": {"delimiter": "_"}}, {"alias": "e", "type": "ReplaceField$Value", "config": {"exclude": "s"}}], "predicates": {"t": {"type": "RecordIsTombstone", "config": {}}}},
+    {"run": "router-then-topic-predicate", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "orders-(\\d+)", "replacement": "o$1"}}, {"alias": "c", "type": "InsertField$Value", "config": {"static.field": "tag", "static.value": "x"}, "predicate": "p"}], "predicates": {"p": {"type": "TopicNameMatches", "config": {"pattern": "o\\d+"}}}},
+    {"run": "router-then-insert-topic", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "orders-(\\d+)", "replacement": "o$1"}}, {"alias": "i", "type": "InsertField$Value", "config": {"topic.field": "t"}}]},
+    {"run": "insert-then-value-to-key", "chain": [{"alias": "i", "type": "InsertField$Value", "config": {"static.field": "src", "static.value": "kc"}}, {"alias": "v", "type": "ValueToKey", "config": {"fields": "src"}}]},
+    {"run": "header-predicate-negate", "chain": [{"alias": "i", "type": "InsertField$Value", "config": {"static.field": "untagged", "static.value": "yes"}, "predicate": "h", "negate": true}], "predicates": {"h": {"type": "HasHeaderKey", "config": {"name": "tenant"}}}},
+    {"run": "extract-then-hoist", "chain": [{"alias": "e", "type": "ExtractField$Value", "config": {"field": "n"}}, {"alias": "h", "type": "HoistField$Value", "config": {"field": "wrapped"}}]},
+    {"run": "rename-then-insert-same-name", "chain": [{"alias": "r", "type": "ReplaceField$Value", "config": {"renames": "a:b"}}, {"alias": "i", "type": "InsertField$Value", "config": {"static.field": "a", "static.value": "new"}}]},
+    {"run": "error-mid-chain-stops", "chain": [{"alias": "c", "type": "ValueToKey", "config": {"fields": "absent"}}, {"alias": "i", "type": "InsertField$Value", "config": {"static.field": "after", "static.value": "cast"}}]},
+    {"run": "two-predicates", "chain": [{"alias": "c", "type": "InsertField$Value", "config": {"static.field": "tag", "static.value": "x"}, "predicate": "p1"}, {"alias": "i", "type": "InsertField$Value", "config": {"static.field": "audited", "static.value": "y"}, "predicate": "p2"}], "predicates": {"p1": {"type": "TopicNameMatches", "config": {"pattern": "orders-.*"}}, "p2": {"type": "TopicNameMatches", "config": {"pattern": "audit-.*"}}}},
+    {"run": "drop-then-later-stage-not-run", "chain": [{"alias": "d", "type": "Filter", "config": {}, "predicate": "t", "negate": true}, {"alias": "i", "type": "InsertField$Value", "config": {"static.field": "seen", "static.value": "y"}}], "predicates": {"t": {"type": "RecordIsTombstone", "config": {}}}}
+  ]
+}

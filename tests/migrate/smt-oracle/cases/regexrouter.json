@@ -1,0 +1,34 @@
+{
+  "suite": "regexrouter",
+  "description": "RegexRouter: group references, full-match semantics, replaceFirst, escapes and non-matching topics.",
+  "records": [
+    {"name": "dotted", "topic": "inventory.orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}},
+    {"name": "suffix-number", "topic": "orders-17", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}},
+    {"name": "no-match", "topic": "payments", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}},
+    {"name": "partial-would-match", "topic": "xorders-17y", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}},
+    {"name": "ab", "topic": "ab", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}},
+    {"name": "a", "topic": "a", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}},
+    {"name": "abc", "topic": "abc", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}},
+    {"name": "aab", "topic": "aab", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}},
+    {"name": "empty-groups", "topic": "a.", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}},
+    {"name": "dollar", "topic": "price$usd", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}},
+    {"name": "unicode", "topic": "ordérs-1", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}}
+  ],
+  "runs": [
+    {"run": "swap-groups", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "(.*)\\.(.*)", "replacement": "$2-$1"}}]},
+    {"run": "digits", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "orders-(\\d+)", "replacement": "o_$1"}}]},
+    {"run": "prefix-only-pattern", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "orders", "replacement": "X"}}]},
+    {"run": "constant-replacement", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": ".*", "replacement": "all"}}]},
+    {"run": "escaped-dollar", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "(.*)", "replacement": "pre\\$fix-$1"}}]},
+    {"run": "whole-topic-group0", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": ".*", "replacement": "$0-copy"}}]},
+    {"run": "missing-group", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "(.*)", "replacement": "$2"}}]},
+    {"run": "optional-group-unmatched", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "a(x)?\\.?", "replacement": "[$1]"}}]},
+    {"run": "alt-short-first", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "a|ab", "replacement": "X"}}]},
+    {"run": "alt-long-first", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "ab|a", "replacement": "X"}}]},
+    {"run": "alt-grouped", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "(a|ab)", "replacement": "[$1]"}}]},
+    {"run": "lazy-quantifier", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "a.*?", "replacement": "X"}}]},
+    {"run": "star-quantifier", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "a*", "replacement": "X"}}]},
+    {"run": "anchored-explicitly", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "^ab$", "replacement": "X"}}]},
+    {"run": "case-insensitive-flag", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "(?i)ORDERS-(\\d+)", "replacement": "$1"}}]}
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "suite": "replacefield",
+  "description": "ReplaceField exclude, renames and include over schemaless and schema'd values; include is refused by the translator but captured here.",
+  "records": [
+    {"name": "flat", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "name": "n", "secret": "s", "extra": 9}},
+    {"name": "nested", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "addr": {"city": "c", "zip": "z"}}},
+    {"name": "missing-fields", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"other": 1}},
+    {"name": "null-field-values", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": null, "name": null, "secret": null}},
+    {"name": "rename-target-exists", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "name": "n", "label": "l"}},
+    {"name": "empty", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {}},
+    {"name": "tombstone", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": null},
+    {"name": "struct", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "name": "n", "secret": "s", "addr": {"city": "c", "zip": "z"}}, "valueSchema": {"type": "struct", "optional": false, "fields": [{"field": "id", "type": "int32", "optional": false}, {"field": "name", "type": "string", "optional": true}, {"field": "secret", "type": "string", "optional": true}, {"type": "struct", "optional": true, "fields": [{"field": "city", "type": "string", "optional": true}, {"field": "zip", "type": "string", "optional": true}], "field": "addr"}]}},
+    {"name": "struct-null-optional", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "name": null, "secret": null, "addr": null}, "valueSchema": {"type": "struct", "optional": false, "fields": [{"field": "id", "type": "int32", "optional": false}, {"field": "name", "type": "string", "optional": true}, {"field": "secret", "type": "string", "optional": true}, {"type": "struct", "optional": true, "fields": [{"field": "city", "type": "string", "optional": true}, {"field": "zip", "type": "string", "optional": true}], "field": "addr"}]}}
+  ],
+  "runs": [
+    {"run": "exclude", "chain": [{"alias": "r", "type": "ReplaceField$Value", "config": {"exclude": "secret,extra"}}]},
+    {"run": "rename", "chain": [{"alias": "r", "type": "ReplaceField$Value", "config": {"renames": "id:order_id,name:label"}}]},
+    {"run": "exclude-and-rename", "chain": [{"alias": "r", "type": "ReplaceField$Value", "config": {"exclude": "secret", "renames": "id:order_id"}}]},
+    {"run": "rename-of-excluded", "chain": [{"alias": "r", "type": "ReplaceField$Value", "config": {"exclude": "name", "renames": "name:label"}}]},
+    {"run": "rename-onto-existing", "chain": [{"alias": "r", "type": "ReplaceField$Value", "config": {"renames": "name:label"}}]},
+    {"run": "rename-swap", "chain": [{"alias": "r", "type": "ReplaceField$Value", "config": {"renames": "id:name,name:id"}}]},
+    {"run": "rename-chain", "chain": [{"alias": "r", "type": "ReplaceField$Value", "config": {"renames": "id:name,name:label"}}]},
+    {"run": "include", "chain": [{"alias": "r", "type": "ReplaceField$Value", "config": {"include": "id,name"}}]},
+    {"run": "include-and-exclude", "chain": [{"alias": "r", "type": "ReplaceField$Value", "config": {"include": "id,name", "exclude": "name"}}]},
+    {"run": "exclude-nothing-listed", "chain": [{"alias": "r", "type": "ReplaceField$Value", "config": {"exclude": ""}}]},
+    {"run": "exclude-key-variant", "chain": [{"alias": "r", "type": "ReplaceField$Key", "config": {"exclude": "id"}}], "records": [{"name": "map-key", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": {"id": 1, "tenant": "t"}, "value": {"a": 1}}, {"name": "null-key", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": null, "value": {"a": 1}}, {"name": "string-key", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}}]}
+  ]
+}

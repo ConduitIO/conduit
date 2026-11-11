@@ -1,0 +1,28 @@
+{
+  "suite": "flatten",
+  "description": "Flatten with the default and custom delimiters over nested maps and structs, nulls, empties, arrays and key collisions.",
+  "records": [
+    {"name": "nested", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "addr": {"city": "c", "geo": {"lat": 1.5, "lon": 2.5}}}},
+    {"name": "flat-unchanged", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "name": "n"}},
+    {"name": "arrays-kept", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "tags": ["a", "b"], "n": {"xs": [1, 2]}}},
+    {"name": "nested-null", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "addr": null}},
+    {"name": "null-leaf-in-nested", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "addr": {"city": null}}},
+    {"name": "empty-nested-map", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "addr": {}}},
+    {"name": "collision", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a.b": 1, "a": {"b": 2}}},
+    {"name": "deep", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": {"b": {"c": {"d": 1}}}}},
+    {"name": "empty", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {}},
+    {"name": "tombstone", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": null},
+    {"name": "primitive", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": 5},
+    {"name": "typed-leaves", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": {"i": {"$int32": 1}, "d": {"$date": "2023-11-14T22:13:20.123Z"}, "b": {"$bytes": "AQID"}}}},
+    {"name": "struct", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "addr": {"city": "c", "geo": {"lat": 1.5, "lon": 2.5}}, "tags": ["a"], "note": "n"}, "valueSchema": {"type": "struct", "optional": false, "fields": [{"field": "id", "type": "int32", "optional": false}, {"type": "struct", "optional": true, "fields": [{"field": "city", "type": "string", "optional": true}, {"type": "struct", "optional": true, "fields": [{"field": "lat", "type": "double", "optional": false}, {"field": "lon", "type": "double", "optional": false}], "field": "geo"}], "field": "addr"}, {"field": "tags", "type": "array", "items": {"type": "string", "optional": false}, "optional": true}, {"field": "note", "type": "string", "optional": true}]}},
+    {"name": "struct-nulls", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "addr": null, "tags": null, "note": null}, "valueSchema": {"type": "struct", "optional": false, "fields": [{"field": "id", "type": "int32", "optional": false}, {"type": "struct", "optional": true, "fields": [{"field": "city", "type": "string", "optional": true}, {"type": "struct", "optional": true, "fields": [{"field": "lat", "type": "double", "optional": false}, {"field": "lon", "type": "double", "optional": false}], "field": "geo"}], "field": "addr"}, {"field": "tags", "type": "array", "items": {"type": "string", "optional": false}, "optional": true}, {"field": "note", "type": "string", "optional": true}]}},
+    {"name": "struct-partial-nested-null", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"id": 1, "addr": {"city": "c", "geo": null}, "tags": null, "note": null}, "valueSchema": {"type": "struct", "optional": false, "fields": [{"field": "id", "type": "int32", "optional": false}, {"type": "struct", "optional": true, "fields": [{"field": "city", "type": "string", "optional": true}, {"type": "struct", "optional": true, "fields": [{"field": "lat", "type": "double", "optional": false}, {"field": "lon", "type": "double", "optional": false}], "field": "geo"}], "field": "addr"}, {"field": "tags", "type": "array", "items": {"type": "string", "optional": false}, "optional": true}, {"field": "note", "type": "string", "optional": true}]}}
+  ],
+  "runs": [
+    {"run": "default-delimiter", "chain": [{"alias": "f", "type": "Flatten$Value", "config": {}}]},
+    {"run": "underscore", "chain": [{"alias": "f", "type": "Flatten$Value", "config": {"delimiter": "_"}}]},
+    {"run": "multi-char-delimiter", "chain": [{"alias": "f", "type": "Flatten$Value", "config": {"delimiter": "::"}}]},
+    {"run": "empty-delimiter", "chain": [{"alias": "f", "type": "Flatten$Value", "config": {"delimiter": ""}}]},
+    {"run": "key-variant", "chain": [{"alias": "f", "type": "Flatten$Key", "config": {}}], "records": [{"name": "map-key", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": {"a": {"b": 1}}, "value": {"x": 1}}, {"name": "null-key", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": null, "value": {"x": 1}}, {"name": "string-key", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"x": 1}}, {"name": "struct-key", "topic": "orders", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": {"a": {"b": 1}}, "value": {"x": 1}, "keySchema": {"type": "struct", "optional": false, "fields": [{"type": "struct", "optional": false, "fields": [{"field": "b", "type": "int32", "optional": false}], "field": "a"}]}}]}
+  ]
+}

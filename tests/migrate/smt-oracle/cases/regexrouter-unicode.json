@@ -1,0 +1,26 @@
+{
+  "suite": "regexrouter-unicode",
+  "description": "RegexRouter and TopicNameMatches with the Kelvin sign (U+212A, which Java's case-insensitive matching folds to k only with UNICODE_CASE), alternation and lazy quantifiers.",
+  "records": [
+    {"name": "kelvin", "topic": "kelvin-K", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}},
+    {"name": "ascii-k", "topic": "kelvin-k", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}},
+    {"name": "ascii-K", "topic": "KELVIN-K", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}},
+    {"name": "plain", "topic": "kelvin", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}},
+    {"name": "ab", "topic": "ab", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}},
+    {"name": "a", "topic": "a", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}},
+    {"name": "abc", "topic": "abc", "partition": 3, "offset": 42, "timestamp": 1700000000000, "key": "k", "value": {"a": 1}}
+  ],
+  "runs": [
+    {"run": "ci-ascii", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "(?i)kelvin-k", "replacement": "X"}}]},
+    {"run": "ci-kelvin-literal", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "(?i)kelvin-K", "replacement": "X"}}]},
+    {"run": "ci-unicode-case", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "(?iu)kelvin-k", "replacement": "X"}}]},
+    {"run": "class-ascii", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "kelvin-[a-z]", "replacement": "X"}}]},
+    {"run": "dot", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "kelvin-.", "replacement": "X"}}]},
+    {"run": "alt-short-first", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "a|ab", "replacement": "X"}}]},
+    {"run": "alt-long-first", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "ab|a", "replacement": "X"}}]},
+    {"run": "lazy", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "a.*?", "replacement": "X"}}]},
+    {"run": "greedy-group", "chain": [{"alias": "r", "type": "RegexRouter", "config": {"regex": "(a.*)", "replacement": "[$1]"}}]},
+    {"run": "predicate-ci", "chain": [{"alias": "f", "type": "Filter", "config": {}, "predicate": "p"}], "predicates": {"p": {"type": "TopicNameMatches", "config": {"pattern": "(?i)kelvin-k"}}}},
+    {"run": "predicate-alt", "chain": [{"alias": "f", "type": "Filter", "config": {}, "predicate": "p"}], "predicates": {"p": {"type": "TopicNameMatches", "config": {"pattern": "a|ab"}}}}
+  ]
+}
