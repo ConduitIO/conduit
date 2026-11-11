@@ -492,6 +492,11 @@ func (o Outcome) validate(emit *Action) []error {
 	if (o.Status == kcmigrate.StatusUnsupported || o.Blocking) && o.Fix == "" {
 		errs = append(errs, cerrors.New("an unsupported or blocking outcome needs a fix"))
 	}
+	for _, text := range []string{o.Reason, o.Fix} {
+		if truncated(text) {
+			errs = append(errs, cerrors.Errorf("%q ends mid-sentence; quote the scalar if it contains \" #\", which YAML reads as a comment", text))
+		}
+	}
 	if o.Code != "" {
 		if _, ok := conduiterr.LookupCode(o.Code); !ok || !strings.HasPrefix(o.Code, "kc.") {
 			errs = append(errs, cerrors.Errorf("code %q is not a registered kc.* code", o.Code))
@@ -523,7 +528,24 @@ func (f *File) String() string { return fmt.Sprintf("%s (%s)", f.name, f.Scope) 
 // Name is the rule file's name.
 func (f *File) Name() string { return f.name }
 
+// truncated reports whether a reason or fix ends in a word no sentence ends
+// in: the sign of an unquoted " #" cutting the YAML scalar short.
+func truncated(text string) bool {
+	words := strings.Fields(strings.TrimRight(text, " ."))
+	if len(words) == 0 {
+		return false
+	}
+	switch strings.ToLower(words[len(words)-1]) {
+	case "until", "or", "and", "the", "see":
+		return true
+	}
+	return false
+}
+
 func (n NoteSpec) valid() bool {
+	if truncated(n.Reason) || truncated(n.Fix) {
+		return false
+	}
 	_, ok := conduiterr.LookupCode(n.Code)
 	return ok && strings.HasPrefix(n.Code, "kc.") && n.Reason != "" && (!n.Blocking || n.Fix != "")
 }

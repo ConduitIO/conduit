@@ -12,7 +12,7 @@
 
 | | Key | Location | Code | Reason | Fix |
 | --- | --- | --- | --- | --- | --- |
-| blocking | `topic.prefix` | connector.json#/config/topic.prefix | `kc.target_capability_missing` | topic.prefix becomes debezium.topic.prefix, which requires the Debezium-compatible output mode (debezium.enabled on builtin:postgres); that setting is not in the released connector. | Keep this connector on Kafka Connect until |
+| blocking | `topic.prefix` | connector.json#/config/topic.prefix | `kc.target_capability_missing` | topic.prefix becomes debezium.topic.prefix, which requires the Debezium-compatible output mode (debezium.enabled on builtin:postgres); that setting is not in the released connector. | Keep this connector on Kafka Connect until #3032 ships the Debezium output mode, or accept the difference with --accept-gaps. |
 | blocking | `key.converter` | connector.json#/config/key.converter | `kc.key_unsupported` | This converter is not translated by this version of migrate; the wire format of keys would differ. | Keep this connector on Kafka Connect until migrate translates the converter. |
 | blocking | `value.converter` | connector.json#/config/value.converter | `kc.key_unsupported` | This converter is not translated by this version of migrate; the wire format of values would differ. | Keep this connector on Kafka Connect until migrate translates the converter. |
 | unsupported | `value.converter.schemas.enable` | connector.json#/config/value.converter.schemas.enable | `kc.key_unsupported` | A converter setting; the converter itself is reported on value.converter. | None beyond the value.converter entry. |

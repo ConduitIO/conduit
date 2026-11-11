@@ -382,3 +382,17 @@ func TestLoad_NoPipelineClass(t *testing.T) {
 		})
 	}
 }
+
+// TestLoad_RejectsTruncatedText: an unquoted " #" in a reason or fix starts
+// a YAML comment and cuts the published text short ("Keep this connector on
+// Kafka Connect until"); Load rejects text that ends mid-sentence.
+func TestLoad_RejectsTruncatedText(t *testing.T) {
+	head := "rulesVersion: 1\nscope: shared\nupstream: {name: kafka, version: \"4.2\"}\nkeys:\n  - key: k\n    status: unsupported\n    code: kc.key_unsupported\n    reason: r.\n    diff: behavior\n"
+	_, err := Load(fstest.MapFS{"r.yaml": {Data: []byte(head + "    fix: Keep this connector on Kafka Connect until #3032 ships.\n")}})
+	if err == nil || !strings.Contains(err.Error(), "ends mid-sentence") {
+		t.Fatalf("Load: %v, want a mid-sentence error", err)
+	}
+	if _, err := Load(fstest.MapFS{"r.yaml": {Data: []byte(head + "    fix: \"Keep this connector on Kafka Connect until #3032 ships.\"\n")}}); err != nil {
+		t.Fatalf("quoted fix: %v", err)
+	}
+}
