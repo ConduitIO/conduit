@@ -430,6 +430,16 @@ func (e *Engine) DefaultNotes(c kcmigrate.Connector, workerKeys map[string]bool)
 	set := map[string]bool{}
 	for _, kv := range c.Config {
 		set[kv.Key] = true
+		// A legacy alias sets the key it stands for (table.whitelist is
+		// table.include.list), so the key's absent-default note must not fire.
+		for _, file := range []*File{f, e.shared} {
+			if file == nil {
+				continue
+			}
+			if r, ok := file.exact[kv.Key]; ok && r.AliasOf != "" {
+				set[r.AliasOf] = true
+			}
+		}
 	}
 	var notes []kcmigrate.Note
 	for _, file := range []*File{f, e.shared} {

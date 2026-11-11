@@ -27,7 +27,7 @@
     "translated": 7,
     "approximated": 0,
     "unsupported": 2,
-    "blocking": 7
+    "blocking": 8
   },
   "connectors": [
     {
@@ -205,9 +205,9 @@
         },
         {
           "code": "kc.default_differs",
-          "reason": "table.include.list is absent, so Debezium reads every table it selects, in every non-system schema. Unless another table or schema selection key is set, the source is set to tables \"*\", which reads only the tables of the public schema (url sets search_path=public so each name resolves there).",
-          "fix": "Set table.include.list to the tables to read, or accept the difference.",
-          "blocking": false,
+          "reason": "table.include.list is absent, so Debezium reads every table of every non-system schema (or of the schemas a schema.include.list or schema.exclude.list selects). The builtin:postgres source has no equivalent: its tables \"*\" reads only the public schema's tables. migrate does not write tables.",
+          "fix": "Set table.include.list to the tables to read, as schema.table entries in one schema (one Kafka Connect connector per schema), then re-run.",
+          "blocking": true,
           "rule": "debezium-postgres/defaults/table.include.list"
         },
         {

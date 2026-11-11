@@ -1,6 +1,6 @@
 # Kafka Connect migration report
 
-1 connectors, 9 keys: 7 translated, 0 approximated, 2 unsupported, 7 blocking.
+1 connectors, 9 keys: 7 translated, 0 approximated, 2 unsupported, 8 blocking.
 
 ## inventory-connector
 
@@ -26,6 +26,6 @@
 | blocking | inventory-connector | `kc.converter_unknown` | Neither the connector nor a worker file sets value.converter, so the format Kafka Connect used is unknown. | Pass the worker properties with --worker, or set value.converter on the connector, then re-run. |
 | note | inventory-connector | `kc.secret_plaintext` | The input holds at least one secret as a literal value. Where migrate used the setting it wrote a variable reference instead (a dropped setting has no variable), but the input file itself contains the secret. | Fill the variables in secrets.env.template from your secret store, and replace the literal in the Kafka Connect config with a config-provider reference. |
 | note | inventory-connector | `kc.default_differs` | plugin.name is absent, so Debezium uses decoderbufs; Conduit decodes with pgoutput only, and decoder-specific differences are not emulated. | Set plugin.name=pgoutput in the Kafka Connect config, or accept the difference. |
-| note | inventory-connector | `kc.default_differs` | table.include.list is absent, so Debezium reads every table it selects, in every non-system schema. Unless another table or schema selection key is set, the source is set to tables "*", which reads only the tables of the public schema (url sets search_path=public so each name resolves there). | Set table.include.list to the tables to read, or accept the difference. |
+| blocking | inventory-connector | `kc.default_differs` | table.include.list is absent, so Debezium reads every table of every non-system schema (or of the schemas a schema.include.list or schema.exclude.list selects). The builtin:postgres source has no equivalent: its tables "*" reads only the public schema's tables. migrate does not write tables. | Set table.include.list to the tables to read, as schema.table entries in one schema (one Kafka Connect connector per schema), then re-run. |
 | note | inventory-connector | `kc.default_differs` | Kafka Connect does not retry a failed operation by default (errors.retry.timeout=0). Conduit restarts a failed pipeline through pipeline recovery, so a transient failure that stopped the connector may not stop the pipeline. | - |
 | note | inventory-connector | `kc.default_differs` | Kafka Connect's default header converter types header values; Conduit carries headers as metadata strings. | - |

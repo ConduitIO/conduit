@@ -547,18 +547,22 @@ func listSetting(p *Plan, d *rules.Decision) error {
 
 var listSplit = regexp.MustCompile(`\s*,\s*`)
 
-// settingTables is the builtin:postgres source setting pgTables writes, and
-// allTables its all-tables wildcard, which lists the public schema's tables.
-const (
-	settingTables = "tables"
-	allTables     = "*"
+// pgSchemaName is a schema name pgTables writes to search_path unquoted: an
+// unquoted lowercase identifier. pgTableName is a table name the source
+// quotes, so a leading digit is fine.
+var (
+	pgSchemaName = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
+	pgTableName  = regexp.MustCompile(`^[a-z0-9_]+$`)
 )
+
+// settingTables is the builtin:postgres source setting pgTables writes.
+const settingTables = "tables"
 
 // pgTables translates Debezium Postgres's table.include.list into the
 // builtin:postgres source's tables setting, and only when the result reads
-// exactly the tables Debezium read. Rule data routes only literal entries
-// here (identifier characters and at most one dot); a regex stays a blocking
-// rule entry.
+// exactly the tables Debezium read. Rule data routes here only values made of
+// identifier characters, dots, commas and spaces; any other regex stays a
+// blocking rule entry.
 //
 // Debezium matches each entry, as a case-insensitive regular expression,
 // against the whole schema-qualified name schema.table, and never captures
@@ -584,25 +588,37 @@ func pgTables(p *Plan, d *rules.Decision) error {
 		}
 		return nil
 	}
+	value := strings.TrimSpace(d.KV.Value.Reveal())
+	if value == "" {
+		return block(kcmigrate.CodeKeyUnsupported.Reason(),
+			key+" is empty, which Debezium reads as no table filter: every table of every non-system schema. The builtin:postgres source has no equivalent; its tables \"*\" reads only the public schema's tables.",
+			"Set "+key+" to the tables to read, as schema.table entries in one schema (one Kafka Connect connector per schema), then re-run.")
+	}
 	var schema string
 	var tables []string
-	for _, part := range listSplit.Split(strings.TrimSpace(d.KV.Value.Reveal()), -1) {
+	for _, part := range listSplit.Split(value, -1) {
 		s, t, qualified := strings.Cut(part, ".")
 		switch {
 		case part == "":
 			return block(kcmigrate.CodeKeyUnsupported.Reason(),
-				key+" has an empty element; Kafka Connect keeps it as an empty name.",
-				"Remove the empty element (a doubled or trailing comma) from "+key+".")
+				key+" has an empty element (a doubled or trailing comma), which names no table.",
+				"Remove the empty element from "+key+", then re-run.")
 		case !qualified:
 			return block(kcmigrate.CodeKeyUnsupported.Reason(),
 				key+" entry "+part+" has no schema. Debezium matches each entry against the whole name schema.table, so "+part+" selects no table, while the source would read a table "+part+".",
 				"Write every entry as schema.table (public."+part+" for a table in the public schema), then re-run.")
 		case strings.Contains(t, "."):
-			return cerrors.Errorf("key %s: pg-tables got entry %q with more than one dot; the rule pattern must route it to the regex entry", key, part)
+			return block(kcmigrate.CodeKeyUnsupported.Reason(),
+				key+" entry "+part+" has more than one dot. Debezium reads a dot as a regex wildcard, so the entry is not one literal schema.table name.",
+				"List the tables explicitly as schema.table entries in one schema, then re-run.")
 		case part != strings.ToLower(part):
 			return block(kcmigrate.CodeKeyUnsupported.Reason(),
 				key+" entry "+part+" has uppercase letters. Debezium matches entries case-insensitively and the source's tables are case-sensitive, so migrate cannot tell which table the entry names.",
 				"If the table was created without quotes, its name is lowercase: write the entry in lowercase, then re-run. A schema or table whose name has uppercase letters cannot be translated exactly yet; keep this connector on Kafka Connect.")
+		case !pgSchemaName.MatchString(s) || !pgTableName.MatchString(t):
+			return block(kcmigrate.CodeKeyUnsupported.Reason(),
+				key+" entry "+part+" is not a plain schema.table name: the schema must be an unquoted identifier (it is written to search_path) and the table may hold only letters, digits and underscores.",
+				"Keep this connector on Kafka Connect, or rename the schema or table.")
 		case strings.HasPrefix(s, "pg_") || s == "information_schema":
 			return block(kcmigrate.CodeKeyUnsupported.Reason(),
 				key+" entry "+part+" is in the system schema "+s+", which Debezium never captures.",

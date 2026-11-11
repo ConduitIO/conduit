@@ -192,18 +192,13 @@ func sinkConsumerDefaults(p *Plan, _ rules.Action) ([]kcmigrate.Note, error) {
 // reports the missing url as kc.setting_required. A secret part is already a
 // ${VAR} reference, so the assembled URL carries no plaintext secret.
 //
-// When the source reads tables "*" (the absent-list default, written by an
-// earlier default-setting finisher), the URL also gets search_path=public:
-// builtin:postgres lists the table names of the public schema explicitly
-// (pg_tables WHERE schemaname = 'public') and then finds each name through
-// search_path, so without it a same-name table of the "$user" schema or of a
-// server-side search_path would be read instead of the listed one.
+// When the only recorded part is search_path (table.include.list translated,
+// no database.* key), no url is written and the required-settings check makes
+// it a variable. The search_path the tables depend on would then be lost
+// when the user fills the variable, so a blocking note carries it.
 func pgURL(p *Plan, _ rules.Action) ([]kcmigrate.Note, error) {
 	if len(p.pgURL) == 0 {
 		return nil, nil
-	}
-	if t, ok := p.Setting(SideSource, settingTables); ok && t == allTables && p.pgURL[pgURLSearchPath] == "" {
-		p.pgURL[pgURLSearchPath] = "public"
 	}
 	var parts []string
 	connection := false // a part other than search_path names the server
@@ -216,6 +211,13 @@ func pgURL(p *Plan, _ rules.Action) ([]kcmigrate.Note, error) {
 	if !connection {
 		// search_path alone is no connection string: libpq would default
 		// every other part. The required-settings check reports url.
+		if sp := p.pgURL[pgURLSearchPath]; sp != "" {
+			return []kcmigrate.Note{{
+				Code: kcmigrate.CodeSettingRequired.Reason(), Blocking: true, Rule: FinishPGURL + "/" + pgURLSearchPath,
+				Reason: "table.include.list became bare table names that resolve only with search_path=" + sp + ", but no database.* key gives the connection string, so url is a variable. A url without search_path=" + sp + " reads same-name tables through the server's search_path instead.",
+				Fix:    "Set the source url with search_path=" + sp + " in it (\"search_path=" + sp + "\" in key=value form, \"&search_path=" + sp + "\" in URL form), or add the database.* keys to the Kafka Connect config and re-run.",
+			}}, nil
+		}
 		return nil, nil
 	}
 	if _, _, err := p.Set(SideSource, "url", strings.Join(parts, " "), "(pg-url)"); err != nil {
@@ -240,24 +242,11 @@ func dsnQuote(v string) string {
 // worker set it: the upstream connector's own default, where Conduit's
 // differs (MirrorMaker reads a partition with no stored offset from the
 // beginning; the Kafka source starts at the end).
-//
-// The optional argument unless lists, comma-separated, the keys whose
-// absence the default stands for. When the config sets one of them the
-// default is not written, even if that key was refused: the default would
-// replace what the key selected with something else (a refused
-// table.include.list must not become tables "*", which --accept-gaps would
-// then run). The setting stays unset for the required-settings check.
+
 func defaultSetting(p *Plan, a rules.Action) ([]kcmigrate.Note, error) {
 	side, name, value := a.Args["side"], a.Args["name"], a.Args["value"]
 	if name == "" || value == "" {
 		return nil, cerrors.Errorf(FinishDefault + " needs a name and a value")
-	}
-	if unless := a.Args["unless"]; unless != "" {
-		for _, key := range strings.Split(unless, ",") {
-			if _, ok := p.config[strings.TrimSpace(key)]; ok {
-				return nil, nil
-			}
-		}
 	}
 	idx, err := p.sides(side)
 	if err != nil {

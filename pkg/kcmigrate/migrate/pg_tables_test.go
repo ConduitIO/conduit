@@ -31,13 +31,18 @@ const pgBase = "name=pg\nconnector.class=io.debezium.connector.postgresql.Postgr
 
 func pgRun(t *testing.T, extra string) (kcmigrate.ReportConnector, string) {
 	t.Helper()
+	return pgRunConfig(t, pgBase+extra)
+}
+
+func pgRunConfig(t *testing.T, config string) (kcmigrate.ReportConnector, string) {
+	t.Helper()
 	e, err := rules.Builtin()
 	if err != nil {
 		t.Fatal(err)
 	}
 	res, err := Run(context.Background(), e, withValidator(Request{
 		ConduitVersion: "v", RequiredSettings: BuiltinRequired,
-		Inputs: []kcmigrate.Input{in("pg.properties", pgBase+extra)},
+		Inputs: []kcmigrate.Input{in("pg.properties", config)},
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -93,8 +98,13 @@ func TestPGTables(t *testing.T) {
 		{name: "regex wildcard", list: "public.*", code: "kc.key_unsupported", reason: "regex metacharacters"},
 		{name: "regex star in a name", list: "inventory.ord*", code: "kc.key_unsupported", reason: "regex metacharacters"},
 		{name: "escaped dot", list: `inventory\\.orders`, code: "kc.key_unsupported", reason: "regex metacharacters"},
-		{name: "two dots", list: "shop.inventory.orders", code: "kc.key_unsupported", reason: "regex metacharacters"},
-		{name: "empty element", list: "public.orders,,public.customers", code: "kc.key_unsupported", reason: "regex metacharacters"},
+		{name: "two dots", list: "shop.inventory.orders", code: "kc.key_unsupported", reason: "more than one dot"},
+		{name: "empty element", list: "public.orders,,public.customers", code: "kc.key_unsupported", reason: "empty element"},
+		{name: "trailing comma", list: "public.orders,", code: "kc.key_unsupported", reason: "empty element"},
+		{name: "empty value", list: "", code: "kc.key_unsupported", reason: "is empty"},
+		{name: "digit-leading table", list: "inventory.2024_orders", tables: "2024_orders", searchPath: "inventory"},
+		{name: "digit-leading schema", list: "2024.orders", code: "kc.key_unsupported", reason: "not a plain schema.table"},
+		{name: "space inside a name", list: "public.my orders", code: "kc.key_unsupported", reason: "not a plain schema.table"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -117,6 +127,9 @@ func TestPGTables(t *testing.T) {
 				is.Equal(tables, tt.tables)
 				is.True(strings.HasSuffix(url, " search_path="+tt.searchPath)) // url
 				is.True(strings.Contains(e.Reason, "search_path="+tt.searchPath))
+				for _, n := range rc.Notes { // a list is set: no absent-list note
+					is.True(n.Rule != "debezium-postgres/defaults/table.include.list")
+				}
 				return
 			}
 			is.Equal(e.Status, kcmigrate.StatusUnsupported)
@@ -135,20 +148,54 @@ func TestPGTables(t *testing.T) {
 	}
 }
 
-// Without table.include.list Debezium reads every table: the source gets
-// "*", the default is noted, and url sets search_path=public. The source
-// lists the public schema's table names explicitly and finds each through
-// search_path, so only search_path=public makes the name the listed table.
-func TestPGTables_AbsentListDefaultsToAllInPublic(t *testing.T) {
+// Without table.include.list Debezium reads every table of every
+// non-system schema, and the source's "*" reads only public: there is no
+// exact translation, so the absent list is a blocking note and tables stays a
+// variable (no "*", no search_path).
+func TestPGTables_AbsentListBlocks(t *testing.T) {
 	is := is.New(t)
 	rc, p := pgRun(t, "")
-	is.Equal(setting(t, tablesLine, p), "'*'")
-	is.True(strings.HasSuffix(setting(t, urlLine, p), " search_path=public"))
-	var noted bool
+	is.Equal(setting(t, tablesLine, p), "${KC_PG_SOURCE_TABLES}")
+	is.True(!strings.Contains(setting(t, urlLine, p), "search_path"))
+	var absent, required bool
 	for _, n := range rc.Notes {
-		noted = noted || (n.Rule == "debezium-postgres/defaults/table.include.list" && strings.Contains(n.Reason, "search_path=public"))
+		absent = absent || (n.Rule == "debezium-postgres/defaults/table.include.list" && n.Blocking && strings.Contains(n.Reason, "only the public schema"))
+		required = required || (n.Rule == "required/source/tables" && n.Blocking)
 	}
-	is.True(noted)
+	is.True(absent)
+	is.True(required)
+	is.Equal(rc.PipelineStatus, kcmigrate.PipelineStopped)
+}
+
+// table.include.list and its legacy alias with different schemas conflict;
+// the losing key's schema never reaches search_path (else --accept-gaps
+// would read sales.orders in place of inventory.orders).
+func TestPGTables_AliasConflictKeepsTheWinnersSchema(t *testing.T) {
+	is := is.New(t)
+	rc, p := pgRun(t, "table.include.list=inventory.orders\ntable.whitelist=sales.orders\n")
+	is.Equal(entryFor(rc, "table.whitelist").Code, "kc.key_conflict")
+	is.Equal(setting(t, tablesLine, p), "orders")
+	url := setting(t, urlLine, p)
+	is.True(strings.HasSuffix(url, " search_path=inventory"))
+	is.True(!strings.Contains(url, "sales"))
+}
+
+// Without database.* keys the url is a variable; the search_path the bare
+// tables depend on is carried by a blocking note, so filling the variable
+// cannot silently drop it.
+func TestPGTables_NoConnectionKeysCarrySearchPath(t *testing.T) {
+	is := is.New(t)
+	rc, p := pgRunConfig(t, "name=pg\nconnector.class=io.debezium.connector.postgresql.PostgresConnector\n"+
+		"key.converter=org.apache.kafka.connect.json.JsonConverter\nvalue.converter=org.apache.kafka.connect.json.JsonConverter\n"+
+		"table.include.list=inventory.orders\n")
+	is.Equal(setting(t, tablesLine, p), "orders")
+	is.Equal(setting(t, urlLine, p), "${KC_PG_SOURCE_URL}")
+	var carried bool
+	for _, n := range rc.Notes {
+		carried = carried || (n.Rule == "pg-url/search_path" && n.Blocking && n.Code == "kc.setting_required" && strings.Contains(n.Fix, "search_path=inventory"))
+	}
+	is.True(carried)
+	is.Equal(rc.PipelineStatus, kcmigrate.PipelineStopped)
 }
 
 // A refused table or schema selection key never falls back to tables "*"
