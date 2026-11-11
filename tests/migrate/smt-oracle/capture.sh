@@ -270,20 +270,23 @@ YAML
     java_run --name "$name-consume" --network "${name}_default" -v "$work/fixtures:/out" -- \
       Consume kafka:9092 dbzd.public. /out/debezium-postgres-default-converter.json >"$work/consume.log" 2>&1 || { cat "$work/consume.log" >&2; exit 1; }
     dbz_n=$(python3 -c 'import json,sys; print(sum(1 for e in json.load(open(sys.argv[1])) if e["value"] is not None))' "$work/fixtures/debezium-postgres.json")
+    dbzd_n=$(python3 -c 'import json,sys; print(sum(1 for e in json.load(open(sys.argv[1])) if e["value"] is not None))' "$work/fixtures/debezium-postgres-default-converter.json")
     cond_n=$(grep -c . "$work/conduit-run/records.jsonl" || true)
-    cur="$dbz_n/$cond_n"
-    if [[ $dbz_n == "$cond_n" && $cur == "$prev" ]]; then break; fi
+    cur="$dbz_n/$dbzd_n/$cond_n"
+    if [[ $dbz_n == "$cond_n" && $dbzd_n == "$cond_n" && $cur == "$prev" ]]; then break; fi
     prev=$cur
   done
-  if [[ $dbz_n != "$cond_n" ]]; then
-    echo "Debezium wrote $dbz_n changes but Conduit wrote $cond_n" >&2
+  if [[ $dbz_n != "$cond_n" || $dbzd_n != "$cond_n" ]]; then
+    echo "Debezium wrote $dbz_n changes (default converters: $dbzd_n) but Conduit wrote $cond_n" >&2
     exit 1
   fi
-  state=$(compose exec -T connect curl -sf http://localhost:8083/connectors/smt/status)
-  if ! grep -q '"state":"RUNNING"' <<<"${state//[[:space:]]/}"; then
-    echo "connector not running: $state" >&2
-    exit 1
-  fi
+  for connector in smt smtdef; do
+    state=$(compose exec -T connect curl -sf "http://localhost:8083/connectors/$connector/status")
+    if ! grep -q '"state":"RUNNING"' <<<"${state//[[:space:]]/}"; then
+      echo "connector $connector not running: $state" >&2
+      exit 1
+    fi
+  done
   stop_conduit
   if [[ ! -s $work/conduit-run/schemas.json ]]; then
     echo "the schema registry wrote no dump:" >&2

@@ -226,6 +226,32 @@ func TestCompare_Errors(t *testing.T) {
 	}
 }
 
+func TestCompare_ErrorMatchCannotMatchEverything(t *testing.T) {
+	kc := View{Kind: ViewError, ErrClass: "org.apache.kafka.connect.errors.DataException", ErrMessage: "boom"}
+	cd := View{Kind: ViewError, ErrMessage: "template: bad function"}
+	for name, m := range map[string]ErrorMatch{
+		"empty Conduit text": {KCClass: "DataException"},
+		"empty class":        {Conduit: "template"},
+		"empty entry":        {},
+	} {
+		d, _ := Compare(kc, cd, Options{ErrorMatch: []ErrorMatch{m}})
+		if len(d) != 1 || !strings.Contains(d[0], "would match every failure") {
+			t.Fatalf("%s must be rejected: %v", name, d)
+		}
+	}
+	// A class suffix is not a class: "Exception" must not match DataException.
+	d, _ := Compare(kc, cd, Options{ErrorMatch: []ErrorMatch{{KCClass: "Exception", Conduit: "template"}}})
+	if len(d) != 1 || !strings.Contains(d[0], "no ErrorMatch") {
+		t.Fatalf("a class suffix must not match: %v", d)
+	}
+	// The simple name and the full name both match.
+	for _, class := range []string{"DataException", "org.apache.kafka.connect.errors.DataException"} {
+		if d, _ := Compare(kc, cd, Options{ErrorMatch: []ErrorMatch{{KCClass: class, Conduit: "template"}}}); len(d) != 0 {
+			t.Fatalf("%s: %v", class, d)
+		}
+	}
+}
+
 func TestCompareTombstone(t *testing.T) {
 	kept := View{Kind: ViewRecord}
 	if d := CompareTombstone(kept, true); len(d) != 0 {

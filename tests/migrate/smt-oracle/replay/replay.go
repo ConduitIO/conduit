@@ -28,6 +28,7 @@ package replay
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/big"
 	"strconv"
 	"time"
@@ -413,6 +414,11 @@ func coerceAvro(schema, v any) (any, error) {
 	return nil, fmt.Errorf("unsupported Avro schema %T", schema)
 }
 
+const (
+	avroInt  = "int"
+	avroLong = "long"
+)
+
 func coercePrimitive(typ string, sch map[string]any, v any, logical ...string) (any, error) {
 	if v == nil {
 		return nil, nil
@@ -424,25 +430,25 @@ func coercePrimitive(typ string, sch map[string]any, v any, logical ...string) (
 	switch {
 	case typ == "boolean" || typ == "string":
 		return v, nil
-	case typ == "int":
-		f, ok := v.(float64)
-		if !ok {
-			return nil, fmt.Errorf("int value is %T", v)
+	case typ == avroInt:
+		n, err := exactInt(v, math.MinInt32, math.MaxInt32)
+		if err != nil {
+			return nil, fmt.Errorf("int value: %w", err)
 		}
-		return int32(f), nil
-	case typ == "long" && l == "timestamp-micros":
+		return int32(n), nil //nolint:gosec // exactInt bounded n to the int32 range
+	case typ == avroLong && l == "timestamp-micros":
 		s, ok := v.(string)
 		if !ok {
 			return nil, fmt.Errorf("timestamp value is %T", v)
 		}
 		t, err := time.Parse(time.RFC3339Nano, s)
 		return t, err
-	case typ == "long":
-		f, ok := v.(float64)
-		if !ok {
-			return nil, fmt.Errorf("long value is %T", v)
+	case typ == avroLong:
+		n, err := exactInt(v, math.MinInt64, math.MaxInt64)
+		if err != nil {
+			return nil, fmt.Errorf("long value: %w", err)
 		}
-		return int64(f), nil
+		return n, nil
 	case typ == "float" || typ == "double":
 		f, ok := v.(float64)
 		if !ok {
@@ -462,4 +468,27 @@ func coercePrimitive(typ string, sch map[string]any, v any, logical ...string) (
 	}
 	_ = sch
 	return nil, fmt.Errorf("unsupported Avro type %q (logical %q)", typ, l)
+}
+
+// exactInt converts a value decoded from JSON (float64) to an integer, and
+// refuses what a float64 cannot hold exactly: a fraction, or a magnitude above
+// 2^53, where adjacent integers share a representation and the encoded value
+// would silently be a different one.
+func exactInt(v any, lo, hi int64) (int64, error) {
+	f, ok := v.(float64)
+	if !ok {
+		return 0, fmt.Errorf("is %T, not a number", v)
+	}
+	const maxExact = 1 << 53
+	if f != math.Trunc(f) {
+		return 0, fmt.Errorf("%v is not an integer", f)
+	}
+	if f > maxExact || f < -maxExact {
+		return 0, fmt.Errorf("%v is beyond 2^53 and cannot be represented exactly after a JSON round trip", f)
+	}
+	n := int64(f)
+	if n < lo || n > hi {
+		return 0, fmt.Errorf("%d is out of range", n)
+	}
+	return n, nil
 }

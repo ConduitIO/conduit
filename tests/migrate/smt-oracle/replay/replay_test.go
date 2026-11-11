@@ -21,6 +21,7 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	smtoracle "github.com/conduitio/conduit/tests/migrate/smt-oracle"
+	"github.com/goccy/go-json"
 )
 
 // newReplayer builds the replay environment from the committed fixtures.
@@ -228,11 +229,19 @@ func TestReplay_SchemaBearingRecords(t *testing.T) {
 	}
 }
 
-// knownSDKFailure is a difference the replay found that is not a translation problem: when a nullable
-// column flips from a value to NULL (items@7: qty 7 -> NULL), any processor that changes the after payload
-// makes the schema middleware extract a new schema from the after values alone, and the before payload
-// (qty is an int there) can no longer be encoded with it. Kafka Connect has no such failure. It is
-// recorded here, not hidden: the test fails if it stops reproducing, so a fix is noticed and this is deleted.
+// knownSDKFailure is a conduit-processor-sdk v0.9.2 bug the replay found, not a harness artifact and not
+// a translation problem: when a nullable column flips from a value to NULL (items@7: qty 7 -> NULL), any
+// processor that changes the after payload makes the SDK's encode middleware extract a new schema from the
+// after values alone, and the before payload (qty is an int there) can no longer be encoded with it
+// ("unknown union type int"). Production runs processors through the same middleware, so a real pipeline
+// fails this record too, and Kafka Connect does not.
+//
+// TODO(ConduitIO/conduit-processor-sdk#TBD): remove this when the SDK is fixed.
+//
+// It is pinned here, not hidden, and only in this package: the helper is unexported and matches one record and
+// one text. Translator tests must NOT filter it. Until it is fixed, a translation that reshapes the value of a
+// schema-attached table with nullable columns is not exact, and its case correctly fails to diff clean on
+// items@7. This test fails if the failure stops reproducing, so the fix is noticed.
 const knownSDKFailure = "failed to encode before payload"
 
 func withoutKnownSDKFailure(t *testing.T, failures []string) []string {
@@ -250,4 +259,54 @@ func withoutKnownSDKFailure(t *testing.T, failures []string) []string {
 		t.Error("the known schema-middleware failure on items@7 no longer reproduces: delete knownSDKFailure")
 	}
 	return rest
+}
+
+func TestCoerceAvroRejectsInexactNumbers(t *testing.T) {
+	long := map[string]any{"type": "long"}
+	for name, v := range map[string]any{
+		"fractional":  1.5,
+		"above 2^53":  float64(1<<53) * 2,
+		"below -2^53": -float64(1<<53) * 4,
+		"not number":  "7",
+	} {
+		if _, err := coerceAvro(long, v); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+	if _, err := coerceAvro(map[string]any{"type": "int"}, float64(1<<31)); err == nil {
+		t.Error("an int beyond int32 must fail")
+	}
+	got, err := coerceAvro(long, float64(1<<53))
+	if err != nil || got != int64(1<<53) {
+		t.Errorf("2^53 is exact: %v, %v", got, err)
+	}
+	got, err = coerceAvro(map[string]any{"type": "int"}, float64(-7))
+	if err != nil || got != int32(-7) {
+		t.Errorf("an int: %v, %v", got, err)
+	}
+}
+
+// TestDebeziumFixturesAgree checks that the two Debezium captures (converters at false and at their
+// default) hold the same messages, so a lagging second connector cannot commit a short fixture.
+func TestDebeziumFixturesAgree(t *testing.T) {
+	a, err := smtoracle.DebeziumEvents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := smtoracle.Fixture(smtoracle.DebeziumDefaultConverterFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var b []smtoracle.InputRecord
+	if err := json.Unmarshal(raw, &b); err != nil {
+		t.Fatal(err)
+	}
+	if len(a) != len(b) {
+		t.Fatalf("%d messages with replace.null.with.default=false, %d with the default", len(a), len(b))
+	}
+	for i := range a {
+		if a[i].Name != b[i].Name || a[i].Topic[strings.LastIndex(a[i].Topic, "."):] != b[i].Topic[strings.LastIndex(b[i].Topic, "."):] {
+			t.Fatalf("message %d: %s (%s) against %s (%s)", i, a[i].Name, a[i].Topic, b[i].Name, b[i].Topic)
+		}
+	}
 }

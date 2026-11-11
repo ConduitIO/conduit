@@ -345,12 +345,15 @@ func normalizeTimestamp(v any) (any, error) {
 // ErrorMatch pairs a Kafka Connect exception with the Conduit error that
 // corresponds to it.
 type ErrorMatch struct {
-	// KCClass is the exception's class name, full or simple.
+	// KCClass is the exception's class name, full or simple; it must match the
+	// whole name (the simple name is what follows the last '.' or '$'), never
+	// a suffix, and it is required.
 	KCClass string
 	// KCMessage, when set, must be contained in the exception's message.
 	KCMessage string
 	// Conduit must be contained in the Conduit error's text, for example a
-	// stable error code.
+	// stable error code. It is required: an empty entry would match every
+	// failure.
 	Conduit string
 }
 
@@ -406,7 +409,10 @@ func describeOutcome(v View) string {
 
 func (o Options) compareErrors(kc, conduit View) []string {
 	for _, m := range o.ErrorMatch {
-		if !strings.HasSuffix(kc.ErrClass, m.KCClass) || !strings.Contains(kc.ErrMessage, m.KCMessage) {
+		if m.KCClass == "" || m.Conduit == "" {
+			return []string{fmt.Sprintf("error: ErrorMatch %+v needs a KCClass and a Conduit text; an empty one would match every failure", m)}
+		}
+		if !classMatches(kc.ErrClass, m.KCClass) || !strings.Contains(kc.ErrMessage, m.KCMessage) {
 			continue
 		}
 		if !strings.Contains(conduit.ErrMessage, m.Conduit) {
@@ -415,6 +421,15 @@ func (o Options) compareErrors(kc, conduit View) []string {
 		return nil
 	}
 	return []string{fmt.Sprintf("error: both sides fail, but no ErrorMatch pairs Kafka Connect %s (%s) with the Conduit error %q", kc.ErrClass, describe(kc.ErrMessage), conduit.ErrMessage)}
+}
+
+// classMatches reports whether want is the whole class name or its simple name.
+func classMatches(class, want string) bool {
+	if class == want {
+		return true
+	}
+	i := strings.LastIndexAny(class, ".$")
+	return i >= 0 && class[i+1:] == want
 }
 
 // CompareTombstone reports a difference when Kafka Connect's handling of the

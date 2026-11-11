@@ -124,11 +124,15 @@ line is why the fixture database is split the way it is.
 - It renders `numeric` as a fraction (`"25/2"` for 12.50) and trims trailing zeros of a
   `timestamptz` (`...20Z` against Debezium's `...20.000000Z`).
 
-**Replay finding, not a translation problem.** Replaying `field.exclude` over `items@7` (an update
-where `qty` goes from 7 to NULL) fails with `failed to encode before payload`: the built-in registry's
-schema middleware extracts a new schema from the after payload alone, and the before payload no longer
-fits it. Kafka Connect has no such failure. `replay_test.go` records it as a known difference and fails
-if it stops reproducing.
+**A processor SDK bug the replay found** (`ConduitIO/conduit-processor-sdk#TBD`, TODO: replace with the
+issue number). Replaying `field.exclude` over `items@7` (an update where `qty` goes from 7 to NULL) fails
+with `failed to encode before payload` (`unknown union type int`): when a processor changes the after
+payload, the SDK's encode middleware (v0.9.2) extracts a new schema from the after values alone, and the
+before payload no longer fits it. Production runs processors through the same middleware, so a real
+pipeline fails that record too; Kafka Connect delivers it. Until it is fixed, a translation that
+reshapes the value of a schema-attached table with nullable columns is **not exact**, and its case
+correctly does not diff clean on `items@7`. Translator tests must not filter this failure. `replay_test.go`
+pins it in its own package only, and fails if it stops reproducing so the fix is noticed.
 
 **Kafka Connect 4.2 behaviours the design depends on** (`goldens/`):
 
@@ -228,8 +232,9 @@ changed, the key and the value.
 - **Headers.** Kafka Connect's headers that the chain added or changed (not the input's) must equal
   the metadata values the translator maps to them (`Mapping.Headers`), and no others.
 - **Errors.** A record both sides fail is "the same" only if `Options.ErrorMatch` pairs the Kafka
-  Connect exception (class, message) with text of the Conduit error. An undeclared pair is reported with
-  both texts.
+  Connect exception (the whole class name or its simple name, optionally a message part) with text of
+  the Conduit error; the class and the Conduit text are required, so an entry cannot match every
+  failure. An undeclared pair is reported with both texts.
 - **Tombstones.** Kafka Connect's tombstone results are not compared against a Conduit record,
   because Conduit emits none. `CompareTombstone` checks the translation's stated handling (kept or
   dropped) against the golden for `smtoracle.Pair.Tombstone`.
