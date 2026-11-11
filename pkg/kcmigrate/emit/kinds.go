@@ -42,6 +42,9 @@ const (
 	KindList       = "list-setting"
 	KindStopped    = "pipeline-stopped"
 	KindPGURL      = "pg-url"
+	// KindPGTables writes Debezium Postgres's table.include.list as the
+	// builtin:postgres source's tables, only when that is exact (pgTables).
+	KindPGTables = "pg-tables"
 	// KindBlockSinks blocks, for the pipelines of sink connectors only, a
 	// worker key whose entry is not blocking as classified. A worker key
 	// that configures the consumer Kafka Connect runs for a sink reaches no
@@ -62,6 +65,7 @@ var kinds = map[string]Kind{
 	KindList:       listSetting,
 	KindStopped:    pipelineStopped,
 	KindPGURL:      pgURLPart,
+	KindPGTables:   pgTables,
 	KindBlockSinks: blockSinks,
 	KindSMT:        func(*Plan, *rules.Decision) error { return nil },
 }
@@ -244,6 +248,8 @@ func claimedSettings(a rules.Action) []string {
 		return []string{settingSASLUsername, settingSASLPassword}
 	case KindPGURL:
 		return []string{"url"}
+	case KindPGTables:
+		return []string{settingTables}
 	}
 	return nil
 }
@@ -541,10 +547,101 @@ func listSetting(p *Plan, d *rules.Decision) error {
 
 var listSplit = regexp.MustCompile(`\s*,\s*`)
 
+// settingTables is the builtin:postgres source setting pgTables writes.
+const settingTables = "tables"
+
+// pgTables translates Debezium Postgres's table.include.list into the
+// builtin:postgres source's tables setting, and only when the result reads
+// exactly the tables Debezium read. Rule data routes only literal entries
+// here (identifier characters and at most one dot); a regex stays a blocking
+// rule entry.
+//
+// Debezium matches each entry, as a case-insensitive regular expression,
+// against the whole schema-qualified name schema.table, and never captures
+// the system schemas. The source quotes each tables entry as one
+// case-sensitive identifier and finds it through the connection's
+// search_path: a dot does not separate a schema, so public.orders is a table
+// named "public.orders" and the source refuses to start
+// (conduit-connector-postgres#277). The exact translation is therefore: every
+// entry is schema.table in one schema S, in lowercase; tables gets the bare
+// names and the connection gets search_path=S, so a same-name table in
+// another schema (the "$user" schema of the default search_path, or a
+// server-side search_path) is never read in their place. Postgres searches
+// pg_catalog before search_path, so a table named pg_* is refused too.
+//
+// Everything else is a blocking entry with its reason and fix. Nothing is
+// emitted as a name that fails at Open or reads another table.
+func pgTables(p *Plan, d *rules.Decision) error {
+	key := d.KV.Key
+	block := func(code, reason, fix string) error {
+		d.Entry = kcmigrate.Entry{
+			Key: d.Entry.Key, Status: kcmigrate.StatusUnsupported, Origin: d.Entry.Origin, Blocking: true,
+			Code: code, Reason: reason, Fix: fix,
+		}
+		return nil
+	}
+	var schema string
+	var tables []string
+	for _, part := range listSplit.Split(strings.TrimSpace(d.KV.Value.Reveal()), -1) {
+		s, t, qualified := strings.Cut(part, ".")
+		switch {
+		case part == "":
+			return block(kcmigrate.CodeKeyUnsupported.Reason(),
+				key+" has an empty element; Kafka Connect keeps it as an empty name.",
+				"Remove the empty element (a doubled or trailing comma) from "+key+".")
+		case !qualified:
+			return block(kcmigrate.CodeKeyUnsupported.Reason(),
+				key+" entry "+part+" has no schema. Debezium matches each entry against the whole name schema.table, so "+part+" selects no table, while the source would read a table "+part+".",
+				"Write every entry as schema.table (public."+part+" for a table in the public schema), then re-run.")
+		case strings.Contains(t, "."):
+			return cerrors.Errorf("key %s: pg-tables got entry %q with more than one dot; the rule pattern must route it to the regex entry", key, part)
+		case part != strings.ToLower(part):
+			return block(kcmigrate.CodeKeyUnsupported.Reason(),
+				key+" entry "+part+" has uppercase letters. Debezium matches entries case-insensitively and the source's tables are case-sensitive, so migrate cannot tell which table the entry names.",
+				"If the table was created without quotes, its name is lowercase: write the entry in lowercase, then re-run. A schema or table whose name has uppercase letters cannot be translated exactly yet; keep this connector on Kafka Connect.")
+		case strings.HasPrefix(s, "pg_") || s == "information_schema":
+			return block(kcmigrate.CodeKeyUnsupported.Reason(),
+				key+" entry "+part+" is in the system schema "+s+", which Debezium never captures.",
+				"Remove "+part+" from "+key+", then re-run.")
+		case strings.HasPrefix(t, "pg_"):
+			return block(kcmigrate.CodeKeyUnsupported.Reason(),
+				key+" entry "+part+" names a table starting with pg_. Postgres looks up pg_catalog before the search_path, so the source can read a system catalog of that name instead of "+part+".",
+				"Rename the table, or keep this connector on Kafka Connect.")
+		case schema != "" && s != schema:
+			return block(kcmigrate.CodeTargetCapabilityMissing.Reason(),
+				key+" lists tables in more than one schema ("+schema+", "+s+"). The builtin:postgres source finds bare table names through one search_path and does not accept schema-qualified names (conduit-connector-postgres#277), so with several schemas a same-name table of an earlier schema can be read instead.",
+				"Split the connector into one Kafka Connect connector per schema (each with its own slot.name and publication.name) and migrate each, or keep this connector on Kafka Connect until conduit-connector-postgres#277 ships.")
+		}
+		schema = s
+		if !slices.Contains(tables, t) {
+			tables = append(tables, t)
+		}
+	}
+	if err := set(p, d, SideSource, settingTables, strings.Join(tables, ","), ""); err != nil {
+		return err
+	}
+	if d.Entry.Blocking || d.Entry.Target == nil {
+		return nil // a conflict or a higher layer: the tables are not this key's
+	}
+	if p.pgURL == nil {
+		p.pgURL = map[string]string{}
+	}
+	p.pgURL[pgURLSearchPath] = schema
+	d.Entry.Reason = "Every entry is in schema " + schema + ": the source reads the tables by their bare names, which become opencdc.collection, " +
+		"and url sets search_path=" + schema + " so that no same-name table of another schema is read in their place. " +
+		"Debezium matches case-insensitively and the source reads the lowercase table only, so a table whose name differs only in case (created with a quoted name) is not read. " +
+		"A connection pooler must pass search_path to the server: one that ignores it (PgBouncer ignore_startup_parameters) makes the server's search_path apply."
+	return nil
+}
+
 // pgURLParts are the Postgres connection string parts the pg-url kind
 // accepts, in the order the finisher assembles them. A part outside this
 // list is a rule-data error, caught by CheckActions.
-var pgURLParts = []string{"host", "port", "user", "password", "dbname", "sslmode", "sslcert", "sslkey", "sslrootcert", "sslpassword"}
+var pgURLParts = []string{"host", "port", "user", "password", "dbname", "sslmode", "sslcert", "sslkey", "sslrootcert", "sslpassword", pgURLSearchPath}
+
+// pgURLSearchPath is the connection string part pgTables sets: a run-time
+// parameter, which pgx sends to the server as the session's search_path.
+const pgURLSearchPath = "search_path"
 
 // isPGURLPart reports whether name is a connection string part.
 func isPGURLPart(name string) bool { return slices.Contains(pgURLParts, name) }

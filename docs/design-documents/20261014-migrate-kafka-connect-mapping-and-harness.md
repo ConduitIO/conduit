@@ -422,7 +422,7 @@ not from this table: a value outside it is `unsupported`, blocking, whatever the
 | `topic.delimiter`, `topic.naming.strategy` | default T; other U! | `debezium.topic.*` | |
 | `topic.cache.size`, `topic.transaction`, `topic.heartbeat.prefix`, `topic.heartbeat.name` | U | none | |
 | `schema.include.list`, `schema.exclude.list` | A when combined with a literal table list; U! otherwise | folded into `tables` | |
-| `table.include.list` | T for literal `schema.table` entries; U! for regex | source `tables` | Regex metacharacters make it blocking. Fix: list tables explicitly |
+| `table.include.list` | T for literal lowercase `schema.table` entries in one schema; U! otherwise | source `tables` (bare names) + `search_path=<schema>` in `url` | The source reads each `tables` entry as one identifier through `search_path`, so a dotted entry fails at start (conduit-connector-postgres#277, #3350). Several schemas: U! `kc.target_capability_missing`. A bare, mixed-case, `pg_*` or system-schema entry, or a regex: U! `kc.key_unsupported`. A refused list leaves `tables` unset (`kc.setting_required`), never `*` |
 | `table.exclude.list` | U! | none | `tables` has no exclusion. Fix: list the included tables |
 | `column.include.list`, `column.exclude.list` | T | `debezium.column.include.list`, `.exclude.list` | Applied in the source so the schema descriptor matches |
 | `message.key.columns` | T | `debezium.message.key.columns` | |

@@ -483,14 +483,17 @@ type pipelineFile struct {
 		Status      string `yaml:"status"`
 		Description string `yaml:"description"`
 		Connectors  []struct {
-			Plugin string `yaml:"plugin"`
+			Type     string            `yaml:"type"`
+			Plugin   string            `yaml:"plugin"`
+			Settings map[string]string `yaml:"settings"`
 		} `yaml:"connectors"`
 	} `yaml:"pipelines"`
 }
 
 // checkPipelines checks that each connector's pipeline file exists, has the
-// status the report gives it and the provenance description, and collects
-// the plugins it references.
+// status the report gives it and the provenance description, and that no
+// builtin:postgres source names a schema-qualified table, and collects the
+// plugins it references.
 func checkPipelines(rep Report, files map[string][]byte, m Manifest) ([]string, []string) {
 	var plugins, p []string
 	referenced := map[string]bool{}
@@ -522,6 +525,7 @@ func checkPipelines(rep Report, files map[string][]byte, m Manifest) ([]string, 
 		}
 		for _, c := range pl.Connectors {
 			plugins = append(plugins, c.Plugin)
+			p = append(p, checkPostgresTables(con.Name, c.Plugin, c.Type, c.Settings["tables"])...)
 		}
 	}
 	n := 0
@@ -537,6 +541,26 @@ func checkPipelines(rep Report, files map[string][]byte, m Manifest) ([]string, 
 		p = append(p, fmt.Sprintf("%d pipeline files written, want %d", n, *m.Expect.Pipelines))
 	}
 	return plugins, p
+}
+
+// pluginPostgres is the built-in Postgres connector's plugin name.
+const pluginPostgres = "builtin:postgres"
+
+// checkPostgresTables refuses a builtin:postgres source tables entry with a
+// dot. The source quotes each entry as one identifier found through
+// search_path, so schema.table names a table literally called "schema.table"
+// and the pipeline does not start (conduit-connector-postgres#277, #3350).
+func checkPostgresTables(con, plugin, typ, tables string) []string {
+	if plugin != pluginPostgres || (typ != "" && typ != "source") {
+		return nil
+	}
+	var p []string
+	for _, t := range strings.Split(tables, ",") {
+		if strings.Contains(t, ".") {
+			p = append(p, fmt.Sprintf("%s: builtin:postgres tables entry %q is schema-qualified; the source reads it as one table name and refuses to start", con, strings.TrimSpace(t)))
+		}
+	}
+	return p
 }
 
 // checkReportFile requires report.json to hold the same report as the

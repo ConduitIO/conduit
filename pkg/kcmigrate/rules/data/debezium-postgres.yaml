@@ -28,8 +28,10 @@ finish:
   # Assemble database.* into the source url.
   - {kind: pg-url}
   # table.include.list absent means every table; the Conduit source needs an
-  # explicit list, and "*" is its all-tables wildcard.
-  - {kind: default-setting, side: source, name: tables, value: "*"}
+  # explicit list, and "*" is its all-tables wildcard. Only when absent: a
+  # refused table.include.list leaves tables unset (kc.setting_required)
+  # rather than widening it to "*".
+  - {kind: default-setting, side: source, name: tables, value: "*", unless: "table.include.list,table.whitelist"}
 keys:
   # --- Connection ---
   - key: database.hostname
@@ -381,16 +383,22 @@ keys:
   - key: table.include.list
     diff: identity
     values:
-      - pattern: '^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_*][A-Za-z0-9_*]*)?(\s*,\s*[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_*][A-Za-z0-9_*]*)?)*$'
+      # Literal entries: identifier characters, at most one dot. A dot is a
+      # regex wildcard to Debezium, but between two literal names it can only
+      # match the schema separator. The pg-tables kind decides whether they
+      # translate exactly (one schema, lowercase) and blocks otherwise.
+      # "*" is a regex quantifier (public.* is every table of every schema
+      # whose name starts with "public"), so it is not literal.
+      - pattern: '^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?(\s*,\s*[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?)*$'
         status: translated
-        reason: The tables are read as listed.
-        emit: {kind: list-setting, side: source, name: tables}
+        reason: The tables are read by their bare names, with the connection's search_path set to their schema.
+        emit: {kind: pg-tables}
       - otherwise: true
         status: unsupported
         blocking: true
         code: kc.key_unsupported
         reason: table.include.list uses regex metacharacters; the Conduit source reads a literal table list, not a pattern.
-        fix: List the tables explicitly as schema.table entries, separated by commas.
+        fix: List the tables explicitly as schema.table entries in one schema, separated by commas.
   - key: table.exclude.list
     status: unsupported
     blocking: true

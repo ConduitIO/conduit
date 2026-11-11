@@ -229,6 +229,13 @@ func TestCheckOutput_Mutations(t *testing.T) {
 		},
 		want: "must be relative",
 	}, {
+		// #3350: the source reads public.orders as one table name.
+		name: "a schema-qualified postgres tables entry",
+		mutate: func(_ *testing.T, _ *Summary, _ *Report, out *Output, _ *bool, _ *int) {
+			out.Files["pipelines/orders.yaml"] = []byte(strings.Replace(goodPipeline, "plugin: builtin:postgres\n", "plugin: builtin:postgres\n        settings:\n          tables: orders,public.customers\n", 1))
+		},
+		want: `tables entry "public.customers" is schema-qualified`,
+	}, {
 		name:   "ok true with a blocking entry",
 		mutate: func(_ *testing.T, _ *Summary, _ *Report, _ *Output, ok *bool, _ *int) { *ok = true },
 		want:   "ok is true",

@@ -8,8 +8,8 @@ pipelines:
         type: source
         plugin: builtin:postgres
         settings:
-          tables: public.orders
-          url: host=postgres.internal.example port=5432 user=postgres password=${KC_ORDERS_CDC_DATABASE_PASSWORD} dbname=orders
+          tables: orders
+          url: host=postgres.internal.example port=5432 user=postgres password=${KC_ORDERS_CDC_DATABASE_PASSWORD} dbname=orders search_path=public
       - id: destination
         type: destination
         plugin: builtin:kafka

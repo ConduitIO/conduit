@@ -150,7 +150,7 @@
           "target": {
             "configPath": "/pipelines/0/connectors/0/settings/tables"
           },
-          "reason": "The tables are read as listed.",
+          "reason": "Every entry is in schema public: the source reads the tables by their bare names, which become opencdc.collection, and url sets search_path=public so that no same-name table of another schema is read in their place. Debezium matches case-insensitively and the source reads the lowercase table only, so a table whose name differs only in case (created with a quoted name) is not read. A connection pooler must pass search_path to the server: one that ignores it (PgBouncer ignore_startup_parameters) makes the server's search_path apply.",
           "blocking": false
         },
         {

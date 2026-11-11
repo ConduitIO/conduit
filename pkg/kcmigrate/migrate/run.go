@@ -655,13 +655,12 @@ func (ct chainTranslator) env(plan *emit.Plan, path string, offset int, ds, work
 		// Kafka Connect runs a Debezium source's SMTs over the Debezium
 		// Struct, and the native CDC source emits structured key and value.
 		env.SchemaMode, env.KeyShape, env.ValueShape = true, smt.ShapeStructured, smt.ShapeStructured
-		// The topic is undefined until snapshot and CDC records agree on
-		// opencdc.collection: builtin:postgres v0.20.0 sets it to the
-		// configured tables entry for snapshot records (public.users for a
-		// schema-qualified table.include.list) and to the bare relation
-		// name for CDC records (users), so no single
-		// <topic.prefix>.<schema>.<collection> expression is the Kafka
-		// Connect topic of both.
+		// The topic is undefined: opencdc.collection is the bare table name
+		// (table.include.list translates to bare names with search_path
+		// set to their schema), and the Kafka Connect topic
+		// <topic.prefix>.<schema>.<table> also needs the schema, which no
+		// topic expression carries yet (SMT pack design, "Topic
+		// expression").
 		env.Topic = ""
 	case sink && env.Source == kafkaPlugin:
 		// A sink's SMTs run after its converter: they see bytes only with

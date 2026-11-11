@@ -196,12 +196,16 @@ func pgURL(p *Plan, _ rules.Action) ([]kcmigrate.Note, error) {
 		return nil, nil
 	}
 	var parts []string
+	connection := false // a part other than search_path names the server
 	for _, name := range pgURLParts {
 		if v := p.pgURL[name]; v != "" {
 			parts = append(parts, name+"="+dsnQuote(v))
+			connection = connection || name != pgURLSearchPath
 		}
 	}
-	if len(parts) == 0 {
+	if !connection {
+		// search_path alone is no connection string: libpq would default
+		// every other part. The required-settings check reports url.
 		return nil, nil
 	}
 	if _, _, err := p.Set(SideSource, "url", strings.Join(parts, " "), "(pg-url)"); err != nil {
@@ -226,10 +230,24 @@ func dsnQuote(v string) string {
 // worker set it: the upstream connector's own default, where Conduit's
 // differs (MirrorMaker reads a partition with no stored offset from the
 // beginning; the Kafka source starts at the end).
+//
+// The optional argument unless lists, comma-separated, the keys whose
+// absence the default stands for. When the config sets one of them the
+// default is not written, even if that key was refused: the default would
+// replace what the key selected with something else (a refused
+// table.include.list must not become tables "*", which --accept-gaps would
+// then run). The setting stays unset for the required-settings check.
 func defaultSetting(p *Plan, a rules.Action) ([]kcmigrate.Note, error) {
 	side, name, value := a.Args["side"], a.Args["name"], a.Args["value"]
 	if name == "" || value == "" {
 		return nil, cerrors.Errorf(FinishDefault + " needs a name and a value")
+	}
+	if unless := a.Args["unless"]; unless != "" {
+		for _, key := range strings.Split(unless, ",") {
+			if _, ok := p.config[strings.TrimSpace(key)]; ok {
+				return nil, nil
+			}
+		}
 	}
 	idx, err := p.sides(side)
 	if err != nil {
