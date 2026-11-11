@@ -133,8 +133,10 @@ It provides three strategies for determining the schema:
 
   A top-level field the schema declares and the record no longer has (a processor removed it) is left out of the
   registered schema. A value that does not fit the schema exactly fails the record: a different type, a number out
-  of range, null in a non-null field, more decimal digits than the scale, or a time in a date field. Values are
-  never converted, truncated or filled with a default. An empty key or payload part (nil, or raw data with no bytes,
+  of range, null in a non-null field (a nil byte slice or nil list in a non-null field counts as null and fails the
+  same way), more decimal digits than the scale, a time in a date field, or a time in a zone other than the local
+  one in a local-timestamp field (its wall clock would change). Values are never converted, truncated or filled
+  with a default. An empty key or payload part (nil, or raw data with no bytes,
   as a delete record's ` + "`.Payload.After`" + ` often is) is not encoded: the record passes through unchanged. A record that carries no
   schema is encoded with an inferred schema, as with autoRegister, and counted by the
   ` + "`conduit_processor_avro_encode_schema_fallback_total`" + ` metric.

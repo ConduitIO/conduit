@@ -41,9 +41,10 @@ type schemaConfig struct {
 	//    in the schema registry. This strategy is further configured with options starting with
 	//   `schema.autoRegister.*`.
 	// * `fromRecord` - Encode with the schema the record already carries (its schema subject and
-	//    version metadata), adding a nullable field for each top-level field the record adds, and
-	//    register it in the schema registry. Values that do not fit the schema exactly fail the
-	//    record. This strategy is further configured with options starting with `schema.fromRecord.*`.
+	//    version metadata), adding a nullable field for each top-level field the record adds, dropping each
+	//    top-level field the record no longer has, and register it in the schema registry. Values that
+	//    do not fit the schema exactly fail the record. An empty key or payload part (nil, or raw data
+	//    with no bytes) is passed through unencoded. This strategy is further configured with options starting with `schema.fromRecord.*`.
 	//
 	// For more information about the behavior of each strategy read the main processor description.
 	StrategyType string `json:"strategy" validate:"required,inclusion=preRegistered|autoRegister|fromRecord"`

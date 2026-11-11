@@ -631,3 +631,56 @@ func TestFromRecord_RemovedFieldDefinesNamedType(t *testing.T) {
 		t.Fatalf("want only field a, got %v", got)
 	}
 }
+
+// TestFromRecord_LocalTimestampWallClock: the codec writes a local-timestamp
+// value with the wall clock the instant has in time.Local and reads it back
+// as the same instant, so the instant comparison passes while a reader sees a
+// different wall clock. A time in another zone must fail; one whose zone
+// matches time.Local, or UTC when Local is UTC, must not. Not parallel: it
+// sets time.Local.
+func TestFromRecord_LocalTimestampWallClock(t *testing.T) {
+	prev := time.Local
+	time.Local = time.UTC
+	t.Cleanup(func() { time.Local = prev })
+
+	const lts = `{"type":"record","name":"lt","namespace":"public","fields":[` +
+		`{"name":"a","type":{"type":"long","logicalType":"local-timestamp-micros"}},` +
+		`{"name":"b","type":["null",{"type":"long","logicalType":"local-timestamp-millis"}]},` +
+		`{"name":"n","type":{"type":"record","name":"inner","fields":[` +
+		`{"name":"t","type":{"type":"long","logicalType":"local-timestamp-micros"}}]}},` +
+		`{"name":"u","type":{"type":"long","logicalType":"timestamp-micros"}}]}`
+	utc := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
+	plus5 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.FixedZone("x", 5*3600))
+	row := func(a, b, nested, u time.Time) opencdc.StructuredData {
+		return opencdc.StructuredData{"a": a, "b": b, "n": map[string]any{"t": nested}, "u": u}
+	}
+
+	testCases := []struct {
+		name  string
+		in    opencdc.StructuredData
+		field string // "" means it must encode
+	}{
+		{"all UTC", row(utc, utc, utc, utc), ""},
+		{"zone offset on a timestamp (UTC-instant) field is fine", row(utc, utc, utc, plus5), ""},
+		{"non-UTC in a local-timestamp field", row(plus5, utc, utc, utc), "a"},
+		{"non-UTC in a nullable local-timestamp field", row(utc, plus5, utc, utc), "b"},
+		{"non-UTC in a nested local-timestamp field", row(utc, utc, plus5, utc), "n"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newFromRecordEnv(t, lts)
+			_, err := env.enc.Encode(context.Background(), tc.in, env.carried)
+			if tc.field == "" {
+				if err != nil {
+					t.Fatalf("want no error, got %v", err)
+				}
+				return
+			}
+			wantCode(t, err, CodeSchemaMismatch)
+			ce, _ := conduiterr.Get(err)
+			if want := `field "` + tc.field + `"`; !strings.Contains(ce.Message, want) {
+				t.Fatalf("message %q does not name %s", ce.Message, want)
+			}
+		})
+	}
+}

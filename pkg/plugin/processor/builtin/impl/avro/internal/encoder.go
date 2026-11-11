@@ -101,6 +101,9 @@ func verifyRoundTrip(s schema.Schema, sd opencdc.StructuredData, data []byte) er
 	if err := s.Unmarshal(data, &decoded); err != nil {
 		return mismatch("(record)", "does not decode after encoding", err)
 	}
+	if k := localWallClockChanged(s, sd); k != "" {
+		return mismatch(k, "would not survive encoding: a local-timestamp field is written with the wall clock the time has in the local time zone, not the wall clock of the time's own zone", nil)
+	}
 	if len(decoded) != len(sd) {
 		return mismatch(firstMissingKey(sd, decoded), "would not survive encoding", nil)
 	}

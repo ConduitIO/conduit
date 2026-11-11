@@ -49,6 +49,13 @@ A top-level field that a processor removed (for example with `field.exclude`) is
 the registered schema. A field that is still there keeps its carried type, so a field set to null (rather than
 removed) in a non-null column is a mismatch.
 
+Two cases that look harmless are also mismatches. A nil `[]byte` or nil list in a non-null `bytes` or `array`
+field counts as null, not as an empty value (the codec writes an empty value, and the check compares what was
+written); set it to an empty value, or make the field nullable. A `time.Time` in a `local-timestamp-millis` or
+`-micros` field fails when its zone differs from the process's local zone at that instant: the codec writes the wall
+clock of the local zone, so the wall clock a reader sees would differ from the one the value has. Convert the time to
+UTC and run with `TZ=UTC`, or to the local zone, before this processor.
+
 ### Remediation
 
 Fix the processor that changed the value, or, if the change is intended, attach a schema that describes it and
