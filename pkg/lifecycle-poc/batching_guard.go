@@ -15,22 +15,28 @@
 package lifecycle
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
+	"github.com/conduitio/conduit/pkg/connector"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/pipeline"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 )
 
-// batchingOffender is one DLQ whose sdk.batch.size the v2 engine cannot run.
-// Regular destinations are no longer refused: as of the funnel
-// destination-batching change they batch in the engine itself
-// (docs/design-documents/20261017-funnel-destination-batching.md). The DLQ is
-// not wired through that path, so its SDK destination batching still withholds
-// acks and stalls the stop-and-wait loop, and is refused.
+// batchingOffender is one DLQ batching setting the v2 engine cannot run.
+// Regular destinations are not refused: the funnel batches their writes itself
+// (docs/design-documents/20261017-funnel-destination-batching.md) and
+// configures their plugin not to (20261103-archv2-destination-batch-timing.md).
+// The DLQ is not wired through that path, so an explicit SDK batch on it
+// withholds acks and stalls the stop-and-wait loop, and is refused. That holds
+// for sdk.batch.size > 1 and for sdk.batch.delay > 0: the SDK batches on a
+// delay alone, with a size of its own (1000 in v0.17.2).
 type batchingOffender struct {
 	label      string
+	setting    string // config.SDKBatchSizeSetting or config.SDKBatchDelaySetting
 	configPath string // JSON pointer into the pipeline config document
 	value      string // the offending value, trimmed
 }
@@ -51,6 +57,16 @@ func batchingOffenders(dlq map[string]string) []batchingOffender {
 	if key, value, bad := config.SDKBatchSizeAboveOne(dlq); bad {
 		offenders = append(offenders, batchingOffender{
 			label:      "the dead letter queue",
+			setting:    config.SDKBatchSizeSetting,
+			configPath: dlqSettingPointer(key),
+			value:      value,
+		})
+	}
+	// #3321: a delay alone turns the SDK batcher on too.
+	if key, value, bad := config.SDKBatchDelayAboveZero(dlq); bad {
+		offenders = append(offenders, batchingOffender{
+			label:      "the dead letter queue",
+			setting:    config.SDKBatchDelaySetting,
 			configPath: dlqSettingPointer(key),
 			value:      value,
 		})
@@ -59,7 +75,7 @@ func batchingOffenders(dlq map[string]string) []batchingOffender {
 }
 
 // checkDLQBatching refuses a pipeline that would run on arch v2 with a DLQ
-// connector using sdk.batch.size > 1 (#2979). It only reads engine config, so
+// connector using sdk.batch.size > 1 (#2979) or sdk.batch.delay > 0 (#3321). It only reads engine config, so
 // Start calls it before any connector is built or opened: nothing is read from
 // the source and nothing is acked on the refusal path (invariants 1 and 3).
 func (s *Service) checkDLQBatching(pl *pipeline.Instance) error {
@@ -74,9 +90,21 @@ func (s *Service) checkDLQBatching(pl *pipeline.Instance) error {
 // PreflightPipelineConfig applies the same refusal to a DESIRED pipeline config
 // before it is applied. pkg/provisioning calls it (through an optional
 // interface) ahead of a live apply's StopAndWait, so an apply that adds
-// sdk.batch.size to a running pipeline's DLQ is refused with the coded error
+// sdk.batch.size or sdk.batch.delay to a running pipeline's DLQ is refused with the coded error
 // while the pipeline is still running and the stored config is untouched (#2979).
 func (s *Service) PreflightPipelineConfig(cfg config.Pipeline) error {
+	var nonLiteral []batchingOffender
+	for i, conn := range cfg.Connectors {
+		if conn.Type != config.TypeDestination {
+			continue
+		}
+		label := fmt.Sprintf("destination connector %q", conn.ID)
+		nonLiteral = append(nonLiteral, nonLiteralOffenders(label, conn.Settings, connectorSettingPointer(i))...)
+	}
+	nonLiteral = append(nonLiteral, nonLiteralOffenders("the dead letter queue", cfg.DLQ.Settings, dlqSettingPointer)...)
+	if len(nonLiteral) > 0 {
+		return errBatchingNotLiteral(cfg.ID, nonLiteral, true)
+	}
 	if offenders := batchingOffenders(cfg.DLQ.Settings); len(offenders) > 0 {
 		return errDLQBatchingUnsupported(cfg.ID, offenders, true)
 	}
@@ -90,9 +118,9 @@ func errDLQBatchingUnsupported(pipelineID string, offenders []batchingOffender, 
 	parts := make([]string, len(offenders))
 	for i, o := range offenders {
 		if withDocument {
-			parts[i] = fmt.Sprintf("%s sets %s=%s (%s)", o.label, config.SDKBatchSizeSetting, o.value, o.configPath)
+			parts[i] = fmt.Sprintf("%s sets %s=%s (%s)", o.label, o.setting, o.value, o.configPath)
 		} else {
-			parts[i] = fmt.Sprintf("%s sets %s=%s", o.label, config.SDKBatchSizeSetting, o.value)
+			parts[i] = fmt.Sprintf("%s sets %s=%s", o.label, o.setting, o.value)
 		}
 	}
 	ce := conduiterr.New(
@@ -108,6 +136,98 @@ func errDLQBatchingUnsupported(pipelineID string, offenders []batchingOffender, 
 	if withDocument {
 		ce.ConfigPath = offenders[0].configPath
 		ce.Fix = &conduiterr.Fix{ConfigPath: offenders[0].configPath, Op: "remove"}
+	}
+	return ce
+}
+
+// connectorSettingPointer returns the pointer builder for the settings of the
+// connector at index i of the pipeline config document. A provisioned
+// pipeline's ConnectorIDs follow the order of its config's connectors list
+// (pkg/provisioning adds them in that order and rebuilds the list on any
+// change), so the index of an ID there is its index in the document.
+func connectorSettingPointer(i int) func(key string) string {
+	return func(key string) string {
+		return fmt.Sprintf("/connectors/%d/settings/%s", i, jsonPointerEscape(key))
+	}
+}
+
+// nonLiteralOffenders lists the sdk.batch.* settings whose value is not a
+// literal (config.SDKBatchNonLiteral, shared with the offline validate check).
+// The value is reported as written: it is the reference, never its expansion.
+func nonLiteralOffenders(label string, settings map[string]string, pointer func(key string) string) []batchingOffender {
+	keys := config.SDKBatchNonLiteral(settings)
+	offenders := make([]batchingOffender, 0, len(keys))
+	for _, k := range keys {
+		offenders = append(offenders, batchingOffender{
+			label:      label,
+			setting:    strings.TrimSpace(k),
+			configPath: pointer(k),
+			value:      strings.TrimSpace(settings[k]),
+		})
+	}
+	return offenders
+}
+
+// checkBatchingLiterals refuses a pipeline that would run on arch v2 with a
+// destination or DLQ sdk.batch.* value that is not a literal
+// (CodeArchV2DestinationBatchingNotLiteral). The engine resolves batching from
+// the stored settings while the plugin gets them with ${VAR} expanded, so a
+// reference would let the plugin batch behind the engine and withhold acks.
+// Like checkDLQBatching it reads only engine config, and Start calls it before
+// any connector is built or opened: a refused start reads nothing and acks
+// nothing (invariants 1 and 3).
+func (s *Service) checkBatchingLiterals(ctx context.Context, pl *pipeline.Instance) error {
+	var offenders []batchingOffender
+	for i, id := range pl.ConnectorIDs {
+		instance, err := s.connectors.Get(ctx, id)
+		if err != nil {
+			return cerrors.Errorf("could not fetch connector: %w", err)
+		}
+		if instance.Type != connector.TypeDestination {
+			continue
+		}
+		instance.RLock()
+		label := fmt.Sprintf("destination connector %q", instance.ID)
+		if instance.Config.Name != "" && instance.Config.Name != instance.ID {
+			label = fmt.Sprintf("destination connector %q (%s)", instance.ID, instance.Config.Name)
+		}
+		offenders = append(offenders, nonLiteralOffenders(label, instance.Config.Settings, connectorSettingPointer(i))...)
+		instance.RUnlock()
+	}
+	offenders = append(offenders, nonLiteralOffenders("the dead letter queue", pl.DLQ.Settings, dlqSettingPointer)...)
+	if len(offenders) > 0 {
+		return errBatchingNotLiteral(pl.ID, offenders, pl.ProvisionedBy != pipeline.ProvisionTypeAPI)
+	}
+	return nil
+}
+
+// errBatchingNotLiteral builds the CodeArchV2DestinationBatchingNotLiteral
+// refusal. withDocument is false for an API-created pipeline (no config
+// document): ConfigPath is then omitted and the message alone names the
+// setting. It carries no structured Fix, because the literal to set is the
+// operator's choice; the suggestion says what to do.
+func errBatchingNotLiteral(pipelineID string, offenders []batchingOffender, withDocument bool) error {
+	parts := make([]string, len(offenders))
+	for i, o := range offenders {
+		if withDocument {
+			parts[i] = fmt.Sprintf("%s sets %s=%s (%s)", o.label, o.setting, o.value, o.configPath)
+		} else {
+			parts[i] = fmt.Sprintf("%s sets %s=%s", o.label, o.setting, o.value)
+		}
+	}
+	ce := conduiterr.New(
+		CodeArchV2DestinationBatchingNotLiteral,
+		fmt.Sprintf(
+			"can't start pipeline %s on pipeline architecture v2: %s; "+
+				"v2 batches a destination itself and configures the connector not to batch, which it decides "+
+				"from the value as written, while an environment reference is expanded only for the connector, "+
+				"so the connector could batch behind the engine and withhold acks",
+			pipelineID, strings.Join(parts, "; ")),
+	)
+	ce.Suggestion = "set sdk.batch.size and sdk.batch.delay to literal values (for example 1000 and 1s) " +
+		"instead of an environment reference, or run without --preview.pipeline-arch-v2"
+	if withDocument {
+		ce.ConfigPath = offenders[0].configPath
 	}
 	return ce
 }

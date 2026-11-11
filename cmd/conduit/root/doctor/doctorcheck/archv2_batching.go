@@ -25,13 +25,26 @@ import (
 )
 
 // archV2BatchingCheck reuses the offline validate engine (the same one
-// `conduit pipelines validate` shells over) to refuse a destination or
-// dead-letter-queue with sdk.batch.size above 1 when arch-v2 is enabled. It
+// `conduit pipelines validate` shells over) to fail on a dead-letter-queue with
+// sdk.batch.size above 1 or sdk.batch.delay above 0 when arch-v2 is enabled.
+// Regular destinations' batching is not reported: the engine batches them. It
 // shares config.SDKBatchSizeAboveOne with the runtime engine guard, so doctor
 // never drifts from what `conduit run` refuses at start (#2979, #2985).
+//
+// It also fails on a destination or dead-letter-queue sdk.batch.* value that is
+// not a literal (an environment reference), which `conduit run` refuses at
+// start with pipeline.archv2_destination_batching_not_literal. The check's Code
+// is the code of the first finding.
 type archV2BatchingCheck struct {
 	cfg conduit.Config
 }
+
+// The runtime codes this check reports (pkg/lifecycle-poc/codes.go); literals so
+// doctor does not import the engine.
+const (
+	codeArchV2BatchingUnsupported = "pipeline.archv2_destination_batching_unsupported"
+	codeArchV2BatchingNotLiteral  = "pipeline.archv2_destination_batching_not_literal"
+)
 
 func (c archV2BatchingCheck) Name() string { return NameArchV2Batching }
 
@@ -48,15 +61,18 @@ func (c archV2BatchingCheck) Run(ctx context.Context) check.CheckResult {
 	// Collect the arch-v2 findings only; parse/validate errors are
 	// config.validate's job, not this check's.
 	var msgs []string
-	var firstPath string
+	var firstPath, firstCode string
 	for _, f := range report.Files {
 		for _, finding := range f.Findings {
-			if finding.Code != "pipeline.archv2_destination_batching_unsupported" {
+			switch finding.Code {
+			case codeArchV2BatchingUnsupported, codeArchV2BatchingNotLiteral:
+			default:
 				continue
 			}
 			msgs = append(msgs, finding.Message)
 			if firstPath == "" {
 				firstPath = finding.ConfigPath
+				firstCode = finding.Code
 			}
 		}
 	}
@@ -65,16 +81,16 @@ func (c archV2BatchingCheck) Run(ctx context.Context) check.CheckResult {
 		return check.CheckResult{
 			Status:   check.StatusPass,
 			Category: CategoryConfig,
-			Message:  "no destination or dead-letter-queue sets sdk.batch.size above 1",
+			Message:  "no dead-letter-queue batching or non-literal sdk.batch.* setting that architecture v2 refuses",
 		}
 	}
 
 	return check.CheckResult{
 		Status:     check.StatusFail,
 		Category:   CategoryConfig,
-		Code:       "pipeline.archv2_destination_batching_unsupported",
+		Code:       firstCode,
 		ConfigPath: firstPath,
 		Message:    strings.Join(msgs, "; "),
-		Suggestion: "set sdk.batch.size to 1 or remove it, or disable preview.pipeline-arch-v2",
+		Suggestion: "remove the sdk.batch.size or sdk.batch.delay setting each finding names (or, for an environment reference, set a literal value), or disable preview.pipeline-arch-v2",
 	}
 }

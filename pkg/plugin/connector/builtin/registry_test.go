@@ -23,6 +23,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/matryer/is"
@@ -112,4 +113,41 @@ func TestRegistry_NewDispenser_PluginNotFound(t *testing.T) {
 			is.True(dispenser != nil)
 		})
 	}
+}
+
+// TestRegistry_NewDispenser_CarriesSpecification (#3321): the dispenser carries
+// the specification of the version the registry resolved, through the
+// cleanup wrapper the plugin service adds, so the arch-v2 engine reads the
+// connector's sdk.batch.* defaults without starting a plugin. The S3 default
+// (1000 / 1 s) is what made a 1-record pipeline run at 1 record/s; the other
+// built-in destinations declare "0".
+func TestRegistry_NewDispenser_CarriesSpecification(t *testing.T) {
+	r := NewRegistry(log.Nop(), DefaultBuiltinConnectors, nil)
+	r.Init(context.Background())
+	for name, want := range map[string][2]string{
+		"builtin:s3":       {"1000", "1s"},
+		"builtin:file":     {"0", "0"},
+		"builtin:postgres": {"0", "0"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			d, err := r.NewDispenser(log.Nop(), plugin.FullName(name), pconnector.PluginConfig{})
+			is.NoErr(err)
+			for _, d := range []connector.Dispenser{d, connector.DispenserWithCleanup(d, func() {})} {
+				spec, ok := connector.DispenserSpecification(d)
+				is.True(ok)
+				is.Equal(spec.DestinationParams["sdk.batch.size"].Default, want[0])
+				is.Equal(spec.DestinationParams["sdk.batch.delay"].Default, want[1])
+			}
+		})
+	}
+}
+
+// TestDispenser_NoSpecificationOutsideRegistry: a dispenser built directly,
+// not by the registry, reports no specification.
+func TestDispenser_NoSpecificationOutsideRegistry(t *testing.T) {
+	is := is.New(t)
+	d := NewDispenser("builtin:x", log.Nop(), nil, nil, nil)
+	_, ok := connector.DispenserSpecification(d)
+	is.True(!ok)
 }

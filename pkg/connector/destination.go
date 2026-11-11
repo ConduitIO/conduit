@@ -16,6 +16,7 @@ package connector
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -62,13 +63,13 @@ type Destination struct {
 	// twice. Only accessed by Ack, which must not be called concurrently.
 	pendingRecv <-chan destinationRecvResult
 
-	// engineBatches is set by the arch-v2 funnel when it will batch writes
-	// itself using the destination's sdk.batch.size/sdk.batch.delay settings.
-	// It strips those two settings before Configure so the connector SDK does
-	// not also buffer and withhold acks (which would stall the funnel's
-	// stop-and-wait loop). See pkg/lifecycle-poc/batching_guard.go and
-	// docs/design-documents/20261017-funnel-destination-batching.md.
-	engineBatches bool
+	// pluginBatchingOverrides lists the sdk.batch.* keys configure sets to
+	// "0" before Configure, so the connector SDK's own batcher stays off while
+	// the arch-v2 funnel batches the writes itself. Only the arch-v2 engine
+	// sets it (SetPluginBatchingOverrides); the classic engine passes the
+	// settings through verbatim. See docs/design-documents/
+	// 20261103-archv2-destination-batch-timing.md, Decision 2.
+	pluginBatchingOverrides []string
 }
 
 type DestinationState struct {
@@ -84,12 +85,32 @@ func (d *Destination) ID() string {
 	return d.Instance.ID
 }
 
-// SetEngineBatches marks this destination as batched by the engine (arch-v2
-// funnel) rather than by the connector SDK. configure then strips
-// sdk.batch.size/sdk.batch.delay so the SDK destination writes synchronously
-// and does not withhold acks behind its own buffer.
-func (d *Destination) SetEngineBatches() {
-	d.engineBatches = true
+// SetPluginBatchingOverrides tells configure to hand the plugin "0" for each
+// of keys (sdk.batch.size, sdk.batch.delay) instead of the value the settings
+// would give it. The arch-v2 engine calls it, before Open, for every key whose
+// effective value, from the pipeline config or the connector's spec default,
+// would turn the connector SDK's batcher on: the engine batches the writes
+// itself, and a plugin batcher behind it would withhold acks that the funnel's
+// stop-and-wait loop waits for (#3321).
+//
+// configure replaces the value of every settings key that matches a listed key
+// after trimming (the SDK trims keys), and adds the plain key when none
+// matches. The engine lists only keys the plugin's spec declares, so an added
+// key is never one the plugin rejects as unrecognised. "0" rather than an
+// absent key: the SDK applies the connector's own default to a missing or
+// empty key, which is what turned S3's 1000 / 1 s batcher back on.
+//
+// It is not safe to call concurrently with Open.
+func (d *Destination) SetPluginBatchingOverrides(keys ...string) {
+	d.pluginBatchingOverrides = append([]string(nil), keys...)
+}
+
+// Specification returns the specification of the plugin this destination
+// will dispense, as resolved by the registry together with the dispenser, and
+// false if the dispenser carries none (see
+// connectorPlugin.DispenserSpecification). It starts no plugin.
+func (d *Destination) Specification() (pconnector.Specification, bool) {
+	return connectorPlugin.DispenserSpecification(d.dispenser)
 }
 
 func (d *Destination) Errors() <-chan error {
@@ -390,13 +411,12 @@ func (d *Destination) configure(ctx context.Context) error {
 	if err != nil {
 		return cerrors.Errorf("could not resolve destination connector settings: %w", err)
 	}
-	if d.engineBatches {
-		// The engine (arch-v2 funnel) batches writes itself; make sure the SDK
-		// destination does not also buffer and withhold acks behind its own
-		// batch, which would stall the engine's stop-and-wait loop.
-		delete(settings, "sdk.batch.size")
-		delete(settings, "sdk.batch.delay")
-	}
+	// Invariant 1 (#3321): the arch-v2 engine batches these writes and acks a
+	// record upstream only after the plugin acks it; a plugin batcher behind
+	// the engine would withhold those acks (1 record/s behind a 1-record
+	// source). "0" keeps it off on every SDK release; deleting the key would
+	// bring the connector's own default back.
+	settings = applyPluginBatchingOverrides(settings, d.pluginBatchingOverrides)
 	_, err = d.plugin.Configure(ctx, pconnector.DestinationConfigureRequest{Config: settings})
 	if err != nil {
 		return cerrors.Errorf("could not configure destination connector plugin: %w", d.Instance.redactError(err))
@@ -531,4 +551,28 @@ func (*Destination) isEqual(cfg1, cfg2 map[string]string) bool {
 		}
 	}
 	return (cfg1 != nil) == (cfg2 != nil)
+}
+
+// applyPluginBatchingOverrides sets every key of settings that matches one of
+// keys after trimming to "0", and adds the plain key when none matches (see
+// SetPluginBatchingOverrides). settings is the resolved copy handed to
+// Configure, never the instance's stored config. It returns settings, or a new
+// map if settings is nil and there is a key to add.
+func applyPluginBatchingOverrides(settings map[string]string, keys []string) map[string]string {
+	if settings == nil && len(keys) > 0 {
+		settings = make(map[string]string, len(keys))
+	}
+	for _, key := range keys {
+		matched := false
+		for k := range settings {
+			if strings.TrimSpace(k) == key {
+				settings[k] = "0"
+				matched = true
+			}
+		}
+		if !matched {
+			settings[key] = "0"
+		}
+	}
+	return settings
 }

@@ -181,7 +181,12 @@ Only after step 7 does the loop read again. So at any moment a v2 worker has at 
 and the stream of acks to the source is naturally ordered.
 
 A destination that batches (`sdk.batch.size` above 1 or `sdk.batch.delay` above 0) buffers the batch
-instead of writing it in step 4, and the worker reads on without acking it. The buffer is written when it
+instead of writing it in step 4, and the worker reads on without acking it. The engine owns that batching
+(#3321): it resolves each key from the pipeline config, else from the connector specification's default (S3
+declares 1000 / 1 s), and configures the connector with `0` for each key that would turn the connector SDK's
+own batcher on, so the connector acks every write when it is written. A connector batcher behind the engine
+would hold back the acks the worker waits for. The classic engine passes the settings through unchanged and
+lets the SDK batch. The buffer is written when it
 is full, when the pipeline stops, or `sdk.batch.delay` after its first record: a one-shot timer armed by
 that record (#3231, design
 [`20261103-archv2-destination-batch-timing`](../design-documents/20261103-archv2-destination-batch-timing.md)),

@@ -192,6 +192,11 @@ func NewWorker(
 // they are built: every destination sees its feeders in that one global order,
 // which is what keeps timers that hold several processing locks from
 // deadlocking each other.
+//
+// On error, destinations visited earlier in the tree may already hold w as a
+// feeder; registration is not rolled back. That is harmless only because the
+// caller discards the whole build (runPipeline fails the start), so NewWorker
+// must not be retried on the same task tree: build the tasks again.
 func registerFeeder(w *Worker, n *TaskNode, shared *TaskNode) error {
 	if n.sharedBoundary && shared == nil {
 		shared = n

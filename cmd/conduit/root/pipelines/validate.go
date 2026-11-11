@@ -49,7 +49,7 @@ type ValidateArgs struct {
 type ValidateFlags struct {
 	Quiet   bool `long:"quiet" short:"q" usage:"suppress passing/OK lines and progress chrome; print only failures and the summary"`
 	NoColor bool `long:"no-color" usage:"disable colored/glyph output even on a color-capable terminal"`
-	ArchV2  bool `long:"preview.pipeline-arch-v2" usage:"report a destination or dead-letter-queue with sdk.batch.size above 1 as unsupported (architecture v2 waits for every ack before the next read and cannot batch)"`
+	ArchV2  bool `long:"preview.pipeline-arch-v2" usage:"report a dead-letter-queue with sdk.batch.size above 1 or sdk.batch.delay above 0, and a destination or dead-letter-queue sdk.batch.* value that is not a literal, as refused under architecture v2"`
 }
 
 // ValidateCommand implements `conduit pipelines validate <path>`: offline,

@@ -279,3 +279,30 @@ func TestFunnelDestinationFlushMetrics_Labels(t *testing.T) {
 	is.Equal(linger.GetHistogram().GetSampleCount(), uint64(1))
 	is.Equal(linger.GetHistogram().GetSampleSum(), 1.5)
 }
+
+// TestFunnelDestinationPluginBatchingNeutralisedCounter_Labels asserts the
+// arch-v2 neutralised-plugin-batching counter (#3321) carries
+// pipeline_name/plugin/component_id.
+func TestFunnelDestinationPluginBatchingNeutralisedCounter_Labels(t *testing.T) {
+	is := is.New(t)
+
+	const (
+		pipelineName = "test-pipeline-funnel-neutralised"
+		plugin       = "builtin:s3"
+		componentID  = "test-destination-instance-id"
+	)
+
+	promReg := registerFreshBackend(is)
+
+	measure.FunnelDestinationPluginBatchingNeutralisedCounter.WithValues(pipelineName, plugin, componentID).Inc()
+
+	families, err := promReg.Gather()
+	is.NoErr(err)
+	m := findMetric(findFamily(families, "conduit_funnel_destination_plugin_batching_neutralised_total"), map[string]string{
+		"pipeline_name": pipelineName,
+		"plugin":        plugin,
+		"component_id":  componentID,
+	})
+	is.True(m != nil)
+	is.Equal(m.GetCounter().GetValue(), float64(1))
+}

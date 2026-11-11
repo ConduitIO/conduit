@@ -34,6 +34,12 @@ type Dispenser struct {
 	dispensed bool
 	client    *goplugin.Client
 	m         sync.Mutex
+
+	// spec is the specification the registry loaded for this plugin binary
+	// when it registered it; hasSpec is false for a dispenser built outside
+	// the registry. See connector.DispenserSpecification.
+	spec    pconnector.Specification
+	hasSpec bool
 }
 
 func NewDispenser(logger zerolog.Logger, path string, opts ...client.Option) (*Dispenser, error) {
@@ -87,6 +93,12 @@ func (d *Dispenser) teardown() {
 	d.client.Kill()
 	d.client = nil
 	d.dispensed = false
+}
+
+// Specification returns the specification the registry attached, if any (see
+// connector.DispenserSpecification). Reading it does not start the plugin.
+func (d *Dispenser) Specification() (pconnector.Specification, bool) {
+	return d.spec, d.hasSpec
 }
 
 func (d *Dispenser) DispenseSpecifier() (connector.SpecifierPlugin, error) {

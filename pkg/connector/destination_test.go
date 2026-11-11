@@ -223,37 +223,83 @@ func TestDestination_LifecycleOnDeleted_Skip(t *testing.T) {
 	is.NoErr(err)
 }
 
-// TestDestination_EngineBatchesStripsSDKBatchSettings: when the arch-v2 funnel
-// batches writes itself, the connector adapter must strip sdk.batch.size and
-// sdk.batch.delay before Configure so the SDK destination does not also buffer
-// and withhold acks (which would stall the funnel's stop-and-wait loop).
-func TestDestination_EngineBatchesStripsSDKBatchSettings(t *testing.T) {
-	is := is.New(t)
-	ctx := context.Background()
-	ctrl := gomock.NewController(t)
+// TestDestination_PluginBatchingOverrides (#3321): when the arch-v2 engine
+// batches a destination it lists the sdk.batch.* keys whose effective value
+// would turn the connector SDK's batcher on, and configure hands the plugin
+// "0" for them. Deleting them (what main did) let the SDK apply the
+// connector's own default, so S3 batched 1000 / 1 s behind the engine. With no
+// overrides (the classic engine, or nothing to neutralise) the settings reach
+// Configure verbatim.
+func TestDestination_PluginBatchingOverrides(t *testing.T) {
+	for name, tc := range map[string]struct {
+		settings  map[string]string
+		overrides []string
+		want      map[string]string
+	}{
+		"values replaced": {
+			settings:  map[string]string{"foo": "bar", "sdk.batch.size": "100", "sdk.batch.delay": "10ms"},
+			overrides: []string{"sdk.batch.size", "sdk.batch.delay"},
+			want:      map[string]string{"foo": "bar", "sdk.batch.size": "0", "sdk.batch.delay": "0"},
+		},
+		"absent keys added (spec default batches)": {
+			settings:  map[string]string{"foo": "bar"},
+			overrides: []string{"sdk.batch.size", "sdk.batch.delay"},
+			want:      map[string]string{"foo": "bar", "sdk.batch.size": "0", "sdk.batch.delay": "0"},
+		},
+		"padded key replaced, no second key": {
+			//nolint:gocritic // the padded key is the point
+			settings:  map[string]string{"foo": "bar", " sdk.batch.size ": "100"},
+			overrides: []string{"sdk.batch.size"},
+			//nolint:gocritic // the padded key is the point
+			want: map[string]string{"foo": "bar", " sdk.batch.size ": "0"},
+		},
+		"only listed keys": {
+			settings:  map[string]string{"foo": "bar", "sdk.batch.size": "lots", "sdk.batch.delay": "10ms"},
+			overrides: []string{"sdk.batch.delay"},
+			want:      map[string]string{"foo": "bar", "sdk.batch.size": "lots", "sdk.batch.delay": "0"},
+		},
+		"no overrides: verbatim (classic engine)": {
+			settings: map[string]string{"foo": "bar", "sdk.batch.size": "100", "sdk.batch.delay": "10ms"},
+			want:     map[string]string{"foo": "bar", "sdk.batch.size": "100", "sdk.batch.delay": "10ms"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+			ctrl := gomock.NewController(t)
 
-	dest, destinationMock := newTestDestination(ctx, t, ctrl)
-	dest.Instance.Config.Settings = map[string]string{
-		"foo":             "bar",
-		"sdk.batch.size":  "100",
-		"sdk.batch.delay": "10ms",
+			dest, destinationMock := newTestDestination(ctx, t, ctrl)
+			dest.Instance.Config.Settings = tc.settings
+			dest.Instance.LastActiveConfig = dest.Instance.Config
+			if tc.overrides != nil {
+				dest.SetPluginBatchingOverrides(tc.overrides...)
+			}
+
+			destinationMock.EXPECT().Configure(gomock.Any(), pconnector.DestinationConfigureRequest{
+				Config: tc.want,
+			}).Return(pconnector.DestinationConfigureResponse{}, nil)
+			destinationMock.EXPECT().Open(gomock.Any(), pconnector.DestinationOpenRequest{}).Return(pconnector.DestinationOpenResponse{}, nil)
+			stream := &builtin.InMemoryDestinationRunStream{}
+			destinationMock.EXPECT().NewStream().Return(stream)
+			destinationMock.EXPECT().Run(gomock.Any(), stream).DoAndReturn(func(ctx context.Context, _ pconnector.DestinationRunStream) error {
+				stream.Init(ctx)
+				return nil
+			})
+
+			is.NoErr(dest.Open(ctx))
+			// The stored config is untouched: only the copy handed to the
+			// plugin carries the overrides.
+			is.Equal(dest.Instance.Config.Settings, tc.settings)
+		})
 	}
-	dest.Instance.LastActiveConfig = dest.Instance.Config
-	dest.SetEngineBatches()
+}
 
-	// Configure must receive the settings without the sdk.batch.* keys.
-	destinationMock.EXPECT().Configure(gomock.Any(), pconnector.DestinationConfigureRequest{
-		Config: map[string]string{"foo": "bar"},
-	}).Return(pconnector.DestinationConfigureResponse{}, nil)
-	destinationMock.EXPECT().Open(gomock.Any(), pconnector.DestinationOpenRequest{}).Return(pconnector.DestinationOpenResponse{}, nil)
-	stream := &builtin.InMemoryDestinationRunStream{}
-	destinationMock.EXPECT().NewStream().Return(stream)
-	destinationMock.EXPECT().Run(gomock.Any(), stream).DoAndReturn(func(ctx context.Context, _ pconnector.DestinationRunStream) error {
-		stream.Init(ctx)
-		return nil
-	})
-
-	is.NoErr(dest.Open(ctx))
+// TestApplyPluginBatchingOverrides_NilSettings: a destination with no
+// stored settings still gets the injected keys (no nil-map write).
+func TestApplyPluginBatchingOverrides_NilSettings(t *testing.T) {
+	is := is.New(t)
+	is.Equal(applyPluginBatchingOverrides(nil, []string{"sdk.batch.size"}), map[string]string{"sdk.batch.size": "0"})
+	is.Equal(applyPluginBatchingOverrides(nil, nil), map[string]string(nil))
 }
 
 func newTestDestination(ctx context.Context, t *testing.T, ctrl *gomock.Controller) (*Destination, *mock.DestinationPlugin) {

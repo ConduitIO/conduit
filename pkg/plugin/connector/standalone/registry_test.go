@@ -28,6 +28,7 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin"
+	"github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/matryer/is"
 )
 
@@ -172,4 +173,27 @@ func TestRegistry_NewDispenser_NotRefusedWhenEgressUnrestricted(t *testing.T) {
 	ce, ok := conduiterr.Get(err)
 	is.True(ok)
 	is.Equal(ce.Code, conduiterr.CodeConnectorPluginNotFound)
+}
+
+// TestRegistry_NewDispenser_CarriesSpecification (#3321): the dispenser carries
+// the specification loaded from the plugin binary at registration, for the
+// version the name resolved to, and reading it starts no plugin process.
+func TestRegistry_NewDispenser_CarriesSpecification(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	r := NewRegistry(log.Nop(), testPluginDir)
+	r.Init(ctx, ":12345", server.DefaultMaxReceiveRecordSize)
+
+	for _, name := range []string{
+		"standalone:" + testPluginName,
+		"standalone:" + testPluginName + "@" + testPluginVersion,
+	} {
+		d, err := r.NewDispenser(log.Nop(), plugin.FullName(name), pconnector.PluginConfig{})
+		is.NoErr(err)
+		spec, ok := connector.DispenserSpecification(d)
+		is.True(ok)
+		is.Equal(spec, testPluginBlueprint().Specification)
+		is.True(!d.(*Dispenser).dispensed) // nothing was started to read it
+	}
 }

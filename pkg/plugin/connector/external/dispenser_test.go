@@ -23,6 +23,7 @@ import (
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
+	"github.com/conduitio/conduit/pkg/plugin/connector"
 	"github.com/conduitio/conduit/pkg/plugin/connector/external"
 	"github.com/matryer/is"
 	"github.com/rs/zerolog"
@@ -214,4 +215,19 @@ func TestDispenser_Teardown_CompletesGracefully(t *testing.T) {
 	// "teardown eventually completes" (catches a real hang), it does not
 	// assert low latency.
 	is.True(elapsed < 5*time.Second)
+}
+
+// TestDispenser_CarriesNoSpecification is a tripwire for the package doc's
+// wiring prerequisite: an external Dispenser carries no plugin specification,
+// so it must not be returned by connector.PluginService.newDispenser until it
+// does (otherwise arch-v2 loses the connector's sdk.batch.* defaults and
+// #3321 comes back for a connector that batches by default). Whoever attaches
+// the specification flips this test to assert the spec is the one Specify
+// returned.
+func TestDispenser_CarriesNoSpecification(t *testing.T) {
+	is := is.New(t)
+	d, err := external.NewDispenser(zerolog.Nop(), &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1})
+	is.NoErr(err) // constructing does not dial
+	_, ok := connector.DispenserSpecification(d)
+	is.True(!ok)
 }
