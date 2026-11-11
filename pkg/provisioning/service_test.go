@@ -553,6 +553,11 @@ func TestService_IntegrationTestServices(t *testing.T) {
 	t.Cleanup(func() {
 		err := os.Remove(destFile)
 		is.NoErr(err)
+		// builtin:file v0.13.0 keeps the committed length next to the output.
+		err = os.Remove(destFile + ".committed")
+		if !os.IsNotExist(err) {
+			is.NoErr(err)
+		}
 	})
 
 	// create DLQ file (the running pipeline's DLQ is builtin:file; its Open
@@ -563,6 +568,11 @@ func TestService_IntegrationTestServices(t *testing.T) {
 	t.Cleanup(func() {
 		err := os.Remove(dlqFile)
 		is.NoErr(err)
+		// builtin:file v0.13.0 keeps the committed length next to the output.
+		err = os.Remove(dlqFile + ".committed")
+		if !os.IsNotExist(err) {
+			is.NoErr(err)
+		}
 	})
 
 	service := NewService(db, logger, plService, connService, procService, connPluginService, lifecycleService, "./test/pipelines4-integration-test")
