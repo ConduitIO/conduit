@@ -85,11 +85,13 @@ type Options struct {
 	// consulted when ResolvePlugins.
 	BuiltinProcessors map[string]struct{}
 
-	// ArchV2 checks, on top of parse -> enrich -> validate, that no destination
-	// or dead-letter-queue sets sdk.batch.size above 1: architecture v2's
-	// stop-and-wait destination task waits for every ack before the next read,
-	// so it cannot batch, and the engine refuses such a pipeline at start with
-	// pipeline.archv2_destination_batching_unsupported. The offline engine has
+	// ArchV2 checks, on top of parse -> enrich -> validate, what the engine
+	// refuses at start under architecture v2: a dead-letter-queue with
+	// sdk.batch.size above 1 or sdk.batch.delay above 0
+	// (pipeline.archv2_destination_batching_unsupported), and a destination or
+	// dead-letter-queue sdk.batch.* value that is not a literal
+	// (pipeline.archv2_destination_batching_not_literal). Regular destinations'
+	// batching is not refused: the engine batches them itself. The offline engine has
 	// no runtime config, so the command passes this from
 	// preview.pipeline-arch-v2.
 	ArchV2 bool
@@ -322,18 +324,17 @@ const codeArchV2DestinationBatchingUnsupported = "pipeline.archv2_destination_ba
 // reason as codeArchV2DestinationBatchingUnsupported; keep it in sync.
 const codeArchV2DestinationBatchingNotLiteral = "pipeline.archv2_destination_batching_not_literal"
 
-// archV2BatchingFindings is the --preview.pipeline-arch-v2 check: arch-v2's
-// stop-and-wait destination task waits for every ack before the next read, so
-// a destination (or the dead-letter queue) with sdk.batch.size above 1 is
-// refused at start with pipeline.archv2_destination_batching_unsupported. The
-// engine guard in pkg/lifecycle-poc enforces it at runtime; this surfaces the
-// same refusal offline, sharing config.SDKBatchSizeAboveOne with that guard so
-// the two agree. The code string must stay in sync with
-// lifecycle.CodeArchV2DestinationBatchingUnsupported (a literal here keeps the
-// offline engine from importing the whole lifecycle package). It also reports
-// a destination or DLQ sdk.batch.* value that is not a literal with
-// pipeline.archv2_destination_batching_not_literal (config.SDKBatchNonLiteral,
-// shared with the runtime guard and the live-apply preflight).
+// archV2BatchingFindings is the --preview.pipeline-arch-v2 check. It reports
+// what the engine refuses at start (and PreflightPipelineConfig refuses on a
+// live apply): a dead-letter-queue with sdk.batch.size above 1 or
+// sdk.batch.delay above 0 (pipeline.archv2_destination_batching_unsupported;
+// the engine does not batch the DLQ), and a destination or DLQ sdk.batch.*
+// value that is not a literal (pipeline.archv2_destination_batching_not_literal,
+// config.SDKBatchNonLiteral). A batched destination is not reported: the
+// engine batches it itself. It shares config.SDKBatchSizeAboveOne and
+// config.SDKBatchDelayAboveZero with the runtime guard so the two agree. The
+// code strings must stay in sync with the lifecycle constants (literals here
+// keep the offline engine from importing the whole lifecycle package).
 func archV2BatchingFindings(p config.Pipeline) []Finding {
 	add := func(findings []Finding, configPath, msg string) []Finding {
 		return append(findings, Finding{

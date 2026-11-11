@@ -31,11 +31,12 @@ import (
 // withTempConfigFile.
 type ConfigArgs struct {
 	Config string `json:"config" jsonschema:"the pipeline configuration YAML content to check"`
-	// ArchV2 runs the arch-v2 check: a destination or dead-letter-queue with
-	// sdk.batch.size above 1 is reported with
-	// pipeline.archv2_destination_batching_unsupported, matching the runtime
-	// engine's refusal at start.
-	ArchV2 bool `json:"arch_v2,omitempty" jsonschema:"report a destination or dead-letter-queue with sdk.batch.size above 1 as unsupported under architecture v2"`
+	// ArchV2 runs the arch-v2 check, matching what the engine refuses at
+	// start: a dead-letter-queue with sdk.batch.size above 1 or sdk.batch.delay
+	// above 0 (pipeline.archv2_destination_batching_unsupported), and a
+	// destination or dead-letter-queue sdk.batch.* value that is not a literal
+	// (pipeline.archv2_destination_batching_not_literal).
+	ArchV2 bool `json:"arch_v2,omitempty" jsonschema:"report a dead-letter-queue with sdk.batch.size above 1 or sdk.batch.delay above 0, and a destination or dead-letter-queue sdk.batch.* value that is not a literal, as refused under architecture v2"`
 }
 
 // validate implements the validate tool: offline, static verification of a
