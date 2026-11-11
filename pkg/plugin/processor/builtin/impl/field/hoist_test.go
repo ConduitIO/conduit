@@ -67,6 +67,21 @@ func TestHoist_Process(t *testing.T) {
 		record: opencdc.Record{},
 		want:   opencdc.Record{Key: opencdc.StructuredData{"k": nil}},
 	}, {
+		name:   "a typed nil StructuredData is wrapped as null",
+		config: config.Config{"field": ".Key", "name": "k"},
+		record: opencdc.Record{Key: opencdc.StructuredData(nil)},
+		want:   opencdc.Record{Key: opencdc.StructuredData{"k": nil}},
+	}, {
+		name:   "a nil before-image (insert) passes through with its schema metadata",
+		config: config.Config{"field": ".Payload.Before", "name": "b"},
+		record: opencdc.Record{Operation: opencdc.OperationCreate, Metadata: hoistSchemaMD(), Payload: opencdc.Change{After: opencdc.StructuredData{"id": 1}}},
+		want:   opencdc.Record{Operation: opencdc.OperationCreate, Metadata: hoistSchemaMD(), Payload: opencdc.Change{After: opencdc.StructuredData{"id": 1}}},
+	}, {
+		name:   "a typed nil before-image passes through",
+		config: config.Config{"field": ".Payload.Before", "name": "b"},
+		record: opencdc.Record{Payload: opencdc.Change{Before: opencdc.StructuredData(nil)}},
+		want:   opencdc.Record{Payload: opencdc.Change{Before: opencdc.StructuredData(nil)}},
+	}, {
 		name:   "RawData(nil) is bytes, not a nil side",
 		config: config.Config{"field": ".Key", "name": "k"},
 		record: opencdc.Record{Key: opencdc.RawData(nil)},
@@ -156,6 +171,13 @@ func TestHoist_Property(t *testing.T) {
 			}
 			want := recordgen.Clone([]opencdc.Record{orig[i]})[0]
 			side := hoistSide(&want, field)
+			if *side == nil && field == ".Payload.Before" {
+				// No before-image: the record passes through unchanged.
+				if diff := cmp.Diff(want, opencdc.Record(got), cmpopts.IgnoreUnexported(opencdc.Record{})); diff != "" {
+					t.Fatalf("record %d (-want +got):\n%s", i, diff)
+				}
+				continue
+			}
 			var v any
 			switch d := (*side).(type) {
 			case nil:
@@ -172,11 +194,18 @@ func TestHoist_Property(t *testing.T) {
 				delete(want.Metadata, opencdc.MetadataPayloadSchemaSubject)
 				delete(want.Metadata, opencdc.MetadataPayloadSchemaVersion)
 			}
-			if diff := cmp.Diff(want, opencdc.Record(got), cmpopts.IgnoreUnexported(opencdc.Record{}), cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(want, opencdc.Record(got), cmpopts.IgnoreUnexported(opencdc.Record{})); diff != "" {
 				t.Fatalf("record %d (-want +got):\n%s", i, diff)
 			}
 			// The hoisted value shares nothing with the input record.
-			if m, ok := (*hoistSide((*opencdc.Record)(&got), field)).(opencdc.StructuredData)["h"].(map[string]any); ok {
+			hoisted := (*hoistSide((*opencdc.Record)(&got), field)).(opencdc.StructuredData)["h"]
+			if b, ok := hoisted.([]byte); ok && len(b) > 0 {
+				b[0]++
+				if raw, ok := (*hoistSide(&in[i], field)).(opencdc.RawData); !ok || raw[0] == b[0] {
+					t.Fatalf("record %d: hoisted bytes alias the input", i)
+				}
+			}
+			if m, ok := hoisted.(map[string]any); ok {
 				m["__mutated"] = true
 				if sd, ok := (*hoistSide(&in[i], field)).(opencdc.StructuredData); ok {
 					if _, shared := sd["__mutated"]; shared {

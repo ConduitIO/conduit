@@ -34,9 +34,14 @@ import (
 //
 //   - structured data is deep-copied into the new map (as a map[string]any);
 //   - raw data becomes a []byte value, as Kafka Connect wraps a byte array;
-//   - a nil side becomes {name: nil}, as Kafka Connect wraps a null value.
-//     This turns a tombstone into a record with a value, exactly as the SMT
-//     does; the SMT translator relies on it.
+//   - a nil key or after-image becomes {name: nil}, as Kafka Connect wraps a
+//     null value. This turns a tombstone into a record with a value, exactly
+//     as the SMT does;
+//   - a nil before-image passes through unchanged, schema metadata included:
+//     it means "no image" (an insert), not a null value, and Kafka Connect
+//     has no before-image to wrap.
+//
+// A typed nil StructuredData counts as nil.
 //
 // It removes the schema subject and version of the side it hoists, so the
 // SDK schema middleware does not register a schema extracted from the new
@@ -71,9 +76,10 @@ with structured data that holds the old value under ` + "`name`" + `: ` + "`{\"i
 ` + "`{\"<name>\": {\"id\": 1}}`" + `. It is the equivalent of the Kafka Connect ` + "`HoistField$Value`" + ` and
 ` + "`HoistField$Key`" + ` single message transforms.
 
-Structured data is deep-copied. Raw data is stored as bytes. A nil key or payload becomes ` + "`{\"<name>\": null}`" + `,
-as Kafka Connect wraps a null value: a tombstone or a delete's after-image therefore gets a value. Use a
-` + "`condition`" + ` to skip such records if that is not wanted.
+Structured data is deep-copied. Raw data is stored as bytes. A nil key or after-image becomes
+` + "`{\"<name>\": null}`" + `, as Kafka Connect wraps a null value: a tombstone or a delete's after-image therefore gets a
+value. Use a ` + "`condition`" + ` to skip such records if that is not wanted. A nil before-image means the record has no
+before-image (an insert), so it passes through unchanged.
 
 The processor removes the schema subject and version of the side it hoists (` + "`opencdc.key.schema.*`" + ` for the key,
 ` + "`opencdc.payload.schema.*`" + ` for the payload), because the new shape no longer matches the schema the source
@@ -105,6 +111,12 @@ func (p *HoistProcessor) Process(_ context.Context, records []opencdc.Record) []
 		default:
 			side = &rec.Payload.After
 		}
+		if isNilData(*side) && p.config.Field == ".Payload.Before" {
+			// No before-image: nothing to wrap, and the metadata still
+			// describes the after-image.
+			out = append(out, sdk.SingleRecord(rec))
+			continue
+		}
 		*side = opencdc.StructuredData{p.config.Name: hoistedValue(*side)}
 
 		// Invariant 6: the new shape no longer matches the schema the source
@@ -126,13 +138,24 @@ func (p *HoistProcessor) Process(_ context.Context, records []opencdc.Record) []
 // name: a deep copy of structured data as a map[string]any (the type nested
 // maps have in decoded records), the bytes of raw data, or nil.
 func hoistedValue(d opencdc.Data) any {
-	switch d := d.(type) {
-	case nil:
+	if isNilData(d) {
 		return nil
+	}
+	switch d := d.(type) {
 	case opencdc.StructuredData:
 		return map[string]any(d.Clone().(opencdc.StructuredData)) //nolint:forcetypeassert // Clone keeps the type
 	default:
 		// RawData, or any other Data implementation: its bytes.
 		return bytes.Clone(d.Bytes())
 	}
+}
+
+// isNilData reports whether d holds no data: a nil interface or a typed nil
+// StructuredData. RawData(nil) is bytes (an empty value), not nil.
+func isNilData(d opencdc.Data) bool {
+	if d == nil {
+		return true
+	}
+	sd, ok := d.(opencdc.StructuredData)
+	return ok && sd == nil
 }
