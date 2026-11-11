@@ -433,6 +433,14 @@ func TestDestinationTask_DeferOrdered_HonoursFlushDeadline(t *testing.T) {
 // with no DLQ budget is a pipeline error. Deferred behind a buffered record it
 // now fails on the flusher; a graceful stop must report it, not swallow it as a
 // clean stop.
+//
+// The queued nack makes the buffer releasable at once (two entries, batch size
+// 2), so the pass hands [p0, nack] to the flusher. If the flusher wrote p0, ran
+// the refused nack and exited before enqueueFlush's post-send check, the pass
+// itself returned the deferred error: correct (the pipeline fails either way),
+// but it made this test flaky under CI load. Holding p0's Write keeps the
+// flusher alive until the pass has returned, so the error can only surface on
+// Close, which is what this test is about.
 func TestWorker_ProcessorNack_DLQDisabled_FailsPipelineOnStop(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
@@ -444,8 +452,17 @@ func TestWorker_ProcessorNack_DLQDisabled_FailsPipelineOnStop(t *testing.T) {
 		}
 		return nil
 	}, 1, 0) // a DLQ budget of zero nacks: the second nack in a row is refused
-	is.NoErr(rig.pass(ctx, rig.recs[0], rig.recs[1], rig.recs[2])) // p0 buffered, p1+p2's nack deferred
+	blocked, unblock := rig.dest.blockWrites(rig.recs[0].Position)
 
+	// p0 buffered, p1+p2's nack queued behind it; both go to the flusher.
+	is.NoErr(rig.pass(ctx, rig.recs[0], rig.recs[1], rig.recs[2]))
+	<-blocked // the flusher holds [p0, nack] and is inside p0's Write
+
+	// Invariant 1/3: the refused nack runs only after p0 is written, and p0 is
+	// not acked while its Write is in flight.
+	is.Equal(rig.src.ackedPositions(), []opencdc.Position(nil))
+
+	unblock()
 	err := rig.dt.Close(ctx)
 	is.True(err != nil)
 	is.True(isDeferredAckError(err))
