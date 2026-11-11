@@ -88,11 +88,33 @@
         "type": "bool",
         "validations": null
       },
+      "sdk.schema.encode.key.strategy": {
+        "default": "infer",
+        "description": "How to build a new key schema when the processed key no longer fits the schema the record carried. \"infer\" extracts a schema from the values (Avro int becomes long, date becomes timestamp-micros, decimals become decimal(31,10)). \"extend\" keeps the carried type of every field still present, adds new top-level fields as nullable with a null default, leaves out removed top-level fields, and fails the record if a value does not fit its carried type.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "inclusion",
+            "value": "infer,extend"
+          }
+        ]
+      },
       "sdk.schema.encode.payload.enabled": {
         "default": "true",
         "description": "Whether to encode the record payload using its corresponding schema from the schema registry.",
         "type": "bool",
         "validations": null
+      },
+      "sdk.schema.encode.payload.strategy": {
+        "default": "infer",
+        "description": "How to build a new payload schema when the processed payload no longer fits the schema the record carried. \"infer\" extracts a schema from the values (Avro int becomes long, date becomes timestamp-micros, decimals become decimal(31,10)). \"extend\" keeps the carried type of every field still present, adds new top-level fields as nullable with a null default, leaves out removed top-level fields, and fails the record if a value does not fit its carried type.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "inclusion",
+            "value": "infer,extend"
+          }
+        ]
       },
       "user": {
         "default": "",
