@@ -102,8 +102,6 @@ var batchedEngines = []batchedEngine{
 	{name: "arch-v2", flags: []string{"--preview.pipeline-arch-v2"}},
 }
 
-func (e batchedEngine) archV2() bool { return len(e.flags) > 0 }
-
 // batchedOpts shapes the working directory.
 type batchedOpts struct {
 	// lines is how many numbered lines each source starts with.
@@ -113,9 +111,6 @@ type batchedOpts struct {
 	sources int
 	// fifo makes the destination a named pipe at output.fifo instead of a file.
 	fifo bool
-	// archV2 is set for an arch-v2 run: the destination then carries explicit
-	// batching settings (see batchedDir).
-	archV2 bool
 }
 
 // sourceStride separates the number ranges of the sources in an N-source run.
@@ -157,19 +152,10 @@ func batchedDir(t *testing.T, o batchedOpts) string {
 		fmt.Fprintf(&p, "      - id: src%d\n        type: source\n        plugin: builtin:file\n        settings:\n          path: %q\n", k, inputPath(dir, k))
 	}
 	// builtin:file v0.13.0 defaults the destination to sdk.batch.size 1000 and
-	// sdk.batch.delay 100ms, because every write now pays for two fsyncs. The
-	// classic engine writes one record per call, so it needs that SDK batching
-	// and gets it by default. The arch-v2 engine reads destination batching only
-	// from the pipeline config and does not strip the connector's own default
-	// from the SDK, so a default pipeline there holds each source batch (up to
-	// 100 records) in the SDK for the 100ms delay: 200,000 records take about
-	// four minutes instead of five seconds. These tests set the same values on
-	// the pipeline so the engine batches (and strips them from the SDK).
-	destBatch := ""
-	if o.archV2 {
-		destBatch = "          sdk.batch.size: \"1000\"\n          sdk.batch.delay: 100ms\n"
-	}
-	fmt.Fprintf(&p, "      - id: dst\n        type: destination\n        plugin: builtin:file\n        settings:\n          path: %q\n%s", dest, destBatch)
+	// sdk.batch.delay 100ms. Both engines run that shipped default: the classic
+	// engine through the SDK batcher, arch-v2 by adopting the declared defaults
+	// itself and handing the plugin "0" (#3339).
+	fmt.Fprintf(&p, "      - id: dst\n        type: destination\n        plugin: builtin:file\n        settings:\n          path: %q\n", dest)
 	if err := os.WriteFile(filepath.Join(dir, "pipelines", "p.yaml"), []byte(p.String()), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -532,7 +518,7 @@ func TestSIGKILL_BatchedSource_WhileCollecting(t *testing.T) {
 	const total = 60000
 	for _, eng := range batchedEngines {
 		t.Run(eng.name, func(t *testing.T) {
-			dir := batchedDir(t, batchedOpts{archV2: eng.archV2()})
+			dir := batchedDir(t, batchedOpts{})
 			input := inputPath(dir, 0)
 			writerErr := make(chan error, 1)
 			go func() { // the writer outlives the first process
@@ -607,7 +593,7 @@ func TestSIGKILL_BatchedSource_AfterWriteBeforePersist(t *testing.T) {
 	)
 	for _, eng := range batchedEngines {
 		t.Run(eng.name, func(t *testing.T) {
-			dir := batchedDir(t, batchedOpts{lines: total, archV2: eng.archV2()})
+			dir := batchedDir(t, batchedOpts{lines: total})
 
 			first := startConduit(t, conduitBin, dir, "never", eng.flags...)
 			requireBatchedSource(t, first)
@@ -804,7 +790,7 @@ func TestSIGKILL_BatchedSource_StalledDestination_NoLoss(t *testing.T) {
 	const total = 5000
 	for _, eng := range batchedEngines {
 		t.Run(eng.name, func(t *testing.T) {
-			dir := batchedDir(t, batchedOpts{lines: total, fifo: true, archV2: eng.archV2()})
+			dir := batchedDir(t, batchedOpts{lines: total, fifo: true})
 			pipe := openFIFO(t, fifoPath(dir))
 
 			first := startConduit(t, conduitBin, dir, "never", eng.flags...)
@@ -886,7 +872,7 @@ func TestSIGKILL_BatchedSource_NSource(t *testing.T) {
 	const lines = 40000
 	for _, eng := range batchedEngines {
 		t.Run(eng.name, func(t *testing.T) {
-			dir := batchedDir(t, batchedOpts{lines: lines, sources: 2, archV2: eng.archV2()})
+			dir := batchedDir(t, batchedOpts{lines: lines, sources: 2})
 			want := append(rangeOf(1, lines), rangeOf(sourceStride+1, sourceStride+lines)...)
 
 			first := startConduit(t, conduitBin, dir, "never", eng.flags...)
@@ -927,7 +913,7 @@ func TestSIGTERM_BatchedSource_GracefulDrain(t *testing.T) {
 	const total = 5000
 	for _, eng := range batchedEngines {
 		t.Run(eng.name, func(t *testing.T) {
-			dir := batchedDir(t, batchedOpts{lines: total, fifo: true, archV2: eng.archV2()})
+			dir := batchedDir(t, batchedOpts{lines: total, fifo: true})
 			pipe := openFIFO(t, fifoPath(dir))
 
 			first := startConduit(t, conduitBin, dir, "never", eng.flags...)
