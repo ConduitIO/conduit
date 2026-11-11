@@ -1,0 +1,20 @@
+{
+    "name": "sink-s3-events",
+    "config": {
+        "connector.class": "io.confluent.connect.s3.S3SinkConnector",
+        "key.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+        "value.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+        "tasks.max": "1",
+        "topics": "events",
+        "s3.region": "us-east-1",
+        "s3.bucket.name": "example-events-bucket",
+        "flush.size": "1000",
+        "storage.class": "io.confluent.connect.s3.storage.S3Storage",
+        "format.class": "io.confluent.connect.s3.format.bytearray.ByteArrayFormat",
+        "transforms": "drop,missing,drop",
+        "transforms.drop.type": "org.apache.kafka.connect.transforms.Filter",
+        "transforms.drop.predicate": "nowhere",
+        "transforms.hoist.type": "org.apache.kafka.connect.transforms.HoistField$Value",
+        "transforms.hoist.field": "${file:/etc/kafka/smt.properties:field}"
+    }
+}

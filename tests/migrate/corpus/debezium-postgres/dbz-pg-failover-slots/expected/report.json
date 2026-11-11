@@ -137,7 +137,7 @@
           },
           "code": "kc.target_capability_missing",
           "reason": "topic.prefix becomes debezium.topic.prefix, which requires the Debezium-compatible output mode (debezium.enabled on builtin:postgres); that setting is not in the released connector.",
-          "fix": "Keep this connector on Kafka Connect until",
+          "fix": "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode, or accept the difference with --accept-gaps.",
           "blocking": true
         },
         {

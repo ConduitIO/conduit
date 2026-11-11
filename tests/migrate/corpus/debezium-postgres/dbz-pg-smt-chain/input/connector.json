@@ -1,0 +1,31 @@
+{
+    "name": "orders-cdc",
+    "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "tasks.max": "1",
+        "database.hostname": "postgres.internal.example",
+        "database.port": "5432",
+        "database.user": "postgres",
+        "database.password": "PLACEHOLDER_SECRET_DB_PASSWORD",
+        "database.dbname": "orders",
+        "topic.prefix": "shop",
+        "table.include.list": "public.orders",
+        "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+        "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+        "value.converter.schemas.enable": "false",
+        "transforms": "unwrap,onlyOrders,route",
+        "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+        "transforms.unwrap.replace.null.with.default": "false",
+        "transforms.onlyOrders.type": "org.apache.kafka.connect.transforms.Filter",
+        "transforms.onlyOrders.predicate": "isOrders",
+        "transforms.onlyOrders.negate": "true",
+        "transforms.route.type": "io.debezium.transforms.partitions.PartitionRouting",
+        "transforms.route.partition.payload.fields": "change.customer_id",
+        "transforms.route.partition.topic.num": "6",
+        "transforms.old.type": "org.apache.kafka.connect.transforms.Cast$Value",
+        "predicates": "isOrders,unused",
+        "predicates.isOrders.type": "org.apache.kafka.connect.transforms.predicates.TopicNameMatches",
+        "predicates.isOrders.pattern": "shop\\.public\\.orders",
+        "predicates.unused.type": "org.apache.kafka.connect.transforms.predicates.RecordIsTombstone"
+    }
+}

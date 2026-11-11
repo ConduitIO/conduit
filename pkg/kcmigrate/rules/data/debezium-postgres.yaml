@@ -333,7 +333,7 @@ keys:
     blocking: true
     code: kc.target_capability_missing
     reason: topic.prefix becomes debezium.topic.prefix, which requires the Debezium-compatible output mode (debezium.enabled on builtin:postgres); that setting is not in the released connector.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode, or accept the difference with --accept-gaps.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode, or accept the difference with --accept-gaps."
     diff: identity
   - key: database.server.name
     aliasOf: topic.prefix
@@ -343,14 +343,14 @@ keys:
     blocking: true
     code: kc.target_capability_missing
     reason: topic.delimiter becomes debezium.topic.delimiter, which requires the Debezium-compatible output mode.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: identity
   - key: topic.naming.strategy
     status: unsupported
     blocking: true
     code: kc.target_capability_missing
     reason: Topic naming is part of the Debezium-compatible output mode, which is not available; a custom strategy names topics in code migrate cannot read.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: behavior
   - key: topic.cache.size
     status: unsupported
@@ -419,42 +419,42 @@ keys:
     blocking: true
     code: kc.target_capability_missing
     reason: column.include.list becomes debezium.column.include.list, which requires the Debezium-compatible output mode.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: behavior
   - key: column.exclude.list
     status: unsupported
     blocking: true
     code: kc.target_capability_missing
     reason: column.exclude.list becomes debezium.column.exclude.list, which requires the Debezium-compatible output mode.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: behavior
   - key: message.key.columns
     status: unsupported
     blocking: true
     code: kc.target_capability_missing
     reason: message.key.columns becomes debezium.message.key.columns, which requires the Debezium-compatible output mode.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: behavior
   - key: message.prefix.include.list
     status: unsupported
     blocking: true
     code: kc.target_capability_missing
     reason: message.prefix.include.list becomes debezium.message.prefix.include.list, which requires the Debezium-compatible output mode.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: behavior
   - key: message.prefix.exclude.list
     status: unsupported
     blocking: true
     code: kc.target_capability_missing
     reason: message.prefix.exclude.list becomes debezium.message.prefix.exclude.list, which requires the Debezium-compatible output mode.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: behavior
   - key: skipped.operations
     status: unsupported
     blocking: true
     code: kc.target_capability_missing
     reason: skipped.operations becomes debezium.skipped.operations, which requires the Debezium-compatible output mode.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: behavior
   - key: skip.messages.without.change
     status: unsupported
@@ -468,91 +468,91 @@ keys:
     blocking: true
     code: kc.target_capability_missing
     reason: tombstones.on.delete becomes a debezium.encode processor setting, which requires the Debezium-compatible output mode.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: behavior
   - key: provide.transaction.metadata
     status: unsupported
     blocking: true
     code: kc.target_capability_missing
     reason: provide.transaction.metadata becomes debezium.provide.transaction.metadata, which requires the Debezium-compatible output mode; the transaction topic is not produced.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: behavior
   - key: time.precision.mode
     status: unsupported
     blocking: true
     code: kc.target_capability_missing
     reason: time.precision.mode becomes debezium.time.precision.mode, which requires the Debezium-compatible output mode.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: behavior
   - key: decimal.handling.mode
     status: unsupported
     blocking: true
     code: kc.target_capability_missing
     reason: decimal.handling.mode becomes debezium.decimal.handling.mode, which requires the Debezium-compatible output mode.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: behavior
   - key: binary.handling.mode
     status: unsupported
     blocking: true
     code: kc.target_capability_missing
     reason: binary.handling.mode becomes debezium.binary.handling.mode, which requires the Debezium-compatible output mode.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: behavior
   - key: interval.handling.mode
     status: unsupported
     blocking: true
     code: kc.target_capability_missing
     reason: interval.handling.mode becomes debezium.interval.handling.mode, which requires the Debezium-compatible output mode.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: behavior
   - key: hstore.handling.mode
     status: unsupported
     blocking: true
     code: kc.target_capability_missing
     reason: hstore.handling.mode becomes debezium.hstore.handling.mode, which requires the Debezium-compatible output mode.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: behavior
   - key: money.fraction.digits
     status: unsupported
     blocking: true
     code: kc.target_capability_missing
     reason: money.fraction.digits becomes debezium.money.fraction.digits, which requires the Debezium-compatible output mode.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: behavior
   - key: unavailable.value.placeholder
     status: unsupported
     blocking: true
     code: kc.target_capability_missing
     reason: unavailable.value.placeholder becomes debezium.unavailable.value.placeholder, which requires the Debezium-compatible output mode.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: behavior
   - key: include.unknown.datatypes
     status: unsupported
     blocking: true
     code: kc.target_capability_missing
     reason: include.unknown.datatypes becomes debezium.include.unknown.datatypes, which requires the Debezium-compatible output mode.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: behavior
   - key: schema.name.adjustment.mode
     status: unsupported
     blocking: true
     code: kc.target_capability_missing
     reason: schema.name.adjustment.mode becomes debezium.schema.name.adjustment.mode, which requires the Debezium-compatible output mode.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: behavior
   - key: field.name.adjustment.mode
     status: unsupported
     blocking: true
     code: kc.target_capability_missing
     reason: field.name.adjustment.mode becomes debezium.field.name.adjustment.mode, which requires the Debezium-compatible output mode.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: behavior
   - key: extended.headers.enabled
     status: unsupported
     blocking: true
     code: kc.target_capability_missing
     reason: extended.headers.enabled becomes a debezium source setting, which requires the Debezium-compatible output mode.
-    fix: Keep this connector on Kafka Connect until #3032 ships the Debezium output mode.
+    fix: "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode."
     diff: behavior
 
   # --- Masking and converters ---

@@ -12,7 +12,7 @@
 
 | | Key | Location | Code | Reason | Fix |
 | --- | --- | --- | --- | --- | --- |
-| blocking | `topic.prefix` | inventory-source.json#/topic.prefix | `kc.target_capability_missing` | topic.prefix becomes debezium.topic.prefix, which requires the Debezium-compatible output mode (debezium.enabled on builtin:postgres); that setting is not in the released connector. | Keep this connector on Kafka Connect until |
+| blocking | `topic.prefix` | inventory-source.json#/topic.prefix | `kc.target_capability_missing` | topic.prefix becomes debezium.topic.prefix, which requires the Debezium-compatible output mode (debezium.enabled on builtin:postgres); that setting is not in the released connector. | Keep this connector on Kafka Connect until #3032 ships the Debezium output mode, or accept the difference with --accept-gaps. |
 | blocking | `schema.include.list` | inventory-source.json#/schema.include.list | `kc.key_unsupported` | Schema selection folds into the source's tables list only when a literal table.include.list is also set; alone it cannot be expressed. | List the tables explicitly in table.include.list (schema.table), or keep this connector on Kafka Connect. |
 | blocking | `slot.failover` | inventory-source.json#/slot.failover | `kc.key_unsupported` | A failover slot survives a primary switch; Conduit's slot does not. | Keep this connector on Kafka Connect until the connector creates failover slots. |
 | blocking | `snapshot.mode` | inventory-source.json#/snapshot.mode | `kc.key_unsupported` | This snapshot mode has no Conduit equivalent (only initial and never are supported). | Use snapshot.mode=initial or never, or keep this connector on Kafka Connect. |

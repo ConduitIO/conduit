@@ -270,6 +270,9 @@ func (f *File) validate() error {
 		for _, err := range r.validateBlockSinks(f.Scope) {
 			fail("key %s: %v", id, err)
 		}
+		for _, err := range r.validateSMTChain(f.Scope) {
+			fail("key %s: %v", id, err)
+		}
 	}
 	errs = append(errs, f.validateDefaults()...)
 	for _, r := range f.Keys {
@@ -365,6 +368,27 @@ func (r *Rule) validateBlockSinks(scope string) []error {
 	}
 	for _, b := range r.Values {
 		check(b.Outcome, branchEmit(r, b))
+	}
+	return errs
+}
+
+// validateSMTChain checks the smt emit kind: only the shared file
+// claims transform and predicate keys, with one fail-closed outcome
+// (unsupported, blocking) that the chain translator replaces.
+func (r *Rule) validateSMTChain(scope string) []error {
+	uses := r.Emit != nil && r.Emit.Kind == SMTKind
+	for _, b := range r.Values {
+		uses = uses || (b.Emit != nil && b.Emit.Kind == SMTKind)
+	}
+	if !uses {
+		return nil
+	}
+	var errs []error
+	if scope != ScopeShared {
+		errs = append(errs, cerrors.New(SMTKind+" is only for the shared rule file"))
+	}
+	if len(r.Values) > 0 || r.Status != kcmigrate.StatusUnsupported || !r.Blocking {
+		errs = append(errs, cerrors.New(SMTKind+" needs one outcome, unsupported and blocking, as the fail-closed placeholder the chain translator replaces"))
 	}
 	return errs
 }
@@ -468,6 +492,11 @@ func (o Outcome) validate(emit *Action) []error {
 	if (o.Status == kcmigrate.StatusUnsupported || o.Blocking) && o.Fix == "" {
 		errs = append(errs, cerrors.New("an unsupported or blocking outcome needs a fix"))
 	}
+	for _, text := range []string{o.Reason, o.Fix} {
+		if truncated(text) {
+			errs = append(errs, cerrors.Errorf("%q ends mid-sentence; quote the scalar if it contains \" #\", which YAML reads as a comment", text))
+		}
+	}
 	if o.Code != "" {
 		if _, ok := conduiterr.LookupCode(o.Code); !ok || !strings.HasPrefix(o.Code, "kc.") {
 			errs = append(errs, cerrors.Errorf("code %q is not a registered kc.* code", o.Code))
@@ -499,7 +528,24 @@ func (f *File) String() string { return fmt.Sprintf("%s (%s)", f.name, f.Scope) 
 // Name is the rule file's name.
 func (f *File) Name() string { return f.name }
 
+// truncated reports whether a reason or fix ends in a word no sentence ends
+// in: the sign of an unquoted " #" cutting the YAML scalar short.
+func truncated(text string) bool {
+	words := strings.Fields(strings.TrimRight(text, " ."))
+	if len(words) == 0 {
+		return false
+	}
+	switch strings.ToLower(words[len(words)-1]) {
+	case "until", "or", "and", "the", "see":
+		return true
+	}
+	return false
+}
+
 func (n NoteSpec) valid() bool {
+	if truncated(n.Reason) || truncated(n.Fix) {
+		return false
+	}
 	_, ok := conduiterr.LookupCode(n.Code)
 	return ok && strings.HasPrefix(n.Code, "kc.") && n.Reason != "" && (!n.Blocking || n.Fix != "")
 }

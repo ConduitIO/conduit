@@ -42,4 +42,7 @@
 //     emit kind, an unregistered code) fails [Load]. Load errors are build
 //     errors: the production rule files are loaded by a test.
 //   - Values are compared, never copied into an outcome.
+//   - Transform and predicate keys carry the smt kind (SMTKind) with a
+//     blocking placeholder outcome; the SMT pass of package kcmigrate/smt
+//     replaces it for every class that produces a pipeline.
 package rules

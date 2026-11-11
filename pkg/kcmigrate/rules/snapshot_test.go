@@ -126,6 +126,13 @@ func TestSnapshot_AbsentDefaults(t *testing.T) {
 			if k.Default == nil {
 				continue
 			}
+			if r := sc.engine.shared.match(k.Key); r != nil && r.Emit != nil && r.Emit.Kind == SMTKind {
+				// The chain translator decides these keys, an empty list as
+				// translated (pkg/kcmigrate/smt TestApply_EmptyLists); the
+				// rule's own outcome is only its fail-closed placeholder.
+				delete(entries, k.Key)
+				continue
+			}
 			e := classifyOne(sc, k.Key, *k.Default)
 			plain := e.Status == kcmigrate.StatusTranslated && !e.Blocking
 			d, has := entries[k.Key]

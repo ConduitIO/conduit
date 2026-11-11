@@ -1,0 +1,17 @@
+version: "2.2"
+pipelines:
+  - id: orders-cdc
+    status: stopped
+    description: Migrated from Kafka Connect connector "orders-cdc" (io.debezium.connector.postgresql.PostgresConnector) by conduit <VERSION>; report sha256:<REPORT_SHA256>
+    connectors:
+      - id: source
+        type: source
+        plugin: builtin:postgres
+        settings:
+          tables: public.orders
+          url: host=postgres.internal.example port=5432 user=postgres password=${KC_ORDERS_CDC_DATABASE_PASSWORD} dbname=orders
+      - id: destination
+        type: destination
+        plugin: builtin:kafka
+        settings:
+          servers: ${KC_ORDERS_CDC_DESTINATION_SERVERS}

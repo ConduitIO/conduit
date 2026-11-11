@@ -47,6 +47,10 @@ const (
 	// that configures the consumer Kafka Connect runs for a sink reaches no
 	// source connector, so it must not stop their pipelines.
 	KindBlockSinks = rules.BlockSinksKind
+	// KindSMT claims a transforms or predicates key for the chain
+	// translator (package kcmigrate/smt), which decides it after every
+	// other key and finisher of the connector. Applying it writes nothing.
+	KindSMT = rules.SMTKind
 )
 
 var kinds = map[string]Kind{
@@ -59,6 +63,7 @@ var kinds = map[string]Kind{
 	KindStopped:    pipelineStopped,
 	KindPGURL:      pgURLPart,
 	KindBlockSinks: blockSinks,
+	KindSMT:        func(*Plan, *rules.Decision) error { return nil },
 }
 
 // Kinds returns the registered kind names, sorted. A test checks that every
