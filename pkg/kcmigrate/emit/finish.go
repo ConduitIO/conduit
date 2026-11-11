@@ -242,7 +242,6 @@ func dsnQuote(v string) string {
 // worker set it: the upstream connector's own default, where Conduit's
 // differs (MirrorMaker reads a partition with no stored offset from the
 // beginning; the Kafka source starts at the end).
-
 func defaultSetting(p *Plan, a rules.Action) ([]kcmigrate.Note, error) {
 	side, name, value := a.Args["side"], a.Args["name"], a.Args["value"]
 	if name == "" || value == "" {
