@@ -269,8 +269,17 @@ func (r *Rule) outcomeFor(v kcmigrate.Value) (Outcome, *Action) {
 // worker key only sink connectors read).
 const BlockSinksKind = "block-sinks"
 
+// SMTKind claims a single message transform or predicate key for the SMT
+// pass (package kcmigrate/smt), which decides its outcome once the whole
+// chain is known. Applying it writes nothing, like none. The rule's own
+// outcome is a placeholder, unsupported and blocking: the final outcome for
+// a class that produces no pipeline, which the pass never reaches, and
+// replaced for every other class (a claimed key the pass leaves undecided
+// fails the run as an internal error).
+const SMTKind = "smt"
+
 func actionFor(o Outcome, a *Action) *Action {
-	if o.Status == kcmigrate.StatusUnsupported && (a == nil || a.Kind != BlockSinksKind) {
+	if o.Status == kcmigrate.StatusUnsupported && (a == nil || (a.Kind != BlockSinksKind && a.Kind != SMTKind)) {
 		return nil
 	}
 	return a

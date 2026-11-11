@@ -112,3 +112,13 @@ func (e *Engine) ClassesWithout(scope, kind string) []string {
 	sort.Strings(out)
 	return out
 }
+
+// Emits lists the plugins every class file emits, with their roles, in file
+// order; a plugin two classes emit appears twice.
+func (e *Engine) Emits() []Emit {
+	var out []Emit
+	for _, f := range e.files {
+		out = append(out, f.Emits...)
+	}
+	return out
+}

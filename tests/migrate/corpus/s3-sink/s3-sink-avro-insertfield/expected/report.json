@@ -191,9 +191,9 @@
             "file": "sink-s3-voluble.json",
             "pointer": "/transforms"
           },
-          "code": "kc.key_unsupported",
-          "reason": "The connector has single message transforms, which this version of migrate does not translate. Transforms change data.",
-          "fix": "Keep this connector on Kafka Connect, or remove the transforms and add the equivalent processors to the pipeline by hand.",
+          "code": "kc.smt_unsupported",
+          "reason": "The transform chain is not translated, so no processor of it is written: transform AddMetadata: This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
+          "fix": "Make every transform of the chain translatable (see the entries of each), or keep this connector on Kafka Connect. With --accept-gaps the pipeline runs without any of the chain's transforms.",
           "blocking": true
         },
         {
@@ -204,8 +204,8 @@
             "pointer": "/transforms.AddMetadata.type"
           },
           "code": "kc.smt_unsupported",
-          "reason": "A single message transform setting; transforms are not translated by this version of migrate.",
-          "fix": "Keep this connector on Kafka Connect, or write the equivalent processor (processor SDK).",
+          "reason": "This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
+          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
           "blocking": true
         },
         {
@@ -216,8 +216,8 @@
             "pointer": "/transforms.AddMetadata.offset.field"
           },
           "code": "kc.smt_unsupported",
-          "reason": "A single message transform setting; transforms are not translated by this version of migrate.",
-          "fix": "Keep this connector on Kafka Connect, or write the equivalent processor (processor SDK).",
+          "reason": "Part of the transform AddMetadata (org.apache.kafka.connect.transforms.InsertField$Value), which is not translated. This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
+          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
           "blocking": true
         },
         {
@@ -228,8 +228,8 @@
             "pointer": "/transforms.AddMetadata.partition.field"
           },
           "code": "kc.smt_unsupported",
-          "reason": "A single message transform setting; transforms are not translated by this version of migrate.",
-          "fix": "Keep this connector on Kafka Connect, or write the equivalent processor (processor SDK).",
+          "reason": "Part of the transform AddMetadata (org.apache.kafka.connect.transforms.InsertField$Value), which is not translated. This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
+          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
           "blocking": true
         }
       ],
@@ -301,7 +301,13 @@
           "rule": "shared/defaults/header.converter"
         }
       ],
-      "transforms": []
+      "transforms": [
+        {
+          "alias": "AddMetadata",
+          "class": "org.apache.kafka.connect.transforms.InsertField$Value",
+          "status": "unsupported"
+        }
+      ]
     }
   ],
   "acceptedGaps": []

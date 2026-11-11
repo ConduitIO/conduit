@@ -5,7 +5,7 @@
 #
 # A class file's rule for the same key wins over these. Rows of the table that
 # this file does not translate yet (converters other than ByteArrayConverter,
-# SMTs, errors.tolerance=all, client TLS stores) are unsupported and blocking
+# errors.tolerance=all, client TLS stores) are unsupported and blocking
 # here, so a migration that needs them stops instead of running differently.
 rulesVersion: 1
 scope: shared
@@ -135,47 +135,43 @@ keys:
     fix: None beyond the header.converter entry.
     diff: identity
 
-  # SMTs and predicates. The emit-if-exact subset lands with the SMT rules;
-  # until then any transform blocks.
+  # SMTs and predicates. The SMT pass (pkg/kcmigrate/smt, design
+  # docs/design-documents/20261110-kafka-connect-smt-pack.md) decides every
+  # one of these keys per alias once the whole chain is known, for every
+  # class that produces a pipeline. The outcome here is the placeholder it
+  # replaces: blocking, so a key the pass never decides cannot pass, and a
+  # claimed key it leaves undecided fails the run as an internal error.
   - key: transforms
+    status: unsupported
+    blocking: true
+    code: kc.smt_unsupported
+    reason: Transforms are translated only for connector classes that produce a pipeline.
+    fix: Keep this connector on Kafka Connect.
+    emit: {kind: smt}
     diff: behavior
-    values:
-      - match: [""]
-        status: translated
-        reason: No transforms.
-        emit: {kind: none}
-      - otherwise: true
-        status: unsupported
-        blocking: true
-        code: kc.key_unsupported
-        reason: The connector has single message transforms, which this version of migrate does not translate. Transforms change data.
-        fix: Keep this connector on Kafka Connect, or remove the transforms and add the equivalent processors to the pipeline by hand.
   - key: {prefix: transforms.}
     status: unsupported
     blocking: true
     code: kc.smt_unsupported
-    reason: A single message transform setting; transforms are not translated by this version of migrate.
-    fix: Keep this connector on Kafka Connect, or write the equivalent processor (processor SDK).
+    reason: Transforms are translated only for connector classes that produce a pipeline.
+    fix: Keep this connector on Kafka Connect.
+    emit: {kind: smt}
     diff: behavior
   - key: predicates
+    status: unsupported
+    blocking: true
+    code: kc.smt_unsupported
+    reason: Transforms are translated only for connector classes that produce a pipeline.
+    fix: Keep this connector on Kafka Connect.
+    emit: {kind: smt}
     diff: behavior
-    values:
-      - match: [""]
-        status: translated
-        reason: No predicates.
-        emit: {kind: none}
-      - otherwise: true
-        status: unsupported
-        blocking: true
-        code: kc.key_unsupported
-        reason: Predicates select which records a transform applies to; they are not translated by this version of migrate.
-        fix: Keep this connector on Kafka Connect, or express the predicate as a processor condition by hand.
   - key: {prefix: predicates.}
     status: unsupported
     blocking: true
     code: kc.smt_unsupported
-    reason: A predicate setting; predicates are not translated by this version of migrate.
-    fix: Keep this connector on Kafka Connect, or express the predicate as a processor condition by hand.
+    reason: Transforms are translated only for connector classes that produce a pipeline.
+    fix: Keep this connector on Kafka Connect.
+    emit: {kind: smt}
     diff: behavior
 
   # Error handling (base design, "Error handling and the DLQ").

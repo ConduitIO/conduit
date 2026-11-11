@@ -12,7 +12,7 @@
 
 | | Key | Location | Code | Reason | Fix |
 | --- | --- | --- | --- | --- | --- |
-| blocking | `topic.prefix` | connector.json#/config/topic.prefix | `kc.target_capability_missing` | topic.prefix becomes debezium.topic.prefix, which requires the Debezium-compatible output mode (debezium.enabled on builtin:postgres); that setting is not in the released connector. | Keep this connector on Kafka Connect until |
+| blocking | `topic.prefix` | connector.json#/config/topic.prefix | `kc.target_capability_missing` | topic.prefix becomes debezium.topic.prefix, which requires the Debezium-compatible output mode (debezium.enabled on builtin:postgres); that setting is not in the released connector. | Keep this connector on Kafka Connect until #3032 ships the Debezium output mode, or accept the difference with --accept-gaps. |
 | approximated | `slot.name` | connector.json#/config/slot.name | `kc.key_approximated` | Conduit creates its own replication slot (logrepl.slotName, default conduitslot) so rollback stays possible; Debezium's slot is not reused. | - |
 | approximated | `publication.name` | connector.json#/config/publication.name | `kc.key_approximated` | Conduit creates its own publication (logrepl.publicationName, default conduitpub); Debezium's publication is not reused. | - |
 

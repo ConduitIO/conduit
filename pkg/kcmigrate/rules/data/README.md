@@ -9,3 +9,8 @@ tables these files implement are in
 Every `*.yaml` file here is embedded in the binary and loaded by `rules.Builtin`. A test loads them, so a file
 that breaks the report contract fails the build. A connector family's file lands in the same PR as its corpus
 cases and its `certification.yaml` entry.
+
+Single message transform and predicate keys are claimed in `shared.yaml` with the `smt` emit kind and a blocking
+placeholder outcome. The SMT pass in `pkg/kcmigrate/smt` decides them per alias; its plugin capabilities and the
+refusal of every class without a translator are Go tables there (`data.go`), not files here, because this directory
+holds only rule files.

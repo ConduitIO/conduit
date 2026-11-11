@@ -306,6 +306,42 @@ func TestEngine_RulesUsed(t *testing.T) {
 	is.Equal(len(e.RulesUsed(nil, true)), 1)
 }
 
+// TestLoad_SMTKind: only the shared file claims keys for the chain
+// translator, and only with the fail-closed outcome it replaces.
+func TestLoad_SMTKind(t *testing.T) {
+	head := "rulesVersion: 1\nscope: shared\nupstream: {name: kafka, version: \"4.2\"}\nkeys:\n"
+	for name, tt := range map[string]struct {
+		yaml string
+		ok   bool
+	}{
+		"fail-closed":  {head + "  - {key: transforms, status: unsupported, blocking: true, code: kc.smt_unsupported, reason: r, fix: f, emit: {kind: smt}, diff: behavior}\n", true},
+		"translated":   {head + "  - {key: transforms, status: translated, emit: {kind: smt}, diff: behavior}\n", false},
+		"not blocking": {head + "  - {key: transforms, status: unsupported, code: kc.smt_unsupported, reason: r, fix: f, emit: {kind: smt}, diff: behavior}\n", false},
+		"class file": {"rulesVersion: 1\nscope: source\nclass: C\nupstream: {name: u, version: \"1\"}\nemits: [{plugin: p, role: source}]\nkeys:\n" +
+			"  - {key: transforms, status: unsupported, blocking: true, code: kc.smt_unsupported, reason: r, fix: f, emit: {kind: smt}, diff: behavior}\n", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := Load(fstest.MapFS{"r.yaml": {Data: []byte(tt.yaml)}})
+			if (err == nil) != tt.ok {
+				t.Fatalf("Load: %v, want ok=%v", err, tt.ok)
+			}
+		})
+	}
+}
+
+// TestClassify_SMTKeepsAction: the smt action survives the
+// unsupported placeholder outcome, so the chain translator sees the key.
+func TestClassify_SMTKeepsAction(t *testing.T) {
+	is := is.New(t)
+	e, err := Builtin()
+	is.NoErr(err)
+	cl := e.Classify(connector("io.debezium.connector.postgresql.PostgresConnector", "transforms", "a", "transforms.a.type", "X", "predicates", ""))
+	for _, d := range cl.Decisions {
+		is.True(d.Emit != nil && d.Emit.Kind == SMTKind)
+		is.True(d.Entry.Blocking) // fail closed until the translator decides
+	}
+}
+
 const noPipelineHead = "rulesVersion: 1\nscope: source\nclass: com.example.Aux\nupstream: {name: u, version: \"1\"}\npipeline: none\n"
 
 // A no-pipeline class (MirrorMaker's heartbeat and checkpoint connectors)
@@ -344,5 +380,19 @@ func TestLoad_NoPipelineClass(t *testing.T) {
 			is.True(err != nil)
 			is.True(strings.Contains(err.Error(), tt.want))
 		})
+	}
+}
+
+// TestLoad_RejectsTruncatedText: an unquoted " #" in a reason or fix starts
+// a YAML comment and cuts the published text short ("Keep this connector on
+// Kafka Connect until"); Load rejects text that ends mid-sentence.
+func TestLoad_RejectsTruncatedText(t *testing.T) {
+	head := "rulesVersion: 1\nscope: shared\nupstream: {name: kafka, version: \"4.2\"}\nkeys:\n  - key: k\n    status: unsupported\n    code: kc.key_unsupported\n    reason: r.\n    diff: behavior\n"
+	_, err := Load(fstest.MapFS{"r.yaml": {Data: []byte(head + "    fix: Keep this connector on Kafka Connect until #3032 ships.\n")}})
+	if err == nil || !strings.Contains(err.Error(), "ends mid-sentence") {
+		t.Fatalf("Load: %v, want a mid-sentence error", err)
+	}
+	if _, err := Load(fstest.MapFS{"r.yaml": {Data: []byte(head + "    fix: \"Keep this connector on Kafka Connect until #3032 ships.\"\n")}}); err != nil {
+		t.Fatalf("quoted fix: %v", err)
 	}
 }

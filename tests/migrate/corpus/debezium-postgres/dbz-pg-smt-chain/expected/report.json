@@ -1,0 +1,419 @@
+{
+  "reportVersion": 1,
+  "generator": {
+    "conduit": "<VERSION>",
+    "rules": [
+      {
+        "class": "(shared)",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "kafka",
+          "version": "4.2"
+        }
+      },
+      {
+        "class": "io.debezium.connector.postgresql.PostgresConnector",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "debezium",
+          "version": "3.7.0.Final"
+        }
+      }
+    ]
+  },
+  "summary": {
+    "connectors": 1,
+    "keys": 26,
+    "translated": 10,
+    "approximated": 0,
+    "unsupported": 16,
+    "blocking": 17
+  },
+  "connectors": [
+    {
+      "name": "orders-cdc",
+      "class": "io.debezium.connector.postgresql.PostgresConnector",
+      "role": "source",
+      "pipeline": "pipelines/orders-cdc.yaml",
+      "pipelineStatus": "stopped",
+      "target": {
+        "source": "builtin:postgres",
+        "destination": "builtin:kafka"
+      },
+      "entries": [
+        {
+          "key": "connector.class",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/connector.class"
+          },
+          "reason": "Selects the rule file and the Conduit plugins.",
+          "blocking": false
+        },
+        {
+          "key": "tasks.max",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/tasks.max"
+          },
+          "reason": "One task, one reader.",
+          "blocking": false
+        },
+        {
+          "key": "database.hostname",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/database.hostname"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/url"
+          },
+          "reason": "Becomes part of the source connection string.",
+          "blocking": false
+        },
+        {
+          "key": "database.port",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/database.port"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/url"
+          },
+          "reason": "Becomes part of the source connection string.",
+          "blocking": false
+        },
+        {
+          "key": "database.user",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/database.user"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/url"
+          },
+          "reason": "Becomes part of the source connection string.",
+          "blocking": false
+        },
+        {
+          "key": "database.password",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/database.password"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/url",
+            "env": "KC_ORDERS_CDC_DATABASE_PASSWORD"
+          },
+          "reason": "Becomes part of the source connection string, as a variable.",
+          "blocking": false,
+          "secret": true
+        },
+        {
+          "key": "database.dbname",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/database.dbname"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/url"
+          },
+          "reason": "Becomes part of the source connection string.",
+          "blocking": false
+        },
+        {
+          "key": "topic.prefix",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/topic.prefix"
+          },
+          "code": "kc.target_capability_missing",
+          "reason": "topic.prefix becomes debezium.topic.prefix, which requires the Debezium-compatible output mode (debezium.enabled on builtin:postgres); that setting is not in the released connector.",
+          "fix": "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode, or accept the difference with --accept-gaps.",
+          "blocking": true
+        },
+        {
+          "key": "table.include.list",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/table.include.list"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/tables"
+          },
+          "reason": "The tables are read as listed.",
+          "blocking": false
+        },
+        {
+          "key": "key.converter",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/key.converter"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "This converter is not translated by this version of migrate; the wire format of keys would differ.",
+          "fix": "Keep this connector on Kafka Connect until migrate translates the converter.",
+          "blocking": true
+        },
+        {
+          "key": "value.converter",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/value.converter"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "This converter is not translated by this version of migrate; the wire format of values would differ.",
+          "fix": "Keep this connector on Kafka Connect until migrate translates the converter.",
+          "blocking": true
+        },
+        {
+          "key": "value.converter.schemas.enable",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/value.converter.schemas.enable"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A converter setting; the converter itself is reported on value.converter.",
+          "fix": "None beyond the value.converter entry.",
+          "blocking": false
+        },
+        {
+          "key": "transforms",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms"
+          },
+          "code": "kc.smt_unsupported",
+          "reason": "The transform chain is not translated, so no processor of it is written: transform unwrap: This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it; transform onlyOrders: Its predicate \"isOrders\" is not translated. This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it; transform route: The Kafka destination partitions by key only; explicit partition writing is v0.23 (per-partition ordering, invariant 4).",
+          "fix": "Make every transform of the chain translatable (see the entries of each), or keep this connector on Kafka Connect. With --accept-gaps the pipeline runs without any of the chain's transforms.",
+          "blocking": true
+        },
+        {
+          "key": "transforms.unwrap.type",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.unwrap.type"
+          },
+          "code": "kc.smt_unsupported",
+          "reason": "This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
+          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "blocking": true
+        },
+        {
+          "key": "transforms.unwrap.replace.null.with.default",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.unwrap.replace.null.with.default"
+          },
+          "code": "kc.smt_unsupported",
+          "reason": "Part of the transform unwrap (io.debezium.transforms.ExtractNewRecordState), which is not translated. This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
+          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "blocking": true
+        },
+        {
+          "key": "transforms.onlyOrders.type",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.onlyOrders.type"
+          },
+          "code": "kc.smt_unsupported",
+          "reason": "Part of the transform onlyOrders (org.apache.kafka.connect.transforms.Filter), which is not translated. Its predicate \"isOrders\" is not translated. This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
+          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "blocking": true
+        },
+        {
+          "key": "transforms.onlyOrders.predicate",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.onlyOrders.predicate"
+          },
+          "code": "kc.smt_unsupported",
+          "reason": "Its predicate \"isOrders\" is not translated. This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
+          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "blocking": true
+        },
+        {
+          "key": "transforms.onlyOrders.negate",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.onlyOrders.negate"
+          },
+          "code": "kc.smt_unsupported",
+          "reason": "Part of the transform onlyOrders (org.apache.kafka.connect.transforms.Filter), which is not translated. Its predicate \"isOrders\" is not translated. This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
+          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "blocking": true
+        },
+        {
+          "key": "transforms.route.type",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.route.type"
+          },
+          "code": "kc.target_capability_missing",
+          "reason": "The Kafka destination partitions by key only; explicit partition writing is v0.23 (per-partition ordering, invariant 4).",
+          "fix": "Keep this connector on Kafka Connect until v0.23.",
+          "blocking": true
+        },
+        {
+          "key": "transforms.route.partition.payload.fields",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.route.partition.payload.fields"
+          },
+          "code": "kc.target_capability_missing",
+          "reason": "Part of the transform route (io.debezium.transforms.partitions.PartitionRouting), which is not translated. The Kafka destination partitions by key only; explicit partition writing is v0.23 (per-partition ordering, invariant 4).",
+          "fix": "Keep this connector on Kafka Connect until v0.23.",
+          "blocking": true
+        },
+        {
+          "key": "transforms.route.partition.topic.num",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.route.partition.topic.num"
+          },
+          "code": "kc.target_capability_missing",
+          "reason": "Part of the transform route (io.debezium.transforms.partitions.PartitionRouting), which is not translated. The Kafka destination partitions by key only; explicit partition writing is v0.23 (per-partition ordering, invariant 4).",
+          "fix": "Keep this connector on Kafka Connect until v0.23.",
+          "blocking": true
+        },
+        {
+          "key": "transforms.old.type",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.old.type"
+          },
+          "reason": "Kafka Connect ignores transform settings for an alias transforms does not list.",
+          "blocking": false
+        },
+        {
+          "key": "predicates",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/predicates"
+          },
+          "code": "kc.smt_unsupported",
+          "reason": "The predicates are used by transforms of a chain that is not translated; the transforms entry says why.",
+          "fix": "Make every transform of the chain translatable (see the entries of each), or keep this connector on Kafka Connect. With --accept-gaps the pipeline runs without any of the chain's transforms.",
+          "blocking": true
+        },
+        {
+          "key": "predicates.isOrders.type",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/predicates.isOrders.type"
+          },
+          "code": "kc.smt_unsupported",
+          "reason": "This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
+          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "blocking": true
+        },
+        {
+          "key": "predicates.isOrders.pattern",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/predicates.isOrders.pattern"
+          },
+          "code": "kc.smt_unsupported",
+          "reason": "Part of the predicate isOrders, which is not translated. This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
+          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "blocking": true
+        },
+        {
+          "key": "predicates.unused.type",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/predicates.unused.type"
+          },
+          "reason": "No transform names the predicate unused, and Kafka Connect evaluates a predicate only for the transforms that name it.",
+          "blocking": false
+        }
+      ],
+      "notes": [
+        {
+          "code": "kc.output_shape_differs",
+          "reason": "Debezium-compatible output mode is not available. The released builtin:postgres source has no debezium.enabled setting and the debezium.encode processor has not landed, so the pipeline emits OpenCDC-shaped records, not the Debezium envelope (before/after structs, source, op, ts_ms) or its topic naming. Consumers of the Debezium envelope break.",
+          "fix": "Keep this connector on Kafka Connect until the Debezium output mode ships (#3032), or accept the difference with --accept-gaps.",
+          "blocking": true,
+          "rule": "debezium-postgres/notes/kc.output_shape_differs"
+        },
+        {
+          "code": "kc.setting_required",
+          "reason": "The builtin:kafka destination requires servers, and no key of the Kafka Connect config sets it; the pipeline references ${KC_ORDERS_CDC_DESTINATION_SERVERS} instead.",
+          "fix": "Set KC_ORDERS_CDC_DESTINATION_SERVERS in the environment (see secrets.env.template), or pass the worker file with --worker if it holds bootstrap.servers.",
+          "blocking": true,
+          "rule": "required/destination/servers"
+        },
+        {
+          "code": "kc.secret_plaintext",
+          "reason": "The input holds at least one secret as a literal value. Where migrate used the setting it wrote a variable reference instead (a dropped setting has no variable), but the input file itself contains the secret.",
+          "fix": "Fill the variables in secrets.env.template from your secret store, and replace the literal in the Kafka Connect config with a config-provider reference.",
+          "blocking": false,
+          "rule": "secrets"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "plugin.name is absent, so Debezium uses decoderbufs; Conduit decodes with pgoutput only, and decoder-specific differences are not emulated.",
+          "fix": "Set plugin.name=pgoutput in the Kafka Connect config, or accept the difference.",
+          "blocking": false,
+          "rule": "debezium-postgres/defaults/plugin.name"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "Kafka Connect does not retry a failed operation by default (errors.retry.timeout=0). Conduit restarts a failed pipeline through pipeline recovery, so a transient failure that stopped the connector may not stop the pipeline.",
+          "blocking": false,
+          "rule": "shared/defaults/errors.retry.timeout"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "Kafka Connect's default header converter types header values; Conduit carries headers as metadata strings.",
+          "blocking": false,
+          "rule": "shared/defaults/header.converter"
+        }
+      ],
+      "transforms": [
+        {
+          "alias": "unwrap",
+          "class": "io.debezium.transforms.ExtractNewRecordState",
+          "status": "unsupported"
+        },
+        {
+          "alias": "onlyOrders",
+          "class": "org.apache.kafka.connect.transforms.Filter",
+          "status": "unsupported"
+        },
+        {
+          "alias": "route",
+          "class": "io.debezium.transforms.partitions.PartitionRouting",
+          "status": "unsupported"
+        }
+      ]
+    }
+  ],
+  "acceptedGaps": []
+}

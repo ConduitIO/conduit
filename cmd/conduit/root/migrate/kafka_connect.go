@@ -93,6 +93,13 @@ unless overridden), so it resumes where the Kafka Connect sink stopped. Stop the
 connector (stop or delete it; pausing keeps its group membership) and wait until the group has no
 members before starting the pipeline; the report says so as kc.consumer_group_shared.
 
+Single message transforms (transforms=) and predicates are translated per chain, all or
+nothing: every SMT key gets its own entry, and if one transform of the chain cannot be translated
+exactly, no processor of the chain is written and every key of the chain blocks, naming the
+transform that refused it (with --accept-gaps the pipeline runs without the chain). Settings of an
+alias transforms= does not list, and predicates no transform names, are no-ops, as in Kafka Connect.
+This version translates no SMT class yet; each one reports the release that maps it.
+
 Connector classes this version migrates: ` + classList() + `.`,
 		Example: "conduit migrate kafka-connect connectors/orders.json\n" +
 			"conduit migrate kafka-connect --worker connect-distributed.properties ./connectors --dry-run\n" +
