@@ -16,7 +16,7 @@ func (flattenConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
 		flattenConfigDelimiter: {
 			Default:     ".",
-			Description: "Delimiter is inserted between the field names of each level when the\nflattened names are built. The default is `.`, as in Kafka Connect.",
+			Description: "Delimiter is inserted between the field names of each level when the\nflattened names are built. The default is `.`, as in Kafka Connect. An\nempty value is replaced by the default, so an empty delimiter (which\nKafka Connect accepts) cannot be configured.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},

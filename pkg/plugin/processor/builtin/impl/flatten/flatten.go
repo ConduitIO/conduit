@@ -86,7 +86,9 @@ type flattenConfig struct {
 	// `Flatten$Value`; `.Key` matches `Flatten$Key`.
 	Field string `json:"field" default:".Payload.After" validate:"inclusion=.Key|.Payload.Before|.Payload.After"`
 	// Delimiter is inserted between the field names of each level when the
-	// flattened names are built. The default is `.`, as in Kafka Connect.
+	// flattened names are built. The default is `.`, as in Kafka Connect. An
+	// empty value is replaced by the default, so an empty delimiter (which
+	// Kafka Connect accepts) cannot be configured.
 	Delimiter string `json:"delimiter" default:"."`
 }
 
@@ -100,7 +102,10 @@ joined by ` + "`delimiter`" + `: ` + "`{\"a\": {\"b\": 1}}`" + ` becomes ` + "`{
 Kafka Connect ` + "`Flatten$Value`" + ` and ` + "`Flatten$Key`" + ` single message transforms.
 
 Arrays are not flattened: they are kept as they are, like every other value that is not a map. An empty nested map
-produces no field.
+produces no field. A null field, including a null nested map, is kept as a field with a null value.
+
+An empty ` + "`delimiter`" + ` is replaced by the default ` + "`.`" + `, so a Kafka Connect ` + "`Flatten`" + ` with ` + "`delimiter=`" + `
+(empty) has no equivalent here.
 
 If two paths produce the same name (` + "`{\"a.b\": 1, \"a\": {\"b\": 2}}`" + ` with the delimiter ` + "`.`" + `), the record fails
 with the error code ` + "`flatten.key_collision`" + `, naming both paths and the name. A value is never overwritten.
@@ -158,6 +163,12 @@ func (p *Processor) flattenRecord(rec *opencdc.Record) error {
 		// through, as in Kafka Connect.
 		return nil
 	case opencdc.StructuredData:
+		if data == nil {
+			// A typed nil is no data either: pass it through as nil, with
+			// its schema keys.
+			*side = nil
+			return nil
+		}
 		flat, err := flatten(data, p.delimiter, p.field)
 		if err != nil {
 			return err
@@ -205,17 +216,23 @@ func flatten(data opencdc.StructuredData, delimiter, root string) (opencdc.Struc
 				name = prefix + delimiter + k
 			}
 			fieldPath := append(slices.Clone(path), k)
+			// A nested map is flattened; a nil one (typed or not) is a
+			// null leaf and kept, never dropped.
 			switch v := m[k].(type) {
 			case map[string]any:
-				if err := walk(name, fieldPath, v); err != nil {
-					return err
+				if v != nil {
+					if err := walk(name, fieldPath, v); err != nil {
+						return err
+					}
+					continue
 				}
-				continue
 			case opencdc.StructuredData:
-				if err := walk(name, fieldPath, v); err != nil {
-					return err
+				if v != nil {
+					if err := walk(name, fieldPath, v); err != nil {
+						return err
+					}
+					continue
 				}
-				continue
 			}
 			if prev, ok := paths[name]; ok {
 				return collisionError(root, name, prev, fieldPath)

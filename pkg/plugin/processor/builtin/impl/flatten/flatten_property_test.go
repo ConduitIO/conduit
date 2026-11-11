@@ -74,6 +74,10 @@ func TestFlatten_Property(t *testing.T) {
 				want, collision := oracle(side, delimiter)
 				if collision {
 					wantCode(t, out[0], CodeKeyCollision)
+					// The failing record is not changed.
+					if diff := cmp.Diff(orig, rec, cmpopts.IgnoreUnexported(opencdc.Record{})); diff != "" {
+						t.Fatalf("a colliding record was changed:\n%s", diff)
+					}
 					continue
 				}
 				got, ok := out[0].(sdk.SingleRecord)
@@ -108,9 +112,17 @@ func oracle(data map[string]any, delimiter string) (opencdc.StructuredData, bool
 	walk = func(path []string, m map[string]any) {
 		for k, v := range m {
 			p := append(append([]string{}, path...), k)
-			if nested, ok := v.(map[string]any); ok {
-				walk(p, nested)
-				continue
+			switch nested := v.(type) {
+			case map[string]any:
+				if nested != nil {
+					walk(p, nested)
+					continue
+				}
+			case opencdc.StructuredData:
+				if nested != nil {
+					walk(p, nested)
+					continue
+				}
 			}
 			name := strings.Join(p, delimiter)
 			if _, dup := out[name]; dup {

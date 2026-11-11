@@ -94,6 +94,20 @@ func TestFlatten_Process(t *testing.T) {
 		}}},
 		want: opencdc.Record{Payload: opencdc.Change{After: opencdc.StructuredData{"e": 1}}},
 	}, {
+		name:   "a typed nil nested map is a null leaf, not dropped",
+		config: config.Config{},
+		record: opencdc.Record{Payload: opencdc.Change{After: opencdc.StructuredData{
+			"a": map[string]any(nil), "b": opencdc.StructuredData(nil), "c": map[string]any{"d": map[string]any(nil)}, "e": 1,
+		}}},
+		want: opencdc.Record{Payload: opencdc.Change{After: opencdc.StructuredData{
+			"a": map[string]any(nil), "b": opencdc.StructuredData(nil), "c.d": map[string]any(nil), "e": 1,
+		}}},
+	}, {
+		name:   "a typed nil side passes through as nil with its schema metadata",
+		config: config.Config{},
+		record: opencdc.Record{Metadata: schemaMD(), Payload: opencdc.Change{After: opencdc.StructuredData(nil)}},
+		want:   opencdc.Record{Metadata: schemaMD(), Payload: opencdc.Change{After: nil}},
+	}, {
 		name:   "nested StructuredData is flattened",
 		config: config.Config{},
 		record: opencdc.Record{Payload: opencdc.Change{After: opencdc.StructuredData{
@@ -187,6 +201,16 @@ func TestFlatten_Errors(t *testing.T) {
 		}}},
 		wantCode: CodeKeyCollision,
 		wantMsg:  `.Payload.After.a.b and .Payload.After["a.b"] both flatten to the field name "a.b"`,
+	}, {
+		// Three paths reach "a.b.c"; which pair is reported depends on the
+		// walk order, so this pins the sorted walk.
+		name:   "three paths collide",
+		config: config.Config{},
+		record: opencdc.Record{Payload: opencdc.Change{After: opencdc.StructuredData{
+			"a.b.c": 1, "a": map[string]any{"b.c": 2, "b": map[string]any{"c": 3}},
+		}}},
+		wantCode: CodeKeyCollision,
+		wantMsg:  `.Payload.After.a.b.c and .Payload.After.a["b.c"] both flatten to the field name "a.b.c"`,
 	}, {
 		name:   "two nested paths collide with a custom delimiter",
 		config: config.Config{"field": ".Key", "delimiter": "_"},
