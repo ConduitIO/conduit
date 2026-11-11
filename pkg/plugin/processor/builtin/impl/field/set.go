@@ -121,7 +121,7 @@ processor removes the schema subject and version of that side (` + "`opencdc.key
 ` + "`opencdc.payload.schema.*`" + `), because the side no longer matches the schema the source attached. The record then
 leaves the processor as structured data without a schema, instead of being encoded with a schema extracted from its
 values. With only ` + "`value`" + ` set, the metadata is kept, as in earlier versions.`,
-		Version:    "v0.2.0",
+		Version:    "v0.1.0",
 		Author:     "Meroxa, Inc.",
 		Parameters: setConfig{}.Parameters(),
 	}, nil
