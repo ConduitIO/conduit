@@ -180,9 +180,9 @@ func TestAvroEncode_AutoRegister_StillInfers(t *testing.T) {
 // limitation the design doc lists as an open question: when the processor
 // before avro.encode changes the shape with its schema-encode middleware on,
 // the middleware registers an inferred schema and the record carries that, so
-// fromRecord keeps the inferred types. If the processor SDK starts extending
-// the carried schema instead, this test fails and the documented requirement
-// (sdk.schema.encode.payload.enabled: false) can be dropped.
+// fromRecord keeps the inferred types. If the default strategy of the processor
+// SDK changes from infer to extend, this test fails and the documented
+// requirement (sdk.schema.encode.payload.enabled: false) can be dropped.
 func TestAvroEncode_FromRecord_AfterShapeChangeWithEncodeMiddleware(t *testing.T) {
 	got := runSmokeChain(t,
 		config.Config{"field": ".Payload.After.__op", "value": "c"},
@@ -194,6 +194,38 @@ func TestAvroEncode_FromRecord_AfterShapeChangeWithEncodeMiddleware(t *testing.T
 	)
 	is := is.New(t)
 	is.Equal(got["c00_int"], `"long"`)
+}
+
+// TestAvroEncode_FromRecord_AfterShapeChangeWithExtendStrategy is the sibling
+// of the test above with the upstream processor's schema-encode middleware set
+// to sdk.schema.encode.payload.strategy: extend (conduit-processor-sdk
+// v0.10.0). The middleware then builds its new version from the carried
+// schema, so the record still carries the source types when it reaches
+// avro.encode, and the encoding processor does not need
+// sdk.schema.encode.payload.enabled: false on the upstream one. With the
+// default infer strategy the same chain yields long for c00_int.
+func TestAvroEncode_FromRecord_AfterShapeChangeWithExtendStrategy(t *testing.T) {
+	got := runSmokeChain(t,
+		config.Config{
+			"field":                              ".Payload.After.__op",
+			"value":                              "c",
+			"sdk.schema.encode.payload.strategy": "extend",
+		},
+		config.Config{
+			"field":                     ".Payload.After",
+			"schema.strategy":           "fromRecord",
+			"schema.fromRecord.subject": "cdc.public.bench_source_0-value",
+		},
+	)
+	want := map[string]string{
+		"c00_int":     `"int"`,
+		"c02_numeric": `["null",{"logicalType":"decimal","precision":14,"scale":2,"type":"bytes"}]`,
+		"c06_date":    `{"logicalType":"date","type":"int"}`,
+		"__op":        `["null","string"]`,
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Fatalf("writer schema field types (-want +got):\n%s", diff)
+	}
 }
 
 // TestAvroEncode_FromRecord_ExcludedFieldAndDelete runs field.exclude and
