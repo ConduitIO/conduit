@@ -29,9 +29,11 @@ error codes it produces. Design: `docs/design-documents/20261106-avro-encode-pre
 Set `sdk.schema.encode.payload.enabled: "false"` (or `sdk.schema.encode.key.enabled` for `.Key`) on each processor
 before `avro.encode` that adds or removes fields. The record then keeps the source schema metadata.
 
-A `conduit-processor-sdk` change is planned that lets that middleware extend the carried schema instead of inferring
-one (opt-in in v0.22, warning in v0.23, default in v0.24). Once a release ships with it, this setting is no longer
-needed.
+Alternatively, set `sdk.schema.encode.payload.strategy: "extend"` (or `sdk.schema.encode.key.strategy` for `.Key`)
+on that processor (`conduit-processor-sdk` v0.10.0). Its middleware then builds the new schema version from the
+carried schema instead of inferring one: fields still present keep their carried type, added top-level fields
+become nullable with a null default, and removed top-level fields are left out. A value that does not fit its
+carried type fails the record. The default is `infer`.
 
 ## `processor.avro_encode.schema_mismatch`
 

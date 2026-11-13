@@ -60,11 +60,11 @@ schema in place. For a processor that changes the shape, that means
 keeps naming the source schema). This is a usage requirement of the new strategy, documented in the
 processor description and in the docs.
 
-A `conduit-processor-sdk` change is planned, and built separately, that adds an opt-in mode to
-`ProcessorWithSchemaEncode` which extends the carried schema the same way instead of inferring one. It
-follows the same versioning as this strategy: opt-in in v0.22, a warning in v0.23, the default in
-v0.24. Once it lands, the `sdk.schema.encode.payload.enabled: false` workaround is no longer needed.
-This design does not depend on it: `fromRecord` ships and is correct without it.
+`conduit-processor-sdk` v0.10.0 (shipped in Conduit v0.22) adds an opt-in mode to
+`ProcessorWithSchemaEncode` which extends the carried schema the same way instead of inferring one:
+`sdk.schema.encode.payload.strategy: extend` (and `sdk.schema.encode.key.strategy`), default `infer`.
+With it on the processor that changes the shape, the `sdk.schema.encode.payload.enabled: false`
+workaround is not needed. This design does not depend on it: `fromRecord` ships and is correct without it.
 
 ### Prior decisions this builds on
 
@@ -228,7 +228,7 @@ downstream (DLQ write or pipeline stop), so invariants 1 and 3 hold on every pat
 | Registry compatibility refuses the schema (e.g. the subject holds earlier `autoRegister` versions with `decimal(31,10)`) | `schema_incompatible`, suggestion: use a new subject or change the subject's compatibility | Conduit does not change compatibility on an existing subject |
 | Mixed tables in one processor | Each record registers its own table's schema under the one subject; versions alternate and may be refused by compatibility | Same as `autoRegister` today; route each table to its own processor and subject (as the smoke does with `condition`) |
 | Field `.Payload.Before` after `.Payload.After` was encoded | Fallback (the first encode removed the shared payload metadata) | Existing `dropStaleSchemaMetadata` behavior; documented. When `After` was empty and passed through, the metadata stays and `Before` uses the carried schema |
-| A preceding processor changed the shape with the SDK encode middleware on | Encodes with the middleware's inferred version (lossy types) | See _Context_; set `sdk.schema.encode.payload.enabled: false` on that processor |
+| A preceding processor changed the shape with the SDK encode middleware on | Encodes with the middleware's inferred version (lossy types) | See _Context_; set `sdk.schema.encode.payload.enabled: false` or `sdk.schema.encode.payload.strategy: extend` on that processor |
 | Two named types collide when an added field's inferred type is a record | `schema_unsupported` | The extended schema does not parse; fail closed |
 | Encoded part is empty (nil, or zero-length raw data, as delete records carry) | Not encoded; the record passes through unchanged, schema metadata included | Decision by DeVaris. Encoding would invent a record of nulls or defaults. The SDK middlewares skip an empty part by the same definition. This differs from `autoRegister`, which encodes zero-length raw data as a record with no fields (registering that empty schema) and fails on a nil part; `autoRegister` is unchanged |
 | An added field is null in one record and set in the next | The null one is typed `["null","string"]`, the set one by its value, so the schema text differs and a new version is registered | Same rule as `autoRegister`; fields a pipeline adds should have a stable type |
@@ -254,10 +254,9 @@ downstream (DLQ write or pipeline stop), so invariants 1 and 3 hold on every pat
 ## Versioning and deprecation plan
 
 - **v0.22:** `fromRecord` ships opt-in. Release notes and docs explain it and the
-  `sdk.schema.encode.payload.enabled: false` requirement for shape-changing processors before it. The
-  planned `conduit-processor-sdk` "extend, don't infer" encode-middleware mode follows the same
-  opt-in (v0.22) → warn (v0.23) → default (v0.24) steps; when it is the default, that requirement goes
-  away.
+  `sdk.schema.encode.payload.enabled: false` requirement for shape-changing processors before it, and
+  the `sdk.schema.encode.payload.strategy: extend` alternative that shipped with `conduit-processor-sdk`
+  v0.10.0.
 - **v0.23:** `autoRegister` logs a warning (once per processor) and increments a counter when it infers
   a schema for a record that carries one, naming `fromRecord`.
 - **v0.24:** `autoRegister` uses the carried schema when a record has one (the `fromRecord` algorithm),
@@ -295,11 +294,12 @@ downstream (DLQ write or pipeline stop), so invariants 1 and 3 hold on every pat
 
 ## Open questions
 
-1. **The processor SDK encode middleware still infers between processors.** Resolved by plan: the
-   `conduit-processor-sdk` opt-in mode described under _Context_ (opt-in v0.22, warn v0.23, default
-   v0.24). Until a pipeline runs with it, the `sdk.schema.encode.payload.enabled: false` setting on a
-   shape-changing processor before `avro.encode` remains necessary, and
-   `TestAvroEncode_FromRecord_AfterShapeChangeWithEncodeMiddleware` pins the current behavior.
+1. **The processor SDK encode middleware still infers between processors by default.** Resolved: the
+   `conduit-processor-sdk` v0.10.0 opt-in mode described under _Context_
+   (`sdk.schema.encode.payload.strategy: extend`) shipped in v0.22. With the default `infer`, a
+   shape-changing processor before `avro.encode` still needs `sdk.schema.encode.payload.enabled: false`;
+   `TestAvroEncode_FromRecord_AfterShapeChangeWithEncodeMiddleware` pins that behavior and
+   `TestAvroEncode_FromRecord_AfterShapeChangeWithExtendStrategy` pins the `extend` outcome.
 2. **Removed fields.** Resolved (DeVaris): dropped from the encoding schema when the key is absent from
    the payload; see step 4.
 3. **Empty parts.** Resolved (DeVaris): passed through unencoded; see step 0.
