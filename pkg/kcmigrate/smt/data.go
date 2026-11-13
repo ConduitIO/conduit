@@ -56,29 +56,33 @@ type Capability struct {
 // capabilities is the table: one row per plugin and role a rule file emits
 // (TestCapabilities_CoverEmittedPlugins).
 //
-// Known and not yet claimed, for the translator PRs (checked in the
-// connector sources at the go.mod versions):
+// Claimed, each with its pinning test:
 //   - builtin:kafka source v0.17.0 writes header N as metadata
-//     kafka.header.N (the last value wins) and the value as
-//     opencdc.RawData(value): a null Kafka value is RawData(nil) and an
-//     empty one RawData{}, which differ only in the nil-ness of the slice,
-//     and that does not survive serialization. Only mirror mode records
-//     kafka.value.null.
+//     kafka.header.N (the last value wins; a null value as ""), every header
+//     outside mirror mode (TestCapabilities_KafkaHeaderPrefix). HasHeaderKey
+//     relies on it and refuses in mirror mode, which leaves out headers that
+//     are not UTF-8.
+//
+// Known and not claimed (checked in the connector sources at the go.mod
+// versions):
+//   - builtin:kafka source v0.17.0 writes the value as opencdc.RawData: a
+//     null Kafka value is RawData(nil) and an empty one RawData{}, which
+//     differ only in the nil-ness of the slice, and that does not survive
+//     serialization. Only mirror mode records kafka.value.null, so
+//     RecordIsTombstone is refused on chains that read through it.
 //   - builtin:kafka destination v0.17.0 outside mirror mode writes no
 //     headers and partitions by key hash.
 //   - builtin:s3 destination v0.13.0 names objects from opencdc.collection
 //     only with a partitioner other than none, the default, and has no
-//     topic setting.
+//     topic setting, so RegexRouter is refused on s3-sink.
 //   - builtin:postgres source v0.21.1 sets opencdc.collection to the
 //     configured tables entry for snapshot and CDC records of a configured
 //     table, and to <schema>.<table> for CDC records of a table outside
-//     tables in a reused publication. table.include.list translates to bare
-//     names with search_path set to their one schema (emit pgTables), so the
-//     collection is the bare table name; the Kafka Connect topic
-//     <topic.prefix>.<schema>.<table> also needs the schema, which no topic
-//     expression carries yet.
+//     tables in a reused publication. migrate defines the Debezium topic
+//     <topic.prefix>.<schema>.<table> from it (migrate's debeziumTopic), with
+//     the schema that table.include.list translates to search_path.
 var capabilities = []Capability{
-	{Plugin: "builtin:kafka", Role: roleSource},
+	{Plugin: "builtin:kafka", Role: roleSource, HeaderPrefix: "kafka.header."},
 	{Plugin: "builtin:kafka", Role: roleDestination, TopicSetting: "topic"},
 	{Plugin: "builtin:postgres", Role: roleSource},
 	{Plugin: "builtin:s3", Role: roleDestination},
@@ -104,18 +108,10 @@ var refusalGroups = []refusalGroup{
 			Fix:    "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
 		},
 		classes: []string{
-			"org.apache.kafka.connect.transforms.ExtractField",
-			"org.apache.kafka.connect.transforms.Filter",
 			"org.apache.kafka.connect.transforms.Flatten",
 			"org.apache.kafka.connect.transforms.HoistField",
 			"org.apache.kafka.connect.transforms.InsertField",
-			"org.apache.kafka.connect.transforms.RegexRouter",
-			"org.apache.kafka.connect.transforms.ReplaceField",
 			"org.apache.kafka.connect.transforms.ValueToKey",
-			"org.apache.kafka.connect.transforms.predicates.HasHeaderKey",
-			"org.apache.kafka.connect.transforms.predicates.RecordIsTombstone",
-			"org.apache.kafka.connect.transforms.predicates.TopicNameMatches",
-			"io.debezium.transforms.ExtractNewRecordState",
 		},
 	},
 	{
@@ -139,7 +135,7 @@ var refusalGroups = []refusalGroup{
 		refusal: Refusal{
 			Code:   kcmigrate.CodeTargetCapabilityMissing.Reason(),
 			Reason: "The Kafka destination partitions by key only; explicit partition writing is v0.23 (per-partition ordering, invariant 4).",
-			Fix:    "Keep this connector on Kafka Connect until v0.23.",
+			Fix:    fixUntilV023,
 		},
 		classes: []string{"io.debezium.transforms.partitions.PartitionRouting"},
 	},

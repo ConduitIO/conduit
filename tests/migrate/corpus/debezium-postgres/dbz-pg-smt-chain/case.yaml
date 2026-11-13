@@ -5,10 +5,12 @@ description: >-
   A Debezium Postgres connector with an SMT chain: ExtractNewRecordState, a
   negated Filter on a TopicNameMatches predicate, and PartitionRouting, plus
   settings of an alias transforms= does not list and a predicate no transform
-  names. No SMT is translated before its translator ships with oracle goldens,
-  and PartitionRouting needs explicit partition writing (v0.23), so the chain
-  is refused as a whole and every SMT key blocks with its reason. The unlisted
-  alias and the unused predicate are no-ops, as in Kafka Connect.
+  names. The converters keep replace.null.with.default at its default, so
+  Kafka Connect writes column defaults in place of NULLs and no transform
+  translates exactly (kc.setting_required), and PartitionRouting needs
+  explicit partition writing (v0.23), so the chain is refused as a whole and
+  every SMT key blocks with its reason. The unlisted alias and the unused
+  predicate are no-ops, as in Kafka Connect.
 provenance:
   source: synthetic
   ref: written for the SMT chain framework (design 20261110-kafka-connect-smt-pack.md)
@@ -21,11 +23,11 @@ expect:
   notes: [kc.output_shape_differs]
   entries:
     - {key: transforms, status: unsupported, blocking: true, code: kc.smt_unsupported}
-    - {key: transforms.unwrap.type, status: unsupported, blocking: true, code: kc.smt_unsupported}
-    - {key: transforms.unwrap.replace.null.with.default, status: unsupported, blocking: true, code: kc.smt_unsupported}
-    - {key: transforms.onlyOrders.type, status: unsupported, blocking: true, code: kc.smt_unsupported}
-    - {key: transforms.onlyOrders.predicate, status: unsupported, blocking: true, code: kc.smt_unsupported}
-    - {key: transforms.onlyOrders.negate, status: unsupported, blocking: true, code: kc.smt_unsupported}
+    - {key: transforms.unwrap.type, status: unsupported, blocking: true, code: kc.setting_required}
+    - {key: transforms.unwrap.replace.null.with.default, status: unsupported, blocking: true, code: kc.setting_required}
+    - {key: transforms.onlyOrders.type, status: unsupported, blocking: true, code: kc.setting_required}
+    - {key: transforms.onlyOrders.predicate, status: unsupported, blocking: true, code: kc.setting_required}
+    - {key: transforms.onlyOrders.negate, status: unsupported, blocking: true, code: kc.setting_required}
     - {key: transforms.route.type, status: unsupported, blocking: true, code: kc.target_capability_missing}
     - {key: transforms.route.partition.topic.num, status: unsupported, blocking: true, code: kc.target_capability_missing}
     - {key: transforms.old.type, status: translated, blocking: false}

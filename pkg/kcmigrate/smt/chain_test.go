@@ -17,6 +17,7 @@ package smt_test
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 	"text/template"
@@ -117,13 +118,36 @@ func TestBuiltinData(t *testing.T) {
 	is.True(len(d.Capabilities()) > 0)
 }
 
-// TestBuiltin_ClaimsNoSMT: no SMT is translated before its translator ships
-// with oracle goldens (design, "Tests"); B3 is the framework only.
-func TestBuiltin_ClaimsNoSMT(t *testing.T) {
+// TestBuiltin_ClaimsOnlyOracleProvenSMTs: a translator ships with the Kafka
+// Connect oracle output that proves it exact (design, "Tests"), so Builtin
+// holds exactly the classes whose cases are in tests/migrate/smt-oracle and
+// run in the translators' replay tests. Adding a class here without its case
+// is the mistake this guards.
+func TestBuiltin_ClaimsOnlyOracleProvenSMTs(t *testing.T) {
 	is := is.New(t)
 	reg := smt.Builtin()
-	is.Equal(len(reg.Transforms), 0)
-	is.Equal(len(reg.Predicates), 0)
+	var got []string
+	for class := range reg.Transforms {
+		got = append(got, class)
+	}
+	sort.Strings(got)
+	is.Equal(got, []string{
+		"io.debezium.transforms.ExtractNewRecordState",
+		"org.apache.kafka.connect.transforms.ExtractField",
+		"org.apache.kafka.connect.transforms.Filter",
+		"org.apache.kafka.connect.transforms.RegexRouter",
+		"org.apache.kafka.connect.transforms.ReplaceField",
+	})
+	var preds []string
+	for class := range reg.Predicates {
+		preds = append(preds, class)
+	}
+	sort.Strings(preds)
+	is.Equal(preds, []string{
+		"org.apache.kafka.connect.transforms.predicates.HasHeaderKey",
+		"org.apache.kafka.connect.transforms.predicates.RecordIsTombstone",
+		"org.apache.kafka.connect.transforms.predicates.TopicNameMatches",
+	})
 }
 
 func TestApply_EmptyLists(t *testing.T) {
@@ -284,8 +308,8 @@ func TestApply_RefusalsFromData(t *testing.T) {
 		class, code, mention string
 	}{
 		{"io.debezium.transforms.partitions.PartitionRouting", "kc.target_capability_missing", "partitions by key only"},
-		{"org.apache.kafka.connect.transforms.Filter", "kc.smt_unsupported", "until a migrate release translates it"},
-		{"org.apache.kafka.connect.transforms.ExtractField$Key", "kc.smt_unsupported", "until a migrate release translates it"},
+		{"org.apache.kafka.connect.transforms.Flatten$Value", "kc.smt_unsupported", "until a migrate release translates it"},
+		{"org.apache.kafka.connect.transforms.ExtractField$Key", "kc.smt_unsupported", "v0.23"},
 		{"org.apache.kafka.connect.transforms.Cast$Value", "kc.smt_unsupported", "v0.23"},
 		{"org.apache.kafka.connect.transforms.DropHeaders", "kc.smt_unsupported", "v0.23"},
 		{"com.example.CustomTransform", "kc.smt_unsupported", "processor SDK"},

@@ -24,6 +24,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -655,15 +657,13 @@ func (ct chainTranslator) env(plan *emit.Plan, path string, offset int, ds, work
 		// Kafka Connect runs a Debezium source's SMTs over the Debezium
 		// Struct, and the native CDC source emits structured key and value.
 		env.SchemaMode, env.KeyShape, env.ValueShape = true, smt.ShapeStructured, smt.ShapeStructured
-		// The topic is undefined. builtin:postgres v0.21.1 gives snapshot and
-		// CDC records of a configured table the same opencdc.collection, the
-		// bare tables entry (table.include.list translates to bare names with
-		// search_path set to their schema), and names a table outside tables in
-		// a reused publication <schema>.<table>. Neither is the Kafka Connect
-		// topic <topic.prefix>.<schema>.<table>, which needs the schema, and no
-		// topic expression carries it yet (SMT pack design, "Topic expression").
-		// Topic-reading SMTs refuse until B4 defines it.
-		env.Topic = ""
+		// The topic Debezium names each record's topic with, as an
+		// expression over the native record (SMT pack design, "Topic
+		// expression"); unknown when the configuration does not pin it.
+		env.Topic, env.TopicRefusal = debeziumTopic(plan, ds)
+		// The SMTs see a NULL column; the converter after them writes its
+		// schema default unless told not to (design decision 22).
+		env.Refusal = nullConverterRefusal(keyConv, valueConv)
 	case sink && env.Source == kafkaPlugin:
 		// A sink's SMTs run after its converter: they see bytes only with
 		// ByteArrayConverter (a Struct, map or String with any other), and
@@ -671,6 +671,8 @@ func (ct chainTranslator) env(plan *emit.Plan, path string, offset int, ds, work
 		// same. It names each record's topic in opencdc.collection.
 		env.KeyShape, env.ValueShape = keyConv.sinkShape(), valueConv.sinkShape()
 		env.Topic = collectionTopic
+		mirror, _ := plan.Setting(emit.SideSource, "emitMirrorMetadata")
+		env.MirrorMetadata = strings.EqualFold(strings.TrimSpace(mirror), "true")
 	case source && env.Source == kafkaPlugin:
 		// A source's SMTs run before its converter, over what the connector
 		// produced: MirrorMaker's records are the replicated bytes.
@@ -680,18 +682,113 @@ func (ct chainTranslator) env(plan *emit.Plan, path string, offset int, ds, work
 		// undefined in this version, so topic-reading and -writing SMTs
 		// refuse (design decision 20).
 		env.Topic = ""
+		env.TopicRefusal = &smt.Refusal{
+			Code:   kcmigrate.CodeSMTUnsupported.Reason(),
+			Reason: "MirrorMaker's transforms see the remote topic name its replication policy gives, which this version does not model, so a transform that reads or writes the topic is mapped in v0.23 (SMT pack design decision 20).",
+			Fix:    "Keep this connector on Kafka Connect until v0.23, or remove the transform.",
+		}
 	}
 	return env
+}
+
+// debeziumTopicPrefix is a topic.prefix that Debezium uses as written: topic
+// name characters only, so no sanitizing changes it.
+var debeziumTopicPrefix = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+
+// debeziumTopic returns the topic template of a Debezium Postgres source's
+// records, or why it is unknown. Debezium names the topic
+// <topic.prefix>.<schema>.<table>. builtin:postgres v0.21.1 sets
+// opencdc.collection to the tables entry for snapshot and CDC records of a
+// configured table, and migrate translates table.include.list to bare
+// table names in one schema, with search_path set to it (emit pgTables), so
+// the collection is the bare table name and the schema is the search_path.
+// A table outside tables that a reused publication carries is named
+// <schema>.<table>, which already holds its schema. Bare names never hold a
+// dot, which tells the two apart.
+//
+// The topic is defined only when that naming is pinned: topic.prefix is a
+// literal of topic name characters (Debezium then uses it unchanged),
+// topic.delimiter and topic.naming.strategy keep their defaults, and
+// table.include.list translated to one schema.
+func debeziumTopic(plan *emit.Plan, ds []rules.Decision) (string, *smt.Refusal) {
+	unknown := func(reason, fix string) (string, *smt.Refusal) {
+		return "", &smt.Refusal{
+			Code:   kcmigrate.CodeSMTUnsupported.Reason(),
+			Reason: "Debezium names the topic <topic.prefix>.<schema>.<table>, and migrate cannot reproduce it for this connector: " + reason + " This transform reads or writes the topic.",
+			Fix:    fix,
+		}
+	}
+	prefix, ok := lastValue(ds, "topic.prefix")
+	_, legacy := lastValue(ds, "database.server.name")
+	switch {
+	case legacy:
+		return unknown("database.server.name is set, which Debezium 3 does not read.", "Remove database.server.name and set topic.prefix, then re-run.")
+	case !ok || prefix == "":
+		return unknown("topic.prefix is not set.", "Set topic.prefix, then re-run.")
+	case rules.IsReference(prefix):
+		return unknown("topic.prefix is a config-provider reference.", "Set topic.prefix to its literal value, then re-run.")
+	case !debeziumTopicPrefix.MatchString(prefix):
+		return unknown("topic.prefix has characters other than letters, digits, '.', '_' and '-', which Debezium replaces.", "Set topic.prefix to topic name characters only, or keep this connector on Kafka Connect.")
+	}
+	if d, ok := lastValue(ds, "topic.delimiter"); ok && d != "." {
+		return unknown("topic.delimiter is not the default \".\".", "Remove topic.delimiter, or keep this connector on Kafka Connect.")
+	}
+	if _, ok := lastValue(ds, "topic.naming.strategy"); ok {
+		return unknown("topic.naming.strategy is set, and a strategy names topics in code migrate cannot read.", "Remove topic.naming.strategy if it is the default, or keep this connector on Kafka Connect.")
+	}
+	schema := plan.SearchPath()
+	if schema == "" {
+		return unknown("table.include.list did not translate to tables of one schema, so the schema part is not known.", "Set table.include.list to schema.table entries in one schema (see its entry), then re-run.")
+	}
+	const coll = `(index .Metadata "opencdc.collection")`
+	return "{{ print " + strconv.Quote(prefix+".") + " (ternary " + coll + " (print " + strconv.Quote(schema+".") + " " + coll + ") (contains \".\" " + coll + ")) }}", nil
+}
+
+// nullConverterRefusal refuses a Debezium source's chain unless both of its
+// converters keep a NULL column NULL (SMT pack design decision 22). The
+// SMTs see the NULL, and the translations reproduce what they write; a
+// JsonConverter with replace.null.with.default at its default true then
+// writes the column's schema default in its place, and the Conduit pipeline
+// writes the NULL. The oracle shows it for the bare unwrap
+// (tests/migrate/smt-oracle, payloadDefaultConverter). Only a JsonConverter
+// with replace.null.with.default=false set where the converter class is set
+// (Kafka Connect configures a converter from the same layer as its class)
+// is known to keep it.
+func nullConverterRefusal(key, value converter) *smt.Refusal {
+	var bad []string
+	for _, side := range []struct {
+		name string
+		c    converter
+	}{{"key", key}, {"value", value}} {
+		if side.c.class != jsonConverter || !strings.EqualFold(side.c.replaceNull, "false") {
+			bad = append(bad, side.name+".converter")
+		}
+	}
+	if len(bad) == 0 {
+		return nil
+	}
+	verb := "is"
+	if len(bad) > 1 {
+		verb = "are"
+	}
+	return &smt.Refusal{
+		Code: kcmigrate.CodeSettingRequired.Reason(),
+		Reason: "On a Debezium source, Kafka Connect's converter writes a column's schema default in place of a NULL unless it is a JsonConverter with replace.null.with.default=false, " +
+			"and the Conduit pipeline writes the NULL; " + strings.Join(bad, " and ") + " " + verb + " not set that way, so no transform of the chain translates exactly.",
+		Fix: "Set key.converter.replace.null.with.default=false and value.converter.replace.null.with.default=false next to key.converter and value.converter " +
+			"(in the connector config, or in the worker config when the connector inherits the converters) if consumers should see the NULL, then re-run; with another converter, keep this connector on Kafka Connect.",
+	}
 }
 
 // converter is the Kafka Connect converter a side of a connector uses.
 type converter struct {
 	class string // empty when neither the connector nor the worker sets it
-	// schemasEnable is JsonConverter's schemas.enable from the same layer as
-	// the class: Kafka Connect configures the converter from the connector's
+	// schemasEnable and replaceNull are JsonConverter's schemas.enable and
+	// replace.null.with.default from the same layer as the class: Kafka
+	// Connect configures the converter from the connector's
 	// <side>.converter.* keys when the connector names it, else from the
 	// worker's.
-	schemasEnable string
+	schemasEnable, replaceNull string
 }
 
 // Converter classes the SMT pass knows the schema behaviour of.
@@ -707,7 +804,8 @@ func effectiveConverter(connector, worker []rules.Decision, side string) convert
 	for _, layer := range [][]rules.Decision{connector, worker} {
 		if c, ok := lastValue(layer, side+".converter"); ok {
 			enable, _ := lastValue(layer, side+".converter.schemas.enable")
-			return converter{class: c, schemasEnable: enable}
+			replaceNull, _ := lastValue(layer, side+".converter.replace.null.with.default")
+			return converter{class: c, schemasEnable: enable, replaceNull: replaceNull}
 		}
 	}
 	return converter{}
