@@ -2323,7 +2323,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (207)
+## 3. Error codes (209)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -2382,6 +2382,8 @@ Author: Meroxa, Inc.
 | `field.set.value_and_from` | InvalidArgument | CodeSetValueAndFrom is raised at configure time when both "value" and "from" are set; they are mutually exclusive. |
 | `field.set.value_not_settable` | FailedPrecondition | CodeSetValueNotSettable is raised for a record when a typed value or a copied value cannot be stored in "field": a map, an int or null into metadata (null would delete the key, or reset the map), or raw data, the metadata map, the position or the operation into a field inside structured data. It is never coerced (invariant 6). |
 | `field.set.value_required` | InvalidArgument | CodeSetValueRequired is raised at configure time when neither "value" nor "from" is set. |
+| `flatten.key_collision` | InvalidArgument | CodeKeyCollision is raised when two paths flatten to the same field name. The record fails instead of one value overwriting the other (invariant 6). |
+| `flatten.not_structured` | FailedPrecondition | CodeNotStructured is raised when the flattened side holds raw data, so there are no field names to flatten. A nil side is not an error. |
 | `generate.ambiguous_prompt` | InvalidArgument | CodeAmbiguousPrompt: the request could not be pinned to a pipeline.  Raised in two places, deliberately conservative pre-call (design §9): before any provider call ONLY when the prompt is empty or names one role for two different connectors; otherwise post-hoc, when a candidate's connectors cannot be traced to anything the request actually said. A merely terse request is never refused pre-call — it goes to the model, which reads intent far better than a keyword table, and the result is judged the normal way. |
 | `generate.ambiguous_provider_configuration` | InvalidArgument | CodeAmbiguousProvider: more than one candidate and no explicit choice. This is an error rather than a pick — see the package doc. |
 | `generate.destination_exists` | AlreadyExists | CodeDestinationExists: the resolved output path already exists and --force was not passed (design §8, amended 2026-08-21).  It is a code of its own rather than the foundational common.invalid_argument because the consumer is frequently an agent, and "that file already exists" is fixed by re-running with --force or a different --out, while a generic invalid-argument is fixed by changing the request. A caller that cannot tell those apart from the code has to parse the message.  AlreadyExists shares the Validation exit bucket with InvalidArgument (pkg/conduit/exitcode, fromGRPCCode), so this is additive: the process still exits 2, only the reason string a machine reads gets more specific. |

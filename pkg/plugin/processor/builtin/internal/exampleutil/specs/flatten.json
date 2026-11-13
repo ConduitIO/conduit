@@ -1,0 +1,160 @@
+{
+  "specification": {
+    "name": "flatten",
+    "summary": "Flatten a nested structured key or payload into one level.",
+    "description": "Flatten replaces the structured data in `field` (`.Key`, `.Payload.Before` or\n`.Payload.After`) with a map of one level. Each leaf is stored under the names of the fields on its path,\njoined by `delimiter`: `{\"a\": {\"b\": 1}}` becomes `{\"a.b\": 1}`. It is the equivalent of the\nKafka Connect `Flatten$Value` and `Flatten$Key` single message transforms.\n\nArrays are not flattened: they are kept as they are, like every other value that is not a map. An empty nested map\nproduces no field. A null field, including a null nested map, is kept as a field with a null value.\n\nAn empty `delimiter` is replaced by the default `.`, so a Kafka Connect `Flatten` with `delimiter=`\n(empty) has no equivalent here.\n\nIf two paths produce the same name (`{\"a.b\": 1, \"a\": {\"b\": 2}}` with the delimiter `.`), the record fails\nwith the error code `flatten.key_collision`, naming both paths and the name. A value is never overwritten.\nKafka Connect overwrites one value with the other in this case when the record has no schema, and fails when it has\none.\n\nA nil key or payload (a delete's after-image, a tombstone) passes through unchanged. Raw data fails with\n`flatten.not_structured`; decode it first, for example with\n[`json.decode`](/docs/using/processors/builtin/json.decode).\n\nThe processor removes the schema subject and version of the side it flattens (`opencdc.key.schema.*` for the\nkey, `opencdc.payload.schema.*` for the payload), because the flat data no longer matches the schema the source\nattached. The record then leaves the processor as structured data without a schema.",
+    "version": "v0.1.0",
+    "author": "Meroxa, Inc.",
+    "parameters": {
+      "delimiter": {
+        "default": ".",
+        "description": "Delimiter is inserted between the field names of each level when the\nflattened names are built. The default is `.`, as in Kafka Connect. An\nempty value is replaced by the default, so an empty delimiter (which\nKafka Connect accepts) cannot be configured.",
+        "type": "string",
+        "validations": []
+      },
+      "field": {
+        "default": ".Payload.After",
+        "description": "Field is the side of the record to flatten: `.Key`, `.Payload.Before` or\n`.Payload.After`. The default `.Payload.After` matches Kafka Connect's\n`Flatten$Value`; `.Key` matches `Flatten$Key`.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "inclusion",
+            "value": ".Key,.Payload.Before,.Payload.After"
+          }
+        ]
+      },
+      "sdk.schema.decode.key.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.decode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to decode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.key.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record key using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.key.strategy": {
+        "default": "infer",
+        "description": "How to build a new key schema when the processed key no longer fits the schema the record carried. \"infer\" extracts a schema from the values (Avro int becomes long, date becomes timestamp-micros, decimals become decimal(31,10)). \"extend\" keeps the carried type of every field still present, adds new top-level fields as nullable with a null default, leaves out removed top-level fields, and fails the record if a value does not fit its carried type.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "inclusion",
+            "value": "infer,extend"
+          }
+        ]
+      },
+      "sdk.schema.encode.payload.enabled": {
+        "default": "true",
+        "description": "Whether to encode the record payload using its corresponding schema from the schema registry.",
+        "type": "bool",
+        "validations": null
+      },
+      "sdk.schema.encode.payload.strategy": {
+        "default": "infer",
+        "description": "How to build a new payload schema when the processed payload no longer fits the schema the record carried. \"infer\" extracts a schema from the values (Avro int becomes long, date becomes timestamp-micros, decimals become decimal(31,10)). \"extend\" keeps the carried type of every field still present, adds new top-level fields as nullable with a null default, leaves out removed top-level fields, and fails the record if a value does not fit its carried type.",
+        "type": "string",
+        "validations": [
+          {
+            "type": "inclusion",
+            "value": "infer,extend"
+          }
+        ]
+      }
+    }
+  },
+  "examples": [
+    {
+      "summary": "Flatten the key with a custom delimiter",
+      "description": "This example flattens `.Key` with the delimiter `_`, as Kafka Connect's `Flatten$Key` with `delimiter=_` does.",
+      "config": {
+        "delimiter": "_",
+        "field": ".Key"
+      },
+      "have": {
+        "position": null,
+        "operation": "update",
+        "metadata": null,
+        "key": {
+          "order": 1,
+          "tenant": {
+            "id": 7
+          }
+        },
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "update",
+        "metadata": null,
+        "key": {
+          "order": 1,
+          "tenant_id": 7
+        },
+        "payload": {
+          "before": null,
+          "after": null
+        }
+      }
+    },
+    {
+      "summary": "Flatten a nested payload",
+      "description": "This example flattens the nested `customer` object of `.Payload.After` into fields named with the default delimiter `.`. The `tags` array is kept as it is.",
+      "config": {
+        "delimiter": ".",
+        "field": ".Payload.After"
+      },
+      "have": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": {
+            "customer": {
+              "address": {
+                "city": "Lisbon"
+              },
+              "name": "Wong"
+            },
+            "id": 42,
+            "tags": [
+              "a",
+              "b"
+            ]
+          }
+        }
+      },
+      "want": {
+        "position": null,
+        "operation": "create",
+        "metadata": null,
+        "key": null,
+        "payload": {
+          "before": null,
+          "after": {
+            "customer.address.city": "Lisbon",
+            "customer.name": "Wong",
+            "id": 42,
+            "tags": [
+              "a",
+              "b"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

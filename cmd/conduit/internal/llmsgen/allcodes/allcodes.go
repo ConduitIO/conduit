@@ -74,6 +74,7 @@ import (
 	_ "github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
 	_ "github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/debezium"
 	_ "github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/field"
+	_ "github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/flatten"
 	_ "github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/protobuf"
 	_ "github.com/conduitio/conduit/pkg/processor"
 	_ "github.com/conduitio/conduit/pkg/provisioning"
