@@ -224,6 +224,13 @@
           "rule": "shared/converters/value.converter"
         },
         {
+          "code": "kc.default_differs",
+          "reason": "Kafka Connect's converters write a column's schema default, when it has one, in place of NULL. Conduit writes NULL. Consumers that relied on the default must handle null. key.converter is not a converter this version of migrate models, and it may write defaults in place of NULL. value.converter is not a converter this version of migrate models, and it may write defaults in place of NULL.",
+          "fix": "None needed in Conduit. To compare outputs on the Kafka Connect side: check the documentation of key.converter for a setting that keeps NULL. check the documentation of value.converter for a setting that keeps NULL. Transforms in the chain have their own replace.null.with.default setting (Kafka Connect 3.9 and later).",
+          "blocking": false,
+          "rule": "debezium-postgres/notes/replace-null-with-default"
+        },
+        {
           "code": "kc.secret_plaintext",
           "reason": "The input holds at least one secret as a literal value. Where migrate used the setting it wrote a variable reference instead (a dropped setting has no variable), but the input file itself contains the secret.",
           "fix": "Fill the variables in secrets.env.template from your secret store, and replace the literal in the Kafka Connect config with a config-provider reference.",
