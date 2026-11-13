@@ -342,7 +342,7 @@ not by itself make a pipeline runnable.
 | --- | --- | --- | --- |
 | `Filter` | `filter` + `condition` | predicate translatable or absent (no predicate drops everything in both) | - |
 | `TopicNameMatches` | condition: anchored match on T at the predicate's position (below) | `pattern` is in the RE2-safe ASCII subset and T is known | Java construct named; topic unknown |
-| `HasHeaderKey` | condition testing key `kafka.header.N` in `.Metadata`: the JSON-encoded key followed by a colon must occur in the JSON-encoded metadata, which JSON escaping allows only as an object key (`index` cannot tell an empty value from a missing key; sprig `hasKey` does not take `opencdc.Metadata`) | sink chain from the Kafka source in non-mirror mode | source chains; mirror mode |
+| `HasHeaderKey` | condition testing key `kafka.header.N` in `.Metadata`: the JSON-encoded key, preceded by `{` or `,` and followed by a colon, must occur in the JSON-encoded metadata, which JSON escaping allows only where a key starts (a lookup by key cannot tell an empty value from a missing key, and the map-key test the conditions use does not accept `opencdc.Metadata`) | sink chain from the Kafka source in non-mirror mode | source chains; mirror mode |
 | `RecordIsTombstone` | depends on position | source chain before the unwrap: constant false, evaluated at translate time (no processor). Native CDC emits no tombstones, so the records KC's predicate matches do not exist in Conduit; the output-shape note covers that; after `ExtractNewRecordState` in `tombstone` mode, or after `ExtractField after` (no delete mode applies): condition `.Operation` is `delete`; after `drop` mode: constant false | sink chains unless verified (above); other delete modes |
 | `RegexRouter` | rewrites T (below) | `regex` and `replacement` translate (below), the destination has a topic setting, and no later processor writes what T or the predicate reads | construct named; topic unknown; no topic setting (`kc.target_capability_missing`); later write |
 | `ReplaceField` | `field.exclude`, then per rename an `error` processor when the target is already a field of the After image (KC fails such a record: a duplicate field, or a reverse lookup of a missing source), and `field.rename` on After and Before (the Before copy only where it succeeds, so a delete never fails) | `$Value`; structured side after the unwrap; `exclude` and `renames` of plain names; `replace.null.with.default=false` on Debezium sources; no rename target is also a rename source (KC renames simultaneously from the original names, Conduit renames in sequence); no source renamed twice, no two renames onto one target, no renamed source also excluded (KC then reads the excluded value into the target) | `include` (v0.23); `$Key` (v0.23); swap or chain renames; envelope position; default replacement on |
@@ -419,7 +419,10 @@ records.
   - capturing and non-capturing groups.
 - Pattern literals must be ASCII. RE2's `(?i)` folds Unicode, so a Kelvin sign would match `k`, while Java
   folds ASCII only by default. `(?i)` is the only flag allowed.
-- Refused: lookaround, backreferences and octal escapes, possessive and atomic forms, `\h`, `\v`, `\Z`,
+- Refused: a repetition (`*`, `+`, `{n,m}` with m other than 1) of anything that can match the empty
+  string, such as `(\w*)*`: Java ends the loop with an empty iteration and keeps its group value (`cdc.`
+  where RE2 gives `cdc.items`); a quantifier right after `(?i)`, which Java rejects or reads
+  differently; lookaround, backreferences and octal escapes, possessive and atomic forms, `\h`, `\v`, `\Z`,
   `\p{…}`, `[[:alpha:]]`, nested classes and `&&`, `(?P<name>)`, a `{` that is not a quantifier, a class
   that starts with `]`, and `\Q` without `\E` (it would quote the anchoring around the pattern).
 - Replacement translation, following Java's rules:

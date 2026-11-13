@@ -583,9 +583,10 @@ func translateTopicNameMatches(c *Chain, p *Predicate) (PredicateResult, error) 
 // metadata key is present". A template cannot test a key of
 // opencdc.Metadata for presence directly (index returns "" for a missing
 // key and for an empty value alike), so the condition looks for the
-// JSON-encoded key followed by a colon in the JSON-encoded metadata: JSON
-// escapes every quote inside a string, so that text occurs only as an
-// object key.
+// JSON-encoded key, preceded by { or , and followed by a colon, in the
+// JSON-encoded metadata. JSON escapes every quote inside a string as \",
+// so {" and ," occur only where a key starts, and a key that merely ends
+// with the text (a header named a"kafka.header.X) does not match.
 func translateHasHeaderKey(c *Chain, p *Predicate) (PredicateResult, error) {
 	name, ok := p.Option(optHeaderName)
 	if !ok || name == "" {
@@ -622,7 +623,7 @@ func translateHasHeaderKey(c *Chain, p *Predicate) (PredicateResult, error) {
 		}}, nil
 	}
 	return PredicateResult{
-		Condition: `contains (print (toJson ` + strconv.Quote(prefix+name) + `) ":") (toJson .Metadata)`,
+		Condition: `or (contains (print "{" (toJson ` + strconv.Quote(prefix+name) + `) ":") (toJson .Metadata)) (contains (print "," (toJson ` + strconv.Quote(prefix+name) + `) ":") (toJson .Metadata))`,
 		Claimed:   []string{optHeaderName},
 		Reads:     []Path{".Metadata"},
 	}, nil
@@ -647,7 +648,7 @@ func translateRecordIsTombstone(c *Chain, p *Predicate) (PredicateResult, error)
 	res := PredicateResult{Claimed: []string{}, Reads: []Path{".Operation"}}
 	switch {
 	case !c.Unwrapped(), c.DeletesDropped():
-		res.Condition = "false"
+		res.Condition = condFalse
 	default:
 		res.Condition = isDelete
 	}

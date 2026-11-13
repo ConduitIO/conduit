@@ -81,6 +81,9 @@ func translatePattern(p string) (regexTranslation, string) {
 	if err != nil {
 		return regexTranslation{}, "RE2 cannot parse it (" + parseErrorCode(err) + "); it uses a construct Java has and RE2 lacks"
 	}
+	if loop := nullableLoop(re); loop != "" {
+		return regexTranslation{}, "the repetition " + loop + " repeats something that can match the empty string; Java records a final empty iteration in its groups and RE2 does not"
+	}
 	names := map[string]int{}
 	for i, n := range re.CapNames() {
 		if n == "" {
@@ -92,6 +95,56 @@ func translatePattern(p string) (regexTranslation, string) {
 		names[n] = i
 	}
 	return regexTranslation{pattern: p, groups: re.MaxCap(), names: names}, ""
+}
+
+// nullableLoop returns the first repetition (*, + or {n,m} with m other
+// than 1) whose operand can match the empty string, or "". Java's
+// backtracking matcher can end such a loop with an empty iteration and
+// keeps that iteration's group values, where RE2 stops before it: with
+// (\w*)* on "items", group 1 is "" in Java and "items" in RE2. The overall
+// match can differ too, so every such loop is refused.
+func nullableLoop(re *syntax.Regexp) string {
+	loop := re.Op == syntax.OpStar || re.Op == syntax.OpPlus || re.Op == syntax.OpRepeat && re.Max != 1
+	if loop && nullable(re.Sub[0]) {
+		return re.String()
+	}
+	for _, sub := range re.Sub {
+		if s := nullableLoop(sub); s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+// nullable reports whether re can match the empty string.
+func nullable(re *syntax.Regexp) bool {
+	switch re.Op {
+	case syntax.OpEmptyMatch, syntax.OpBeginLine, syntax.OpEndLine, syntax.OpBeginText, syntax.OpEndText,
+		syntax.OpWordBoundary, syntax.OpNoWordBoundary, syntax.OpStar, syntax.OpQuest:
+		return true
+	case syntax.OpLiteral:
+		return len(re.Rune) == 0
+	case syntax.OpCapture, syntax.OpPlus:
+		return nullable(re.Sub[0])
+	case syntax.OpRepeat:
+		return re.Min == 0 || nullable(re.Sub[0])
+	case syntax.OpConcat:
+		for _, sub := range re.Sub {
+			if !nullable(sub) {
+				return false
+			}
+		}
+		return true
+	case syntax.OpAlternate:
+		for _, sub := range re.Sub {
+			if nullable(sub) {
+				return true
+			}
+		}
+		return false
+	case syntax.OpNoMatch, syntax.OpCharClass, syntax.OpAnyCharNotNL, syntax.OpAnyChar:
+	}
+	return false // a character, a class, or no match
 }
 
 // parseErrorCode is the stable part of an RE2 parse error.
@@ -148,6 +201,11 @@ func scanPattern(p string) string { //nolint:gocyclo // one tokenizer switch ove
 		case '(':
 			if why := scanGroup(p[i:]); why != "" {
 				return why
+			}
+			if strings.HasPrefix(p[i:], "(?i)") && i+4 < len(p) && strings.IndexByte("*+?{", p[i+4]) >= 0 {
+				// Java rejects a quantifier after a flag group (or, for {n},
+				// applies it differently); RE2 applies it to the atom before.
+				return "a quantifier follows the flag group (?i), which Java rejects or reads differently"
 			}
 		case '{':
 			n := quantifierLen(p[i:])

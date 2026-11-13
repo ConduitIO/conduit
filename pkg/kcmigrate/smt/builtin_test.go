@@ -333,6 +333,7 @@ func TestHasHeaderKey(t *testing.T) {
 		{"a": `kafka.header.x"trace":`, "b": `"kafka.header.x\"trace":`}: false,
 		{"kafka.header.X\"trace": ""}:                                    false,
 		{}:                                                               false,
+		{`kafka.header.a"kafka.header.x"trace`: ""}:                      false, // a key that only ends with the needle
 	} {
 		is.Equal(conditionTrue(t, cond, opencdc.Record{Metadata: *md}), want) // metadata
 	}

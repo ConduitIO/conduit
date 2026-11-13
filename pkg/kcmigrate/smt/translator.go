@@ -407,15 +407,25 @@ func BothImages(build func(image string) Processor) []Processor {
 // otherwise write name: nil where Kafka Connect renames nothing). sprig's
 // hasKey takes the StructuredData map; the type test before it keeps hasKey
 // from failing on raw data, and and stops at the first false argument.
-func FieldPresent(s Side, name string) string { return FieldPresentAt(s.Field(), name) }
-
-// FieldPresentAt is FieldPresent for a record reference, such as
-// .Payload.Before.
-func FieldPresentAt(field, name string) string {
-	if field == "" {
+func FieldPresent(s Side, name string) string {
+	if s.Field() == "" {
 		return ""
 	}
-	return `and (eq (printf "%T" ` + field + `) "opencdc.StructuredData") (hasKey ` + field + ` ` + strconv.Quote(name) + `)`
+	return `and (eq (printf "%T" ` + s.Field() + `) "opencdc.StructuredData") (hasKey ` + s.Field() + ` ` + strconv.Quote(name) + `)`
+}
+
+// FieldPresentAt is FieldPresent for a record reference other than a
+// side's, such as .Payload.Before: the same condition with the reference
+// replaced. A name that holds the side's reference text cannot be
+// substituted safely and gives a condition that is never true.
+func FieldPresentAt(field, name string) string {
+	switch {
+	case field == "":
+		return ""
+	case strings.Contains(name, AfterImage):
+		return condFalse
+	}
+	return strings.ReplaceAll(FieldPresent(SideValue, name), AfterImage, field)
 }
 
 // FailRecord returns an error processor that fails every record matching
@@ -437,6 +447,9 @@ func FailRecord(cond, message string) Processor {
 func RegexRoute(pattern, replacement, t string) string {
 	return "ternary (regexReplaceAll `^(?:" + pattern + ")` (" + t + ") `" + replacement + "`) (" + t + ") (regexMatch `^(?:" + pattern + ")$` (" + t + "))"
 }
+
+// condFalse is the condition pipeline that is never true.
+const condFalse = "false"
 
 // Not negates a condition pipeline.
 func Not(cond string) string { return "not (" + cond + ")" }

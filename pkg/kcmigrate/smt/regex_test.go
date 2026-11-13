@@ -16,6 +16,7 @@ package smt
 
 import (
 	"regexp"
+	"regexp/syntax"
 	"strconv"
 	"strings"
 	"testing"
@@ -30,7 +31,7 @@ func TestTranslatePattern(t *testing.T) {
 	accepted := []string{
 		``, `orders`, `dbz\.public\.(.*)`, `a|ab`, `a.*?`, `(?i)ORDERS-(\d+)`, `(?i:x)y`, `(?<tbl>[a-z_]+)`,
 		`[^a-z0-9]+`, `\w\s\d\W\S\D`, `^ab$`, `\bab\B`, `a{2}`, `a{2,}`, `a{2,5}?`, `\Q.*\E`, `[.$^]`,
-		`\x41`, `\x{41}`, `a}`, `[a-]`, `\-\.\/`, `\Aab\z`,
+		`\x41`, `\x{41}`, `a}`, `[a-]`, `\-\.\/`, `\Aab\z`, `(\w+)*`, `(a|b)+`, `(a?)`, `(a*)?`, `(?i)a*`, `(?i:a)*`,
 	}
 	for _, p := range accepted {
 		if _, why := translatePattern(p); why != "" {
@@ -81,6 +82,20 @@ func TestTranslatePattern(t *testing.T) {
 		`(a`:             "cannot parse",
 		`a{1001}`:        "cannot parse",
 		`[\Qa\E]`:        "inside a class",
+		`\Q.*`:           "not closed",
+		// Java ends these loops with an empty iteration whose group value it
+		// keeps (JDK 17: cdc. and x-, where RE2 gives cdc.items and x-orders).
+		`dbz\.public\.(\w*)*`: "can match the empty string",
+		`([a-z]*)+`:           "can match the empty string",
+		`(\w+|)*`:             "can match the empty string",
+		`(^+?[^a]?){2,}?`:     "can match the empty string",
+		`(a?){3}`:             "can match the empty string",
+		`\b+`:                 "can match the empty string",
+		// Java rejects a quantifier after a flag group, or reads {n} differently.
+		`a(?i)*`:   "follows the flag group",
+		`a(?i)+`:   "follows the flag group",
+		`a(?i)?`:   "follows the flag group",
+		`a(?i){2}`: "follows the flag group",
 	}
 	for p, want := range refused {
 		_, why := translatePattern(p)
@@ -263,6 +278,19 @@ func FuzzTranslateReplacement(f *testing.F) {
 	})
 }
 
+// checkLoops fails when a repetition in re repeats a sub-expression that
+// the engine matches against the empty string.
+func checkLoops(t *testing.T, p string, re *syntax.Regexp) {
+	t.Helper()
+	isLoop := re.Op == syntax.OpStar || re.Op == syntax.OpPlus || re.Op == syntax.OpRepeat && re.Max != 1
+	if isLoop && regexp.MustCompile(`^(?:`+re.Sub[0].String()+`)$`).MatchString("") {
+		t.Fatalf("%q accepted with the loop %s over an empty-matching body", p, re)
+	}
+	for _, sub := range re.Sub {
+		checkLoops(t, p, sub)
+	}
+}
+
 func isPrintableASCII(s string) bool {
 	for i := 0; i < len(s); i++ {
 		if s[i] < 0x20 || s[i] > 0x7E {
@@ -278,7 +306,7 @@ var legalTopics = []string{"orders", "dbz.public.items", "a", "ab", "orders-17",
 func FuzzTranslatePattern(f *testing.F) {
 	for _, s := range []string{
 		`dbz\.public\.(.*)`, `a|ab`, `a.*?`, `(?i)kelvin-k`, `(?<t>[a-z]+)`, `[[:alpha:]]`, `(?=x)`, `a*+`, `\1`,
-		`(?P<n>a)`, `a{`, `[a&&b]`, `\Qa.b\E`, `\x{212A}`, "kK", `(?iu)k`, `[^a-z]`, `\bx\b`, `.*$`,
+		`(?P<n>a)`, `a{`, `[a&&b]`, `dbz\.public\.(\w*)*`, `([a-z]*)+`, `(\w+|)*`, `a(?i)*`, `a(?i){2}`, `\Qa.b\E`, `\x{212A}`, "kK", `(?iu)k`, `[^a-z]`, `\bx\b`, `.*$`,
 	} {
 		f.Add(s)
 	}
@@ -294,6 +322,13 @@ func FuzzTranslatePattern(f *testing.F) {
 		if _, err := regexp.Compile(`^(?:` + re.pattern + `)$`); err != nil {
 			t.Fatalf("%q accepted but does not compile: %v", p, err)
 		}
+		// No accepted loop repeats something that can match empty, checked
+		// with the engine rather than with the translator's own walk.
+		parsed, err := syntax.Parse(re.pattern, syntax.Perl)
+		if err != nil {
+			t.Fatal(err)
+		}
+		checkLoops(t, p, parsed)
 		// The pattern is written into a topic expression as a raw string;
 		// it must parse and run there.
 		expr := "{{ " + RegexRoute(re.pattern, "x", `.T`) + " }}|{{ regexMatch `^(?:" + re.pattern + ")$` .T }}"
