@@ -21,6 +21,7 @@ import (
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit-commons/schema"
+	"github.com/conduitio/conduit-commons/schema/avro"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/errsafe"
@@ -78,6 +79,9 @@ func (e *Encoder) Encode(ctx context.Context, sd opencdc.StructuredData, carried
 
 	data, err := s.Marshal(sd)
 	if err != nil {
+		if cerrors.Is(err, avro.ErrDecimalNotRepresentable) {
+			return nil, cerrors.Errorf("failed to marshal data with schema (ID: %v, subject: %v, version: %v): %w", s.ID, s.Subject, s.Version, decimalNotRepresentable(err, e.lossless))
+		}
 		if e.lossless {
 			return nil, cerrors.Errorf("failed to marshal data with schema (ID: %v, subject: %v, version: %v): %w", s.ID, s.Subject, s.Version, mismatchFromCodec(sd, err))
 		}
@@ -96,10 +100,12 @@ func (e *Encoder) Encode(ctx context.Context, sd opencdc.StructuredData, carried
 // CodeSchemaMismatch error unless it gives back the same value.
 //
 // Invariant 6: the Avro codec accepts some values it cannot represent. It
-// truncates a decimal to the schema's scale and a time to the precision of
-// its logical type, and ignores a map key that is not a field of a nested
-// record. Checking the round trip, not trusting a successful encode, turns
-// each of those into an error instead of a changed value.
+// truncates a time to the precision of its logical type and ignores a map key
+// that is not a field of a nested record. Checking the round trip, not
+// trusting a successful encode, turns each of those into an error instead of a
+// changed value. A decimal finer than its scale is refused by Serde.Marshal
+// itself since conduit-commons v0.13.1 (see decimalNotRepresentable); the
+// round trip still covers it should that check ever miss a shape.
 func (e *Encoder) verifyRoundTrip(s schema.Schema, sd opencdc.StructuredData, data []byte) error {
 	var decoded opencdc.StructuredData
 	if err := s.Unmarshal(data, &decoded); err != nil {
