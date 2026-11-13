@@ -56,6 +56,11 @@ type regexTranslation struct {
 	pattern string         // RE2 pattern, the Java pattern as written
 	groups  int            // number of capturing groups
 	names   map[string]int // named groups
+	// inLoop maps a capturing group nested in a repetition (*, + or
+	// {n,m} with m other than 1) to that repetition. Java can keep such a
+	// group's value from an iteration it backtracked out of, where RE2
+	// clears it, so a replacement must not read it.
+	inLoop map[int]string
 }
 
 // javaGroupName is the name of a named group, in Java's grammar.
@@ -94,7 +99,9 @@ func translatePattern(p string) (regexTranslation, string) {
 		}
 		names[n] = i
 	}
-	return regexTranslation{pattern: p, groups: re.MaxCap(), names: names}, ""
+	inLoop := map[int]string{}
+	loopCaptures(re, "", inLoop)
+	return regexTranslation{pattern: p, groups: re.MaxCap(), names: names, inLoop: inLoop}, ""
 }
 
 // nullableLoop returns the first repetition (*, + or {n,m} with m other
@@ -114,6 +121,20 @@ func nullableLoop(re *syntax.Regexp) string {
 		}
 	}
 	return ""
+}
+
+// loopCaptures records, for every capturing group inside a repetition
+// (loop is the outermost one, "" outside any), that repetition.
+func loopCaptures(re *syntax.Regexp, loop string, into map[int]string) {
+	if loop == "" && (re.Op == syntax.OpStar || re.Op == syntax.OpPlus || re.Op == syntax.OpRepeat && re.Max != 1) {
+		loop = re.String()
+	}
+	if re.Op == syntax.OpCapture && loop != "" {
+		into[re.Cap] = loop
+	}
+	for _, sub := range re.Sub {
+		loopCaptures(sub, loop, into)
+	}
 }
 
 // nullable reports whether re can match the empty string.
@@ -374,6 +395,10 @@ func writeLiteral(b *strings.Builder, c byte) {
 	b.WriteByte(c)
 }
 
+func loopGroupReason(ref, loop string) string {
+	return ref + " refers to a group inside the repetition " + loop + ": Java can keep its value from an iteration it backtracked out of, where RE2 clears it"
+}
+
 // javaGroupRef reads the group reference after a $ the way Java's
 // Matcher.appendReplacement does, and returns how many bytes it took and
 // the group (number or name).
@@ -393,6 +418,9 @@ func javaGroupRef(s string, t regexTranslation) (int, string, string) {
 		if _, ok := t.names[name]; !ok {
 			return 0, "", "${" + name + "} names a group the pattern does not have, so Java fails every record the router matches"
 		}
+		if loop, ok := t.inLoop[t.names[name]]; ok {
+			return 0, "", loopGroupReason("${"+name+"}", loop)
+		}
 		return end + 1, name, ""
 	case s[0] < '0' || s[0] > '9':
 		return 0, "", "a $ is not followed by a group number or {name}, which Java rejects (escape a literal $ as \\$)"
@@ -408,6 +436,9 @@ func javaGroupRef(s string, t regexTranslation) (int, string, string) {
 			break
 		}
 		ref, n = next, n+1
+	}
+	if loop, ok := t.inLoop[ref]; ok {
+		return 0, "", loopGroupReason("$"+strconv.Itoa(ref), loop)
 	}
 	return n, strconv.Itoa(ref), ""
 }

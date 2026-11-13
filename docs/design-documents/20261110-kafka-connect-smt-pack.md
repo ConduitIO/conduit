@@ -432,6 +432,10 @@ records.
   - a literal `$` becomes `$$`;
   - what Java rejects at run time for every routed record (a trailing `\` or `$`, a group the pattern
     does not have) is refused, since Go would write an empty group instead.
+  - a reference to a group nested in a repetition (`*`, `+`, `{n,m}` with m other than 1) is refused:
+    Java can keep the group's value from an iteration it backtracked out of, where RE2 clears it
+    (`(?:(dbz)\.)*dbz\.(.*)` with `[$1]|$2` on `dbz.items`: `[dbz]|items` against `[]|items`). A group
+    under `?` and the groups outside any repetition, such as `(.*)`, still translate.
 - Patterns and replacements are written as backtick raw strings inside templates, because `"\d"` is a
   template parse error. One that contains a backtick is refused.
 

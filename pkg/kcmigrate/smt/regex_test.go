@@ -157,6 +157,46 @@ func TestTranslateReplacement(t *testing.T) {
 	}
 }
 
+// TestTranslateReplacement_LoopGroups: a replacement must not read a group
+// inside a repetition (review round 2, JDK 17: Java keeps a value from an
+// abandoned iteration, RE2 clears it).
+func TestTranslateReplacement_LoopGroups(t *testing.T) {
+	for _, tt := range []struct{ pattern, repl string }{
+		{`(?:(dbz)\.)*dbz\.(.*)`, `[$1]|$2`}, // Kafka Connect [dbz]|items, RE2 []|items
+		{`(?:(a))*a.`, `X[$1]`},
+		{`((\w))*\w\.x`, `X[$2]`},
+		{`(x(a))*xa_`, `X[$2]`},
+		{`(.(_*)([A-Z])*)*`, `X[$3]`},
+		{`(?:(?<t>a))+b`, `${t}`},
+		{`(?:(a)b){2,3}`, `$1`},
+	} {
+		re, why := translatePattern(tt.pattern)
+		if why != "" {
+			t.Errorf("%q refused: %s", tt.pattern, why)
+			continue
+		}
+		if _, why := translateReplacement(tt.repl, re); !strings.Contains(why, "inside the repetition") {
+			t.Errorf("%q with %q: got %q, want a refusal naming the repetition", tt.pattern, tt.repl, why)
+		}
+	}
+	for _, tt := range []struct{ pattern, repl string }{
+		{`(?:(dbz)\.)*dbz\.(.*)`, `$2`}, // the group outside the loop
+		{`(.*)`, `x-$1`},
+		{`(\w+)\.(\d+)`, `$2-$1`},
+		{`(?:(dbz)\.)?dbz\.(.*)`, `[$1]|$2`}, // ? is not a repetition
+		{`(?:(a)b){1}`, `$1`},
+		{`(a)*b`, `$0`},
+	} {
+		re, why := translatePattern(tt.pattern)
+		if why != "" {
+			t.Fatalf("%q refused: %s", tt.pattern, why)
+		}
+		if _, why := translateReplacement(tt.repl, re); why != "" {
+			t.Errorf("%q with %q refused: %s", tt.pattern, tt.repl, why)
+		}
+	}
+}
+
 // errJava stands for an exception Java's Matcher.appendReplacement throws.
 var errJava = cerrors.New("java rejects the replacement")
 
@@ -234,10 +274,11 @@ var replacementSubjects = []struct{ pattern, topic string }{
 	{`(?<tbl>[a-z]+)\.(\d+)`, "orders.17"},
 	{`(.*)`, "x$y"},
 	{`a|ab`, "ab"},
+	{`(?:(dbz)\.)*dbz\.(.*)`, "dbz.dbz.items"},
 }
 
-func FuzzTranslateReplacement(f *testing.F) {
-	for _, s := range []string{`$1`, `$12`, `$13`, `${name}`, `${tbl}`, `\$`, `pre\$fix-$1`, `$`, `$x`, `\`, `$0-copy`, `[$1]`, `$9$10$11`, `${nope}`, "a`", `\\$2`} {
+func FuzzTranslateReplacement(f *testing.F) { //nolint:gocyclo // one differential check per outcome
+	for _, s := range []string{`$1`, `$12`, `$13`, `${name}`, `${tbl}`, `\$`, `pre\$fix-$1`, `$`, `$x`, `\`, `$0-copy`, `[$1]`, `$9$10$11`, `${nope}`, "a`", `\\$2`, `[$1]|$2`} {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, repl string) {
@@ -263,6 +304,14 @@ func FuzzTranslateReplacement(f *testing.F) {
 			switch {
 			case why == "" && jerr != nil:
 				t.Fatalf("%q: translated to %q, but Java rejects it", repl, got)
+			case why != "" && strings.Contains(why, "inside the repetition"):
+				// Java and RE2 may disagree on such a group, so the reference
+				// value from RE2 is no oracle: check the refusal is structural.
+				if !refsLoopGroup(t, repl, re.pattern) {
+					t.Fatalf("%q: refused for a loop group it does not reference", repl)
+				}
+			case why == "" && refsLoopGroup(t, repl, re.pattern):
+				t.Fatalf("%q: translated though it reads a group inside a repetition", repl)
 			case why != "" && jerr == nil && asciiSafe:
 				t.Fatalf("%q: refused (%s), but Java accepts it", repl, why)
 			case why == "":
@@ -289,6 +338,53 @@ func checkLoops(t *testing.T, p string, re *syntax.Regexp) {
 	for _, sub := range re.Sub {
 		checkLoops(t, p, sub)
 	}
+}
+
+// refsLoopGroup reports whether repl, read as Java reads it, refers to a
+// capturing group that the pattern nests in a repetition. It walks the
+// syntax tree on its own, independently of translatePattern.
+func refsLoopGroup(t *testing.T, repl, pattern string) bool { //nolint:gocyclo // an independent reading of Java group references
+	t.Helper()
+	re, err := syntax.Parse(pattern, syntax.Perl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inLoop := map[int]bool{}
+	var walk func(r *syntax.Regexp, loop bool)
+	walk = func(r *syntax.Regexp, loop bool) {
+		loop = loop || r.Op == syntax.OpStar || r.Op == syntax.OpPlus || r.Op == syntax.OpRepeat && r.Max != 1
+		if r.Op == syntax.OpCapture && loop {
+			inLoop[r.Cap] = true
+		}
+		for _, s := range r.Sub {
+			walk(s, loop)
+		}
+	}
+	walk(re, false)
+	names := map[string]int{}
+	for i, n := range re.CapNames() {
+		names[n] = i
+	}
+	for i := 0; i < len(repl); i++ {
+		switch {
+		case repl[i] == '\\':
+			i++
+		case repl[i] == '$' && i+1 < len(repl) && repl[i+1] == '{':
+			end := strings.IndexByte(repl[i:], '}')
+			if end > 0 && inLoop[names[repl[i+2:i+end]]] && repl[i+2:i+end] != "" {
+				return true
+			}
+		case repl[i] == '$' && i+1 < len(repl) && repl[i+1] >= '0' && repl[i+1] <= '9':
+			ref, j := int(repl[i+1]-'0'), i+2
+			for j < len(repl) && repl[j] >= '0' && repl[j] <= '9' && ref*10+int(repl[j]-'0') <= re.MaxCap() {
+				ref, j = ref*10+int(repl[j]-'0'), j+1
+			}
+			if inLoop[ref] {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func isPrintableASCII(s string) bool {
