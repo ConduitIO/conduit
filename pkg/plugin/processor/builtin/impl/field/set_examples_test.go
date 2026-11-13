@@ -132,3 +132,96 @@ func ExampleSetProcessor_template() {
 	//    }
 	//  }
 }
+
+func ExampleSetProcessor_typed() {
+	p := NewSetProcessor(log.Nop())
+
+	exampleutil.RunExample(p, exampleutil.Example{
+		Summary: `Set a typed field from a template`,
+		Description: `This example sets ` + "`.Payload.After.version`" + ` to the integer ` + "`2`" + `, instead of the
+string ` + "`\"2\"`" + ` a template renders. The conversion is the one ` + "`field.convert`" + ` uses.`,
+		Config: config.Config{"field": ".Payload.After.version", "value": "{{ add 1 1 }}", "type": "int"},
+		Have: opencdc.Record{
+			Operation: opencdc.OperationCreate,
+			Payload:   opencdc.Change{After: opencdc.StructuredData{"id": 1}},
+		},
+		Want: sdk.SingleRecord{
+			Operation: opencdc.OperationCreate,
+			Payload:   opencdc.Change{After: opencdc.StructuredData{"id": 1, "version": 2}},
+		},
+	})
+
+	// Output:
+	// processor transformed record:
+	// --- before
+	// +++ after
+	// @@ -1,12 +1,13 @@
+	//  {
+	//    "position": null,
+	//    "operation": "create",
+	//    "metadata": null,
+	//    "key": null,
+	//    "payload": {
+	//      "before": null,
+	//      "after": {
+	// -      "id": 1
+	// +      "id": 1,
+	// +      "version": 2
+	//      }
+	//    }
+	//  }
+}
+
+func ExampleSetProcessor_copyField() {
+	p := NewSetProcessor(log.Nop())
+
+	exampleutil.RunExample(p, exampleutil.Example{
+		Summary: `Copy a field with its type`,
+		Description: `This example copies the structured ` + "`.Payload.After.customer`" + ` field into the key, the
+way Kafka Connect's ` + "`ValueToKey`" + ` does. ` + "`from`" + ` is a field reference, not a template, so the copy keeps the
+type of the field (here structured data) and shares no data with it.`,
+		Config: config.Config{"field": ".Key", "from": ".Payload.After.customer"},
+		Have: opencdc.Record{
+			Operation: opencdc.OperationCreate,
+			Key:       opencdc.RawData("1"),
+			Payload: opencdc.Change{After: opencdc.StructuredData{
+				"customer": map[string]any{"id": 7, "region": "eu"},
+				"total":    9.5,
+			}},
+		},
+		Want: sdk.SingleRecord{
+			Operation: opencdc.OperationCreate,
+			Key:       opencdc.StructuredData{"id": 7, "region": "eu"},
+			Payload: opencdc.Change{After: opencdc.StructuredData{
+				"customer": map[string]any{"id": 7, "region": "eu"},
+				"total":    9.5,
+			}},
+		},
+	})
+
+	// Output:
+	// processor transformed record:
+	// --- before
+	// +++ after
+	// @@ -1,16 +1,19 @@
+	//  {
+	//    "position": null,
+	//    "operation": "create",
+	//    "metadata": null,
+	// -  "key": "1",
+	// +  "key": {
+	// +    "id": 7,
+	// +    "region": "eu"
+	// +  },
+	//    "payload": {
+	//      "before": null,
+	//      "after": {
+	//        "customer": {
+	//          "id": 7,
+	//          "region": "eu"
+	//        },
+	//        "total": 9.5
+	//      }
+	//    }
+	//  }
+}

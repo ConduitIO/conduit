@@ -90,7 +90,7 @@ func (p *ConvertProcessor) Process(_ context.Context, records []opencdc.Record) 
 		if err != nil {
 			return append(out, sdk.ErrorRecord{Error: err})
 		}
-		newVal, err := p.stringToType(p.toString(ref.Get()), p.config.Type)
+		newVal, err := stringToType(p.toString(ref.Get()), p.config.Type)
 		if err != nil {
 			return append(out, sdk.ErrorRecord{Error: err})
 		}
@@ -103,7 +103,10 @@ func (p *ConvertProcessor) Process(_ context.Context, records []opencdc.Record) 
 	return out
 }
 
-func (p *ConvertProcessor) stringToType(value, typ string) (any, error) {
+// stringToType converts value to typ (string, int, float, bool or time). It
+// is shared by field.convert and the `type` parameter of field.set, so the two
+// convert the same way. Errors never quote value.
+func stringToType(value, typ string) (any, error) {
 	switch typ {
 	case "string":
 		return value, nil
