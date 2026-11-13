@@ -33,7 +33,9 @@ Alternatively, set `sdk.schema.encode.payload.strategy: "extend"` (or `sdk.schem
 on that processor (`conduit-processor-sdk` v0.10.0). Its middleware then builds the new schema version from the
 carried schema instead of inferring one: fields still present keep their carried type, added top-level fields
 become nullable with a null default, and removed top-level fields are left out. A value that does not fit its
-carried type fails the record. The default is `infer`.
+carried type fails the record, and so does a key added to or removed from a nested record, or a `payload.before`
+and `payload.after` with different top-level fields. On a CDC update, have the processor change both parts (for
+example `.Payload.Before.x` and `.Payload.After.x`), or use `enabled: "false"` instead. The default is `infer`.
 
 ## `processor.avro_encode.schema_mismatch`
 

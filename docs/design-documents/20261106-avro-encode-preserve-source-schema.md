@@ -256,7 +256,8 @@ downstream (DLQ write or pipeline stop), so invariants 1 and 3 hold on every pat
 - **v0.22:** `fromRecord` ships opt-in. Release notes and docs explain it and the
   `sdk.schema.encode.payload.enabled: false` requirement for shape-changing processors before it, and
   the `sdk.schema.encode.payload.strategy: extend` alternative that shipped with `conduit-processor-sdk`
-  v0.10.0.
+  v0.10.0. `extend` also fails a record whose nested record gained or lost a key, or whose
+  `payload.before` and `payload.after` have different top-level fields.
 - **v0.23:** `autoRegister` logs a warning (once per processor) and increments a counter when it infers
   a schema for a record that carries one, naming `fromRecord`.
 - **v0.24:** `autoRegister` uses the carried schema when a record has one (the `fromRecord` algorithm),
