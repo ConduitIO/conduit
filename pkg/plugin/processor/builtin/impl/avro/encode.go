@@ -143,7 +143,9 @@ It provides three strategies for determining the schema:
 
   A processor before this one that changes the shape of the record (for example ` + "`field.set`" + ` adding a
   field) registers an inferred schema for its output by default. Set ` + "`sdk.schema.encode.payload.enabled: false`" + `
-  on that processor so the record still carries the source schema when it reaches this processor.
+  on that processor so the record still carries the source schema when it reaches this processor. Setting
+  ` + "`sdk.schema.encode.payload.strategy: extend`" + ` on that processor also works: it builds the new schema from the carried
+  one and keeps the carried types.
 
 When the encoded field is the whole key or the whole payload (` + "`.Key`, `.Payload.After`, `.Payload.Before`" + `),
 the record's schema metadata for that part (` + "`opencdc.key.schema.*`" + ` or ` + "`opencdc.payload.schema.*`" + `) is removed, because
