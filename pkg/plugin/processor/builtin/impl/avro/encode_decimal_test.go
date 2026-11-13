@@ -131,7 +131,7 @@ func TestEncodeProcessor_DecimalNotRepresentable(t *testing.T) {
 
 			md := opencdc.Metadata{}
 			if tc.strategy == strategyFromRecordCarried {
-				md[opencdc.MetadataPayloadSchemaSubject] = "src-value"
+				md[opencdc.MetadataPayloadSchemaSubject] = decimalSubject(t, "src")
 				md[opencdc.MetadataPayloadSchemaVersion] = "1"
 			}
 			value := mustRat(t, tc.value)
@@ -156,8 +156,15 @@ func TestEncodeProcessor_DecimalNotRepresentable(t *testing.T) {
 }
 
 // strategyFromRecordCarried is schema.strategy fromRecord on a record that
-// carries decimal50Schema as subject src-value, version 1.
+// carries decimal50Schema as version 1 of decimalSubject(t, "src").
 const strategyFromRecordCarried = "fromRecord carried"
+
+// decimalSubject returns a registry subject unique to the running (sub)test.
+// CI runs these tests against one shared registry, where a fixed subject
+// would make version 1 the schema an earlier subtest registered.
+func decimalSubject(t *testing.T, base string) string {
+	return base + "-" + strings.NewReplacer("/", "-", " ", "_", ",", "", "(", "", ")", "").Replace(t.Name()) + "-value"
+}
 
 // newDecimalEncoder returns an opened avro.encode processor with the given
 // strategy and the in-memory registry it uses. For preRegistered and
@@ -172,20 +179,20 @@ func newDecimalEncoder(t *testing.T, strategy string) (*EncodeProcessor, schemar
 	cfg := config.Config{"schema.strategy": strategy}
 	switch strategy {
 	case "autoRegister":
-		cfg["schema.autoRegister.subject"] = "dec-value"
+		cfg["schema.autoRegister.subject"] = decimalSubject(t, "dec")
 	case "fromRecord":
-		cfg["schema.fromRecord.subject"] = "dec-value"
+		cfg["schema.fromRecord.subject"] = decimalSubject(t, "dec")
 	case strategyFromRecordCarried:
-		if _, err := client.CreateSchema(ctx, "src-value", sr.Schema{Type: sr.TypeAvro, Schema: decimal50Schema}); err != nil {
+		if _, err := client.CreateSchema(ctx, decimalSubject(t, "src"), sr.Schema{Type: sr.TypeAvro, Schema: decimal50Schema}); err != nil {
 			t.Fatal(err)
 		}
 		cfg["schema.strategy"] = "fromRecord"
-		cfg["schema.fromRecord.subject"] = "dec-value"
+		cfg["schema.fromRecord.subject"] = decimalSubject(t, "dec")
 	case "preRegistered":
-		if _, err := client.CreateSchema(ctx, "dec-value", sr.Schema{Type: sr.TypeAvro, Schema: decimal50Schema}); err != nil {
+		if _, err := client.CreateSchema(ctx, decimalSubject(t, "dec"), sr.Schema{Type: sr.TypeAvro, Schema: decimal50Schema}); err != nil {
 			t.Fatal(err)
 		}
-		cfg["schema.preRegistered.subject"] = "dec-value"
+		cfg["schema.preRegistered.subject"] = decimalSubject(t, "dec")
 		cfg["schema.preRegistered.version"] = "1"
 	}
 	p := NewEncodeProcessor(log.Nop())
