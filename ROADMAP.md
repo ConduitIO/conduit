@@ -89,8 +89,8 @@ project and must pass the same conformance suite in CI.
   conformance kit. Community SDKs that pass the kit are listed as community-maintained.
 
 Java teams can also run existing Kafka Connect connector JARs (v0.23) and use the SMT compatibility
-pack (reduced in v0.22, completed in v0.23); the Java SDK (v0.25–v0.26) is the native path forward for Kafka Connect
-connector authors.
+pack (reduced in v0.22, completed in v0.23); the Java SDK (v0.25–v0.26) is the native path
+forward for Kafka Connect connector authors.
 
 **Two processor runtimes, one contract.** Processors run either in-process as WASM (sandboxed;
 suited to Go, Rust, TypeScript and untrusted logic) or out-of-process over gRPC (needed for Python
@@ -358,7 +358,7 @@ and two green nightlies on the release branch.
 ### v0.22 — Correct data on the default path (target 2026-11-25)
 
 v0.22 ships on the monthly train with what is ready instead of waiting for the whole Kafka Connect
-part 2 list (decided 2026-11-08; scope confirmed 2026-11-13). It carries the data-integrity and
+part 2 list (decided 2026-11-08; scope set 2026-11-10). It carries the data-integrity and
 Avro-correctness work that the Debezium-shaped output and a migrated pipeline both depend on. The
 rest of part 2 moved to v0.23 and is marked _moved from v0.22_ there. Performance work is arch-v2
 only.
