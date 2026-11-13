@@ -19,7 +19,7 @@ it. Everything the engines share sits below them and is described first.
 A single engine is planned to replace both
 (ADR [`20261009-single-pipeline-engine`](../architecture-decision-records/20261009-single-pipeline-engine.md),
 **proposed, held**); its design is [`20261009-staged-batch-engine`](../design-documents/20261009-staged-batch-engine.md).
-The default flip and the deletion of v1 are v0.22 work.
+The default flip and the deletion of v1 are v0.23 work.
 
 ## The shared connector layer
 
