@@ -59,6 +59,7 @@ var DefaultBuiltinProcessors = map[string]ProcessorPluginConstructor{
 	"filter":              Constructor(impl.NewFilterProcessor),
 	"field.convert":       Constructor(field.NewConvertProcessor),
 	"field.exclude":       Constructor(field.NewExcludeProcessor),
+	"field.hoist":         Constructor(field.NewHoistProcessor),
 	"field.rename":        Constructor(field.NewRenameProcessor),
 	"field.set":           Constructor(field.NewSetProcessor),
 	"flatten":             Constructor(flatten.NewProcessor),
