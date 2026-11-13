@@ -25,51 +25,65 @@ import (
 // families.
 const debeziumUpstream = "debezium"
 
-// keyReplaceNull is the JsonConverter setting, under a "key." or "value."
-// converter prefix, that decides whether a NULL in a column with a default is
-// written as the default.
-const keyReplaceNull = "replace.null.with.default"
+// Settings that stop a converter writing a column's default in place of NULL.
+const (
+	// keyReplaceNull is JsonConverter's (Kafka Connect 3.5 and later, KIP-581):
+	// true by default; false keeps NULL.
+	keyReplaceNull = "replace.null.with.default"
+	// keyIgnoreDefault is the Confluent Avro, Protobuf and JSON Schema
+	// converters' (schema-registry AbstractDataConfig): false by default;
+	// true keeps NULL.
+	keyIgnoreDefault = "ignore.default.for.nullables"
+)
+
+// Confluent converters that take keyIgnoreDefault.
+var confluentConverters = map[string]bool{
+	"io.confluent.connect.avro.AvroConverter":         true,
+	"io.confluent.connect.protobuf.ProtobufConverter": true,
+	"io.confluent.connect.json.JsonSchemaConverter":   true,
+}
 
 // nullDefaultNotes returns a non-blocking kc.default_differs note for a
-// Debezium source connector whose key or value converter does not explicitly
-// set replace.null.with.default=false. Kafka Connect's converters default it
-// to true, so a NULL in a column that has a default was written as the
-// default; Conduit's source writes the NULL. Translating is still right, so
-// the note does not block, but a consumer that relied on the default must now
-// handle null.
+// Debezium source connector whose key or value converter may write a
+// column's schema default in place of NULL. Conduit's source writes the NULL.
+// Translating is still right, so the note does not block, but a consumer
+// that relied on the default must now handle null.
 //
-// The setting is read the way Kafka Connect configures a converter: from the
+// Settings are read the way Kafka Connect configures a converter: from the
 // connector's <side>.converter.* keys when the connector names the converter,
 // else from the worker's. A side whose converter writes no schema
-// (ByteArrayConverter, StringConverter) has no column defaults to apply and
-// is skipped; any other converter is treated like JsonConverter, since this
-// package models no other converter's behavior.
+// (ByteArrayConverter, StringConverter) has no defaults to apply and is
+// skipped. JsonConverter and the Confluent schema converters are checked
+// against their own setting; any other converter is noted without a setting
+// name, since this package does not model it.
 func nullDefaultNotes(cl rules.Classified, worker []rules.Decision) []kcmigrate.Note {
 	if cl.Rules == nil || cl.Rules.Scope != rules.ScopeSource || cl.Rules.Upstream.Name != debeziumUpstream {
 		return nil
 	}
-	var paths []string
+	var found, fixes []string
 	for _, side := range []string{"key", "value"} {
-		if replacesNullWithDefault(cl.Decisions, worker, side) {
-			paths = append(paths, side+".converter."+keyReplaceNull)
+		f, fix := nullDefaultSide(cl.Decisions, worker, side)
+		if f != "" {
+			found, fixes = append(found, f), append(fixes, fix)
 		}
 	}
-	if len(paths) == 0 {
+	if len(found) == 0 {
 		return nil
 	}
 	return []kcmigrate.Note{{
 		Code: kcmigrate.CodeDefaultDiffers.Reason(),
 		Rule: strings.TrimSuffix(cl.Rules.Name(), ".yaml") + "/notes/replace-null-with-default",
-		Reason: "Kafka Connect wrote a column's default in place of NULL, because replace.null.with.default is true by default and " +
-			unsetPhrase(paths) + " Conduit writes NULL. Consumers that relied on the default must handle null.",
-		Fix: "None needed in Conduit. To compare outputs, set key.converter.replace.null.with.default=false and " +
-			"value.converter.replace.null.with.default=false on the Kafka Connect side.",
+		Reason: "Kafka Connect's converters write a column's schema default, when it has one, in place of NULL. Conduit writes NULL. " +
+			"Consumers that relied on the default must handle null. " + strings.Join(found, " "),
+		Fix: "None needed in Conduit. To compare outputs on the Kafka Connect side: " + strings.Join(fixes, " ") +
+			" Transforms in the chain have their own replace.null.with.default setting (Kafka Connect 3.9 and later).",
 	}}
 }
 
-// replacesNullWithDefault reports whether side's converter would write a
-// column default in place of NULL.
-func replacesNullWithDefault(connector, worker []rules.Decision, side string) bool {
+// nullDefaultSide returns, for side ("key" or "value"), what the report says
+// when its converter may write a default in place of NULL and the setting
+// that would stop it; both are empty when it does not.
+func nullDefaultSide(connector, worker []rules.Decision, side string) (found, fix string) {
 	prefix := side + ".converter"
 	layer := worker
 	for _, l := range [][]rules.Decision{connector, worker} {
@@ -79,27 +93,24 @@ func replacesNullWithDefault(connector, worker []rules.Decision, side string) bo
 		}
 	}
 	class, _ := lastValue(layer, prefix)
-	if class == byteArrayConverter || class == stringConverter {
-		return false
-	}
-	if class == "" {
-		// No converter class anywhere (kc.converter_unknown blocks): read the
-		// setting from the connector, then the worker, so a lone setting counts.
-		for _, l := range [][]rules.Decision{connector, worker} {
-			if v, ok := lastValue(l, prefix+"."+keyReplaceNull); ok {
-				return !strings.EqualFold(v, "false")
-			}
+	switch {
+	case class == byteArrayConverter || class == stringConverter:
+		return "", ""
+	case class == jsonConverter:
+		path := prefix + "." + keyReplaceNull
+		if v, ok := lastValue(layer, path); ok && strings.EqualFold(v, "false") {
+			return "", ""
 		}
-		return true
+		return path + " is not set to false (JsonConverter's default is true).",
+			"set " + path + "=false (Kafka Connect 3.5 and later)."
+	case confluentConverters[class]:
+		path := prefix + "." + keyIgnoreDefault
+		if v, ok := lastValue(layer, path); ok && strings.EqualFold(v, "true") {
+			return "", ""
+		}
+		return path + " is not set to true (the Confluent converters' default is false).",
+			"set " + path + "=true."
 	}
-	v, ok := lastValue(layer, prefix+"."+keyReplaceNull)
-	return !ok || !strings.EqualFold(v, "false")
-}
-
-// unsetPhrase says which of the setting paths are not false.
-func unsetPhrase(paths []string) string {
-	if len(paths) == 1 {
-		return paths[0] + " is not set to false."
-	}
-	return "neither " + paths[0] + " nor " + paths[1] + " is set to false."
+	return prefix + " is not a converter this version of migrate models, and it may write defaults in place of NULL.",
+		"check the documentation of " + prefix + " for a setting that keeps NULL."
 }

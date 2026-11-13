@@ -67,66 +67,122 @@ func TestNullDefaultNote(t *testing.T) {
 	const (
 		keyPath   = "key.converter.replace.null.with.default"
 		valuePath = "value.converter.replace.null.with.default"
+		keyIgn    = "key.converter.ignore.default.for.nullables"
+		valueIgn  = "value.converter.ignore.default.for.nullables"
+		strKey    = "key.converter=org.apache.kafka.connect.storage.StringConverter\n"
+		strValue  = "value.converter=org.apache.kafka.connect.storage.StringConverter\n"
+		avroKey   = "key.converter=io.confluent.connect.avro.AvroConverter\n"
+		avroValue = "value.converter=io.confluent.connect.avro.AvroConverter\n"
+		unkValue  = "value.converter=com.example.CustomConverter\n"
 	)
 	tests := []struct {
 		name      string
 		connector string
 		worker    string
-		want      bool
-		paths     []string // the setting paths the reason names, when want
+		want      []string // each named in the reason, when a note is expected
+		not       []string // none named in the reason
 	}{
-		{"unset", pgNullBase + jsonKey + jsonValue, "", true, []string{keyPath, valuePath}},
-		{"both off on connector", pgNullBase + jsonKey + jsonValue + keyOff + valueOff, "", false, nil},
-		{"set to true", pgNullBase + jsonKey + jsonValue + "key.converter.replace.null.with.default=true\n" + valueOff, "", true, []string{keyPath}},
-		{"only key off", pgNullBase + jsonKey + jsonValue + keyOff, "", true, []string{valuePath}},
-		{"only value off", pgNullBase + jsonKey + jsonValue + valueOff, "", true, []string{keyPath}},
-		{"false is case-insensitive", pgNullBase + jsonKey + jsonValue + "key.converter.replace.null.with.default=FALSE\n" + valueOff, "", false, nil},
-		{"worker only, both off", pgNullBase, jsonKey + jsonValue + keyOff + valueOff, false, nil},
-		{"worker only, unset", pgNullBase, jsonKey + jsonValue, true, []string{keyPath, valuePath}},
+		{"unset", pgNullBase + jsonKey + jsonValue, "", []string{keyPath, valuePath}, nil},
+		{"both off on connector", pgNullBase + jsonKey + jsonValue + keyOff + valueOff, "", nil, nil},
+		{"set to true", pgNullBase + jsonKey + jsonValue + "key.converter.replace.null.with.default=true\n" + valueOff, "", []string{keyPath}, []string{valuePath}},
+		{"only key off", pgNullBase + jsonKey + jsonValue + keyOff, "", []string{valuePath}, []string{keyPath}},
+		{"only value off", pgNullBase + jsonKey + jsonValue + valueOff, "", []string{keyPath}, []string{valuePath}},
+		{"false is case-insensitive", pgNullBase + jsonKey + jsonValue + "key.converter.replace.null.with.default=FALSE\n" + valueOff, "", nil, nil},
+		{"worker only, both off", pgNullBase, jsonKey + jsonValue + keyOff + valueOff, nil, nil},
+		{"worker only, unset", pgNullBase, jsonKey + jsonValue, []string{keyPath, valuePath}, nil},
 		{
 			// The connector names the converter, so Kafka Connect reads
 			// its settings from the connector only: the worker's false
 			// does not apply.
 			"connector converter overrides worker setting",
-			pgNullBase + jsonKey + jsonValue, keyOff + valueOff, true,
+			pgNullBase + jsonKey + jsonValue, keyOff + valueOff,
+			[]string{keyPath, valuePath},
+			nil,
+		},
+		{
+			"connector off, worker on",
+			pgNullBase + jsonKey + jsonValue + keyOff + valueOff,
+			"key.converter.replace.null.with.default=true\nvalue.converter.replace.null.with.default=true\n",
+			nil, nil,
+		},
+		{
+			// Precedence: the connector's class wins over the worker's, so the
+			// worker's JsonConverter does not apply to a StringConverter side.
+			"worker JsonConverter, connector StringConverter",
+			pgNullBase + strKey + strValue, jsonKey + jsonValue, nil, nil,
+		},
+		{
+			"worker StringConverter, connector JsonConverter",
+			pgNullBase + jsonKey + jsonValue, strKey + strValue,
+			[]string{keyPath, valuePath},
+			nil,
+		},
+		{
+			// Both layers name JsonConverter: only the connector's setting counts.
+			"both name JsonConverter, connector off, worker unset",
+			pgNullBase + jsonKey + jsonValue + keyOff + valueOff, jsonKey + jsonValue, nil, nil,
+		},
+		{
+			"both name JsonConverter, connector unset, worker off",
+			pgNullBase + jsonKey + jsonValue, jsonKey + jsonValue + keyOff + valueOff,
+			[]string{keyPath, valuePath},
+			nil,
+		},
+		{"converters without a schema are skipped", pgNullBase + strKey + "value.converter=org.apache.kafka.connect.converters.ByteArrayConverter\n", "", nil, nil},
+		{
+			// Confluent converters use ignore.default.for.nullables, not
+			// replace.null.with.default.
+			"Confluent converter unset",
+			pgNullBase + jsonKey + avroValue + keyOff, "",
+			[]string{valueIgn},
+			[]string{valuePath, keyPath, keyIgn},
+		},
+		{
+			"Confluent converter ignores replace.null.with.default",
+			pgNullBase + avroKey + avroValue + keyOff + valueOff, "",
+			[]string{keyIgn, valueIgn},
+			[]string{keyPath, valuePath},
+		},
+		{"Confluent converter set to true", pgNullBase + avroKey + avroValue + "key.converter.ignore.default.for.nullables=true\nvalue.converter.ignore.default.for.nullables=TRUE\n", "", nil, nil},
+		{
+			"Confluent converter set to false",
+			pgNullBase + avroKey + avroValue + "key.converter.ignore.default.for.nullables=true\nvalue.converter.ignore.default.for.nullables=false\n",
+			"",
+			[]string{valueIgn},
+			[]string{keyIgn},
+		},
+		{
+			"Protobuf and JSON Schema use the same setting",
+			pgNullBase + "key.converter=io.confluent.connect.protobuf.ProtobufConverter\nvalue.converter=io.confluent.connect.json.JsonSchemaConverter\n",
+			"",
+			[]string{keyIgn, valueIgn},
 			[]string{keyPath, valuePath},
 		},
 		{
-			"connector converter off, worker on",
-			pgNullBase + jsonKey + jsonValue + keyOff + valueOff,
-			"key.converter.replace.null.with.default=true\nvalue.converter.replace.null.with.default=true\n",
-			false, nil,
-		},
-		{
-			"converters without a schema are skipped",
-			pgNullBase + "key.converter=org.apache.kafka.connect.storage.StringConverter\nvalue.converter=org.apache.kafka.connect.converters.ByteArrayConverter\n",
-			"", false, nil,
-		},
-		{
-			"other schema converter is noted conservatively",
-			pgNullBase + jsonKey + "value.converter=io.confluent.connect.avro.AvroConverter\n" + keyOff,
-			"", true,
-			[]string{valuePath},
+			"unknown converter names no setting",
+			pgNullBase + jsonKey + unkValue + keyOff, "",
+			[]string{"value.converter is not a converter this version"},
+			[]string{valuePath, valueIgn},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			is := is.New(t)
 			n, ok := nullDefNote(t, tt.connector, tt.worker)
-			is.Equal(ok, tt.want)
+			is.Equal(ok, len(tt.want) > 0)
 			if !ok {
 				return
 			}
 			is.Equal(n.Code, "kc.default_differs")
 			is.True(!n.Blocking)
 			is.True(n.Fix != "")
-			for _, p := range []string{keyPath, valuePath} {
-				named := false
-				for _, want := range tt.paths {
-					named = named || want == p
-				}
-				// The reason names exactly the sides that replace.
-				is.Equal(strings.Contains(n.Reason, p), named)
+			is.True(!strings.Contains(n.Reason, "wrote a column's default in place"))
+			for _, w := range tt.want {
+				is.True(strings.Contains(n.Reason, w))
+			}
+			for _, w := range tt.not {
+				is.True(!strings.Contains(n.Reason, w))
+				is.True(!strings.Contains(n.Fix, w))
 			}
 		})
 	}

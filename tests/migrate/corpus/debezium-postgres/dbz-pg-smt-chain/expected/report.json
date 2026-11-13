@@ -371,8 +371,8 @@
         },
         {
           "code": "kc.default_differs",
-          "reason": "Kafka Connect wrote a column's default in place of NULL, because replace.null.with.default is true by default and neither key.converter.replace.null.with.default nor value.converter.replace.null.with.default is set to false. Conduit writes NULL. Consumers that relied on the default must handle null.",
-          "fix": "None needed in Conduit. To compare outputs, set key.converter.replace.null.with.default=false and value.converter.replace.null.with.default=false on the Kafka Connect side.",
+          "reason": "Kafka Connect's converters write a column's schema default, when it has one, in place of NULL. Conduit writes NULL. Consumers that relied on the default must handle null. key.converter.replace.null.with.default is not set to false (JsonConverter's default is true). value.converter.replace.null.with.default is not set to false (JsonConverter's default is true).",
+          "fix": "None needed in Conduit. To compare outputs on the Kafka Connect side: set key.converter.replace.null.with.default=false (Kafka Connect 3.5 and later). set value.converter.replace.null.with.default=false (Kafka Connect 3.5 and later). Transforms in the chain have their own replace.null.with.default setting (Kafka Connect 3.9 and later).",
           "blocking": false,
           "rule": "debezium-postgres/notes/replace-null-with-default"
         },
