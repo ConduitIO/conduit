@@ -133,7 +133,9 @@ clean. The same release changed two things the replay depends on: a field remove
 the record (`ErrFieldNotInSchema`) instead of being silently dropped from Before, so a translated exclude
 removes the field from both images; and a delete's nil after stays nil, so the unguarded chain no longer
 turns a delete into `{}`. `replay_test.go` keeps a negative control for the first: an After-only exclude must
-fail every update with `ErrFieldNotInSchema`.
+fail exactly the four updates of `items` (`items@5` to `items@8`, the ones with a before-image) with
+`ErrFieldNotInSchema`. A second control excludes only `big` and must report value differences naming `attrs`,
+so the replay fails if `Compare` stops comparing values.
 
 **Kafka Connect 4.2 behaviours the design depends on** (`goldens/`):
 
@@ -154,7 +156,18 @@ fail every update with `ErrFieldNotInSchema`.
 - Debezium 3.7 no longer defines `delete.handling.mode` or `drop.tombstones`; Connect ignores the
   unknown keys, so they have no effect (`dbz-extractnewrecordstate`).
 - `delete.tombstone.handling.mode` takes `drop`, `tombstone`, `rewrite`, `rewrite-with-tombstone`
-  and `delete-to-tombstone`.
+  and `delete-to-tombstone`. Both `tombstone` (the default) and `drop` drop Debezium's own tombstone.
+- `ReplaceField` renames build the value from the original names and read each output field back
+  through the reverse mapping, so a rename whose target is already a column fails the record: as a
+  duplicate field when the source is there too (`items`), and as `note is not a valid field name`
+  when it is not (`strict`) (`pg-reshape`, `rename-onto-existing-enrs-null-false`).
+- `ExtractField` of `after` keeps Debezium's own tombstone; the native source emits none.
+
+**The engine evaluates a processor's condition before the processor decodes the record.** The
+Conduit Postgres source attaches a schema, so the row reaches the chain as encoded bytes, and a
+condition that tests a field of it is false until some processor has decoded it and dropped the
+schema keys. The translators mark such processors (`Processor.NeedsDecoded`), and the chain removes
+the side's schema keys before them; `TestTranslators_GuardsNeedTheDecodedRow` fails without it.
 
 Not modelled: a real Debezium `SourceRecord` has a null partition and timestamp, where the oracle's
 copy carries the consumed message's partition and a fixed timestamp. It only matters for
@@ -220,6 +233,19 @@ holds the captured schemas at the versions they had. Filtered and failed records
 such. `replay_test.go` shows the pattern, including chains that must differ (an After-only exclude that
 processor-sdk v0.10.0 refuses on updates; an empty chain against the routing and header goldens) so the
 harness is known to be able to fail.
+
+### The translator gate
+
+`replay/translators_test.go` is the enforcement point of design decision 21. For every run of
+`pg-unwrap`, `pg-reshape` and `pg-envelope` it builds the Debezium connector of the capture (topic
+prefix `dbz`, schema `public`, JsonConverters with `replace.null.with.default=false`) with the run's
+chain, runs `migrate` with the shipped translators, and either replays the processors it emitted
+over the committed records, with the topic the Kafka destination evaluates from its `topic` setting,
+and requires a clean diff, or requires the chain to be refused. A run that translates without being
+listed as replayed fails, so no SMT ships without its diff. The same is done for Filter chains on
+an S3 sink (records built as the Kafka source reads them) and for every hand-written RegexRouter run,
+whose topic template is evaluated by the Kafka destination's own code. The only known differences
+are on topic names Kafka rejects (the Kelvin sign), listed in the test.
 
 ### What `Compare` compares
 

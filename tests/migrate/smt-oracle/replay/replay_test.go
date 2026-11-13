@@ -207,12 +207,45 @@ func TestReplay_ReplaceFieldExcludeAfterOnlyFails(t *testing.T) {
 	if len(failures) == 0 {
 		t.Fatal("expected an After-only exclude to fail on updates with a Before image, found no difference")
 	}
+	// Exactly the four updates of items, whose REPLICA IDENTITY FULL gives
+	// them a before-image holding the excluded columns, and nothing else.
+	failed := map[string]bool{}
 	for _, f := range failures {
 		if !strings.Contains(f, " update: ") || !strings.Contains(f, "field is not in the attached schema") {
 			t.Errorf("unexpected failure, want only updates that fail with ErrFieldNotInSchema: %s", f)
 		}
+		failed[strings.SplitN(f, " ", 2)[0]] = true
 	}
-	t.Logf("After-only exclude, as expected, fails: %v", failures)
+	want := []string{"items@5", "items@6", "items@7", "items@8"}
+	if len(failed) != len(want) {
+		t.Errorf("failed records %v, want exactly %v", failed, want)
+	}
+	for _, w := range want {
+		if !failed[w] {
+			t.Errorf("%s did not fail; want exactly %v", w, want)
+		}
+	}
+}
+
+// TestReplay_ReplaceFieldExcludeOneColumnFails is the value-level negative
+// control: a chain that excludes big but keeps attrs must report a value
+// difference naming attrs on every change that has a row, so a Compare that
+// stopped comparing values would fail here.
+func TestReplay_ReplaceFieldExcludeOneColumnFails(t *testing.T) {
+	chain := []Step{{
+		Plugin:    "builtin:field.exclude",
+		Settings:  map[string]string{"fields": ".Payload.Before.big,.Payload.After.big"},
+		Condition: `{{ not (eq (printf "%v" .Operation) "delete") }}`,
+	}}
+	failures := replayExcludeFailures(t, chain)
+	if len(failures) == 0 {
+		t.Fatal("expected value differences naming attrs, found none")
+	}
+	for _, f := range failures {
+		if !strings.Contains(f, "value.attrs: only in Conduit") {
+			t.Errorf("unexpected difference, want only value.attrs kept by Conduit: %s", f)
+		}
+	}
 }
 
 // TestReplay_SchemaBearingRecords runs a chain over records that carry registry schemas

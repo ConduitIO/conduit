@@ -50,7 +50,8 @@ Checked against `main` (9de15d31), Apache Kafka 4.2.0 and the Debezium source.
   - `field.rename` of a missing field writes `new: nil`. Renames are sequential and fail with
     `ErrFieldExists`.
   - The reference resolver creates intermediate maps on nested paths. It turns a nil side into
-    `StructuredData{}` (#3147, open). Setting a string into `.Key` or `.Payload.*` stores `RawData`.
+    `StructuredData{}` (#3147). processor-sdk v0.10.0 fixed the read and delete half: a nil side now stays
+    nil. Setting a string into `.Key` or `.Payload.*` stores `RawData`.
 - **Schema middleware** (`conduit-processor-sdk` v0.9.2). Every built-in processor runs the encode
   middleware. Suppose a processor reshapes a side whose `opencdc.<side>.schema.subject`/`.version` did not
   change. The middleware then extracts a schema from the values, which widens int to long and drops
@@ -91,7 +92,8 @@ Checked against `main` (9de15d31), Apache Kafka 4.2.0 and the Debezium source.
 
 ## Maintainer decisions (2026-11-10)
 
-Recorded as decided. Decisions 17 to 21 came out of the second review round:
+Recorded as decided. Decisions 17 to 21 came out of the second review round, decision 22 out of the B11
+oracle (decided 2026-11-13), and decision 23 out of the B3 review:
 
 1. **The v0.22 cut line.**
    - The base work: the processors from B1 and B2 (including `field.hoist`), the B3 framework and the B11
@@ -144,6 +146,25 @@ Recorded as decided. Decisions 17 to 21 came out of the second review round:
     - The end-to-end comparison against real Postgres in Docker stays in the B11 workflow (manual and
       nightly).
     - If B11 slips, B4 and B5 do not merge, and their SMTs keep the v0.23 refusal.
+22. **Converters on Debezium sources (decided 2026-11-13).** The SMTs run before the
+    converter, so they see a NULL column; a JsonConverter with `replace.null.with.default` at its default
+    `true` then writes the column's schema default in its place, for the bare unwrap too
+    (`payloadDefaultConverter` in the oracle goldens; `items@1` gets `note` "none" and `qty` 5), and the
+    Conduit pipeline writes the NULL. For `ValueToKey` that changes the Kafka key, and with it the
+    partition and the per-key ordering. So a
+    Debezium-source chain translates only when the effective key and value converters are both
+    `JsonConverter` with `key.converter.replace.null.with.default=false` and
+    `value.converter.replace.null.with.default=false` set explicitly, in the layer that sets the converter
+    class, at the worker or the connector level (the connector's converter overrides the worker's, and
+    Kafka Connect configures a converter from the connector's keys when the connector names it, else from
+    the worker's). Otherwise every SMT of the chain is blocking with `kc.setting_required` and a fix that
+    names both settings. Another converter is refused the same way until the oracle covers it. The check
+    is the chain's, not a translator's (`Env.Refusal`), so every translator gets it.
+23. **Config-provider references outside the chain (decided 2026-11-11).** A config-provider reference under an
+    alias `transforms=` does not list, or in a predicate no transform names, refuses the whole chain, not
+    only its key. Kafka Connect resolves references in every key and fails the connector when it cannot,
+    so no part of the chain is known to run as written. This is fail-closed and fully reported; with
+    `--accept-gaps` the pipeline runs without the chain and every link is listed.
 
 ## Decision
 
@@ -200,7 +221,7 @@ The pass parses `transforms=` and `predicates=` into ordered alias lists and gro
 | `.predicate` names an undefined predicate | Blocking |
 | Predicate used by no transform | Translated as a no-op |
 | Predicate whose only users are refused or not emitted | Unsupported and blocking: "used only by transform(s) `<a>`, which are not translated" |
-| Config-provider reference as any SMT value | Blocking (cannot be evaluated offline) |
+| Config-provider reference as any SMT value | Blocking (cannot be evaluated offline). Under an unlisted alias or in an unused predicate it refuses the whole chain (decision 23) |
 | Sub-key no translator claims | `kc.key_unknown`, blocking (so an option added in a later KC release shows up) |
 | Class with no v0.22 translator | `kc.smt_unsupported` on every key of the alias; fix names v0.23, or "write a processor" |
 | Key of a refused SMT | The key the refusal is about gets the specific reason. The SMT's other sub-keys get "part of transform `<a>`, which is not translated: `<reason>`". All are blocking |
@@ -251,10 +272,11 @@ processor it became.
   - A second unwrap point after the first is refused.
   - `replace.null.with.default` must be set explicitly to `false` on every SMT that has the option,
     `ExtractNewRecordState` included (decisions 13 and 19).
-  - Flatten and HoistField have no such option. They read through `Struct.get`, which applies defaults. If
-    the oracle shows that a defaulted nullable column comes out with its default, they are refused on
-    Debezium sources. One thing is not verified: whether Debezium Postgres propagates column defaults into
-    the Connect schema. The oracle confirms it.
+  - The key and value converters must keep NULLs too (decision 22).
+  - Flatten and HoistField have no such option. The oracle shows that Debezium Postgres propagates column
+    defaults into the Connect schema, and that `Flatten` writes the default in place of a NULL in a defaulted
+    column (record `items@1`) while `HoistField` keeps the NULL. So `Flatten` is refused on Debezium sources,
+    and `HoistField` is not.
 - **Sink chains.**
   - The converter decides. Only `ByteArrayConverter` is translated, so the value is bytes.
   - SMTs that need a map or a struct fail on bytes in KC itself, and are refused (see the reachability
@@ -306,10 +328,10 @@ not by itself make a pipeline runnable.
 
 | Class | Converter | Reachable SMTs in v0.22 | Refused |
 | --- | --- | --- | --- |
-| debezium-postgres (source, schema mode) | any; JsonConverter schemaless is the oracle target | `Filter` + `TopicNameMatches`, `RecordIsTombstone`; `RegexRouter` and `TopicNameMatches` once T is defined (B4, below); `ReplaceField` exclude/rename, `InsertField` static/topic, `ValueToKey`, `HoistField`, `Flatten`, `ExtractNewRecordState`, `ExtractField after` | `HasHeaderKey` (Debezium headers are v0.23); everything else (v0.23) |
-| s3-sink (sink) | `ByteArrayConverter` | `Filter` + `TopicNameMatches`, `HasHeaderKey`; `RegexRouter` if the S3 destination names objects from `opencdc.collection` (checked in B3); `HoistField` on bytes | `RecordIsTombstone` unless B3 shows that the Kafka source distinguishes a null value from an empty one; every SMT that needs a map or struct (KC fails it on bytes) |
+| debezium-postgres (source, schema mode) | JsonConverter with `replace.null.with.default=false` on both sides (decision 22); schemaless is the oracle target | `Filter` + `RecordIsTombstone`; `TopicNameMatches`, `RegexRouter` and `InsertField topic.field` where T is defined (below); `ReplaceField` exclude/rename, `InsertField` static, `ValueToKey`, `HoistField`, `ExtractNewRecordState`, `ExtractField after` | `HasHeaderKey` (Debezium headers are v0.23); `Flatten` (default substitution, above); topic SMTs where T is unknown; everything else (v0.23) |
+| s3-sink (sink) | `ByteArrayConverter` | `Filter` + `TopicNameMatches`, `HasHeaderKey`; `HoistField` on bytes | `RegexRouter` (checked in B4: the S3 destination has no topic setting and names objects from `opencdc.collection` only with a partitioner other than its default); `RecordIsTombstone` (checked in B4: outside mirror mode the Kafka source writes a null value and an empty one alike); every SMT that needs a map or struct (KC fails it on bytes) |
 | s3-sink | any other | none (the converter is blocking) | all |
-| mirror-source (source of records from Kafka) | `ByteArrayConverter` | `Filter` without a topic predicate; `HoistField` on bytes | `TopicNameMatches` (T is not defined for mirror-source: its SMTs see the remote topic name after the replication policy, not `opencdc.collection`; v0.23, decision 20); `HasHeaderKey` (mirror mode omits headers that are not UTF-8); `RegexRouter` (MirrorMaker topic naming is a finisher; combining the two is v0.23) |
+| mirror-source (source of records from Kafka) | `ByteArrayConverter` | `Filter` without a topic predicate; `HoistField` on bytes | `RecordIsTombstone` (it reads records through the same Kafka source as s3-sink, so the same caveat applies); `TopicNameMatches` (T is not defined for mirror-source: its SMTs see the remote topic name after the replication policy, not `opencdc.collection`; v0.23, decision 20); `HasHeaderKey` (mirror mode omits headers that are not UTF-8); `RegexRouter` (MirrorMaker topic naming is a finisher; combining the two is v0.23) |
 | Unknown or no-pipeline classes | any | none: placeholder outcome | all |
 
 `debezium-mysql` has no class file on `main`, so its corpus cases stay pending whatever the SMT work does.
@@ -319,17 +341,17 @@ not by itself make a pipeline runnable.
 | SMT | Emits | Exact when | Refused otherwise |
 | --- | --- | --- | --- |
 | `Filter` | `filter` + `condition` | predicate translatable or absent (no predicate drops everything in both) | - |
-| `TopicNameMatches` | condition: anchored match on T (below) | `pattern` is in the RE2-safe ASCII subset and T is known | Java construct named; topic unknown |
-| `HasHeaderKey` | condition testing key `kafka.header.N` in `.Metadata` with a `range` and a flag variable (`index` cannot tell an empty value from a missing key; sprig `hasKey` does not take `opencdc.Metadata`) | sink chain from the Kafka source in non-mirror mode | source chains; mirror mode |
+| `TopicNameMatches` | condition: anchored match on T at the predicate's position (below) | `pattern` is in the RE2-safe ASCII subset and T is known | Java construct named; topic unknown |
+| `HasHeaderKey` | condition testing key `kafka.header.N` in `.Metadata`: the JSON-encoded key, preceded by `{` or `,` and followed by a colon, must occur in the JSON-encoded metadata, which JSON escaping allows only where a key starts (a lookup by key cannot tell an empty value from a missing key, and the map-key test the conditions use does not accept `opencdc.Metadata`) | sink chain from the Kafka source in non-mirror mode | source chains; mirror mode |
 | `RecordIsTombstone` | depends on position | source chain before the unwrap: constant false, evaluated at translate time (no processor). Native CDC emits no tombstones, so the records KC's predicate matches do not exist in Conduit; the output-shape note covers that; after `ExtractNewRecordState` in `tombstone` mode, or after `ExtractField after` (no delete mode applies): condition `.Operation` is `delete`; after `drop` mode: constant false | sink chains unless verified (above); other delete modes |
-| `RegexRouter` | rewrites T (below) | `regex` and `replacement` translate (below), and no later processor writes what T or the predicate reads | construct named; topic unknown; later write |
-| `ReplaceField` | `field.exclude`, then `field.rename`, on After and Before | structured side after the unwrap; `exclude` and `renames`; `replace.null.with.default=false` on Debezium sources; no rename target is also a rename source (KC renames simultaneously from the original names, Conduit renames in sequence) | `include` (v0.23); swap or chain renames; envelope position; default replacement on |
-| `InsertField` | typed `field.set` (`type: string`), on After and Before | `static.field`/`static.value`; `topic.field` from T; `!`/`?` suffixes stripped; `replace.null.with.default=false` | `partition.field`, `offset.field` (Kafka source emits them only in mirror mode, which changes what destinations write), `timestamp.field` (v0.23), default replacement on |
+| `RegexRouter` | rewrites T (below) | `regex` and `replacement` translate (below), the destination has a topic setting, and no later processor writes what T or the predicate reads | construct named; topic unknown; no topic setting (`kc.target_capability_missing`); later write |
+| `ReplaceField` | `field.exclude`, then per rename an `error` processor when the target is already a field of the After image (KC fails such a record: a duplicate field, or a reverse lookup of a missing source), and `field.rename` on After and Before (the Before copy only where it succeeds, so a delete never fails) | `$Value`; structured side after the unwrap; `exclude` and `renames` of plain names; `replace.null.with.default=false` on Debezium sources; no rename target is also a rename source (KC renames simultaneously from the original names, Conduit renames in sequence); no source renamed twice, no two renames onto one target, no renamed source also excluded (KC then reads the excluded value into the target) | `include` (v0.23); `$Key` (v0.23); swap or chain renames; envelope position; default replacement on |
+| `InsertField` | typed `field.set` (`type: string`), on After and Before | `static.field`/`static.value`; `topic.field` from T; `!`/`?` suffixes stripped; `replace.null.with.default=false` | topic unknown (`topic.field`); `partition.field`, `offset.field` (Kafka source emits them only in mirror mode, which changes what destinations write), `timestamp.field` (v0.23), default replacement on |
 | `ExtractField` | none for `field=after` before any unwrap point (it is itself one) | KC's result equals the already-flat native CDC record | every other field: on debezium-postgres every column is a scalar, and a scalar cannot become an OpenCDC side without changing its bytes; on sink chains the value is bytes |
 | `HoistField` | `field.hoist`, on After and Before (or on `.Key`) | structured, nil or raw side; on Debezium sources, only if the oracle shows that no default is substituted | as above |
 | `ValueToKey` | `error` on a nil value, `field.exclude .Key`, then `field.set` with `from` per field | structured value after the unwrap; `replace.null.with.default=false` on Debezium sources. `field.exclude` accepts `.Key` and sets it to nil, and the later `field.set .Key.<f>` creates the structured key | envelope position; default replacement on |
-| `Flatten` | `flatten`, on After and Before (or `.Key`) | structured or nil side after the unwrap; `delimiter` any; the oracle diffs clean on the jsonb and array fixtures (Debezium emits jsonb as a string, so if the Conduit source emits a map, Flatten is refused on debezium-postgres) | envelope position; any fixture that differs |
-| `ExtractNewRecordState` | none (`tombstone`, the default); `filter` on `.Operation` delete (`drop`) | native CDC source; `replace.null.with.default=false` (decision 19); no other options set | `replace.null.with.default` unset or `true`; `add.fields`, `add.headers`, `rewrite*` modes and other options (v0.23); a predicate on it (it emits no processor, so it cannot be made conditional); sink chains (`unwrap.debezium` needs the `payload` wrapper of `schemas.enable=true`, which decision 8 refuses, and its `json.Unmarshal` loses int64 precision); Debezium output mode |
+| `Flatten` | `flatten`, on After and Before (or `.Key`) | structured or nil side after the unwrap; `delimiter` any; the oracle diffs clean on the jsonb and array fixtures | Debezium sources: KC reads a NULL in a defaulted column as the default and Flatten has no option to stop it (oracle `items@1`); envelope position; any fixture that differs |
+| `ExtractNewRecordState` | none (`tombstone`, the default: a delete's value is null, as a native delete's After is nil; Debezium's own tombstone is dropped); `filter` on `.Operation` delete (`drop`) | native CDC source; `replace.null.with.default=false` (decision 19); no other options set | `replace.null.with.default` unset or `true`; `add.fields`, `add.headers`, `rewrite*` modes and other options (v0.23); a predicate on it (it emits no processor, so it cannot be made conditional); sink chains (`unwrap.debezium` needs the `payload` wrapper of `schemas.enable=true`, which decision 8 refuses, and its `json.Unmarshal` loses int64 precision); Debezium output mode |
 | `Cast`, `TimestampConverter`, `TimezoneConverter` | none | - | v0.23 (decision 11) |
 | `ExtractChangedRecordState`, `EventRouter`, `DropHeaders`, `InsertHeader`, `HeaderFrom` | none | - | v0.23 (decisions 10, 14, 15) |
 | `PartitionRouting` | none | - | `kc.target_capability_missing`: "the Kafka destination partitions by key only; explicit partition writing is v0.23 (per-partition ordering, invariant 4)" |
@@ -344,19 +366,24 @@ The topic is a Go-template pipeline expression, T, carried through the chain. It
 records.
 
 - **Initial T.**
-  - debezium-postgres: undefined until the Postgres connector emits the same `opencdc.collection` in
-    snapshot and in CDC. A fix for that is in progress. Once it lands, B4 defines T as
-    `<topic.prefix>.<schema>.<collection>`, and only when every captured table is in one schema named by
-    `table.include.list` or `schema.include.list` and `topic.delimiter` is the default. Until then, the
-    topic-reading and topic-writing SMTs on debezium-postgres are refused.
+  - debezium-postgres (B4, on `builtin:postgres` v0.21.1, #3351). Debezium names the topic
+    `<topic.prefix>.<schema>.<table>`. The source gives snapshot and CDC records of a configured table the
+    same `opencdc.collection`, the bare `tables` entry, because migrate translates `table.include.list` to
+    bare names in one schema with `search_path=<schema>` in the url; it names a table outside `tables`
+    that a reused publication carries `<schema>.<table>`. Bare names never hold a dot, so T is
+    `print "<topic.prefix>." (ternary C (print "<schema>." C) (contains "." C))` with C the collection.
+    T is defined only when `topic.prefix` is a literal of topic name characters (Debezium uses it
+    unchanged), `topic.delimiter` and `topic.naming.strategy` are unset or default, `database.server.name`
+    is unset, and `table.include.list` translated to one schema. Otherwise the topic-reading and
+    topic-writing SMTs are refused with that reason.
   - Sink chains: `(index .Metadata "opencdc.collection")`.
   - mirror-source: undefined in v0.22. Its SMTs see the remote topic name after the replication policy, so
     the sink-chain T would match the wrong name. Topic-reading and topic-writing SMTs there are refused
     (decision 20).
-- **RegexRouter** (fixes the replace-all anchoring):
+- **RegexRouter** (fixes the replace-all anchoring), as one pipeline:
 
   ```text
-  {{ if regexMatch `^(?:P)$` (T) }}{{ regexReplaceAll `^(?:P)` (T) `R` }}{{ else }}{{ T }}{{ end }}
+  ternary (regexReplaceAll `^(?:P)` (T) `R`) (T) (regexMatch `^(?:P)$` (T))
   ```
 
   - KC runs `matches()`, then `replaceFirst`, which finds from index 0 with leftmost-first preference. So a
@@ -364,7 +391,9 @@ records.
     reproduces that in RE2, which also prefers the leftmost-first match.
   - T is a pipeline, such as `index .Metadata "opencdc.collection"`, so it is always parenthesised when it
     is an argument. The same applies in `TopicNameMatches` conditions and inside nested rewrites.
-  - A predicate on a RegexRouter becomes `{{ if PRED }}…{{ else }}T{{ end }}`.
+  - A predicate on a RegexRouter becomes `ternary (ROUTE) (T) (PRED)`.
+  - A predicate is translated at the position of each transform that names it, because T and the
+    tombstone rule depend on the position.
   - T is evaluated against the final record, so the pass refuses a RegexRouter, or a predicate, when a
     later processor in the chain writes any path, field or metadata key that it reads. A processor whose
     writes are a whole side conflicts with any read of that side.
@@ -374,8 +403,14 @@ records.
 
 **Regex translation.**
 
-- The pattern is parsed with `regexp/syntax`, and every node must be on an allow-list of constructs with the
-  same meaning in Java and RE2:
+- The subject is always a Kafka topic name: on a sink the consumed topic, on a Debezium source T, whose
+  parts migrate requires to be topic name characters. Kafka allows only ASCII letters, digits, `.`, `_`
+  and `-`, so the subject holds no line terminator and nothing outside ASCII. That removes the remaining
+  differences between the engines (`.`, `$`, `\s`, `\b`, and the extra folds of RE2's `(?i)`). The
+  oracle's hand-written records include names Kafka rejects (the Kelvin sign); the translator test lists
+  the one difference they show.
+- The pattern is checked token by token, then parsed with `regexp/syntax`, and every construct must be on an
+  allow-list with the same meaning in Java and RE2:
   - literals and `.`;
   - classes without POSIX bracket names;
   - `\d \w \s` with their ASCII meaning;
@@ -384,12 +419,23 @@ records.
   - capturing and non-capturing groups.
 - Pattern literals must be ASCII. RE2's `(?i)` folds Unicode, so a Kelvin sign would match `k`, while Java
   folds ASCII only by default. `(?i)` is the only flag allowed.
-- Refused: lookaround, backreferences, possessive and atomic forms, `\h`, `\Z`, `\p{…}`, `[[:alpha:]]`.
+- Refused: a repetition (`*`, `+`, `{n,m}` with m other than 1) of anything that can match the empty
+  string, such as `(\w*)*`: Java ends the loop with an empty iteration and keeps its group value (`cdc.`
+  where RE2 gives `cdc.items`); a quantifier right after `(?i)`, which Java rejects or reads
+  differently; lookaround, backreferences and octal escapes, possessive and atomic forms, `\h`, `\v`, `\Z`,
+  `\p{…}`, `[[:alpha:]]`, nested classes and `&&`, `(?P<name>)`, a `{` that is not a quantifier, a class
+  that starts with `]`, and `\Q` without `\E` (it would quote the anchoring around the pattern).
 - Replacement translation, following Java's rules:
   - `$n` takes the longest digit run that is still a valid group number, and becomes `${n}`;
   - `${name}` stays a named group;
   - `\x` becomes the literal `x`;
-  - a literal `$` becomes `$$`.
+  - a literal `$` becomes `$$`;
+  - what Java rejects at run time for every routed record (a trailing `\` or `$`, a group the pattern
+    does not have) is refused, since Go would write an empty group instead.
+  - a reference to a group nested in a repetition (`*`, `+`, `{n,m}` with m other than 1) is refused:
+    Java can keep the group's value from an iteration it backtracked out of, where RE2 clears it
+    (`(?:(dbz)\.)*dbz\.(.*)` with `[$1]|$2` on `dbz.items`: `[dbz]|items` against `[]|items`). A group
+    under `?` and the groups outside any repetition, such as `(.*)`, still translate.
 - Patterns and replacements are written as backtick raw strings inside templates, because `"\d"` is a
   template parse error. One that contains a backtick is refused.
 
@@ -405,6 +451,13 @@ reshaping processor because of its condition keeps its schema metadata, as it ke
 the reshaping processor, the exclude would come too
 late: each built-in processor's encode middleware would already have registered a widened schema as a new
 version of the source subject and encoded the data with it.
+
+**Conditions read the encoded row.** The engine evaluates a processor's condition before the processor
+decodes the record, and `builtin:postgres` attaches a schema, so the row reaches the chain as encoded
+bytes and a condition that tests a field of it is false. A processor whose condition reads a side's
+fields (the `ReplaceField` rename guards, for example) is marked, and the chain removes that side's schema
+keys under the SMT's predicate alone before it: the exclude's own decode leaves the row structured for
+every processor after it. The oracle replay fails without it.
 
 The new processors (`flatten`, `field.hoist`, and `field.set` with `from` or a non-string `type` under
 `.Key`/`.Payload`) also drop the two keys themselves, so hand-written pipelines are safe. A test asserts that
@@ -435,7 +488,7 @@ predicates, `RegexRouter`) are unaffected.
   drops that side's schema keys.
 - The default is byte-identical to today, `tplerr.Exec` wrapping included. This is checked against a frozen
   copy of today's `Process` over generated records, and `value: ".Payload.After.id"` still sets that
-  literal string. The version moves to v0.2.0.
+  literal string. The version stays at v0.1.0: the new parameters are opt-in and the default is unchanged.
 
 **`flatten` (B2).**
 
@@ -456,7 +509,8 @@ replaces the side with `{<name>: <old side>}`:
 
 - a structured side is deep-copied;
 - raw data becomes `[]byte`;
-- nil becomes `{<name>: nil}`, as KC wraps a null.
+- on `.Payload.After` and `.Key`, nil becomes `{<name>: nil}`, as KC wraps a null; a nil `.Payload.Before`
+  passes through (decision 17: it means "no image").
 
 It drops the side's schema keys.
 
@@ -522,7 +576,9 @@ It lost to decision 12, which keeps the before-image consistent for CDC consumer
     Kafka Connect 4.2 with the case's SMT chain and a schemaless JsonConverter, against a fixture database.
   - The capture writes, per case, two files that are committed with provenance:
     - the **input records**: the OpenCDC records the Conduit Postgres source produced from the same
-      database, captured in the same run;
+      database, captured in the same run, with the schemas it registered; the replay runs against an
+      in-memory schema registry seeded with them, so processors that resolve a schema behave as in a
+      pipeline;
     - the **KC output**: key, value, topic and headers per record.
   - **Enforcement point (decision 21).** Each translator PR adds a Go test to the required `test` job. It
     needs no Docker and no JVM.
@@ -598,11 +654,11 @@ v0.22 cuts on 2026-11-20.
 
 | PR | Content | Depends on | Tier | Release |
 | --- | --- | --- | --- | --- |
-| B1 | `field.set`: `from`, `type`, the runtime rules above, schema-key drop, byte-identical test, v0.2.0 | - | 2 | v0.22 (required) |
+| B1 | `field.set`: `from`, `type`, the runtime rules above, schema-key drop, byte-identical test (version stays v0.1.0) | - | 2 | v0.22 (required) |
 | B2 | `flatten` and `field.hoist` per the requirements above; registration; doc pages | - | 2 | v0.22 (required) |
 | B3 | Framework only: SMT pass in `migrateConnector`; placeholder rule data and the `smt` kind; `processors` in the pipeline model; grouping and per-key outcomes, including dotted-prefix aliases; per-side converter shape and the schema-carrying flag; capability and sub-key tables in Go; nil, field and `error` guards; schema-key exclude placement per condition; all-or-nothing; `report.Transform`; MCP parity; the `PartitionRouting` and v0.23 refusals | - | 2 | v0.22 (required) |
 | B11 | KC oracle: capture program, pinned and mirrored images, manual and nightly workflow; committed input records and KC outputs; the Go diff helper and normalizations; the offline replay harness the `test` job uses | - | 3 | v0.22 (required; if it slips, B4 and B5 do not merge) |
-| B4 | `Filter` and the predicates; the regex translator and `RegexRouter`; the debezium-postgres T (after the Postgres `opencdc.collection` fix); the regex fuzz targets; `ReplaceField` exclude/rename, `ExtractNewRecordState`, `ExtractField after` | B3, B11 | 2 | v0.22, per SMT, if its case diffs clean in `test` |
+| B4 | `Filter` and the predicates; the regex translator and `RegexRouter`; the debezium-postgres T; the regex fuzz targets; `ReplaceField` exclude/rename, `ExtractNewRecordState`, `ExtractField after`; decision 22 | B3, B11, the Postgres `opencdc.collection` fix (`builtin:postgres` v0.21.1, #3351) | 2 | v0.22, per SMT, if its case diffs clean in `test` |
 | B5 | Translators over new processors: `InsertField` static/topic, `ValueToKey`, `HoistField`, `Flatten` | B1, B2, B3, B11 | 2 | v0.22, per SMT, if its case diffs clean in `test` |
 | B10 | Cross-cutting docs | B4, B5 | 3 | v0.22 |
 | B6 | `ExtractChangedRecordState` | header-writing destination | 2 | v0.23 |
@@ -619,7 +675,7 @@ keeps its refusal with a v0.23 fix, so no report gets worse.
 
 ## Open questions
 
-None. The decisions above (2026-11-10) close every question from the first draft and its review.
+None. The decisions above close every question from the first draft and its reviews.
 
 ## Related
 
