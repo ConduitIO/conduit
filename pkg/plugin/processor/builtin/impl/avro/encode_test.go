@@ -23,6 +23,7 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/log"
+	avrointernal "github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/internal"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal"
 	"github.com/google/go-cmp/cmp"
 	"github.com/matryer/is"
@@ -58,7 +59,7 @@ func TestEncodeProcessor_Process_StructuredData(t *testing.T) {
 	// skipping Open(), so we can inject a mock encoder
 	mockEncoder := NewMockEncoder(gomock.NewController(t))
 	mockEncoder.EXPECT().
-		Encode(ctx, input.Payload.After).
+		Encode(ctx, input.Payload.After, avrointernal.SchemaRef{}).
 		Return(want.Payload.After.(opencdc.RawData), nil)
 	underTest.encoder = mockEncoder
 
@@ -94,7 +95,7 @@ func TestEncodeProcessor_Process_RawData(t *testing.T) {
 	// skipping Open(), so we can inject a mock encoder
 	mockEncoder := NewMockEncoder(gomock.NewController(t))
 	mockEncoder.EXPECT().
-		Encode(ctx, opencdc.StructuredData{"field_int": float64(123)}).
+		Encode(ctx, opencdc.StructuredData{"field_int": float64(123)}, avrointernal.SchemaRef{}).
 		Return(want.Payload.After.(opencdc.RawData), nil)
 	underTest.encoder = mockEncoder
 
@@ -152,7 +153,7 @@ func TestEncodeProcessor_Process_RawData_CustomField(t *testing.T) {
 			// skipping Open(), so we can inject a mock encoder
 			mockEncoder := NewMockEncoder(gomock.NewController(t))
 			mockEncoder.EXPECT().
-				Encode(ctx, opencdc.StructuredData{"field_int": float64(123)}).
+				Encode(ctx, opencdc.StructuredData{"field_int": float64(123)}, avrointernal.SchemaRef{}).
 				Return(encodedValue, nil)
 			underTest.encoder = mockEncoder
 
@@ -190,7 +191,7 @@ func TestEncodeProcessor_Process_EmptyPayloadField(t *testing.T) {
 			mockEncoder: func(ctx context.Context) *MockEncoder {
 				m := NewMockEncoder(gomock.NewController(t))
 				m.EXPECT().
-					Encode(ctx, opencdc.StructuredData{}).
+					Encode(ctx, opencdc.StructuredData{}, avrointernal.SchemaRef{}).
 					Return(opencdc.RawData(`{}`), nil)
 				return m
 			},
@@ -213,7 +214,7 @@ func TestEncodeProcessor_Process_EmptyPayloadField(t *testing.T) {
 			mockEncoder: func(ctx context.Context) *MockEncoder {
 				m := NewMockEncoder(gomock.NewController(t))
 				m.EXPECT().
-					Encode(ctx, opencdc.StructuredData{}).
+					Encode(ctx, opencdc.StructuredData{}, avrointernal.SchemaRef{}).
 					Return(opencdc.RawData(`{}`), nil)
 				return m
 			},
@@ -342,7 +343,7 @@ func TestEncodeProcessor_Process_SchemaMetadata(t *testing.T) {
 				"schema.autoRegister.subject": "testsubject",
 			}))
 			mockEncoder := NewMockEncoder(gomock.NewController(t))
-			mockEncoder.EXPECT().Encode(ctx, gomock.Any()).Return(opencdc.RawData("encoded"), nil)
+			mockEncoder.EXPECT().Encode(ctx, gomock.Any(), avrointernal.SchemaRef{}).Return(opencdc.RawData("encoded"), nil)
 			underTest.encoder = mockEncoder
 
 			before := maps.Clone(tc.input.Metadata)

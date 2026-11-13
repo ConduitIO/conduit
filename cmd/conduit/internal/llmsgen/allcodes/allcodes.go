@@ -70,6 +70,7 @@ import (
 	_ "github.com/conduitio/conduit/pkg/orchestrator"
 	_ "github.com/conduitio/conduit/pkg/pipeline"
 	_ "github.com/conduitio/conduit/pkg/plugin/connector/standalone"
+	_ "github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro"
 	_ "github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/custom"
 	_ "github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/debezium"
 	_ "github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/protobuf"

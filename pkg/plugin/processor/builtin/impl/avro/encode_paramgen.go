@@ -10,6 +10,7 @@ import (
 const (
 	encodeConfigField                      = "field"
 	encodeConfigSchemaAutoRegisterSubject  = "schema.autoRegister.subject"
+	encodeConfigSchemaFromRecordSubject    = "schema.fromRecord.subject"
 	encodeConfigSchemaPreRegisteredSubject = "schema.preRegistered.subject"
 	encodeConfigSchemaPreRegisteredVersion = "schema.preRegistered.version"
 	encodeConfigSchemaStrategy             = "schema.strategy"
@@ -29,6 +30,12 @@ func (encodeConfig) Parameters() map[string]config.Parameter {
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
+		encodeConfigSchemaFromRecordSubject: {
+			Default:     "",
+			Description: "The subject under which the schema used to encode the record (the schema the record\ncarries, plus any fields the record adds) is registered in the schema registry.",
+			Type:        config.ParameterTypeString,
+			Validations: []config.Validation{},
+		},
 		encodeConfigSchemaPreRegisteredSubject: {
 			Default:     "",
 			Description: "The subject of the schema in the schema registry used to encode the record.",
@@ -45,11 +52,11 @@ func (encodeConfig) Parameters() map[string]config.Parameter {
 		},
 		encodeConfigSchemaStrategy: {
 			Default:     "",
-			Description: "Strategy to use to determine the schema for the record.\nAvailable strategies are:\n* `preRegistered` (recommended) - Download an existing schema from the schema registry.\n   This strategy is further configured with options starting with `schema.preRegistered.*`.\n* `autoRegister` (for development purposes) - Infer the schema from the record and register it\n   in the schema registry. This strategy is further configured with options starting with\n  `schema.autoRegister.*`.\n\nFor more information about the behavior of each strategy read the main processor description.",
+			Description: "Strategy to use to determine the schema for the record.\nAvailable strategies are:\n* `preRegistered` (recommended) - Download an existing schema from the schema registry.\n   This strategy is further configured with options starting with `schema.preRegistered.*`.\n* `autoRegister` (for development purposes) - Infer the schema from the record and register it\n   in the schema registry. This strategy is further configured with options starting with\n  `schema.autoRegister.*`.\n* `fromRecord` - Encode with the schema the record already carries (its schema subject and\n   version metadata), adding a nullable field for each top-level field the record adds, dropping each\n   top-level field the record no longer has, and register it in the schema registry. Values that\n   do not fit the schema exactly fail the record. An empty key or payload part (nil, or raw data\n   with no bytes) is passed through unencoded. This strategy is further configured with options starting with `schema.fromRecord.*`.\n\nFor more information about the behavior of each strategy read the main processor description.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
-				config.ValidationInclusion{List: []string{"preRegistered", "autoRegister"}},
+				config.ValidationInclusion{List: []string{"preRegistered", "autoRegister", "fromRecord"}},
 			},
 		},
 	}

@@ -59,7 +59,7 @@ func TestDecoder_Decode(t *testing.T) {
 	t.Run("a valid record", func(t *testing.T) {
 		is := is.New(t)
 		e := NewEncoder(registry, log.Nop(), DownloadSchemaStrategy{Subject: subject, Version: 1})
-		raw, err := e.Encode(ctx, opencdc.StructuredData{"a": "hello"})
+		raw, err := e.Encode(ctx, opencdc.StructuredData{"a": "hello"}, SchemaRef{})
 		is.NoErr(err)
 		got, err := d.Decode(ctx, raw)
 		is.NoErr(err)
@@ -98,14 +98,14 @@ func TestEncoder_Encode(t *testing.T) {
 	t.Run("unknown subject", func(t *testing.T) {
 		is := is.New(t)
 		e := NewEncoder(registry, log.Nop(), DownloadSchemaStrategy{Subject: "no-such-subject", Version: 1})
-		_, err := e.Encode(ctx, opencdc.StructuredData{"a": "x"})
+		_, err := e.Encode(ctx, opencdc.StructuredData{"a": "x"}, SchemaRef{})
 		is.True(err != nil)
 		is.True(strings.Contains(err.Error(), "failed to get schema"))
 	})
 	t.Run("codec failure does not repeat the value", func(t *testing.T) {
 		is := is.New(t)
 		e := NewEncoder(registry, log.Nop(), DownloadSchemaStrategy{Subject: subject, Version: 1})
-		_, err := e.Encode(ctx, opencdc.StructuredData{"a": map[string]any{"customer-SECRET-4711": 1}})
+		_, err := e.Encode(ctx, opencdc.StructuredData{"a": map[string]any{"customer-SECRET-4711": 1}}, SchemaRef{})
 		is.True(err != nil)
 		is.True(strings.Contains(err.Error(), "failed to marshal data with schema"))
 		is.True(strings.Contains(err.Error(), "details not shown"))

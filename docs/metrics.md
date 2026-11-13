@@ -35,6 +35,7 @@ locally, you can get metrics if you run `curl localhost:8080/metrics`.
     | `conduit_pipeline_execution_duration_seconds`  | Histogram | Amount of time records spent in a pipeline.                                                                    |
     | `conduit_connector_execution_duration_seconds` | Histogram | Amount of time spent reading or writing records per pipeline, plugin, connector type (source, destination) and component ID. |
     | `conduit_processor_execution_duration_seconds` | Histogram | Amount of time spent on processing records per pipeline, processor and component ID.                           |
+    | `conduit_processor_avro_encode_schema_fallback_total` | Counter | Number of records the `avro.encode` `fromRecord` strategy encoded with an inferred schema because they carried none (by subject). |
     | `conduit_dlq_execution_duration_seconds`       | Histogram | Amount of time spent writing records to DLQ connector per pipeline and plugin.                                 |
     | `conduit_inspector_sessions`                   | Gauge     | Number of inspector sessions by ID of pipeline component (connector or processor)                              |
     | `conduit_funnel_destination_flushes_total`     | Counter   | Number of times an arch-v2 batching destination's buffer was taken for writing, by pipeline name, plugin, component ID and trigger (`size`, `bytes`, `deadline_arrival`, `deadline_timer`, `ack_queue`, `drain`, `close`). `deadline_timer` counts partial batches flushed by the `sdk.batch.delay` timer. |

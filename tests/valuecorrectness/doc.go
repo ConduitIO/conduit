@@ -40,6 +40,12 @@
 //   - the values: decoding the body with that schema, again on a fresh config,
 //     gives back the expected value.
 //
+// Two of those pipelines attach their schema as payload schema metadata and
+// encode with avro.encode's fromRecord strategy, which must write the schema
+// the record carries (enums and named types included) under its output
+// subject, not one inferred from the values and not another pipeline's
+// definitions of the same names.
+//
 // A second test (fanout_test.go) covers conduit#3151 / conduit-commons#336:
 // one source into three destinations, on the classic and the arch-v2 engine,
 // where two destinations edit nested arrays and maps of their record in place

@@ -19,12 +19,14 @@ package avro
 
 import (
 	"context"
+	"fmt"
 	"maps"
 
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-processor-sdk"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
+	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/impl/avro/internal"
 	"github.com/conduitio/conduit/pkg/plugin/processor/builtin/internal/errsafe"
@@ -33,7 +35,7 @@ import (
 )
 
 type encoder interface {
-	Encode(ctx context.Context, sd opencdc.StructuredData) (opencdc.RawData, error)
+	Encode(ctx context.Context, sd opencdc.StructuredData, carried internal.SchemaRef) (opencdc.RawData, error)
 }
 
 type encodeConfig struct {
@@ -69,6 +71,14 @@ func parseEncodeConfig(ctx context.Context, c config.Config) (encodeConfig, erro
 	cfg.fieldResolver = rr
 	cfg.part = classifyField(rr)
 
+	if cfg.Schema.StrategyType == strategyFromRecord && cfg.part == partNone {
+		ce := conduiterr.New(conduiterr.CodeInvalidArgument,
+			fmt.Sprintf("schema strategy 'fromRecord' needs field to be the whole key or a whole payload part, got %q", cfg.Field))
+		ce.ConfigPath = encodeConfigField
+		ce.Suggestion = "set field to .Key, .Payload.After or .Payload.Before: the schema a record carries describes the whole part, not a field inside it"
+		return encodeConfig{}, ce
+	}
+
 	return cfg, nil
 }
 
@@ -94,7 +104,7 @@ func (p *EncodeProcessor) Specification() (sdk.Specification, error) {
 		Name:    "avro.encode",
 		Summary: "Encodes a record's field into the Avro format.",
 		Description: `The processor takes a record's field and encodes it using a schema into the [Avro format](https://avro.apache.org/).
-It provides two strategies for determining the schema:
+It provides three strategies for determining the schema:
 
 * **preRegistered** (recommended)
   This strategy downloads an existing schema from the schema registry and uses it to encode the record.
@@ -112,6 +122,28 @@ It provides two strategies for determining the schema:
   registers each inferred schema in the schema registry with the same subject, therefore the schema compatibility
   checks need to be disabled for this schema to prevent failures. If the schema subject does not exist before running
   this processor, it will automatically set the correct compatibility settings in the schema registry.
+* **fromRecord**
+  This strategy encodes the record with the schema it already carries: the schema whose subject and version are in
+  the record metadata (` + "`opencdc.payload.schema.*`" + ` for ` + "`.Payload.After`" + ` and ` + "`.Payload.Before`" + `,
+  ` + "`opencdc.key.schema.*`" + ` for ` + "`.Key`" + `), for example the schema a source connector attached. Avro types,
+  logical types and decimal precision and scale are kept as the source declared them, instead of being inferred from
+  the values. For each top-level field the record has and the schema does not, a nullable field with a null default
+  is added, typed by inference from its value. The result is registered under ` + "`schema.fromRecord.subject`" + `.
+  The field must be the whole key or a whole payload part.
+
+  A top-level field the schema declares and the record no longer has (a processor removed it) is left out of the
+  registered schema. A value that does not fit the schema exactly fails the record: a different type, a number out
+  of range, null in a non-null field (a nil byte slice or nil list in a non-null field counts as null and fails the
+  same way), more decimal digits than the scale, a time in a date field, or a time in a zone other than the local
+  one in a local-timestamp field (its wall clock would change). Values are never converted, truncated or filled
+  with a default. An empty key or payload part (nil, or raw data with no bytes,
+  as a delete record's ` + "`.Payload.After`" + ` often is) is not encoded: the record passes through unchanged. A record that carries no
+  schema is encoded with an inferred schema, as with autoRegister, and counted by the
+  ` + "`conduit_processor_avro_encode_schema_fallback_total`" + ` metric.
+
+  A processor before this one that changes the shape of the record (for example ` + "`field.set`" + ` adding a
+  field) registers an inferred schema for its output by default. Set ` + "`sdk.schema.encode.payload.enabled: false`" + `
+  on that processor so the record still carries the source schema when it reaches this processor.
 
 When the encoded field is the whole key or the whole payload (` + "`.Key`, `.Payload.After`, `.Payload.Before`" + `),
 the record's schema metadata for that part (` + "`opencdc.key.schema.*`" + ` or ` + "`opencdc.payload.schema.*`" + `) is removed, because
@@ -164,12 +196,30 @@ func (p *EncodeProcessor) processRecord(ctx context.Context, rec opencdc.Record)
 		return nil, cerrors.Errorf("failed resolving field: %w", err)
 	}
 
+	if p.cfg.Schema.StrategyType == strategyFromRecord && isEmptyPart(field.Get()) {
+		// Invariant 6: an empty part (a delete record's After, for example)
+		// has no value to encode. Encoding it would register and write a
+		// record with no fields, or, with the carried schema, invent its
+		// defaults. The record passes through unchanged, metadata included:
+		// nothing was replaced, and the SDK schema middlewares skip empty
+		// parts the same way.
+		return sdk.SingleRecord(rec), nil
+	}
+
 	data, err := p.structuredData(field.Get())
 	if err != nil {
 		return nil, cerrors.Errorf("failed getting structured data: %w", err)
 	}
 
-	rd, err := p.encoder.Encode(ctx, data)
+	var carried internal.SchemaRef
+	if p.cfg.Schema.StrategyType == strategyFromRecord {
+		carried, err = p.carriedSchema(rec.Metadata)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	rd, err := p.encoder.Encode(ctx, data, carried)
 	if err != nil {
 		return nil, cerrors.Errorf("failed encoding data: %w", err)
 	}
@@ -180,6 +230,41 @@ func (p *EncodeProcessor) processRecord(ctx context.Context, rec opencdc.Record)
 	}
 	rec.Metadata = p.dropStaleSchemaMetadata(rec.Metadata)
 	return sdk.SingleRecord(rec), nil
+}
+
+// carriedSchema returns the schema subject and version the encoded part
+// carries according to md: the key schema for .Key, the payload schema for
+// .Payload.Before and .Payload.After. It returns the zero SchemaRef when the
+// part carries no schema, and a CodeSchemaUnsupported error when only one of
+// subject and version is set or the version is not a positive integer.
+func (p *EncodeProcessor) carriedSchema(md opencdc.Metadata) (internal.SchemaRef, error) {
+	var (
+		subject                string
+		version                int
+		errSubject, errVersion error
+	)
+	switch p.cfg.part {
+	case partKey:
+		subject, errSubject = md.GetKeySchemaSubject()
+		version, errVersion = md.GetKeySchemaVersion()
+	case partPayload:
+		subject, errSubject = md.GetPayloadSchemaSubject()
+		version, errVersion = md.GetPayloadSchemaVersion()
+	case partNone:
+		return internal.SchemaRef{}, nil // rejected in parseEncodeConfig
+	}
+	subjectMissing := cerrors.Is(errSubject, opencdc.ErrMetadataFieldNotFound)
+	versionMissing := cerrors.Is(errVersion, opencdc.ErrMetadataFieldNotFound)
+	switch {
+	case subjectMissing && versionMissing:
+		return internal.SchemaRef{}, nil
+	case errSubject != nil || errVersion != nil || subject == "" || version <= 0:
+		ce := conduiterr.New(internal.CodeSchemaUnsupported,
+			"the record's schema metadata for the encoded field is incomplete or invalid: it needs both a subject and a positive version")
+		ce.Suggestion = "check the processor or connector that set the schema subject and version metadata"
+		return internal.SchemaRef{}, ce
+	}
+	return internal.SchemaRef{Subject: subject, Version: version}, nil
 }
 
 // dropStaleSchemaMetadata removes the schema subject and version metadata that
@@ -253,6 +338,18 @@ func classifyField(rr sdk.ReferenceResolver) recordPart {
 		return partPayload
 	}
 	return partNone
+}
+
+// isEmptyPart reports whether data is an empty record part: nil, or raw data
+// with no bytes. It is the definition the connector and processor SDK schema
+// middlewares use to skip a part, so strategy fromRecord skips the same parts
+// they do.
+func isEmptyPart(data any) bool {
+	if data == nil {
+		return true
+	}
+	raw, ok := data.(opencdc.RawData)
+	return ok && len(raw) == 0
 }
 
 func (p *EncodeProcessor) Teardown(context.Context) error {
