@@ -27,7 +27,7 @@
     "translated": 7,
     "approximated": 0,
     "unsupported": 2,
-    "blocking": 6
+    "blocking": 8
   },
   "connectors": [
     {
@@ -163,6 +163,13 @@
         },
         {
           "code": "kc.setting_required",
+          "reason": "The builtin:postgres source requires tables, and no key of the Kafka Connect config sets it; the pipeline references ${KC_INVENTORY_CONNECTOR_SOURCE_TABLES} instead.",
+          "fix": "Set KC_INVENTORY_CONNECTOR_SOURCE_TABLES in the environment (see secrets.env.template).",
+          "blocking": true,
+          "rule": "required/source/tables"
+        },
+        {
+          "code": "kc.setting_required",
           "reason": "The builtin:kafka destination requires servers, and no key of the Kafka Connect config sets it; the pipeline references ${KC_INVENTORY_CONNECTOR_DESTINATION_SERVERS} instead.",
           "fix": "Set KC_INVENTORY_CONNECTOR_DESTINATION_SERVERS in the environment (see secrets.env.template), or pass the worker file with --worker if it holds bootstrap.servers.",
           "blocking": true,
@@ -198,9 +205,9 @@
         },
         {
           "code": "kc.default_differs",
-          "reason": "table.include.list is absent, so Debezium reads every table; the source is set to tables \"*\", whose schema coverage is connector-defined.",
-          "fix": "Set table.include.list to the tables to read, or accept the difference.",
-          "blocking": false,
+          "reason": "table.include.list is absent, so Debezium reads every table of every non-system schema (or of the schemas a schema.include.list or schema.exclude.list selects). The builtin:postgres source has no equivalent: its tables \"*\" reads only the public schema's tables. migrate does not write tables.",
+          "fix": "Set table.include.list to the tables to read, as schema.table entries in one schema (one Kafka Connect connector per schema), then re-run.",
+          "blocking": true,
           "rule": "debezium-postgres/defaults/table.include.list"
         },
         {

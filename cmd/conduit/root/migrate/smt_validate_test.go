@@ -58,3 +58,31 @@ func TestRun_SMTProcessorsPassPipelinesValidate(t *testing.T) {
 	is.True(strings.Contains(p, "id: smt-split-2"))
 	is.Equal(res.Report.Connectors[0].Transforms[1].Processor, "field.exclude")
 }
+
+// TestRun_PostgresTablesPassPipelinesValidate runs a Debezium Postgres config
+// with a schema-qualified table.include.list through the CLI's own Run, whose
+// validator is the `pipelines validate` engine: the translated tables are
+// bare names (the source reads a dotted entry as one table name and refuses
+// to start, #3350), the schema reaches the connection as search_path, and
+// the pipeline validates.
+func TestRun_PostgresTablesPassPipelinesValidate(t *testing.T) {
+	is := is.New(t)
+	cfg := `{"name": "pg", "config": {
+		"connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+		"database.hostname": "db.internal.example",
+		"database.user": "dbz",
+		"database.dbname": "shop",
+		"table.include.list": "inventory.orders,inventory.categories"}}`
+	res, err := Run(context.Background(), migrate.Request{
+		Inputs: []kcmigrate.Input{{Name: "pg.json", Content: []byte(cfg)}},
+	})
+	is.NoErr(err)
+	var p string
+	for _, f := range res.Files {
+		if strings.HasPrefix(f.Path, "pipelines/") {
+			p = string(f.Content)
+		}
+	}
+	is.True(strings.Contains(p, "tables: orders,categories\n"))
+	is.True(strings.Contains(p, " search_path=inventory\n"))
+}

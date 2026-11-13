@@ -191,17 +191,33 @@ func sinkConsumerDefaults(p *Plan, _ rules.Action) ([]kcmigrate.Note, error) {
 // writes nothing when no part was recorded, so the required-settings check
 // reports the missing url as kc.setting_required. A secret part is already a
 // ${VAR} reference, so the assembled URL carries no plaintext secret.
+//
+// When the only recorded part is search_path (table.include.list translated,
+// no database.* key), no url is written and the required-settings check makes
+// it a variable. The search_path the tables depend on would then be lost
+// when the user fills the variable, so a blocking note carries it.
 func pgURL(p *Plan, _ rules.Action) ([]kcmigrate.Note, error) {
 	if len(p.pgURL) == 0 {
 		return nil, nil
 	}
 	var parts []string
+	connection := false // a part other than search_path names the server
 	for _, name := range pgURLParts {
 		if v := p.pgURL[name]; v != "" {
 			parts = append(parts, name+"="+dsnQuote(v))
+			connection = connection || name != pgURLSearchPath
 		}
 	}
-	if len(parts) == 0 {
+	if !connection {
+		// search_path alone is no connection string: libpq would default
+		// every other part. The required-settings check reports url.
+		if sp := p.pgURL[pgURLSearchPath]; sp != "" {
+			return []kcmigrate.Note{{
+				Code: kcmigrate.CodeSettingRequired.Reason(), Blocking: true, Rule: FinishPGURL + "/" + pgURLSearchPath,
+				Reason: "table.include.list became bare table names that resolve only with search_path=" + sp + ", but no database.* key gives the connection string, so url is a variable. A url without search_path=" + sp + " reads same-name tables through the server's search_path instead.",
+				Fix:    "Set the source url with search_path=" + sp + " in it (\"search_path=" + sp + "\" in key=value form, \"&search_path=" + sp + "\" in URL form), or add the database.* keys to the Kafka Connect config and re-run.",
+			}}, nil
+		}
 		return nil, nil
 	}
 	if _, _, err := p.Set(SideSource, "url", strings.Join(parts, " "), "(pg-url)"); err != nil {

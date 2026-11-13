@@ -1,0 +1,17 @@
+{
+    "name": "shop-cdc",
+    "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "tasks.max": "1",
+        "database.hostname": "postgres.internal.example",
+        "database.port": "5432",
+        "database.user": "postgres",
+        "database.password": "PLACEHOLDER_SECRET_DB_PASSWORD",
+        "database.dbname": "shop",
+        "topic.prefix": "shop",
+        "plugin.name": "pgoutput",
+        "table.include.list": "inventory.orders,sales.orders",
+        "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+        "value.converter": "org.apache.kafka.connect.json.JsonConverter"
+    }
+}

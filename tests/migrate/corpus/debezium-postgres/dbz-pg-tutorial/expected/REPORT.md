@@ -1,6 +1,6 @@
 # Kafka Connect migration report
 
-1 connectors, 9 keys: 7 translated, 0 approximated, 2 unsupported, 6 blocking.
+1 connectors, 9 keys: 7 translated, 0 approximated, 2 unsupported, 8 blocking.
 
 ## inventory-connector
 
@@ -20,11 +20,12 @@
 | | Connector | Code | Difference | Fix |
 | --- | --- | --- | --- | --- |
 | blocking | inventory-connector | `kc.output_shape_differs` | Debezium-compatible output mode is not available. The released builtin:postgres source has no debezium.enabled setting and the debezium.encode processor has not landed, so the pipeline emits OpenCDC-shaped records, not the Debezium envelope (before/after structs, source, op, ts_ms) or its topic naming. Consumers of the Debezium envelope break. | Keep this connector on Kafka Connect until the Debezium output mode ships (#3032), or accept the difference with --accept-gaps. |
+| blocking | inventory-connector | `kc.setting_required` | The builtin:postgres source requires tables, and no key of the Kafka Connect config sets it; the pipeline references ${KC_INVENTORY_CONNECTOR_SOURCE_TABLES} instead. | Set KC_INVENTORY_CONNECTOR_SOURCE_TABLES in the environment (see secrets.env.template). |
 | blocking | inventory-connector | `kc.setting_required` | The builtin:kafka destination requires servers, and no key of the Kafka Connect config sets it; the pipeline references ${KC_INVENTORY_CONNECTOR_DESTINATION_SERVERS} instead. | Set KC_INVENTORY_CONNECTOR_DESTINATION_SERVERS in the environment (see secrets.env.template), or pass the worker file with --worker if it holds bootstrap.servers. |
 | blocking | inventory-connector | `kc.converter_unknown` | Neither the connector nor a worker file sets key.converter, so the format Kafka Connect used is unknown. | Pass the worker properties with --worker, or set key.converter on the connector, then re-run. |
 | blocking | inventory-connector | `kc.converter_unknown` | Neither the connector nor a worker file sets value.converter, so the format Kafka Connect used is unknown. | Pass the worker properties with --worker, or set value.converter on the connector, then re-run. |
 | note | inventory-connector | `kc.secret_plaintext` | The input holds at least one secret as a literal value. Where migrate used the setting it wrote a variable reference instead (a dropped setting has no variable), but the input file itself contains the secret. | Fill the variables in secrets.env.template from your secret store, and replace the literal in the Kafka Connect config with a config-provider reference. |
 | note | inventory-connector | `kc.default_differs` | plugin.name is absent, so Debezium uses decoderbufs; Conduit decodes with pgoutput only, and decoder-specific differences are not emulated. | Set plugin.name=pgoutput in the Kafka Connect config, or accept the difference. |
-| note | inventory-connector | `kc.default_differs` | table.include.list is absent, so Debezium reads every table; the source is set to tables "*", whose schema coverage is connector-defined. | Set table.include.list to the tables to read, or accept the difference. |
+| blocking | inventory-connector | `kc.default_differs` | table.include.list is absent, so Debezium reads every table of every non-system schema (or of the schemas a schema.include.list or schema.exclude.list selects). The builtin:postgres source has no equivalent: its tables "*" reads only the public schema's tables. migrate does not write tables. | Set table.include.list to the tables to read, as schema.table entries in one schema (one Kafka Connect connector per schema), then re-run. |
 | note | inventory-connector | `kc.default_differs` | Kafka Connect does not retry a failed operation by default (errors.retry.timeout=0). Conduit restarts a failed pipeline through pipeline recovery, so a transient failure that stopped the connector may not stop the pipeline. | - |
 | note | inventory-connector | `kc.default_differs` | Kafka Connect's default header converter types header values; Conduit carries headers as metadata strings. | - |

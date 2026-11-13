@@ -16,12 +16,13 @@ sanitized: {scrubbed: true, check: scrub-v1}
 upstream: {debezium: "3.7.0.Final", connect: "4.2"}
 command: {args: [migrate, kafka-connect, input/connector.json]}
 expect:
-  # schema.include.list without a literal table list is U! (mapping table).
+  # schema.include.list without a literal table list is U! (mapping table),
+  # and tables is left unset (kc.setting_required), not widened to "*".
   exitCode: 2
   # plugin.name absent means decoderbufs: non-blocking default note; the
   # Debezium output mode is not wired, so every migration carries the
   # blocking kc.output_shape_differs note.
-  notes: [kc.default_differs, kc.converter_unknown, kc.output_shape_differs]
+  notes: [kc.default_differs, kc.converter_unknown, kc.output_shape_differs, kc.setting_required]
   entries:
     - {key: schema.include.list, status: unsupported, blocking: true}
     - {key: topic.prefix, status: unsupported, blocking: true, code: kc.target_capability_missing}

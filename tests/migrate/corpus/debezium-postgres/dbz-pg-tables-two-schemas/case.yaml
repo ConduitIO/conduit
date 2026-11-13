@@ -1,0 +1,32 @@
+schemaVersion: 1
+id: dbz-pg-tables-two-schemas
+family: debezium-postgres
+description: >-
+  A literal table.include.list with tables in two schemas, both named orders.
+  The builtin:postgres source finds bare table names through one search_path
+  and does not accept schema-qualified names (conduit-connector-postgres#277),
+  so the list cannot be expressed: the key blocks with
+  kc.target_capability_missing instead of emitting entries the source refuses
+  at start (#3350). tables is left unset, a variable with a blocking
+  kc.setting_required note, so the refused list never widens to "*".
+provenance:
+  source: synthetic
+  ref: written for the schema-qualified tables fix (#3350)
+  license: Apache-2.0
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {debezium: "3.7.0.Final", connect: "4.2"}
+command: {args: [migrate, kafka-connect, input/connector.json]}
+expect:
+  exitCode: 2
+  notes: [kc.output_shape_differs, kc.setting_required]
+  entries:
+    - {key: table.include.list, status: unsupported, blocking: true, code: kc.target_capability_missing}
+    - {key: topic.prefix, status: unsupported, blocking: true, code: kc.target_capability_missing}
+    - {key: plugin.name, status: translated}
+covers:
+  - class: io.debezium.connector.postgresql.PostgresConnector
+    keys: [table.include.list]
+emits:
+  - {plugin: builtin:postgres, role: source}
+  - {plugin: builtin:kafka, role: destination}
+run: {tier: offline}

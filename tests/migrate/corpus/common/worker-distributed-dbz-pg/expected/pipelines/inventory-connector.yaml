@@ -8,7 +8,7 @@ pipelines:
         type: source
         plugin: builtin:postgres
         settings:
-          tables: '*'
+          tables: ${KC_INVENTORY_CONNECTOR_SOURCE_TABLES}
           url: host=postgres.internal.example port=5432 user=postgres password=${KC_INVENTORY_CONNECTOR_DATABASE_PASSWORD} dbname=postgres
       - id: destination
         type: destination

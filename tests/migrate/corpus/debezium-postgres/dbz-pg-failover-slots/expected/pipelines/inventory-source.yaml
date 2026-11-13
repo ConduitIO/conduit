@@ -8,7 +8,7 @@ pipelines:
         type: source
         plugin: builtin:postgres
         settings:
-          tables: '*'
+          tables: ${KC_INVENTORY_SOURCE_SOURCE_TABLES}
           url: host=pgbouncer.internal.example port=5432 user=user password=${KC_INVENTORY_SOURCE_DATABASE_PASSWORD} dbname=inventorydb
       - id: destination
         type: destination
