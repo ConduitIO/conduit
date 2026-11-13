@@ -27,6 +27,8 @@
     {"run": "flatten-enrs-null-default", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {}}, {"alias": "f", "type": "Flatten$Value", "config": {}}]},
     {"run": "hoist-enrs-null-default", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {}}, {"alias": "h", "type": "HoistField$Value", "config": {"field": "row"}}]},
     {"run": "rename-swap-enrs-null-default", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {}}, {"alias": "r", "type": "ReplaceField$Value", "config": {"renames": "a:b,b:a", "replace.null.with.default": "false"}}]},
-    {"run": "exclude-enrs-null-default", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {}}, {"alias": "r", "type": "ReplaceField$Value", "config": {"exclude": "big,attrs", "replace.null.with.default": "false"}}]}
+    {"run": "exclude-enrs-null-default", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {}}, {"alias": "r", "type": "ReplaceField$Value", "config": {"exclude": "big,attrs", "replace.null.with.default": "false"}}]},
+    {"run": "exclude-rename-enrs-null-false", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"replace.null.with.default": "false"}}, {"alias": "r", "type": "ReplaceField$Value", "config": {"exclude": "big", "renames": "note:remark,qty:quantity", "replace.null.with.default": "false"}}]},
+    {"run": "rename-onto-existing-enrs-null-false", "chain": [{"alias": "unwrap", "type": "io.debezium.transforms.ExtractNewRecordState", "config": {"replace.null.with.default": "false"}}, {"alias": "r", "type": "ReplaceField$Value", "config": {"renames": "note:name", "replace.null.with.default": "false"}}]}
   ]
 }

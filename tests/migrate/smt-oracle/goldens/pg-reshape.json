@@ -1,5 +1,5 @@
 {
-  "caseSha256": "a02ce48087afec79e5b538799fb0dc56719b23db2bd12e240d7d6b087c9053ad",
+  "caseSha256": "4db07664e8df1c0b2790a2deb6659dc8e43ccddcf1401dc4659f2f2c9c9f4b9a",
   "description": "Reshaping SMTs after the unwrap, over real Debezium Postgres output: a defaulted nullable column, jsonb, TOAST, dotted and Kelvin-sign names, rename swaps, and InsertField onto an existing field.",
   "fixtureSha256": {
     "debezium-postgres.json": "befbf92195a6574793a790915d663501a18c3a6fa573a24da812611cf6786a06"
@@ -28647,6 +28647,2135 @@
         }
       ],
       "run": "exclude-enrs-null-default"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "unwrap",
+            "config": {
+              "replace.null.with.default": "false"
+            },
+            "type": "io.debezium.transforms.ExtractNewRecordState"
+          },
+          {
+            "alias": "r",
+            "config": {
+              "exclude": "big",
+              "renames": "note:remark,qty:quantity",
+              "replace.null.with.default": "false"
+            },
+            "type": "ReplaceField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-dee0cafe1199"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.a",
+            "value": {
+              "payload": {
+                "id": 1,
+                "v": "one"
+              },
+              "schema": "s-41cea21e3d63"
+            }
+          },
+          "record": "a@0",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 2
+              },
+              "schema": "s-dee0cafe1199"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.a",
+            "value": {
+              "payload": {
+                "id": 2,
+                "v": "two"
+              },
+              "schema": "s-41cea21e3d63"
+            }
+          },
+          "record": "a@1",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-3d63d3532f97"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.ab",
+            "value": {
+              "payload": {
+                "id": 1,
+                "v": "one"
+              },
+              "schema": "s-ba08fae3ba6d"
+            }
+          },
+          "record": "ab@0",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 2
+              },
+              "schema": "s-3d63d3532f97"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.ab",
+            "value": {
+              "payload": {
+                "id": 2,
+                "v": "two"
+              },
+              "schema": "s-ba08fae3ba6d"
+            }
+          },
+          "record": "ab@1",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-3d63d3532f97"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.ab",
+            "value": {
+              "payload": null,
+              "schema": "s-a41b642ac0d5"
+            }
+          },
+          "record": "ab@2",
+          "result": "record"
+        },
+        {
+          "record": "ab@3",
+          "result": "dropped"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-b723c0c8c846"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.items",
+            "value": {
+              "payload": {
+                "a": "A1",
+                "attrs": "{\"k\": [1, 2, {\"z\": null}], \"s\": \"x\"}",
+                "b": "B1",
+                "created": "2023-11-14T22:13:20.000000Z",
+                "id": 1,
+                "name": "widget",
+                "price": 12.5,
+                "quantity": 7,
+                "remark": "n1"
+              },
+              "schema": "s-28f9289a08cf"
+            }
+          },
+          "record": "items@0",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 2
+              },
+              "schema": "s-b723c0c8c846"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.items",
+            "value": {
+              "payload": {
+                "a": null,
+                "attrs": null,
+                "b": null,
+                "created": null,
+                "id": 2,
+                "name": "gadget",
+                "price": null,
+                "quantity": null,
+                "remark": null
+              },
+              "payloadDefaultConverter": {
+                "a": null,
+                "attrs": null,
+                "b": null,
+                "created": null,
+                "id": 2,
+                "name": "gadget",
+                "price": null,
+                "quantity": 5,
+                "remark": "none"
+              },
+              "schema": "s-28f9289a08cf"
+            }
+          },
+          "record": "items@1",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 3
+              },
+              "schema": "s-b723c0c8c846"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.items",
+            "value": {
+              "payload": {
+                "a": "A3",
+                "attrs": "[]",
+                "b": "B3",
+                "created": "2023-11-14T22:13:20.123456Z",
+                "id": 3,
+                "name": "gizmo",
+                "price": 0.1,
+                "quantity": 5,
+                "remark": "none"
+              },
+              "schema": "s-28f9289a08cf"
+            }
+          },
+          "record": "items@2",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 4
+              },
+              "schema": "s-b723c0c8c846"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.items",
+            "value": {
+              "payload": {
+                "a": "A4",
+                "attrs": null,
+                "b": "B4",
+                "created": null,
+                "id": 4,
+                "name": "inserted-defaults",
+                "price": null,
+                "quantity": 5,
+                "remark": "none"
+              },
+              "schema": "s-28f9289a08cf"
+            }
+          },
+          "record": "items@3",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 5
+              },
+              "schema": "s-b723c0c8c846"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.items",
+            "value": {
+              "payload": {
+                "a": "A5",
+                "attrs": null,
+                "b": "B5",
+                "created": null,
+                "id": 5,
+                "name": "inserted-explicit-null",
+                "price": null,
+                "quantity": null,
+                "remark": null
+              },
+              "payloadDefaultConverter": {
+                "a": "A5",
+                "attrs": null,
+                "b": "B5",
+                "created": null,
+                "id": 5,
+                "name": "inserted-explicit-null",
+                "price": null,
+                "quantity": 5,
+                "remark": "none"
+              },
+              "schema": "s-28f9289a08cf"
+            }
+          },
+          "record": "items@4",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-b723c0c8c846"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.items",
+            "value": {
+              "payload": {
+                "a": "A1",
+                "attrs": "{\"k\": [1, 2, {\"z\": null}], \"s\": \"x\"}",
+                "b": "B1",
+                "created": "2023-11-14T22:13:20.000000Z",
+                "id": 1,
+                "name": "widget-2",
+                "price": 12.5,
+                "quantity": 7,
+                "remark": "n1"
+              },
+              "schema": "s-28f9289a08cf"
+            }
+          },
+          "record": "items@5",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 3
+              },
+              "schema": "s-b723c0c8c846"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.items",
+            "value": {
+              "payload": {
+                "a": "A3",
+                "attrs": "[]",
+                "b": "B3",
+                "created": "2023-11-14T22:13:20.123456Z",
+                "id": 3,
+                "name": "gizmo",
+                "price": 0.1,
+                "quantity": 5,
+                "remark": "none"
+              },
+              "schema": "s-28f9289a08cf"
+            }
+          },
+          "record": "items@6",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-b723c0c8c846"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.items",
+            "value": {
+              "payload": {
+                "a": "A1",
+                "attrs": "{\"k\": [1, 2, {\"z\": null}], \"s\": \"x\"}",
+                "b": "B1",
+                "created": "2023-11-14T22:13:20.000000Z",
+                "id": 1,
+                "name": "widget-2",
+                "price": 12.5,
+                "quantity": null,
+                "remark": null
+              },
+              "payloadDefaultConverter": {
+                "a": "A1",
+                "attrs": "{\"k\": [1, 2, {\"z\": null}], \"s\": \"x\"}",
+                "b": "B1",
+                "created": "2023-11-14T22:13:20.000000Z",
+                "id": 1,
+                "name": "widget-2",
+                "price": 12.5,
+                "quantity": 5,
+                "remark": "none"
+              },
+              "schema": "s-28f9289a08cf"
+            }
+          },
+          "record": "items@7",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 3
+              },
+              "schema": "s-b723c0c8c846"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.items",
+            "value": {
+              "payload": {
+                "a": "A3",
+                "attrs": "{\"k\": []}",
+                "b": "B3",
+                "created": "2023-11-14T22:13:20.123456Z",
+                "id": 3,
+                "name": "gizmo",
+                "price": 0.1,
+                "quantity": 5,
+                "remark": "none"
+              },
+              "schema": "s-28f9289a08cf"
+            }
+          },
+          "record": "items@8",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 2
+              },
+              "schema": "s-b723c0c8c846"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.items",
+            "value": {
+              "payload": null,
+              "schema": "s-a86e5cdf2ff3"
+            }
+          },
+          "record": "items@9",
+          "result": "record"
+        },
+        {
+          "record": "items@10",
+          "result": "dropped"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 5
+              },
+              "schema": "s-b723c0c8c846"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.items",
+            "value": {
+              "payload": null,
+              "schema": "s-a86e5cdf2ff3"
+            }
+          },
+          "record": "items@11",
+          "result": "record"
+        },
+        {
+          "record": "items@12",
+          "result": "dropped"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-8474bf5364da"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.noschema",
+            "value": {
+              "payload": {
+                "a.b": "dot",
+                "id": 1,
+                "nums": [
+                  1,
+                  2,
+                  3
+                ],
+                "tags": [
+                  "x",
+                  "y"
+                ],
+                "temp_K": "kelvin"
+              },
+              "schema": "s-61ebf3776f84"
+            }
+          },
+          "record": "noschema@0",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 2
+              },
+              "schema": "s-8474bf5364da"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.noschema",
+            "value": {
+              "payload": {
+                "a.b": "",
+                "id": 2,
+                "nums": [],
+                "tags": [],
+                "temp_K": ""
+              },
+              "schema": "s-61ebf3776f84"
+            }
+          },
+          "record": "noschema@1",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 3
+              },
+              "schema": "s-8474bf5364da"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.noschema",
+            "value": {
+              "payload": {
+                "a.b": null,
+                "id": 3,
+                "nums": null,
+                "tags": null,
+                "temp_K": null
+              },
+              "schema": "s-61ebf3776f84"
+            }
+          },
+          "record": "noschema@2",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-8474bf5364da"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.noschema",
+            "value": {
+              "payload": {
+                "a.b": "dot2",
+                "id": 1,
+                "nums": [
+                  9
+                ],
+                "tags": [
+                  "z"
+                ],
+                "temp_K": "kelvin"
+              },
+              "schema": "s-61ebf3776f84"
+            }
+          },
+          "record": "noschema@3",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-712f78d1d50c"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.strict",
+            "value": {
+              "payload": {
+                "attrs": "{\"a\": [1, {\"b\": null}]}",
+                "created": "2023-11-14T22:13:20.000000Z",
+                "flag": true,
+                "id": 1,
+                "name": "one",
+                "price": 9.99,
+                "quantity": 3
+              },
+              "schema": "s-b519c6c7ad92"
+            }
+          },
+          "record": "strict@0",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 2
+              },
+              "schema": "s-712f78d1d50c"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.strict",
+            "value": {
+              "payload": {
+                "attrs": "[]",
+                "created": "2023-11-14T22:13:20.123456Z",
+                "flag": false,
+                "id": 2,
+                "name": "two",
+                "price": 0.01,
+                "quantity": 5
+              },
+              "schema": "s-b519c6c7ad92"
+            }
+          },
+          "record": "strict@1",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 3
+              },
+              "schema": "s-712f78d1d50c"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.strict",
+            "value": {
+              "payload": {
+                "attrs": "{}",
+                "created": "2024-01-01T00:00:00.000000Z",
+                "flag": true,
+                "id": 3,
+                "name": "three",
+                "price": 1.5,
+                "quantity": 1
+              },
+              "schema": "s-b519c6c7ad92"
+            }
+          },
+          "record": "strict@2",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-712f78d1d50c"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.strict",
+            "value": {
+              "payload": {
+                "attrs": "{\"a\": [1, {\"b\": null}]}",
+                "created": "2023-11-14T22:13:20.000000Z",
+                "flag": true,
+                "id": 1,
+                "name": "one-b",
+                "price": 9.99,
+                "quantity": 3
+              },
+              "schema": "s-b519c6c7ad92"
+            }
+          },
+          "record": "strict@3",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 2
+              },
+              "schema": "s-712f78d1d50c"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.strict",
+            "value": {
+              "payload": null,
+              "schema": "s-1608e9fc33c6"
+            }
+          },
+          "record": "strict@4",
+          "result": "record"
+        },
+        {
+          "record": "strict@5",
+          "result": "dropped"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-783e2e663af0"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.toast",
+            "value": {
+              "payload": {
+                "id": 1,
+                "label": "one"
+              },
+              "schema": "s-5fdaef29dd1f"
+            }
+          },
+          "record": "toast@0",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-783e2e663af0"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.toast",
+            "value": {
+              "payload": {
+                "id": 1,
+                "label": "one-b"
+              },
+              "schema": "s-5fdaef29dd1f"
+            }
+          },
+          "record": "toast@1",
+          "result": "record"
+        }
+      ],
+      "run": "exclude-rename-enrs-null-false"
+    },
+    {
+      "chain": {
+        "transforms": [
+          {
+            "alias": "unwrap",
+            "config": {
+              "replace.null.with.default": "false"
+            },
+            "type": "io.debezium.transforms.ExtractNewRecordState"
+          },
+          {
+            "alias": "r",
+            "config": {
+              "renames": "note:name",
+              "replace.null.with.default": "false"
+            },
+            "type": "ReplaceField$Value"
+          }
+        ]
+      },
+      "results": [
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-dee0cafe1199"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.a",
+            "value": {
+              "payload": {
+                "id": 1,
+                "v": "one"
+              },
+              "schema": "s-41cea21e3d63"
+            }
+          },
+          "record": "a@0",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 2
+              },
+              "schema": "s-dee0cafe1199"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.a",
+            "value": {
+              "payload": {
+                "id": 2,
+                "v": "two"
+              },
+              "schema": "s-41cea21e3d63"
+            }
+          },
+          "record": "a@1",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-3d63d3532f97"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.ab",
+            "value": {
+              "payload": {
+                "id": 1,
+                "v": "one"
+              },
+              "schema": "s-ba08fae3ba6d"
+            }
+          },
+          "record": "ab@0",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 2
+              },
+              "schema": "s-3d63d3532f97"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.ab",
+            "value": {
+              "payload": {
+                "id": 2,
+                "v": "two"
+              },
+              "schema": "s-ba08fae3ba6d"
+            }
+          },
+          "record": "ab@1",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-3d63d3532f97"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.ab",
+            "value": {
+              "payload": null,
+              "schema": "s-a41b642ac0d5"
+            }
+          },
+          "record": "ab@2",
+          "result": "record"
+        },
+        {
+          "record": "ab@3",
+          "result": "dropped"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.SchemaBuilderException",
+            "message": "Cannot create field because of field name duplication name"
+          },
+          "record": "items@0",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.SchemaBuilderException",
+            "message": "Cannot create field because of field name duplication name"
+          },
+          "record": "items@1",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.SchemaBuilderException",
+            "message": "Cannot create field because of field name duplication name"
+          },
+          "record": "items@2",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.SchemaBuilderException",
+            "message": "Cannot create field because of field name duplication name"
+          },
+          "record": "items@3",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.SchemaBuilderException",
+            "message": "Cannot create field because of field name duplication name"
+          },
+          "record": "items@4",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.SchemaBuilderException",
+            "message": "Cannot create field because of field name duplication name"
+          },
+          "record": "items@5",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.SchemaBuilderException",
+            "message": "Cannot create field because of field name duplication name"
+          },
+          "record": "items@6",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.SchemaBuilderException",
+            "message": "Cannot create field because of field name duplication name"
+          },
+          "record": "items@7",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.SchemaBuilderException",
+            "message": "Cannot create field because of field name duplication name"
+          },
+          "record": "items@8",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 2
+              },
+              "schema": "s-b723c0c8c846"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.items",
+            "value": {
+              "payload": null,
+              "schema": "s-a86e5cdf2ff3"
+            }
+          },
+          "record": "items@9",
+          "result": "record"
+        },
+        {
+          "record": "items@10",
+          "result": "dropped"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 5
+              },
+              "schema": "s-b723c0c8c846"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.items",
+            "value": {
+              "payload": null,
+              "schema": "s-a86e5cdf2ff3"
+            }
+          },
+          "record": "items@11",
+          "result": "record"
+        },
+        {
+          "record": "items@12",
+          "result": "dropped"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-8474bf5364da"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.noschema",
+            "value": {
+              "payload": {
+                "a.b": "dot",
+                "id": 1,
+                "nums": [
+                  1,
+                  2,
+                  3
+                ],
+                "tags": [
+                  "x",
+                  "y"
+                ],
+                "temp_K": "kelvin"
+              },
+              "schema": "s-61ebf3776f84"
+            }
+          },
+          "record": "noschema@0",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 2
+              },
+              "schema": "s-8474bf5364da"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.noschema",
+            "value": {
+              "payload": {
+                "a.b": "",
+                "id": 2,
+                "nums": [],
+                "tags": [],
+                "temp_K": ""
+              },
+              "schema": "s-61ebf3776f84"
+            }
+          },
+          "record": "noschema@1",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 3
+              },
+              "schema": "s-8474bf5364da"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.noschema",
+            "value": {
+              "payload": {
+                "a.b": null,
+                "id": 3,
+                "nums": null,
+                "tags": null,
+                "temp_K": null
+              },
+              "schema": "s-61ebf3776f84"
+            }
+          },
+          "record": "noschema@2",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-8474bf5364da"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.noschema",
+            "value": {
+              "payload": {
+                "a.b": "dot2",
+                "id": 1,
+                "nums": [
+                  9
+                ],
+                "tags": [
+                  "z"
+                ],
+                "temp_K": "kelvin"
+              },
+              "schema": "s-61ebf3776f84"
+            }
+          },
+          "record": "noschema@3",
+          "result": "record"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "note is not a valid field name"
+          },
+          "record": "strict@0",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "note is not a valid field name"
+          },
+          "record": "strict@1",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "note is not a valid field name"
+          },
+          "record": "strict@2",
+          "result": "error"
+        },
+        {
+          "error": {
+            "class": "org.apache.kafka.connect.errors.DataException",
+            "message": "note is not a valid field name"
+          },
+          "record": "strict@3",
+          "result": "error"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 2
+              },
+              "schema": "s-712f78d1d50c"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.strict",
+            "value": {
+              "payload": null,
+              "schema": "s-1608e9fc33c6"
+            }
+          },
+          "record": "strict@4",
+          "result": "record"
+        },
+        {
+          "record": "strict@5",
+          "result": "dropped"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-783e2e663af0"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.toast",
+            "value": {
+              "payload": {
+                "big": "e2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850ee2af829bf6d4c7bf88ad5489522b850e",
+                "id": 1,
+                "label": "one"
+              },
+              "schema": "s-eef4d1849c60"
+            }
+          },
+          "record": "toast@0",
+          "result": "record"
+        },
+        {
+          "output": {
+            "headers": [
+              {
+                "key": "__debezium.context.connectorLogicalName",
+                "schema": "string",
+                "value": "dbz"
+              },
+              {
+                "key": "__debezium.context.taskId",
+                "schema": "string",
+                "value": "0"
+              },
+              {
+                "key": "__debezium.context.connectorName",
+                "schema": "string",
+                "value": "postgresql"
+              },
+              {
+                "key": "__debezium.context.runId",
+                "schema": "string",
+                "value": "00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "key": {
+              "payload": {
+                "id": 1
+              },
+              "schema": "s-783e2e663af0"
+            },
+            "partition": 0,
+            "timestamp": 1700000000000,
+            "topic": "dbz.public.toast",
+            "value": {
+              "payload": {
+                "big": "__debezium_unavailable_value",
+                "id": 1,
+                "label": "one-b"
+              },
+              "schema": "s-eef4d1849c60"
+            }
+          },
+          "record": "toast@1",
+          "result": "record"
+        }
+      ],
+      "run": "rename-onto-existing-enrs-null-false"
     }
   ],
   "schemas": {
@@ -28880,6 +31009,70 @@
           "field": "src",
           "optional": true,
           "type": "string"
+        }
+      ],
+      "name": "dbz.public.items.Value",
+      "optional": false,
+      "type": "struct"
+    },
+    "s-28f9289a08cf": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "name",
+          "optional": false,
+          "type": "string"
+        },
+        {
+          "default": "none",
+          "field": "remark",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "default": 5,
+          "field": "quantity",
+          "optional": true,
+          "type": "int32"
+        },
+        {
+          "field": "price",
+          "name": "org.apache.kafka.connect.data.Decimal",
+          "optional": true,
+          "parameters": {
+            "connect.decimal.precision": "10",
+            "scale": "2"
+          },
+          "type": "bytes",
+          "version": 1
+        },
+        {
+          "field": "attrs",
+          "name": "io.debezium.data.Json",
+          "optional": true,
+          "type": "string",
+          "version": 1
+        },
+        {
+          "field": "a",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "b",
+          "optional": true,
+          "type": "string"
+        },
+        {
+          "field": "created",
+          "name": "io.debezium.time.ZonedTimestamp",
+          "optional": true,
+          "type": "string",
+          "version": 1
         }
       ],
       "name": "dbz.public.items.Value",
@@ -29984,6 +32177,59 @@
         }
       ],
       "name": "dbz.public.toast.Value",
+      "optional": false,
+      "type": "struct"
+    },
+    "s-b519c6c7ad92": {
+      "fields": [
+        {
+          "field": "id",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "name",
+          "optional": false,
+          "type": "string"
+        },
+        {
+          "default": 5,
+          "field": "quantity",
+          "optional": false,
+          "type": "int32"
+        },
+        {
+          "field": "price",
+          "name": "org.apache.kafka.connect.data.Decimal",
+          "optional": false,
+          "parameters": {
+            "connect.decimal.precision": "10",
+            "scale": "2"
+          },
+          "type": "bytes",
+          "version": 1
+        },
+        {
+          "field": "created",
+          "name": "io.debezium.time.ZonedTimestamp",
+          "optional": false,
+          "type": "string",
+          "version": 1
+        },
+        {
+          "field": "attrs",
+          "name": "io.debezium.data.Json",
+          "optional": false,
+          "type": "string",
+          "version": 1
+        },
+        {
+          "field": "flag",
+          "optional": false,
+          "type": "boolean"
+        }
+      ],
+      "name": "dbz.public.strict.Value",
       "optional": false,
       "type": "struct"
     },
