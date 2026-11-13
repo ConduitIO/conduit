@@ -69,13 +69,14 @@ type Capability struct {
 //   - builtin:s3 destination v0.13.0 names objects from opencdc.collection
 //     only with a partitioner other than none, the default, and has no
 //     topic setting.
-//   - builtin:postgres source v0.21.0 sets opencdc.collection to the
-//     configured tables entry for snapshot records and to the bare relation
-//     name for CDC records (v0.21.1: the configured name for both).
-//     table.include.list translates to bare names with search_path set to
-//     their one schema (emit pgTables), so both are the bare table name; the
-//     Kafka Connect topic <topic.prefix>.<schema>.<table> also needs the
-//     schema, which no topic expression carries yet.
+//   - builtin:postgres source v0.21.1 sets opencdc.collection to the
+//     configured tables entry for snapshot and CDC records of a configured
+//     table, and to <schema>.<table> for CDC records of a table outside
+//     tables in a reused publication. table.include.list translates to bare
+//     names with search_path set to their one schema (emit pgTables), so the
+//     collection is the bare table name; the Kafka Connect topic
+//     <topic.prefix>.<schema>.<table> also needs the schema, which no topic
+//     expression carries yet.
 var capabilities = []Capability{
 	{Plugin: "builtin:kafka", Role: roleSource},
 	{Plugin: "builtin:kafka", Role: roleDestination, TopicSetting: "topic"},
