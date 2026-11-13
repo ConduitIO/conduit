@@ -210,6 +210,13 @@
           "rule": "required/destination/servers"
         },
         {
+          "code": "kc.default_differs",
+          "reason": "Kafka Connect wrote a column's default in place of NULL, because replace.null.with.default is true by default and neither key.converter.replace.null.with.default nor value.converter.replace.null.with.default is set to false. Conduit writes NULL. Consumers that relied on the default must handle null.",
+          "fix": "None needed in Conduit. To compare outputs, set key.converter.replace.null.with.default=false and value.converter.replace.null.with.default=false on the Kafka Connect side.",
+          "blocking": false,
+          "rule": "debezium-postgres/notes/replace-null-with-default"
+        },
+        {
           "code": "kc.secret_plaintext",
           "reason": "The input holds at least one secret as a literal value. Where migrate used the setting it wrote a variable reference instead (a dropped setting has no variable), but the input file itself contains the secret.",
           "fix": "Fill the variables in secrets.env.template from your secret store, and replace the literal in the Kafka Connect config with a config-provider reference.",

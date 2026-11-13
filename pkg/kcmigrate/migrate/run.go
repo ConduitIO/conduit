@@ -315,6 +315,7 @@ func migrateConnector(cl rules.Classified, state string, workerDs []rules.Decisi
 	run.rc.Pipeline = plan.File
 	run.rc.Target = &kcmigrate.Target{Source: plan.Plugin(emit.SideSource), Destination: plan.Plugin(emit.SideDestination)}
 	run.rc.Notes = append(run.rc.Notes, converterNotes(cl.Decisions, workerDs)...)
+	run.rc.Notes = append(run.rc.Notes, nullDefaultNotes(cl, workerDs)...)
 	// From the input, not the plan: a literal in a key that ends up unused
 	// (overridden, an unused fallback cluster) is still in the input file.
 	// A worker literal the pipeline uses is noted here too.

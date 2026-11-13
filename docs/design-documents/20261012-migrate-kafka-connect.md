@@ -306,6 +306,7 @@ so the command stays honest if a certification slips.
 | `heartbeat.interval.ms`, `heartbeat.action.query` | none | unsupported, **warning** (non-blocking): the v0.15.0 Postgres work found no idle-database slot-advancement problem and dropped the heartbeat writer. |
 | `signal.*`, `incremental.snapshot.*`, `snapshot.select.statement.overrides`, `snapshot.locking.mode` | | unsupported. |
 | `max.batch.size`, `max.queue.size`, `poll.interval.ms` | `sdk.batch.size` / none | approximated (non-blocking). |
+| `key.converter.replace.null.with.default`, `value.converter.replace.null.with.default` | none | Kafka Connect's converters default it to `true`, so a NULL in a column with a default was written as the default; the Postgres source writes NULL. Every Debezium Postgres connector whose effective converter (the connector's `<side>.converter.*` keys when it names the converter, else the worker's) does not set it to `false` gets a non-blocking `kc.default_differs` note naming the setting path (`debezium-postgres/notes/replace-null-with-default`). A side with `StringConverter` or `ByteArrayConverter` is skipped; any other converter is noted the same way. |
 
 _Resume._ For Debezium Postgres, v0.21 migrates with **no re-snapshot** by importing Debezium's committed
 offset into a fresh Conduit slot. The design is in `conduit-connector-postgres#341` (Tier 1) and the CLI side
