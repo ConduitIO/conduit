@@ -80,7 +80,7 @@ func (e *Encoder) Encode(ctx context.Context, sd opencdc.StructuredData, carried
 	data, err := s.Marshal(sd)
 	if err != nil {
 		if cerrors.Is(err, avro.ErrDecimalNotRepresentable) {
-			return nil, cerrors.Errorf("failed to marshal data with schema (ID: %v, subject: %v, version: %v): %w", s.ID, s.Subject, s.Version, decimalNotRepresentable(err, e.lossless))
+			return nil, cerrors.Errorf("failed to marshal data with schema (ID: %v, subject: %v, version: %v): %w", s.ID, s.Subject, s.Version, decimalNotRepresentable(err, e.lossless, !carried.IsZero()))
 		}
 		if e.lossless {
 			return nil, cerrors.Errorf("failed to marshal data with schema (ID: %v, subject: %v, version: %v): %w", s.ID, s.Subject, s.Version, mismatchFromCodec(sd, err))

@@ -33,13 +33,16 @@ import (
 //
 // With schema.strategy fromRecord the code is CodeSchemaMismatch, which that
 // strategy has always returned for a decimal finer than its scale. With
-// autoRegister and preRegistered it is CodeDecimalNotRepresentable.
+// autoRegister and preRegistered it is CodeDecimalNotRepresentable. hasCarried
+// reports whether the record carried a schema; a fromRecord record that
+// carries none was encoded with the inferred decimal(31,10), so the suggestion
+// points at that inference rather than at a processor.
 //
 // Unlike other codec errors, the detail is shown: by the contract of
 // ErrDecimalNotRepresentable it holds the field path, the precision and scale
 // the value needs, the schema's, and a fix, never the value. If its format
 // changes, the error keeps its code and only loses the detail.
-func decimalNotRepresentable(err error, fromRecord bool) error {
+func decimalNotRepresentable(err error, fromRecord, hasCarried bool) error {
 	detail, fix := decimalDetail(err)
 	msg := "a decimal value does not fit its Avro schema exactly and is not rounded or truncated to fit"
 	if detail != "" {
@@ -48,8 +51,10 @@ func decimalNotRepresentable(err error, fromRecord bool) error {
 
 	if fromRecord {
 		ce := conduiterr.Wrap(CodeSchemaMismatch, msg, err)
-		ce.Suggestion = "the value no longer fits the schema the record carries and is not changed to fit it; " +
-			"fix the processor that changed it, or attach a schema that describes it"
+		ce.Suggestion = SuggestionDecimalCarried
+		if !hasCarried {
+			ce.Suggestion = SuggestionDecimalInferred
+		}
 		if fix != "" {
 			ce.Suggestion += "; for this value: " + fix
 		}
@@ -57,13 +62,30 @@ func decimalNotRepresentable(err error, fromRecord bool) error {
 	}
 
 	ce := conduiterr.Wrap(CodeDecimalNotRepresentable, msg, err)
-	ce.Suggestion = "use schema.strategy fromRecord to encode with the decimal type the record carries, " +
-		"or preRegistered with a schema whose decimal has enough digits, or round the value before avro.encode"
+	ce.Suggestion = SuggestionDecimalStrategy
 	if fix != "" {
 		ce.Suggestion += "; for this value: " + fix
 	}
 	return ce
 }
+
+// Suggestions of the decimalNotRepresentable error, by case. Each is followed
+// by "; for this value: " and the fix conduit-commons computed, when there is
+// one.
+const (
+	// SuggestionDecimalCarried is for fromRecord with a schema the record
+	// carries.
+	SuggestionDecimalCarried = "the value no longer fits the schema the record carries and is not changed to fit it; " +
+		"fix the processor that changed it, or attach a schema that describes it"
+	// SuggestionDecimalInferred is for fromRecord with a record that carries
+	// no schema, encoded with the inferred decimal(31,10).
+	SuggestionDecimalInferred = "the record carries no schema, so avro.encode inferred decimal(31,10), which cannot hold " +
+		"the value; attach the source's schema to the record, or use preRegistered with a schema whose decimal has " +
+		"enough digits, or round the value before avro.encode"
+	// SuggestionDecimalStrategy is for autoRegister and preRegistered.
+	SuggestionDecimalStrategy = "use schema.strategy fromRecord to encode with the decimal type the record carries, " +
+		"or preRegistered with a schema whose decimal has enough digits, or round the value before avro.encode"
+)
 
 // decimalDetail returns the part of an ErrDecimalNotRepresentable message
 // after the sentinel, split into the description (`field "d": the value

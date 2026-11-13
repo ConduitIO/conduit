@@ -26,7 +26,9 @@ The code depends on where the record was encoded:
 - The schema handling of a built-in connector or processor (a source that attaches a schema, or a processor that
   re-encodes a schema-attached record): no Conduit code; the message contains
   `avro decimal value is not representable in its schema`. A source that fails this way stops the pipeline, since a
-  source error has no DLQ.
+  source error has no DLQ; nothing is acknowledged, and it resumes from the last position once fixed. The built-in
+  Postgres source can hit this with `logrepl.withAvroSchema: false` and `sdk.schema.extract.payload.enabled: true`,
+  where the SDK infers `decimal(31,10)` for a `numeric`.
 
 The message never contains the value.
 

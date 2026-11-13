@@ -66,6 +66,7 @@ func TestEncodeProcessor_DecimalNotRepresentable(t *testing.T) {
 		wantErr  bool
 		wantCode conduiterr.Code
 		wantText []string // substrings of the error message
+		wantHint string   // prefix of the suggestion
 	}{{
 		name:     "autoRegister, more fractional digits than decimal(31,10)",
 		strategy: "autoRegister",
@@ -73,6 +74,7 @@ func TestEncodeProcessor_DecimalNotRepresentable(t *testing.T) {
 		wantErr:  true,
 		wantCode: avrointernal.CodeDecimalNotRepresentable,
 		wantText: []string{`field "d"`, "scale 12", "decimal(31,10)"},
+		wantHint: avrointernal.SuggestionDecimalStrategy,
 	}, {
 		name:     "autoRegister, no finite decimal expansion",
 		strategy: "autoRegister",
@@ -80,6 +82,7 @@ func TestEncodeProcessor_DecimalNotRepresentable(t *testing.T) {
 		wantErr:  true,
 		wantCode: avrointernal.CodeDecimalNotRepresentable,
 		wantText: []string{`field "d"`, "non-terminating", "decimal(31,10)"},
+		wantHint: avrointernal.SuggestionDecimalStrategy,
 	}, {
 		name:     "autoRegister, exactly 10 fractional digits",
 		strategy: "autoRegister",
@@ -91,6 +94,7 @@ func TestEncodeProcessor_DecimalNotRepresentable(t *testing.T) {
 		wantErr:  true,
 		wantCode: avrointernal.CodeDecimalNotRepresentable,
 		wantText: []string{`field "d"`, "scale 1", "decimal(5,0)"},
+		wantHint: avrointernal.SuggestionDecimalStrategy,
 	}, {
 		name:     "preRegistered, negative integer under scale 0",
 		strategy: "preRegistered",
@@ -98,29 +102,49 @@ func TestEncodeProcessor_DecimalNotRepresentable(t *testing.T) {
 	}, {
 		// fromRecord with no carried schema infers decimal(31,10) like
 		// autoRegister, and keeps its own code for a value finer than the
-		// scale.
+		// scale. The suggestion names the inference, not a processor.
 		name:     "fromRecord fallback, more fractional digits than decimal(31,10)",
 		strategy: "fromRecord",
 		value:    "1.123456789012",
 		wantErr:  true,
 		wantCode: avrointernal.CodeSchemaMismatch,
 		wantText: []string{`field "d"`, "scale 12", "decimal(31,10)"},
+		wantHint: avrointernal.SuggestionDecimalInferred,
+	}, {
+		// fromRecord with the schema the record carries (decimal(5,0)).
+		name:     "fromRecord carried, negative fraction under scale 0",
+		strategy: strategyFromRecordCarried,
+		value:    "-1.5",
+		wantErr:  true,
+		wantCode: avrointernal.CodeSchemaMismatch,
+		wantText: []string{`field "d"`, "scale 1", "decimal(5,0)"},
+		wantHint: avrointernal.SuggestionDecimalCarried,
+	}, {
+		name:     "fromRecord carried, exact value",
+		strategy: strategyFromRecordCarried,
+		value:    "-2",
 	}}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			p, client := newDecimalEncoder(t, tc.strategy)
 
+			md := opencdc.Metadata{}
+			if tc.strategy == strategyFromRecordCarried {
+				md[opencdc.MetadataPayloadSchemaSubject] = "src-value"
+				md[opencdc.MetadataPayloadSchemaVersion] = "1"
+			}
 			value := mustRat(t, tc.value)
 			got := p.Process(ctx, []opencdc.Record{{
 				Operation: opencdc.OperationCreate,
+				Metadata:  md,
 				Payload:   opencdc.Change{After: opencdc.StructuredData{"d": value}},
 			}})
 			if len(got) != 1 {
 				t.Fatalf("want 1 processed record, got %d", len(got))
 			}
 			if tc.wantErr {
-				assertDecimalError(t, got[0], tc.wantCode, tc.wantText)
+				assertDecimalError(t, got[0], value, tc.wantCode, tc.wantHint, tc.wantText)
 				return
 			}
 			d := decodeDecimal(t, client, singleRecord(t, got[0]).Payload.After.Bytes())
@@ -131,9 +155,13 @@ func TestEncodeProcessor_DecimalNotRepresentable(t *testing.T) {
 	}
 }
 
+// strategyFromRecordCarried is schema.strategy fromRecord on a record that
+// carries decimal50Schema as subject src-value, version 1.
+const strategyFromRecordCarried = "fromRecord carried"
+
 // newDecimalEncoder returns an opened avro.encode processor with the given
-// strategy and the in-memory registry it uses. For preRegistered it registers
-// decimal50Schema first.
+// strategy and the in-memory registry it uses. For preRegistered and
+// strategyFromRecordCarried it registers decimal50Schema first.
 func newDecimalEncoder(t *testing.T, strategy string) (*EncodeProcessor, schemaregistry.Registry) {
 	t.Helper()
 	ctx := context.Background()
@@ -146,6 +174,12 @@ func newDecimalEncoder(t *testing.T, strategy string) (*EncodeProcessor, schemar
 	case "autoRegister":
 		cfg["schema.autoRegister.subject"] = "dec-value"
 	case "fromRecord":
+		cfg["schema.fromRecord.subject"] = "dec-value"
+	case strategyFromRecordCarried:
+		if _, err := client.CreateSchema(ctx, "src-value", sr.Schema{Type: sr.TypeAvro, Schema: decimal50Schema}); err != nil {
+			t.Fatal(err)
+		}
+		cfg["schema.strategy"] = "fromRecord"
 		cfg["schema.fromRecord.subject"] = "dec-value"
 	case "preRegistered":
 		if _, err := client.CreateSchema(ctx, "dec-value", sr.Schema{Type: sr.TypeAvro, Schema: decimal50Schema}); err != nil {
@@ -193,9 +227,9 @@ func decodeDecimal(t *testing.T, client schemaregistry.Registry, raw []byte) *bi
 }
 
 // assertDecimalError checks that got is an error record for
-// ErrDecimalNotRepresentable with the given code, a suggestion, and a message
-// that contains wantText and none of the test values.
-func assertDecimalError(t *testing.T, got sdk.ProcessedRecord, code conduiterr.Code, wantText []string) {
+// ErrDecimalNotRepresentable with the given code, a suggestion that starts
+// with hint, and a message that contains wantText and no rendering of value.
+func assertDecimalError(t *testing.T, got sdk.ProcessedRecord, value *big.Rat, code conduiterr.Code, hint string, wantText []string) {
 	t.Helper()
 	errRec, ok := got.(sdk.ErrorRecord)
 	if !ok {
@@ -211,8 +245,8 @@ func assertDecimalError(t *testing.T, got sdk.ProcessedRecord, code conduiterr.C
 	if ce.Code != code {
 		t.Fatalf("want code %s, got %s: %v", code, ce.Code, errRec.Error)
 	}
-	if ce.Suggestion == "" {
-		t.Fatal("want a suggestion")
+	if !strings.HasPrefix(ce.Suggestion, hint) {
+		t.Fatalf("suggestion %q does not start with %q", ce.Suggestion, hint)
 	}
 	msg := errRec.Error.Error()
 	for _, want := range wantText {
@@ -220,10 +254,28 @@ func assertDecimalError(t *testing.T, got sdk.ProcessedRecord, code conduiterr.C
 			t.Errorf("message %q does not contain %q", msg, want)
 		}
 	}
-	// The value itself never appears: not its digits, not its fraction.
-	for _, leak := range []string{"123456789012", "1/3", "-3/2", "1.5"} {
+	// The value itself never appears, in any rendering: its digits, its
+	// fraction, or its decimal form at the scales involved.
+	for _, leak := range valueRenderings(value) {
 		if strings.Contains(msg, leak) || strings.Contains(ce.Suggestion, leak) {
 			t.Errorf("error %q / suggestion %q quotes the value (%q)", msg, ce.Suggestion, leak)
 		}
 	}
+}
+
+// valueRenderings returns the ways value could be written into a message: its
+// fraction and its decimal form at several scales. Bare integers are left out,
+// since the message has digit counts such as 12 and 31 of its own.
+func valueRenderings(value *big.Rat) []string {
+	forms := []string{value.RatString()}
+	for _, n := range []int{1, 2, 10, 12, 15} {
+		forms = append(forms, value.FloatString(n))
+	}
+	out := make([]string, 0, len(forms))
+	for _, f := range forms {
+		if strings.ContainsAny(f, "./") {
+			out = append(out, f)
+		}
+	}
+	return out
 }
