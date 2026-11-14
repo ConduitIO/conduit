@@ -147,6 +147,12 @@ It provides three strategies for determining the schema:
   ` + "`sdk.schema.encode.payload.strategy: extend`" + ` on that processor also works: it builds the new schema from the carried
   one and keeps the carried types.
 
+With every strategy, a decimal value that does not fit the schema's ` + "`decimal(precision, scale)`" + ` exactly fails the
+record instead of being rounded or truncated: more fractional digits than the scale, no finite decimal expansion
+(such as 1/3), or more digits than the precision. autoRegister infers ` + "`decimal(31,10)`" + ` for every decimal, so a value
+with more than 10 fractional digits fails with ` + "`processor.avro_encode.decimal_not_representable`" + `; use fromRecord to
+keep the source's decimal type, or a pre-registered schema with enough scale.
+
 When the encoded field is the whole key or the whole payload (` + "`.Key`, `.Payload.After`, `.Payload.Before`" + `),
 the record's schema metadata for that part (` + "`opencdc.key.schema.*`" + ` or ` + "`opencdc.payload.schema.*`" + `) is removed, because
 it described the value that was replaced. The encoded bytes carry the schema ID in the registry wire format.
