@@ -84,7 +84,9 @@ including the delete hook.
 `custom.javascript` (`script.path` and `require()`) opens relative to the allowed directory without
 following a symlink in any component (`openat2` with `RESOLVE_BENEATH|RESOLVE_NO_SYMLINKS` on Linux,
 one `openat` per component with `O_NOFOLLOW` elsewhere on Unix), so a symlink swapped in after the
-check cannot redirect the read. The file destination will do the same once the engine supplies its open function (a follow-up that needs a `conduit-connector-file` release with `file.WithOpener`); until then it is a configure-time check. On Windows the open is the
+check cannot redirect the read. The file destination will do the same once the engine supplies its open
+function (a follow-up that needs a `conduit-connector-file` release with `file.WithOpener`); until then it
+is a configure-time check. On Windows the open is the
 checked path opened normally.
 
 Not enforced at open time, because the connector or a library opens the path itself: the file
