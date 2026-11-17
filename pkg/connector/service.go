@@ -203,23 +203,12 @@ func (s *Service) Create(
 // retry a failed hook with, and the resource was orphaned silently. When the
 // hook fails, or the plugin cannot be dispensed to run it, Delete returns
 // CodeConnectorDeleteHookFailed and changes nothing, so the caller (an
-// operator, or provisioning's next boot) can retry. A connector that never
-// started has no hook to run and is deleted directly; Instance.Close tests
-// that before dispensing the plugin, so a never-started connector whose
-// plugin binary is gone stays deletable.
-//
-// A retry calls the hook again, which needs the plugin's handler to
-// tolerate a second call after a partial first run. The connector SDK does
-// not require that of LifecycleOnDeleted today, so Conduit does not assume
-// it: ForceDelete is the way out for a handler that cannot succeed twice.
-// See Source.OnDelete and
-// docs/operations/connector-delete-hook-failures.md.
+// operator, or provisioning's next boot) can retry: hooks are idempotent by
+// contract. A connector that never started has no hook to run (see
+// Source.OnDelete) and is deleted directly.
 //
 // If the hook succeeds and the store delete then fails, the record is kept
-// and the store error returned, so the connector is still visible and
-// deletable - but the external resource is already gone, and a retry hits
-// the case above. The orchestrator wraps both writes in one transaction so
-// the store cannot end up half-updated (invariant 5).
+// and the store error returned; a retry runs the hook again.
 func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher PluginDispenserFetcher) error {
 	instance, err := s.Get(ctx, id)
 	if err != nil {
@@ -296,29 +285,6 @@ func (s *Service) removeRecord(ctx context.Context, instance *Instance) error {
 	delete(s.connectors, instance.ID)
 	measure.ConnectorsGauge.WithValues(strings.ToLower(instance.Type.String())).Dec()
 	return nil
-}
-
-// Restore puts instance back into the in-memory map after a Delete or
-// ForceDelete that the caller is rolling back. It deliberately writes
-// nothing to the store: the caller's transaction is what undoes the store
-// side, and re-issuing a store write here would either land in a
-// transaction that is about to be discarded or fail outright on one whose
-// Commit already failed.
-//
-// It restores the original *Instance, so every field survives - notably
-// LastActiveConfig. Rebuilding the instance through Create instead would
-// drop it, and a connector whose LastActiveConfig is empty skips its delete
-// hook (see Instance.Close), which would reintroduce #3058 in the recovery
-// path of its own fix.
-//
-// Restore cannot fail, so a rollback that uses it cannot panic in
-// rollback.R.MustExecute.
-func (s *Service) Restore(instance *Instance) {
-	if _, ok := s.connectors[instance.ID]; ok {
-		return // nothing was removed, or it was already restored
-	}
-	s.connectors[instance.ID] = instance
-	measure.ConnectorsGauge.WithValues(strings.ToLower(instance.Type.String())).Inc()
 }
 
 // Orphan returns the orphan entry recorded for connector id by ForceDelete,

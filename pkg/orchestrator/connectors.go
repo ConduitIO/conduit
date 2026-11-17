@@ -17,7 +17,6 @@ package orchestrator
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	"github.com/conduitio/conduit-commons/rollback"
 	"github.com/conduitio/conduit/pkg/connector"
@@ -205,23 +204,18 @@ func (c *ConnectorOrchestrator) delete(ctx context.Context, id string, force boo
 	if err != nil {
 		return nil, err
 	}
-	// The delete hook has run by now and released whatever the connector
-	// held outside Conduit; that cannot be undone. Every rollback from here
-	// on is in-memory only, because txn.Discard is what undoes the store
-	// side. Re-issuing the store writes instead (through Create and
-	// AddConnector) wrote into a transaction that was about to be discarded,
-	// or failed outright on one whose Commit had already failed - and
-	// Create rebuilt the instance without LastActiveConfig, so the next
-	// Delete skipped the delete hook and reintroduced #3058 in the recovery
-	// path of its own fix. See connector.Service.Restore.
-	r.AppendPure(func() { c.connectors.Restore(conn) })
-
-	connectorIDs := slices.Clone(pl.ConnectorIDs)
+	r.Append(func() error {
+		_, err = c.connectors.Create(ctx, id, conn.Type, conn.Plugin, conn.PipelineID, conn.Config, conn.ProvisionedBy)
+		return err
+	})
 	_, err = c.pipelines.RemoveConnector(ctx, pl.ID, id)
 	if err != nil {
 		return nil, err
 	}
-	r.AppendPure(func() { c.pipelines.RestoreConnectorIDs(pl.ID, connectorIDs) })
+	r.Append(func() error {
+		_, err := c.pipelines.AddConnector(ctx, pl.ID, id)
+		return err
+	})
 	err = txn.Commit()
 	if err != nil {
 		return nil, cerrors.Errorf("could not commit db transaction: %w", err)

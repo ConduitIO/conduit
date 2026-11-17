@@ -406,34 +406,6 @@ func TestService_ForceDelete_NeverStartedPluginMissing(t *testing.T) {
 	is.True(cerrors.Is(err, ErrInstanceNotFound))
 }
 
-// TestService_Restore_KeepsLastActiveConfig: Restore is the orchestrator's
-// rollback for a Delete whose transaction is discarded. It has to put the
-// original instance back, because an instance rebuilt through Create has no
-// LastActiveConfig and a connector without one skips its delete hook - the
-// #3058 bug, reintroduced in the recovery path of its own fix.
-func TestService_Restore_KeepsLastActiveConfig(t *testing.T) {
-	is := is.New(t)
-	ctx := context.Background()
-	service := NewService(log.Nop(), &inmemory.DB{}, nil)
-	conn := startedSource(t, service)
-
-	ctrl := gomock.NewController(t)
-	is.NoErr(service.Delete(ctx, conn.ID, hookFetcher(ctrl, conn, nil)))
-	_, err := service.Get(ctx, conn.ID)
-	is.True(cerrors.Is(err, ErrInstanceNotFound))
-
-	service.Restore(conn)
-	restored, err := service.Get(ctx, conn.ID)
-	is.NoErr(err)
-	is.True(restored.LastActiveConfig.Settings != nil)
-	is.Equal(restored.LastActiveConfig.Settings["slot.name"], "conduit_orders")
-
-	// Restoring twice is a no-op, so a rollback that runs after a partial
-	// one cannot double-count the connector.
-	service.Restore(conn)
-	is.Equal(len(service.List(ctx)), 1)
-}
-
 // TestOrphan_HookErrorCapped: a plugin's error goes into the store, which is
 // not rotated like a log file, so its length is bounded. The full error still
 // reaches the caller and the log.

@@ -88,9 +88,6 @@ type PipelineService interface {
 
 	AddConnector(ctx context.Context, pipelineID string, connectorID string) (*pipeline.Instance, error)
 	RemoveConnector(ctx context.Context, pipelineID string, connectorID string) (*pipeline.Instance, error)
-	// RestoreConnectorIDs rolls an AddConnector or RemoveConnector back in
-	// memory only; the store side is undone by the caller's transaction.
-	RestoreConnectorIDs(pipelineID string, ids []string)
 	AddProcessor(ctx context.Context, pipelineID string, processorID string) (*pipeline.Instance, error)
 	RemoveProcessor(ctx context.Context, pipelineID string, processorID string) (*pipeline.Instance, error)
 }
@@ -101,10 +98,6 @@ type ConnectorService interface {
 	Create(ctx context.Context, id string, t connector.Type, plugin string, pipelineID string, c connector.Config, p connector.ProvisionType) (*connector.Instance, error)
 	Delete(ctx context.Context, id string, dispenserFetcher connector.PluginDispenserFetcher) error
 	ForceDelete(ctx context.Context, id string, dispenserFetcher connector.PluginDispenserFetcher) (*connector.Orphan, error)
-	// Restore rolls a Delete or ForceDelete back in memory only, keeping
-	// every field of the instance; the store side is undone by the caller's
-	// transaction.
-	Restore(instance *connector.Instance)
 	AcknowledgeOrphan(ctx context.Context, id string) error
 	Update(ctx context.Context, id string, plugin string, c connector.Config) (*connector.Instance, error)
 
