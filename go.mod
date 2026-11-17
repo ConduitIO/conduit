@@ -1,6 +1,6 @@
 module github.com/conduitio/conduit
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
@@ -39,7 +39,7 @@ require (
 	github.com/in-toto/attestation v1.2.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/jpillora/backoff v1.0.0
-	github.com/klauspost/compress v1.20.0
+	github.com/klauspost/compress v1.20.3
 	github.com/matryer/is v1.4.1
 	github.com/mattn/go-isatty v0.0.24
 	github.com/modelcontextprotocol/go-sdk v1.8.0
