@@ -153,6 +153,18 @@ func (i *Instance) Connector(_ context.Context, dispenserFetcher PluginDispenser
 }
 
 func (i *Instance) Close(ctx context.Context, dispenserFetcher PluginDispenserFetcher) error {
+	// Invariant (#3058): a connector that never started created nothing
+	// outside Conduit, so there is no delete hook to run. The check belongs
+	// here and not only in Source.OnDelete/Destination.OnDelete, because
+	// reaching those means the plugin was dispensed first: a never-started
+	// connector whose plugin binary is gone would fail to dispense and
+	// become undeletable, which is a regression on the behaviour before the
+	// #3058 fix. Keep the two in sync - they test the same condition.
+	if i.LastActiveConfig.Settings == nil {
+		i.inspector.Close()
+		return nil
+	}
+
 	conn, err := i.Connector(ctx, dispenserFetcher)
 	if err != nil {
 		return err

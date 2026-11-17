@@ -298,6 +298,21 @@ func (d *Destination) Ack(context.Context) ([]DestinationAck, error) {
 	return acks, nil
 }
 
+// OnDelete triggers the plugin's delete lifecycle event, which releases
+// whatever the connector created outside Conduit. It returns early for a
+// connector that never started: there is nothing to release, and
+// Instance.Close tests the same condition before dispensing the plugin at
+// all (keep the two in sync).
+//
+// Retry semantics: when OnDelete fails the connector is kept so the delete
+// can be retried (#3058), and a retry calls this again. Conduit therefore
+// needs the plugin's handler to tolerate being called a second time after a
+// partial first run. That requirement is NOT stated in the connector SDK's
+// LifecycleOnDeleted contract today, so Conduit cannot assume it: a handler
+// that errors because the resource is already gone leaves the connector
+// undeletable until the operator uses --force, which records an orphan
+// entry and removes the connector anyway. See
+// docs/operations/connector-delete-hook-failures.md.
 func (d *Destination) OnDelete(ctx context.Context) (err error) {
 	if d.Instance.LastActiveConfig.Settings == nil {
 		return nil // the connector was never started, nothing to trigger
