@@ -10,7 +10,6 @@ setting no longer resolves, the hook cannot run:
 - a path outside `connectors.file.allowed-dirs` / `secrets.allowed-dirs`,
 - a target refused by `connectors.egress.allow`.
 
-
 ## What happens
 
 The delete is **refused**, and nothing is removed:
