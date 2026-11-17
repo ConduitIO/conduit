@@ -45,8 +45,10 @@ SELECT pubname FROM pg_publication;
 
 Pick one:
 
-- Fix the cause and delete again. The hook is safe to run more than once. For a config-provisioned pipeline, restart
-  Conduit after fixing it.
+- Fix the cause and delete again. The retry calls the hook a second time, so the plugin's handler has to tolerate a
+  partial first run. The connector SDK does not require that of `LifecycleOnDeleted` yet, so check the connector's
+  docs before retrying a hook that got part of the way through; use `--force` below if it cannot run twice. For a
+  config-provisioned pipeline, restart Conduit after fixing it.
 - If the hook can never succeed (the database was decommissioned, the plugin is gone for good), delete with force:
 
   ```bash
@@ -61,14 +63,37 @@ Pick one:
   DROP PUBLICATION conduit_orders;
   ```
 
-  `conduit doctor` reports every forced delete under `connectors.orphaned_resources` until you acknowledge it. Doctor
-  reads the store directly, so with BadgerDB or SQLite stop the server first. Once the resources are gone:
+  `conduit doctor` reports every forced delete under `connectors.orphaned_resources` until you acknowledge it.
+  Doctor and the acknowledgement need the server in opposite states, so run them in this order:
 
-  ```bash
-  conduit connectors delete orders-src --acknowledge-orphan
-  ```
+  1. Stop the server. Doctor reads the store directly, and BadgerDB and SQLite allow one writer.
+  2. `conduit doctor` - lists the orphan entries and the plugin error each one recorded.
+  3. Remove the leftover resources by hand, as above.
+  4. Start the server again.
+  5. Acknowledge the entry, which goes through the API:
+
+     ```bash
+     conduit connectors delete orders-src --acknowledge-orphan
+     ```
+
+  With an in-memory store there is nothing to acknowledge after a restart: the entries are gone with the store.
 
 `--force` is not available for connectors created from a pipeline config file. Fix the cause and restart Conduit.
+
+### The hook succeeded but the delete still failed
+
+A store or transaction error after a successful hook leaves the connector in place while what it held outside Conduit
+is already released - the mirror image of #3058. The symptom is a delete that fails with a store error rather than
+`connector.delete_hook_failed`, and a connector that is still listed:
+
+```bash
+conduit connectors list --json | jq '.[] | select(.id == "orders-src")'
+```
+
+The store is never half-updated, because the orchestrator writes the record deletion and the pipeline update in one
+transaction (invariant 5). Delete the connector again. The hook runs a second time against a resource that is already
+gone, so if the plugin's handler treats that as an error, use `--force` and acknowledge the orphan entry - the
+resource needs no manual cleanup in this case, the first hook already removed it.
 
 ## Related
 

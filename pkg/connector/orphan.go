@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/conduitio/conduit-commons/database"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -55,8 +56,18 @@ type Orphan struct {
 	PipelineID  string `json:"pipelineId"`
 	Plugin      string `json:"plugin"`
 	// HookError is the delete hook's error with secret-looking setting values
-	// scrubbed (log.ScrubSettingValues). It is the plugin's only channel for
-	// naming what it failed to release.
+	// scrubbed (log.ScrubSettingValues) and its length capped at
+	// maxHookErrorLen. It is the plugin's only channel for naming what it
+	// failed to release.
+	//
+	// The text is third-party plugin output on its way into the store, which
+	// unlike a log file is not rotated, so it is treated as untrusted on two
+	// counts. Scrubbing catches the connector's own setting values and any
+	// password in a URL among them; a secret the plugin prints that is not
+	// one of those values is not caught, which is why the cap exists - it
+	// bounds what a plugin can write here, whether that is a record payload,
+	// a credential dump or just noise. Issue #2566 (per-parameter
+	// sensitivity metadata) is the structural fix for the scrubbing half.
 	HookError string    `json:"hookError"`
 	DeletedAt time.Time `json:"deletedAt"`
 }
@@ -135,6 +146,10 @@ func mergeOrphan(o, prev *Orphan) {
 	}
 	if prev.HookError != "" && prev.HookError != o.HookError {
 		o.HookError += " | earlier unacknowledged failure (" + prev.DeletedAt.Format(time.RFC3339) + "): " + prev.HookError
+		// Repeated forced deletes of the same ID chain their errors, so the
+		// merged text is capped again - otherwise the entry grows without
+		// bound in the store.
+		o.HookError = capHookError(o.HookError)
 	}
 }
 
@@ -199,7 +214,28 @@ func scrubbedHookError(instance *Instance, hookErr error) string {
 	msg := hookErr.Error()
 	msg = log.ScrubSettingValues(msg, instance.LastActiveConfig.Settings)
 	msg = log.ScrubSettingValues(msg, instance.Config.Settings)
-	return msg
+	return capHookError(msg)
+}
+
+// maxHookErrorLen bounds a stored Orphan.HookError. The full error is logged
+// and returned to the caller; only the durable copy is capped. See the
+// HookError field's doc comment for why a plugin's error text is not allowed
+// unbounded room in the store.
+const maxHookErrorLen = 2048
+
+// capHookError truncates msg to maxHookErrorLen, marking that it did. It cuts
+// on a rune boundary so the result stays valid UTF-8 and survives a JSON
+// round trip.
+func capHookError(msg string) string {
+	const marker = " [truncated]"
+	if len(msg) <= maxHookErrorLen {
+		return msg
+	}
+	cut := maxHookErrorLen - len(marker)
+	for cut > 0 && !utf8.RuneStart(msg[cut]) {
+		cut--
+	}
+	return msg[:cut] + marker
 }
 
 func orphanSuggestion(connectorID string) string {

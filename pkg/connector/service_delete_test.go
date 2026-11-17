@@ -18,6 +18,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
+	"unicode/utf8"
 
 	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
@@ -359,4 +361,106 @@ func TestService_ForceDelete_KilledBetweenTheTwoWrites(t *testing.T) {
 	stored, err = ListOrphans(ctx, inner)
 	is.NoErr(err)
 	is.Equal(len(stored), 1)
+}
+
+// TestService_Delete_NeverStartedPluginMissing guards the never-started
+// guard's placement. Instance.Close has to test LastActiveConfig before it
+// dispenses the plugin: when the guard sat only inside
+// Source.OnDelete/Destination.OnDelete, reaching it meant dispensing first,
+// so a connector that never ran and whose plugin binary is gone failed to
+// dispense and could not be deleted at all - a regression on the behaviour
+// before the #3058 fix, which deleted it without complaint.
+//
+// fakePluginFetcher{} is that missing binary: NewDispenser finds no entry
+// and fails, as TestService_Delete_PluginMissing relies on for a connector
+// that HAS run.
+func TestService_Delete_NeverStartedPluginMissing(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	service := NewService(log.Nop(), &inmemory.DB{}, nil)
+	conn, err := service.Create(ctx, uuid.NewString(), TypeSource, "builtin:postgres", uuid.NewString(),
+		Config{Name: "orders", Settings: map[string]string{"slot.name": "conduit_orders"}}, ProvisionTypeAPI)
+	is.NoErr(err)
+	is.True(conn.LastActiveConfig.Settings == nil) // it never ran
+
+	is.NoErr(service.Delete(ctx, conn.ID, fakePluginFetcher{}))
+	_, err = service.Get(ctx, conn.ID)
+	is.True(cerrors.Is(err, ErrInstanceNotFound))
+}
+
+// TestService_ForceDelete_NeverStartedPluginMissing is the same for the
+// forced path: with no hook to run there is nothing to orphan, so this is
+// an ordinary delete and the Orphan is nil.
+func TestService_ForceDelete_NeverStartedPluginMissing(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	service := NewService(log.Nop(), &inmemory.DB{}, nil)
+	conn, err := service.Create(ctx, uuid.NewString(), TypeDestination, "builtin:file", uuid.NewString(),
+		Config{Name: "out", Settings: map[string]string{"path": "/tmp/out"}}, ProvisionTypeAPI)
+	is.NoErr(err)
+
+	orphan, err := service.ForceDelete(ctx, conn.ID, fakePluginFetcher{})
+	is.NoErr(err)
+	is.True(orphan == nil)
+	_, err = service.Get(ctx, conn.ID)
+	is.True(cerrors.Is(err, ErrInstanceNotFound))
+}
+
+// TestService_Restore_KeepsLastActiveConfig: Restore is the orchestrator's
+// rollback for a Delete whose transaction is discarded. It has to put the
+// original instance back, because an instance rebuilt through Create has no
+// LastActiveConfig and a connector without one skips its delete hook - the
+// #3058 bug, reintroduced in the recovery path of its own fix.
+func TestService_Restore_KeepsLastActiveConfig(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	service := NewService(log.Nop(), &inmemory.DB{}, nil)
+	conn := startedSource(t, service)
+
+	ctrl := gomock.NewController(t)
+	is.NoErr(service.Delete(ctx, conn.ID, hookFetcher(ctrl, conn, nil)))
+	_, err := service.Get(ctx, conn.ID)
+	is.True(cerrors.Is(err, ErrInstanceNotFound))
+
+	service.Restore(conn)
+	restored, err := service.Get(ctx, conn.ID)
+	is.NoErr(err)
+	is.True(restored.LastActiveConfig.Settings != nil)
+	is.Equal(restored.LastActiveConfig.Settings["slot.name"], "conduit_orders")
+
+	// Restoring twice is a no-op, so a rollback that runs after a partial
+	// one cannot double-count the connector.
+	service.Restore(conn)
+	is.Equal(len(service.List(ctx)), 1)
+}
+
+// TestOrphan_HookErrorCapped: a plugin's error goes into the store, which is
+// not rotated like a log file, so its length is bounded. The full error still
+// reaches the caller and the log.
+func TestOrphan_HookErrorCapped(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	service := NewService(log.Nop(), &inmemory.DB{}, nil)
+	conn := startedSource(t, service)
+
+	ctrl := gomock.NewController(t)
+	huge := strings.Repeat("secret-ish payload ", 1000)
+	orphan, err := service.ForceDelete(ctx, conn.ID, hookFetcher(ctrl, conn, cerrors.New(huge)))
+	is.NoErr(err)
+	is.True(orphan != nil)
+	is.True(len(orphan.HookError) <= maxHookErrorLen)
+	is.True(strings.HasSuffix(orphan.HookError, "[truncated]"))
+	is.True(utf8.ValidString(orphan.HookError))
+}
+
+// TestMergeOrphan_CapsChainedErrors: force-deleting the same ID repeatedly
+// chains each failure's text into the entry, so the merged result is capped
+// too and the entry cannot grow without bound.
+func TestMergeOrphan_CapsChainedErrors(t *testing.T) {
+	is := is.New(t)
+	long := strings.Repeat("a", maxHookErrorLen)
+	o := &Orphan{HookError: long}
+	mergeOrphan(o, &Orphan{HookError: strings.Repeat("b", maxHookErrorLen), DeletedAt: time.Now().UTC()})
+	is.True(len(o.HookError) <= maxHookErrorLen)
+	is.True(utf8.ValidString(o.HookError))
 }
