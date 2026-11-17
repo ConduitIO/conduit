@@ -159,8 +159,28 @@ func (i *Instance) Close(ctx context.Context, dispenserFetcher PluginDispenserFe
 	// reaching those means the plugin was dispensed first: a never-started
 	// connector whose plugin binary is gone would fail to dispense and
 	// become undeletable, which is a regression on the behaviour before the
-	// #3058 fix. Keep the two in sync - they test the same condition.
-	if i.LastActiveConfig.Settings == nil {
+	// #3058 fix. Keep the LastActiveConfig half in sync with those two -
+	// they test the same condition.
+	//
+	// The connector == nil half is this shortcut's own requirement, not
+	// theirs. LastActiveConfig is set only when a lifecycle event actually
+	// fired (Source.Open -> triggerLifecycleEvent), so a connector whose
+	// Config.Settings is nil runs with LastActiveConfig.Settings still nil:
+	// no "created" event fired for it, so it has nothing to release and
+	// skipping the hook is right, but it may well be RUNNING. Without this
+	// half the shortcut would skip Instance.Connector's ErrConnectorRunning
+	// check and let Service.Delete remove the record from under a live
+	// plugin. Falling through instead means Connector refuses the delete,
+	// which is what happens today.
+	//
+	// Read both under RLock: Source.Open and Destination.Open write
+	// LastActiveConfig and connector while holding Instance's write lock.
+	// Release it before dispensing, because OnDelete takes the write lock
+	// itself.
+	i.RLock()
+	neverRan := i.LastActiveConfig.Settings == nil && i.connector == nil
+	i.RUnlock()
+	if neverRan {
 		i.inspector.Close()
 		return nil
 	}

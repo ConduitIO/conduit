@@ -436,3 +436,26 @@ func TestMergeOrphan_CapsChainedErrors(t *testing.T) {
 	is.True(len(o.HookError) <= maxHookErrorLen)
 	is.True(utf8.ValidString(o.HookError))
 }
+
+// TestService_Delete_NeverStartedButRunning: the never-started shortcut in
+// Instance.Close must not swallow Instance.Connector's ErrConnectorRunning
+// check. LastActiveConfig is set only when a lifecycle event fires, and no
+// event fires for a connector whose Config.Settings is nil, so such a
+// connector can be running with LastActiveConfig.Settings still nil. The
+// shortcut is right that it has no hook to run - and wrong to delete the
+// record from under a live plugin.
+func TestService_Delete_NeverStartedButRunning(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	service := NewService(log.Nop(), &inmemory.DB{}, nil)
+	conn, err := service.Create(ctx, uuid.NewString(), TypeSource, "builtin:postgres", uuid.NewString(),
+		Config{Name: "orders"}, ProvisionTypeAPI)
+	is.NoErr(err)
+	is.True(conn.LastActiveConfig.Settings == nil) // no lifecycle event fired
+	conn.connector = &Source{Instance: conn}       // ... but it is running
+
+	err = service.Delete(ctx, conn.ID, fakePluginFetcher{})
+	is.True(cerrors.Is(err, ErrConnectorRunning))
+	_, err = service.Get(ctx, conn.ID)
+	is.NoErr(err) // still there
+}
