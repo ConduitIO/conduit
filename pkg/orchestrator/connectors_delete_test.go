@@ -243,3 +243,83 @@ func TestConnectorOrchestrator_ForceDelete_KilledAtCommit(t *testing.T) {
 	is.NoErr(err)
 	is.Equal(pl.ConnectorIDs, []string{h.conn.ID})
 }
+
+// orchestratorOn is orchestrator with the store the transaction comes from
+// chosen by the caller, so a test can make the commit fail.
+func (h *deleteHarness) orchestratorOn(t *testing.T, db database.DB, ps PipelineService, hookErr error) *Orchestrator {
+	t.Helper()
+	_, _, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
+	expectMutation(t, lifecycleMock, h.pl.ID, true)
+
+	ctrl := gomock.NewController(t)
+	plugin := pmock.NewSourcePlugin(ctrl)
+	plugin.EXPECT().LifecycleOnDeleted(gomock.Any(), gomock.Any()).Return(pconnector.SourceLifecycleOnDeletedResponse{}, hookErr)
+	plugin.EXPECT().Teardown(gomock.Any(), gomock.Any()).Return(pconnector.SourceTeardownResponse{}, nil)
+	dispenser := pmock.NewDispenser(ctrl)
+	dispenser.EXPECT().DispenseSource().Return(plugin, nil)
+	connPluginMock.EXPECT().NewDispenser(gomock.Any(), h.conn.Plugin, h.conn.ID).Return(dispenser, nil)
+
+	return NewOrchestrator(db, log.Nop(), ps, h.cs, procsMock, connPluginMock, procPluginMock, lifecycleMock)
+}
+
+// assertDeletableAgain is what a connector has to look like after a delete
+// that failed with the hook already run: present in the store, present in
+// memory attached to its pipeline, and still carrying LastActiveConfig so
+// the next Delete runs the hook instead of taking the never-started
+// shortcut. Losing LastActiveConfig here is #3058 reintroduced in the
+// recovery path of its own fix.
+func (h *deleteHarness) assertDeletableAgain(t *testing.T) {
+	t.Helper()
+	is := is.New(t)
+	ctx := context.Background()
+
+	is.True(h.storedConnectorExists(t))
+
+	conn, err := h.cs.Get(ctx, h.conn.ID)
+	is.NoErr(err)
+	is.True(conn.LastActiveConfig.Settings != nil)
+	is.Equal(conn.LastActiveConfig.Settings["slot.name"], "conduit_orders")
+
+	pl, err := h.ps.Get(ctx, h.pl.ID)
+	is.NoErr(err)
+	is.Equal(pl.ConnectorIDs, []string{h.conn.ID})
+}
+
+// TestConnectorOrchestrator_Delete_HookSucceededThenRemoveConnectorFails:
+// the hook ran and released the connector's upstream resource, then a later
+// step failed. The transaction is discarded, so nothing reached the store -
+// and the rollback has to leave the in-memory state agreeing with it.
+//
+// The rollback used to call connector.Service.Create, which rebuilds the
+// instance from scratch and so dropped LastActiveConfig: the connector came
+// back looking like one that had never started, and the next Delete skipped
+// its hook. It also re-issued a store write through the transaction that
+// was about to be discarded.
+func TestConnectorOrchestrator_Delete_HookSucceededThenRemoveConnectorFails(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	h := newDeleteHarness(t)
+	orc := h.orchestratorOn(t, h.db, failingRemovePipelines{h.ps}, nil)
+
+	err := orc.Connectors.Delete(ctx, h.conn.ID)
+	is.True(err != nil)
+
+	h.assertDeletableAgain(t)
+}
+
+// TestConnectorOrchestrator_Delete_HookSucceededThenCommitFails is the same
+// for a kill at commit, where the transaction is already discarded by the
+// time the rollback runs. Re-issuing the store writes there fails on a dead
+// transaction, and rollback.R.MustExecute turns a rollback error into a
+// panic - so the rollback has to be in-memory only.
+func TestConnectorOrchestrator_Delete_HookSucceededThenCommitFails(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	h := newDeleteHarness(t)
+	orc := h.orchestratorOn(t, commitFailsDB{h.db}, h.ps, nil)
+
+	err := orc.Connectors.Delete(ctx, h.conn.ID)
+	is.True(err != nil)
+
+	h.assertDeletableAgain(t)
+}

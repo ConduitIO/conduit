@@ -235,6 +235,22 @@ func (s *Service) AddConnector(ctx context.Context, pipelineID string, connector
 }
 
 // RemoveConnector removes a connector from a pipeline.
+// RestoreConnectorIDs sets pipelineID's connector ID list back to ids in
+// memory, to roll back an AddConnector or RemoveConnector whose store write
+// the caller's transaction discards. Like connector.Service.Restore it
+// writes nothing to the store and cannot fail, so a rollback that uses it
+// cannot re-issue a write on a dead transaction or panic in
+// rollback.R.MustExecute. Calling AddConnector to undo a RemoveConnector
+// would do both, and would also append the ID instead of putting it back
+// where it was.
+func (s *Service) RestoreConnectorIDs(pipelineID string, ids []string) {
+	pl, ok := s.instances[pipelineID]
+	if !ok {
+		return
+	}
+	pl.ConnectorIDs = ids
+}
+
 func (s *Service) RemoveConnector(ctx context.Context, pipelineID string, connectorID string) (*Instance, error) {
 	pl, err := s.Get(ctx, pipelineID)
 	if err != nil {
