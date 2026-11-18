@@ -85,8 +85,11 @@ func TestDeleteConnectorAction_RollbackKeepsPosition(t *testing.T) {
 			_, err = conns.SetState(ctx, conn.ID, wantState)
 			is.NoErr(err)
 
+			// No NewDispenser expectation: a connector without a
+			// LastActiveConfig created nothing outside Conduit, so the delete
+			// runs no hook and dispenses no plugin (#3058). A call here would
+			// fail the test as unexpected.
 			plugins := mock.NewConnectorPluginService(ctrl)
-			plugins.EXPECT().NewDispenser(gomock.Any(), cfg.Plugin, cfg.ID).Return(pmock.NewDispenser(ctrl), nil)
 
 			b := actionsBuilder{connectorService: conns, connectorPluginService: plugins}
 			actions := b.prepareConnectorActions(cfg, config.Connector{}, pipelineID)

@@ -361,12 +361,15 @@ func (d *Destination) recv() <-chan destinationRecvResult {
 }
 
 func (d *Destination) OnDelete(ctx context.Context) (err error) {
+	// The lock is taken before LastActiveConfig is read: Open writes it (and
+	// Instance.connector) while holding the write lock, so reading it
+	// unsynchronized races with a concurrent start.
+	d.Instance.Lock()
+	defer d.Instance.Unlock()
+
 	if d.Instance.LastActiveConfig.Settings == nil {
 		return nil // the connector was never started, nothing to trigger
 	}
-
-	d.Instance.Lock()
-	defer d.Instance.Unlock()
 
 	d.Instance.logger.Debug(ctx).Msg("dispensing destination connector plugin")
 	d.plugin, err = d.dispenser.DispenseDestination()

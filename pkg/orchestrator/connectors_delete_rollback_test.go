@@ -121,7 +121,11 @@ func TestConnectorOrchestrator_Delete_RollbackRestoresInstance(t *testing.T) {
 			}
 
 			_, _, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
-			connPluginMock.EXPECT().NewDispenser(gomock.Any(), conn.Plugin, conn.ID).Return(dispenser, nil)
+			if tc.started {
+				// A connector that never started created nothing outside
+				// Conduit, so the delete dispenses no plugin at all (#3058).
+				connPluginMock.EXPECT().NewDispenser(gomock.Any(), conn.Plugin, conn.ID).Return(dispenser, nil)
+			}
 			expectMutation(t, lifecycleMock, pl.ID, true)
 
 			wantErr := cerrors.New("could not remove the connector from the pipeline")

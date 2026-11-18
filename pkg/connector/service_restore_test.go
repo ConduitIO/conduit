@@ -111,10 +111,14 @@ func TestService_Restore_AfterDeleteHook(t *testing.T) {
 		started  bool  // has a LastActiveConfig, so the hook delivers "deleted"
 		hookErr  error // what the plugin's LifecycleOnDeleted returns
 		wantMark bool
+		// A hook that failed refuses the delete (#3058), so there is nothing
+		// for Restore to put back — the instance never left. The mark still
+		// applies: the plugin got the event and may have released part of it.
+		wantDeleteErr bool
 	}{
 		{name: "hook succeeded", started: true, hookErr: nil, wantMark: true},
 		// The plugin got the event; it may have released part of it.
-		{name: "hook failed", started: true, hookErr: cerrors.New("could not drop slot"), wantMark: true},
+		{name: "hook failed", started: true, hookErr: cerrors.New("could not drop slot"), wantMark: true, wantDeleteErr: true},
 		// An older plugin without lifecycle events did nothing.
 		{name: "hook not implemented", started: true, hookErr: pconnector.ErrUnimplemented, wantMark: false},
 		// Never started: there is no "deleted" event to deliver.
@@ -145,8 +149,15 @@ func TestService_Restore_AfterDeleteHook(t *testing.T) {
 				dispenser := hookDispenser(ctrl, typ, tc.started, tc.hookErr)
 				plugins := fakePluginFetcher{conn.Plugin: dispenser}
 
-				is.NoErr(s.Delete(ctx, conn.ID, plugins))
-				is.NoErr(s.Restore(ctx, conn))
+				err = s.Delete(ctx, conn.ID, plugins)
+				if tc.wantDeleteErr {
+					ce, ok := conduiterr.Get(err)
+					is.True(ok)
+					is.Equal(ce.Code.Reason(), CodeConnectorDeleteHookFailed.Reason())
+				} else {
+					is.NoErr(err)
+				}
+				is.NoErr(s.Restore(ctx, conn)) // a no-op when the delete was refused
 
 				got, err := s.Get(ctx, conn.ID)
 				is.NoErr(err)

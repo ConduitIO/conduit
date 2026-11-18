@@ -175,7 +175,15 @@ func (i *Instance) CheckStartable() error {
 // newConnector is Connector without the delete-hook check. Close uses it: a
 // connector whose delete hook already ran must still be deletable.
 func (i *Instance) newConnector(_ context.Context, dispenserFetcher PluginDispenserFetcher) (Connector, error) {
-	if i.connector != nil {
+	// Source.Open and Destination.Open write i.connector while holding the
+	// write lock, so this read takes the read lock. It is released before the
+	// dispense below: nothing here needs the field to stay unchanged, and
+	// holding it would deadlock a caller that goes on to OnDelete, which takes
+	// the write lock itself.
+	i.RLock()
+	running := i.connector != nil
+	i.RUnlock()
+	if running {
 		// connector is already running, might be a bug where an old connector is stuck
 		// Invariant: errors.Is(err, ErrConnectorRunning) still holds — sentinel
 		// wrapped, ConduitError adds the code.
@@ -211,8 +219,48 @@ func (i *Instance) newConnector(_ context.Context, dispenserFetcher PluginDispen
 	}
 }
 
+// Close delivers the plugin's "deleted" lifecycle hook, which releases what
+// the connector created outside Conduit (the Postgres source drops its
+// replication slot, for example), and closes the instance's inspector once
+// the hook is done.
+//
+// Invariant 3 (#3058): a caller that is deleting the connector must call
+// Close BEFORE it removes the stored record, and must keep that record when
+// Close returns an error. The hook is the only way Conduit can release the
+// external resource; once the record is gone there is nothing left to retry
+// the hook from, so the resource is orphaned with no way to clean it up
+// through Conduit — a replication slot left behind keeps retaining WAL until
+// someone drops it by hand. Service.Delete is that caller.
+//
+// Retry semantics: Close may be called again after it failed, and a caller
+// that kept the record is expected to, once the cause is fixed. The plugin
+// may have run part of its hook before failing, so a plugin's "deleted"
+// handler has to tolerate being called twice. A plugin that received the
+// event at all, whether it succeeded or not, leaves the instance marked (see
+// Instance.deleteHookRan), so an instance that is restored instead of deleted
+// refuses to start (CheckStartable).
+//
+// A connector that never started created nothing outside Conduit: Close runs
+// no hook for it and dispenses no plugin, so a missing plugin binary cannot
+// make such a connector undeletable.
 func (i *Instance) Close(ctx context.Context, dispenserFetcher PluginDispenserFetcher) error {
-	i.inspector.Close()
+	// The read lock is released before newConnector, which takes it itself,
+	// and before OnDelete, which takes the write lock.
+	//
+	// The running check is part of the condition on purpose: a connector with
+	// empty settings triggers no lifecycle event, so LastActiveConfig.Settings
+	// stays nil while Open still sets i.connector. A shortcut keyed on the
+	// settings alone would skip newConnector's ErrConnectorRunning check and
+	// let the caller remove the record from under a live plugin.
+	i.RLock()
+	neverStarted := i.LastActiveConfig.Settings == nil && i.connector == nil
+	i.RUnlock()
+	// guard: connector-close-skips-plugin-only-when-never-started tests=^TestService_Delete_NeverStartedNeedsNoPlugin$
+	if neverStarted {
+		i.inspector.Close()
+		return nil
+	}
+
 	conn, err := i.newConnector(ctx, dispenserFetcher)
 	if err != nil {
 		return err
@@ -222,5 +270,8 @@ func (i *Instance) Close(ctx context.Context, dispenserFetcher PluginDispenserFe
 		return err
 	}
 
+	// Only now: a delete that was refused leaves the connector in place, and
+	// its inspection sessions with it.
+	i.inspector.Close()
 	return nil
 }

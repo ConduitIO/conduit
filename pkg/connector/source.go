@@ -1055,12 +1055,15 @@ func (s *Source) warnDeliveryDrainTimedOut(ctx context.Context) {
 }
 
 func (s *Source) OnDelete(ctx context.Context) (err error) {
+	// The lock is taken before LastActiveConfig is read: Open writes it (and
+	// Instance.connector) while holding the write lock, so reading it
+	// unsynchronized races with a concurrent start.
+	s.Instance.Lock()
+	defer s.Instance.Unlock()
+
 	if s.Instance.LastActiveConfig.Settings == nil {
 		return nil // the connector was never started, nothing to trigger
 	}
-
-	s.Instance.Lock()
-	defer s.Instance.Unlock()
 
 	s.Instance.logger.Debug(ctx).Msg("dispensing source connector plugin")
 	s.plugin, err = s.dispenser.DispenseSource()
