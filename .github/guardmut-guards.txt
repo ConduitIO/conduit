@@ -6,6 +6,7 @@
 connector-close-skips-plugin-only-when-never-started
 connector-connector-checkstartable
 connector-delete-hook-before-record-removal
+connector-delete-force-does-not-skip-running-check
 connector-destination-delete-hook-marks-instance
 connector-persister-missing-result-fails-closed
 connector-restore-no-overwrite

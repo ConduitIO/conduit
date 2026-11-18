@@ -249,15 +249,28 @@ func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher Plugin
 	// started, so a missing plugin binary cannot make one undeletable.
 	// guard: connector-delete-hook-before-record-removal tests=^TestService_Delete_(HookFailureKeepsTheConnector|DispenseFailureKeepsTheConnector|RunningConnectorKeepsTheConnector)$
 	if closeErr := instance.Close(ctx, dispenserFetcher); closeErr != nil {
+		// Invariant 2: force skips the plugin's hook, never the running
+		// check. The stored record is the only handle Conduit has on a live
+		// run, so removing it while the plugin is still streaming loses the
+		// position and leaves the run unreachable — an outcome force was
+		// never meant to permit. The caller stops the pipeline first, forced
+		// or not. Returned as-is: it already carries CodeConnectorRunning and
+		// its own suggestion, and its text holds no settings to redact.
+		// guard: connector-delete-force-does-not-skip-running-check tests=^TestService_Delete_ForcedRunningConnectorKeepsTheConnector$
+		if cerrors.Is(closeErr, ErrConnectorRunning) {
+			return closeErr
+		}
 		if !ForceDelete(ctx) {
-			// conduiterr.Wrap passes an inner code through, so a cause that
-			// already carries one keeps it (a running connector reports
-			// connector.running, which is the more precise reason).
+			// The plugin's error text can echo its resolved settings, which
+			// carry env-expanded secrets, so it is redacted before it reaches
+			// the API caller — and passed as the cause redacted too, so no
+			// unredacted text survives in the chain (#2566).
+			safeErr := instance.redactError(closeErr)
 			ce := conduiterr.Wrap(CodeConnectorDeleteHookFailed, fmt.Sprintf(
 				"connector %v was not deleted: the %v plugin's deletion hook did not succeed (%v), so what it cleans up "+
 					"(for example a Postgres replication slot, which keeps retaining WAL) would stay behind",
-				id, instance.Type, closeErr,
-			), closeErr)
+				id, instance.Type, safeErr,
+			), safeErr)
 			ce.Suggestion = "fix the cause named in the message (start the plugin binary, stop the pipeline, or clear the " +
 				"error the plugin reported) and delete again; or delete with force to skip the hook and clean up by hand " +
 				"(see docs/operations/connector-delete-hook.md)"

@@ -184,3 +184,34 @@ func TestService_Delete_RunningConnectorKeepsTheConnector(t *testing.T) {
 	is.True(got == conn)
 	is.True(stored(t, ctx, db, conn.ID))
 }
+
+// TestService_Delete_ForcedRunningConnectorKeepsTheConnector pins what force
+// does not buy. Force is the escape hatch for a hook that cannot run or that
+// failed, and it skips the hook — but the stored record is the only handle
+// Conduit has on a live run, so removing it while the plugin is still
+// streaming loses the position and leaves the run unreachable (invariant 2).
+// A forced delete of a running connector is refused exactly like an unforced
+// one, and reports connector.running so the caller knows to stop the pipeline
+// rather than retry with more force.
+func TestService_Delete_ForcedRunningConnectorKeepsTheConnector(t *testing.T) {
+	is := is.New(t)
+	ctx := WithForceDelete(context.Background())
+	db := &inmemory.DB{}
+	svc := NewService(log.Nop(), db, nil)
+	conn, err := svc.Create(ctx, uuid.NewString(), TypeSource, "test-plugin", uuid.NewString(),
+		Config{Name: "conn"}, ProvisionTypeAPI)
+	is.NoErr(err)
+	conn.connector = fakeConnector{} // as after a successful Open
+
+	err = svc.Delete(ctx, conn.ID, fakePluginFetcher{})
+	is.True(err != nil)
+	is.True(cerrors.Is(err, ErrConnectorRunning))
+	ce, ok := conduiterr.Get(err)
+	is.True(ok)
+	is.Equal(ce.Code.Reason(), CodeConnectorRunning.Reason())
+
+	got, err := svc.Get(ctx, conn.ID)
+	is.NoErr(err)
+	is.True(got == conn)
+	is.True(stored(t, ctx, db, conn.ID))
+}
