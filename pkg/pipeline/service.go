@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -281,6 +282,50 @@ func (s *Service) RemoveConnector(ctx context.Context, pipelineID string, connec
 	}
 
 	return pl, err
+}
+
+// RestoreConnectorIDs puts a pipeline's connector list back to what it was
+// before a failed operation changed it. It is the rollback counterpart of
+// AddConnector and RemoveConnector, and exists because neither of those is
+// safe to call from a rollback callback: both write to the store, and a
+// rollback runs after the caller's transaction is already gone.
+//
+// ids replaces the whole list rather than adding or removing one entry, so the
+// order is restored exactly. RemoveConnector shifts the elements of the
+// instance's slice in place, so the caller must pass a copy taken before the
+// mutation, not the slice it read from the instance. updatedAt restores the
+// timestamp the mutation overwrote.
+//
+// Like connector.Service.Restore, it writes to the store only when ctx carries
+// no transaction. Inside one the caller is rolling back and will discard it:
+// the discard is what reverts the store, and a write issued here would be
+// rejected outright (badger returns ErrDiscardedTxn once Commit has run, even
+// a Commit that failed) or, on a backend that rejects statements in an aborted
+// transaction (Postgres, 25P02), fail there. Either way the rollback callback
+// would return an error and rollback.R.MustExecute would panic. Without a
+// transaction the mutation reached the store, so this writes the old list back.
+//
+// It is safe for concurrent use with the other Service methods; it takes no
+// lock itself, matching AddConnector and RemoveConnector, which mutate the
+// instance the same way.
+func (s *Service) RestoreConnectorIDs(ctx context.Context, pipelineID string, ids []string, updatedAt time.Time) error {
+	pl, err := s.Get(ctx, pipelineID)
+	if err != nil {
+		return err
+	}
+	pl.ConnectorIDs = slices.Clone(ids)
+	pl.UpdatedAt = updatedAt
+
+	// Invariant 5: the store side of a rolled-back mutation is reverted by
+	// discarding the transaction, never by a second write through it.
+	if database.TransactionFromContext(ctx) != nil {
+		return nil
+	}
+	err = s.persist(ctx, pl)
+	if err != nil {
+		return cerrors.Errorf("failed to save pipeline with ID %q: %w", pl.ID, err)
+	}
+	return nil
 }
 
 // AddProcessor adds a processor to a pipeline.
