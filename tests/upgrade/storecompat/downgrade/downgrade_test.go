@@ -116,3 +116,42 @@ func TestStoreCompat_NewFixtureReopensWithOldLibraries(t *testing.T) {
 		})
 	}
 }
+
+// TestStoreCompat_UnknownKeyPrefixesIgnoredByOldLibraries is the downgrade
+// half of the unknown-prefix gate (see the upgrade half in
+// tests/upgrade/storecompat). A database written by the current build,
+// carrying key prefixes a previous release knows nothing about, must open
+// on the previous release's storage libraries, read back exactly the state
+// they do know, and keep the unknown entries untouched - otherwise adding
+// a new persisted key (the pending orphan ledger) breaks rollback.
+func TestStoreCompat_UnknownKeyPrefixesIgnoredByOldLibraries(t *testing.T) {
+	for _, f := range fixtures {
+		t.Run(filepath.Base(f.dir), func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+
+			dir := storecompat.CopyFixture(t, f.dir)
+
+			db, err := f.open(ctx, dir)
+			is.NoErr(err)
+			is.NoErr(storecompat.SeedUnknownKeys(ctx, db))
+			is.NoErr(db.Close())
+
+			db, err = f.open(ctx, dir)
+			is.NoErr(err)
+			storecompat.AssertState(t, ctx, db, storecompat.SourcePosition)
+			storecompat.AssertUnknownKeysIntact(t, ctx, db)
+
+			conns := storecompat.ExpectedConnectors(storecompat.ResumedPosition)
+			src := conns[storecompat.SourceID]
+			is.NoErr(storecompat.PersistConnectors(ctx, db, log.Nop(), map[string]*connector.Instance{src.ID: src}))
+			is.NoErr(db.Close())
+
+			db, err = f.open(ctx, dir)
+			is.NoErr(err)
+			t.Cleanup(func() { _ = db.Close() })
+			storecompat.AssertState(t, ctx, db, storecompat.ResumedPosition)
+			storecompat.AssertUnknownKeysIntact(t, ctx, db)
+		})
+	}
+}
