@@ -58,9 +58,9 @@ github.com/conduitio/conduit-connector-generator | 76a663a | copy the file paylo
 # Toolchain — Go 1.26.11 for GO-2026-6859 (backport of #3347). Without it
 # govulncheck fails on this branch: GO-2026-6859 is reachable on 1.26.10 and is
 # not in .github/govulncheck-allowlist.txt.
-conduit | 883a2d68 | bump the Go toolchain to 1.26.11 for GO-2026-6859
+conduit | d938aef0 | bump the Go toolchain to 1.26.11 for GO-2026-6859
 
 # Compression — klauspost/compress v1.20.3 for GO-2026-6865 (panic on two-block
 # frames, reachable via huff0.Compress4X). v0.20.x pinned v1.20.0; the fix is in
 # v1.20.2 and main already runs v1.20.3.
-conduit | ac95ceaf | bump `github.com/klauspost/compress` to v1.20.3 for GO-2026-6865
+conduit | d938aef0 | bump `github.com/klauspost/compress` to v1.20.3 for GO-2026-6865
