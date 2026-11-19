@@ -12,6 +12,7 @@ package mock
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	pconnector "github.com/conduitio/conduit-connector-protocol/pconnector"
 	sdk "github.com/conduitio/conduit-processor-sdk"
@@ -353,6 +354,44 @@ func (c *PipelineServiceRemoveProcessorCall) Do(f func(context.Context, string, 
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
 func (c *PipelineServiceRemoveProcessorCall) DoAndReturn(f func(context.Context, string, string) (*pipeline.Instance, error)) *PipelineServiceRemoveProcessorCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// RestoreConnectorIDs mocks base method.
+func (m *PipelineService) RestoreConnectorIDs(ctx context.Context, pipelineID string, ids []string, updatedAt time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RestoreConnectorIDs", ctx, pipelineID, ids, updatedAt)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RestoreConnectorIDs indicates an expected call of RestoreConnectorIDs.
+func (mr *PipelineServiceMockRecorder) RestoreConnectorIDs(ctx, pipelineID, ids, updatedAt any) *PipelineServiceRestoreConnectorIDsCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RestoreConnectorIDs", reflect.TypeOf((*PipelineService)(nil).RestoreConnectorIDs), ctx, pipelineID, ids, updatedAt)
+	return &PipelineServiceRestoreConnectorIDsCall{Call: call}
+}
+
+// PipelineServiceRestoreConnectorIDsCall wrap *gomock.Call
+type PipelineServiceRestoreConnectorIDsCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *PipelineServiceRestoreConnectorIDsCall) Return(arg0 error) *PipelineServiceRestoreConnectorIDsCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *PipelineServiceRestoreConnectorIDsCall) Do(f func(context.Context, string, []string, time.Time) error) *PipelineServiceRestoreConnectorIDsCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *PipelineServiceRestoreConnectorIDsCall) DoAndReturn(f func(context.Context, string, []string, time.Time) error) *PipelineServiceRestoreConnectorIDsCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

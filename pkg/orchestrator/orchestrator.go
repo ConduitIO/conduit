@@ -17,6 +17,7 @@ package orchestrator
 
 import (
 	"context"
+	"time"
 
 	"github.com/conduitio/conduit-commons/database"
 	"github.com/conduitio/conduit-connector-protocol/pconnector"
@@ -88,6 +89,10 @@ type PipelineService interface {
 
 	AddConnector(ctx context.Context, pipelineID string, connectorID string) (*pipeline.Instance, error)
 	RemoveConnector(ctx context.Context, pipelineID string, connectorID string) (*pipeline.Instance, error)
+	// RestoreConnectorIDs puts the pipeline's connector list back after a
+	// failed mutation; see pipeline.Service.RestoreConnectorIDs for why a
+	// rollback may not call AddConnector or RemoveConnector.
+	RestoreConnectorIDs(ctx context.Context, pipelineID string, ids []string, updatedAt time.Time) error
 	AddProcessor(ctx context.Context, pipelineID string, processorID string) (*pipeline.Instance, error)
 	RemoveProcessor(ctx context.Context, pipelineID string, processorID string) (*pipeline.Instance, error)
 }

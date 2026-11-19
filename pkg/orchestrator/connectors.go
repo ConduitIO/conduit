@@ -17,6 +17,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/conduitio/conduit-commons/rollback"
 	"github.com/conduitio/conduit/pkg/connector"
@@ -175,13 +176,24 @@ func (c *ConnectorOrchestrator) Delete(ctx context.Context, id string) error {
 	r.Append(func() error {
 		return c.connectors.Restore(ctx, conn)
 	})
+	// Captured before RemoveConnector, which shifts the elements of this very
+	// slice in place: reading it afterwards would give the already-mutated list.
+	prevConnectorIDs := slices.Clone(pl.ConnectorIDs)
+	prevUpdatedAt := pl.UpdatedAt
 	_, err = c.pipelines.RemoveConnector(ctx, pl.ID, id)
 	if err != nil {
 		return err
 	}
+	// Invariant 5: roll back the pipeline in memory and let txn.Discard revert
+	// the store. Rollbacks run LIFO, so this runs before the Discard appended
+	// above — but txn.Commit discards the transaction even when it fails, so by
+	// then any write issued through ctx is rejected (badger: ErrDiscardedTxn).
+	// AddConnector writes to the store, so using it here made the rollback
+	// callback fail and rollback.R.MustExecute panic on an ordinary connector
+	// delete whose commit failed. RestoreConnectorIDs skips the store write
+	// inside a transaction and puts back the whole prior list, order included.
 	r.Append(func() error {
-		_, err := c.pipelines.AddConnector(ctx, pl.ID, id)
-		return err
+		return c.pipelines.RestoreConnectorIDs(ctx, pl.ID, prevConnectorIDs, prevUpdatedAt)
 	})
 	err = txn.Commit()
 	if err != nil {
