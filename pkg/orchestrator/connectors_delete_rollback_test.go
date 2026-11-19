@@ -382,7 +382,6 @@ func TestConnectorOrchestrator_Delete_CommitFailureRollsBack(t *testing.T) {
 	ctx := context.Background()
 	logger := log.Nop()
 	db := newCommitFailDB()
-	ctrl := gomock.NewController(t)
 
 	pls := pipeline.NewService(logger, db)
 	conns := connector.NewService(logger, db, nil)
@@ -411,9 +410,11 @@ func TestConnectorOrchestrator_Delete_CommitFailureRollsBack(t *testing.T) {
 	wantUpdatedAt := pl.UpdatedAt
 
 	_, _, procsMock, connPluginMock, procPluginMock, lifecycleMock := newMockServices(t)
-	// The connector never started, so Delete does not run the plugin's delete
-	// hook; it still dispenses the plugin to close the instance.
-	connPluginMock.EXPECT().NewDispenser(gomock.Any(), conn.Plugin, conn.ID).Return(pmock.NewDispenser(ctrl), nil)
+	// The connector never started, so Instance.Close takes its never-started
+	// shortcut (#3369) and dispenses no plugin at all: there is no running
+	// plugin to tear down and no delete hook to run. No NewDispenser call is
+	// expected, which is what keeps a connector with a missing plugin binary
+	// deletable.
 	expectMutation(t, lifecycleMock, pl.ID, true)
 
 	wantErr := cerrors.New("commit refused: conflict")
