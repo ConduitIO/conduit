@@ -361,12 +361,15 @@ func (d *Destination) recv() <-chan destinationRecvResult {
 }
 
 func (d *Destination) OnDelete(ctx context.Context) (err error) {
+	// The lock is taken before LastActiveConfig is read: Open writes it (and
+	// Instance.connector) while holding the write lock, so reading it
+	// unsynchronized races with a concurrent start.
+	d.Instance.Lock()
+	defer d.Instance.Unlock()
+
 	if d.Instance.LastActiveConfig.Settings == nil {
 		return nil // the connector was never started, nothing to trigger
 	}
-
-	d.Instance.Lock()
-	defer d.Instance.Unlock()
 
 	d.Instance.logger.Debug(ctx).Msg("dispensing destination connector plugin")
 	d.plugin, err = d.dispenser.DispenseDestination()
@@ -385,7 +388,10 @@ func (d *Destination) OnDelete(ctx context.Context) (err error) {
 		d.Instance.logger.Err(ctx, tdErr).Msg("could not tear down destination connector plugin")
 	})
 	if err != nil {
-		return cerrors.Errorf("could not trigger lifecycle event: %w", err)
+		// Redacted here, as in configure, open and run: the plugin's error
+		// text can echo the resolved settings this event was built from, and
+		// those carry env-expanded secrets (#2566).
+		return cerrors.Errorf("could not trigger lifecycle event: %w", d.Instance.redactError(err))
 	}
 
 	return nil

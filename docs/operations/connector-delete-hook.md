@@ -45,3 +45,38 @@ only place `force` exists. Pipelines removed by deleting their YAML file are not
 setting fails the removal with the same code until you fix it.
 
 Alert on `conduit_connector_force_deletes_total` increasing.
+
+## When the hook runs but does not succeed
+
+The settings resolving is only the precondition. The hook itself still has to run and succeed before
+anything is removed: the connector's stored record is the only handle Conduit has on the connector, so
+if the record were removed first and the hook then failed, the replication slot (or whatever the plugin
+created) would be orphaned with no way to retry the cleanup through Conduit.
+
+So nothing is removed until the hook has succeeded, and a hook that did not succeed refuses the delete:
+
+```text
+connector.delete_hook_failed
+connector <id> was not deleted: the Source plugin's deletion hook did not succeed (...), so what it
+cleans up (for example a Postgres replication slot, which keeps retaining WAL) would stay behind
+```
+
+The message names the cause. The three it can be:
+
+| Cause | Code | Symptom in the message | Remediation |
+| --- | --- | --- | --- |
+| The plugin could not be dispensed | `connector.delete_hook_failed` | `plugin not found`, or a failure starting the binary | Put the connector's plugin back where `connectors.path` looks for it (the same plugin and version the connector ran with), then delete again |
+| The connector is still running | `connector.running` | `connector is running` | Stop the pipeline (`conduit pipelines stop <id>`), wait for it to stop, then delete again |
+| The plugin's hook returned an error | `connector.delete_hook_failed` | the plugin's own message, for example a Postgres error dropping the slot | Fix what the plugin reported (the database is unreachable, the role lacks `REPLICATION`, the slot is still active on another connection), then delete again |
+
+The connector is untouched in all three cases — it is still in `conduit connectors list` and still in the
+store, so a restart sees it — and the delete can simply be retried. A plugin's `deleted` handler may
+have run in part before failing, so it has to tolerate being called twice; the plugins Conduit ships do.
+
+If the cleanup cannot be made to work and you will do it by hand, delete with `force` (above): force
+skips the hook and removes the connector regardless of which of the three causes it was.
+
+One case is the reverse: the hook succeeded and the store write then failed. The connector is still
+listed, but the plugin has already released what its saved position depends on. It refuses to start with
+`connector.delete_hook_ran` (see [connector-delete-hook-ran.md](connector-delete-hook-ran.md)) until it
+is deleted — retry the delete, which is the intended remedy.

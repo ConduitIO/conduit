@@ -49,6 +49,18 @@ var (
 	// refuses to start until it is deleted and created again, or Conduit is
 	// restarted after the resources were checked (#3137).
 	CodeConnectorDeleteHookRan = conduiterr.Register("connector.delete_hook_ran", codes.FailedPrecondition)
+	// CodeConnectorDeleteHookFailed is raised when a connector's delete is
+	// refused because the plugin's "deleted" hook did not succeed: the plugin
+	// could not be dispensed (a missing or broken binary) or its hook returned
+	// an error. The hook is the only way Conduit can release what the
+	// connector created on the other side (a Postgres replication slot, for
+	// example), so the connector is left in place and the delete can be
+	// retried once the cause is fixed — removing the record first would
+	// orphan that resource with nothing left to retry from (#3058).
+	//
+	// A cause that carries its own code keeps it: a delete refused because
+	// the connector is still running reports CodeConnectorRunning.
+	CodeConnectorDeleteHookFailed = conduiterr.Register("connector.delete_hook_failed", codes.FailedPrecondition)
 	// CodeConnectorDeleteHookUnresolvable is raised when a connector is deleted
 	// while its stored settings no longer resolve (an environment variable that
 	// left env.allow or is gone, a path outside the allowed directories), so

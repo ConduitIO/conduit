@@ -2370,7 +2370,7 @@ Author: Meroxa, Inc.
 | `sdk.schema.extract.key.enabled` | bool | true | no | Whether to extract and decode the record key with a schema. |  |
 | `sdk.schema.extract.payload.enabled` | bool | true | no | Whether to extract and decode the record payload with a schema. |  |
 
-## 3. Error codes (209)
+## 3. Error codes (210)
 
 | Reason | gRPC status | Description |
 | --- | --- | --- |
@@ -2398,6 +2398,7 @@ Author: Meroxa, Inc.
 | `config.path_not_allowed` | PermissionDenied | CodePathNotAllowed is raised when a path in a setting is outside every directory the operator allows for it (or no directory is allowed). The fix is for an operator to allow the directory in conduit.yaml and restart; it cannot be changed through the API. |
 | `connector.ambient_credentials_disabled` | PermissionDenied | CodeAmbientCredentialsDisabled is raised when a built-in connector has no static credentials and the operator has not enabled ambient credentials. |
 | `connector.credentials_incomplete` | PermissionDenied | CodeCredentialsIncomplete is raised when only one of a static credential pair is set; it never falls back to ambient credentials. |
+| `connector.delete_hook_failed` | FailedPrecondition | CodeConnectorDeleteHookFailed is raised when a connector's delete is refused because the plugin's "deleted" hook did not succeed: the plugin could not be dispensed (a missing or broken binary) or its hook returned an error. The hook is the only way Conduit can release what the connector created on the other side (a Postgres replication slot, for example), so the connector is left in place and the delete can be retried once the cause is fixed — removing the record first would orphan that resource with nothing left to retry from (#3058).  A cause that carries its own code keeps it: a delete refused because the connector is still running reports CodeConnectorRunning. |
 | `connector.delete_hook_ran` | FailedPrecondition | CodeConnectorDeleteHookRan is raised when a connector is started after a delete that was rolled back but had already delivered the "deleted" lifecycle event to the plugin. The plugin may have released resources its saved position depends on (for example a Postgres replication slot), so resuming from that position could skip records. The connector refuses to start until it is deleted and created again, or Conduit is restarted after the resources were checked (#3137). |
 | `connector.delete_hook_unresolvable` | FailedPrecondition | CodeConnectorDeleteHookUnresolvable is raised when a connector is deleted while its stored settings no longer resolve (an environment variable that left env.allow or is gone, a path outside the allowed directories), so the plugin's "deleted" hook cannot run. Deleting anyway would leave what the hook cleans up behind: a Postgres replication slot keeps retaining WAL on the database until someone drops it. The delete is refused; restore the setting, or delete with force to skip the hook. |
 | `connector.egress_blocked` | PermissionDenied | CodeEgressBlocked is raised when a connector setting names a target that is not allowed. It cannot be changed through the API: a metadata endpoint is never allowed, and the allowlist is the operator's. |

@@ -1055,12 +1055,15 @@ func (s *Source) warnDeliveryDrainTimedOut(ctx context.Context) {
 }
 
 func (s *Source) OnDelete(ctx context.Context) (err error) {
+	// The lock is taken before LastActiveConfig is read: Open writes it (and
+	// Instance.connector) while holding the write lock, so reading it
+	// unsynchronized races with a concurrent start.
+	s.Instance.Lock()
+	defer s.Instance.Unlock()
+
 	if s.Instance.LastActiveConfig.Settings == nil {
 		return nil // the connector was never started, nothing to trigger
 	}
-
-	s.Instance.Lock()
-	defer s.Instance.Unlock()
 
 	s.Instance.logger.Debug(ctx).Msg("dispensing source connector plugin")
 	s.plugin, err = s.dispenser.DispenseSource()
@@ -1079,7 +1082,10 @@ func (s *Source) OnDelete(ctx context.Context) (err error) {
 		s.Instance.logger.Err(ctx, tdErr).Msg("could not tear down source connector plugin")
 	})
 	if err != nil {
-		return cerrors.Errorf("could not trigger lifecycle event: %w", err)
+		// Redacted here, as in configure, open and run: the plugin's error
+		// text can echo the resolved settings this event was built from, and
+		// those carry env-expanded secrets (#2566).
+		return cerrors.Errorf("could not trigger lifecycle event: %w", s.Instance.redactError(err))
 	}
 
 	return nil

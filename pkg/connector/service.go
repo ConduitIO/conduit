@@ -214,6 +214,23 @@ func (s *Service) Create(
 }
 
 // Delete removes the connector.
+//
+// The plugin's "deleted" lifecycle hook runs first and has to succeed:
+// nothing is removed until it has. The hook releases what the connector
+// created outside Conduit (the Postgres source drops its replication slot),
+// and the stored record is the only handle Conduit has on the connector, so a
+// delete that removed the record and then failed the hook would orphan that
+// resource with no way to retry through Conduit (invariant 3, #3058). A
+// failed hook therefore leaves the connector in place, in memory and in the
+// store, and returns CodeConnectorDeleteHookFailed; the caller can delete
+// again once the cause is fixed, or delete with force to skip the hook and
+// clean up by hand (see docs/operations/connector-delete-hook.md).
+//
+// The reverse order of failure — the hook succeeded, the store write did not
+// — leaves the record in place with the external resource already released.
+// Instance.Close marks the instance for that case, so the connector refuses
+// to start from a position the plugin may no longer back (#3137), and the
+// delete can be retried.
 func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher PluginDispenserFetcher) error {
 	// make sure instance exists
 	instance, err := s.Get(ctx, id)
@@ -227,18 +244,49 @@ func (s *Service) Delete(ctx context.Context, id string, dispenserFetcher Plugin
 		return hookErr
 	}
 
+	// Invariant 3: the hook succeeds before the record is removed, never
+	// after. Instance.Close dispenses no plugin for a connector that never
+	// started, so a missing plugin binary cannot make one undeletable.
+	// guard: connector-delete-hook-before-record-removal tests=^TestService_Delete_(HookFailureKeepsTheConnector|DispenseFailureKeepsTheConnector|RunningConnectorKeepsTheConnector)$
+	if closeErr := instance.Close(ctx, dispenserFetcher); closeErr != nil {
+		// Invariant 2: force skips the plugin's hook, never the running
+		// check. The stored record is the only handle Conduit has on a live
+		// run, so removing it while the plugin is still streaming loses the
+		// position and leaves the run unreachable — an outcome force was
+		// never meant to permit. The caller stops the pipeline first, forced
+		// or not. Returned as-is: it already carries CodeConnectorRunning and
+		// its own suggestion, and its text holds no settings to redact.
+		// guard: connector-delete-force-does-not-skip-running-check tests=^TestService_Delete_ForcedRunningConnectorKeepsTheConnector$
+		if cerrors.Is(closeErr, ErrConnectorRunning) {
+			return closeErr
+		}
+		if !ForceDelete(ctx) {
+			// The plugin's error text can echo its resolved settings, which
+			// carry env-expanded secrets, so it is redacted before it reaches
+			// the API caller — and passed as the cause redacted too, so no
+			// unredacted text survives in the chain (#2566).
+			safeErr := instance.redactError(closeErr)
+			ce := conduiterr.Wrap(CodeConnectorDeleteHookFailed, fmt.Sprintf(
+				"connector %v was not deleted: the %v plugin's deletion hook did not succeed (%v), so what it cleans up "+
+					"(for example a Postgres replication slot, which keeps retaining WAL) would stay behind",
+				id, instance.Type, safeErr,
+			), safeErr)
+			ce.Suggestion = "fix the cause named in the message (start the plugin binary, stop the pipeline, or clear the " +
+				"error the plugin reported) and delete again; or delete with force to skip the hook and clean up by hand " +
+				"(see docs/operations/connector-delete-hook.md)"
+			return ce
+		}
+		// A forced delete is the operator's explicit escape hatch; it must not
+		// be blocked by the hook it was asked to skip.
+		instance.logger.Err(ctx, closeErr).Msg("could not run the connector's deletion hook; " +
+			"deleting anyway because the delete was forced, clean up what the plugin created by hand")
+	}
+
 	err = s.store.Delete(ctx, id)
 	if err != nil {
 		return cerrors.Errorf("could not delete connector instance %v from store: %w", id, err)
 	}
 	delete(s.connectors, id)
-
-	err = instance.Close(ctx, dispenserFetcher)
-	if err != nil {
-		// connector is already deleted, only log the error coming from the
-		// cleanup function, use the instance logger to attach connector ID
-		instance.logger.Err(ctx, err).Msg("could not close connector instance")
-	}
 	measure.ConnectorsGauge.WithValues(strings.ToLower(instance.Type.String())).Dec()
 
 	return nil

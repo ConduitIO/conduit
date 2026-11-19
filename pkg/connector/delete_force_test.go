@@ -124,9 +124,10 @@ func TestService_Delete_ResolvableOrNeverStartedNeedsNoForce(t *testing.T) {
 	svc := NewService(log.Nop(), &inmemory.DB{}, nil, WithSettingsResolver(EnvSettingsResolver{Allow: allow}))
 	conn := startedConnector(t, ctx, svc)
 	ctrl := gomock.NewController(t)
-	disp := pmock.NewDispenser(ctrl)
-	disp.EXPECT().DispenseSource().Return(nil, context.Canceled).AnyTimes() // the hook runs (and may fail): not our concern here
-	is.NoErr(svc.Delete(ctx, conn.ID, fakePluginFetcher{conn.Plugin: disp}))
+	// The hook runs and succeeds; nothing is forced. A hook that fails here
+	// would refuse the delete instead (#3058), which
+	// TestService_Delete_HookFailureKeepsTheConnector covers.
+	is.NoErr(svc.Delete(ctx, conn.ID, fakePluginFetcher{conn.Plugin: hookDispenser(ctrl, TypeSource, true, nil)}))
 
 	svc2 := NewService(log.Nop(), &inmemory.DB{}, nil, WithSettingsResolver(EnvSettingsResolver{Allow: nil}))
 	fresh, err := svc2.Create(ctx, uuid.NewString(), TypeSource, "test-plugin", uuid.NewString(),
