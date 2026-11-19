@@ -94,3 +94,50 @@ func TestStoreCompat_OldFixtureReopensAndResumes(t *testing.T) {
 		})
 	}
 }
+
+// TestStoreCompat_UnknownKeyPrefixesIgnoredAndPreserved is the gate that
+// has to be green before any new persisted store key (the orphan ledger
+// is the pending one) can be added: a build that does not know a key
+// prefix must start on a database that contains it, read everything it
+// does know exactly as before, and leave the unknown entries byte-for-byte
+// alone so the build that wrote them still finds them.
+//
+// Without this, adding any new store key would be a downgrade-breaking
+// change. The fixture is an older storage library's database, so the
+// unknown keys are also exercised across the library versions.
+func TestStoreCompat_UnknownKeyPrefixesIgnoredAndPreserved(t *testing.T) {
+	for _, f := range fixtures {
+		t.Run(filepath.Base(f.dir), func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+
+			dir := CopyFixture(t, f.dir)
+
+			// Seed and close, so the unknown keys are durably on disk
+			// before the build that does not know them opens the
+			// database.
+			db, err := f.open(ctx, dir)
+			is.NoErr(err)
+			is.NoErr(SeedUnknownKeys(ctx, db))
+			is.NoErr(db.Close())
+
+			db, err = f.open(ctx, dir)
+			is.NoErr(err)
+			AssertState(t, ctx, db, SourcePosition)
+			AssertUnknownKeysIntact(t, ctx, db)
+
+			// Writing through the runtime's own path must not disturb
+			// them either.
+			conns := ExpectedConnectors(ResumedPosition)
+			src := conns[SourceID]
+			is.NoErr(PersistConnectors(ctx, db, log.Nop(), map[string]*connector.Instance{src.ID: src}))
+			is.NoErr(db.Close())
+
+			db, err = f.open(ctx, dir)
+			is.NoErr(err)
+			t.Cleanup(func() { _ = db.Close() })
+			AssertState(t, ctx, db, ResumedPosition)
+			AssertUnknownKeysIntact(t, ctx, db)
+		})
+	}
+}
