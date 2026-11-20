@@ -1,0 +1,21 @@
+services:
+  minio:
+    # Same pin as test/compose-templates.yaml (#2893).
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
+    container_name: benchi-minio
+    networks:
+      - benchi
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: benchiminio
+      MINIO_ROOT_PASSWORD: benchiminiosecret
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
+
+networks:
+  benchi:
+    external: true

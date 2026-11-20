@@ -1,0 +1,19 @@
+# Conduit under test. The baseline is the v0.20.0 release (builtin:s3 v0.9.4).
+# For a branch, build an image (`docker build -t conduit-bench:<name> .` from a
+# worktree) and point a second tool at it, as ../ack-hot-path does.
+services:
+  conduit:
+    image: ghcr.io/conduitio/conduit:v0.20.0
+    container_name: benchi-conduit
+    networks:
+      - benchi
+    ports:
+      - '8080:8080'
+    environment:
+      CONDUIT_LOG_FORMAT: json
+    volumes:
+      - ../pipeline.yml:/app/pipelines/pipeline.yml
+
+networks:
+  benchi:
+    external: true
