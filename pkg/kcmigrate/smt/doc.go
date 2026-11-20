@@ -35,9 +35,12 @@
 //
 //   - [Translator] and [PredicateTranslator] turn one SMT or predicate
 //     into processors or a condition, or refuse it with a [Refusal]. They
-//     are registered by class without the $Key/$Value suffix. [Builtin] has
-//     none yet: a translator ships with the Kafka Connect oracle output that
-//     proves it exact. Package smttest holds fixtures for tests only.
+//     are registered by class without the $Key/$Value suffix. [Builtin]
+//     holds the translators that ship, each with the Kafka Connect oracle
+//     output that proves it exact (tests/migrate/smt-oracle): Filter,
+//     RegexRouter, ReplaceField, ExtractNewRecordState, ExtractField and the
+//     predicates TopicNameMatches, HasHeaderKey and RecordIsTombstone.
+//     Package smttest holds fixtures for tests only.
 //   - [Chain] is what a translator reads: chain side, schema mode, record
 //     shapes and whether each side's converter carries a schema (both from
 //     the effective converter, connector over worker), plugin [Capability]
@@ -69,7 +72,17 @@
 //     condition, once per distinct condition, so no widened schema is
 //     registered under the source's subject.
 //   - Topic: the topic expression is evaluated against the final record, so
-//     an SMT whose topic reads what a later SMT writes is refused.
+//     an SMT whose topic reads what a later SMT writes is refused. A
+//     predicate is translated at the position of each transform that names
+//     it, since the topic and the tombstone rule depend on the position.
+//   - Regexes: a Java pattern is used only when it means the same in RE2
+//     over Kafka topic names (regex.go); everything else is refused.
+//   - Decoded conditions: a condition that reads a side's fields would see
+//     the encoded bytes of a schema-carrying record, so the chain removes
+//     the side's schema keys first (Processor.NeedsDecoded).
+//   - Connector-wide refusals: Env.Refusal refuses every translated SMT,
+//     for a Debezium source whose converters write column defaults in place
+//     of NULLs (design decision 22).
 //   - Determinism: output depends only on the keys and values, in
 //     transforms= order; permuting input keys changes nothing, and renaming
 //     aliases changes only the processor IDs (smt-<alias>).

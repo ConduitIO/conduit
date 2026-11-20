@@ -197,7 +197,7 @@
             "pointer": "/config/transforms"
           },
           "code": "kc.smt_unsupported",
-          "reason": "The transform chain is not translated, so no processor of it is written: transform unwrap: This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it; transform onlyOrders: Its predicate \"isOrders\" is not translated. This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it; transform route: The Kafka destination partitions by key only; explicit partition writing is v0.23 (per-partition ordering, invariant 4).",
+          "reason": "The transform chain is not translated, so no processor of it is written: transform unwrap: On a Debezium source, Kafka Connect's converter writes a column's schema default in place of a NULL unless it is a JsonConverter with replace.null.with.default=false, and the Conduit pipeline writes the NULL; key.converter and value.converter are not set that way, so no transform of the chain translates exactly; transform onlyOrders: On a Debezium source, Kafka Connect's converter writes a column's schema default in place of a NULL unless it is a JsonConverter with replace.null.with.default=false, and the Conduit pipeline writes the NULL; key.converter and value.converter are not set that way, so no transform of the chain translates exactly; transform route: The Kafka destination partitions by key only; explicit partition writing is v0.23 (per-partition ordering, invariant 4).",
           "fix": "Make every transform of the chain translatable (see the entries of each), or keep this connector on Kafka Connect. With --accept-gaps the pipeline runs without any of the chain's transforms.",
           "blocking": true
         },
@@ -208,9 +208,9 @@
             "file": "connector.json",
             "pointer": "/config/transforms.unwrap.type"
           },
-          "code": "kc.smt_unsupported",
-          "reason": "This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
-          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "code": "kc.setting_required",
+          "reason": "On a Debezium source, Kafka Connect's converter writes a column's schema default in place of a NULL unless it is a JsonConverter with replace.null.with.default=false, and the Conduit pipeline writes the NULL; key.converter and value.converter are not set that way, so no transform of the chain translates exactly.",
+          "fix": "Set key.converter.replace.null.with.default=false and value.converter.replace.null.with.default=false next to key.converter and value.converter (in the connector config, or in the worker config when the connector inherits the converters) if consumers should see the NULL, then re-run; with another converter, keep this connector on Kafka Connect.",
           "blocking": true
         },
         {
@@ -220,9 +220,9 @@
             "file": "connector.json",
             "pointer": "/config/transforms.unwrap.replace.null.with.default"
           },
-          "code": "kc.smt_unsupported",
-          "reason": "Part of the transform unwrap (io.debezium.transforms.ExtractNewRecordState), which is not translated. This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
-          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "code": "kc.setting_required",
+          "reason": "Part of the transform unwrap (io.debezium.transforms.ExtractNewRecordState), which is not translated. On a Debezium source, Kafka Connect's converter writes a column's schema default in place of a NULL unless it is a JsonConverter with replace.null.with.default=false, and the Conduit pipeline writes the NULL; key.converter and value.converter are not set that way, so no transform of the chain translates exactly.",
+          "fix": "Set key.converter.replace.null.with.default=false and value.converter.replace.null.with.default=false next to key.converter and value.converter (in the connector config, or in the worker config when the connector inherits the converters) if consumers should see the NULL, then re-run; with another converter, keep this connector on Kafka Connect.",
           "blocking": true
         },
         {
@@ -232,9 +232,9 @@
             "file": "connector.json",
             "pointer": "/config/transforms.onlyOrders.type"
           },
-          "code": "kc.smt_unsupported",
-          "reason": "Part of the transform onlyOrders (org.apache.kafka.connect.transforms.Filter), which is not translated. Its predicate \"isOrders\" is not translated. This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
-          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "code": "kc.setting_required",
+          "reason": "On a Debezium source, Kafka Connect's converter writes a column's schema default in place of a NULL unless it is a JsonConverter with replace.null.with.default=false, and the Conduit pipeline writes the NULL; key.converter and value.converter are not set that way, so no transform of the chain translates exactly.",
+          "fix": "Set key.converter.replace.null.with.default=false and value.converter.replace.null.with.default=false next to key.converter and value.converter (in the connector config, or in the worker config when the connector inherits the converters) if consumers should see the NULL, then re-run; with another converter, keep this connector on Kafka Connect.",
           "blocking": true
         },
         {
@@ -244,9 +244,9 @@
             "file": "connector.json",
             "pointer": "/config/transforms.onlyOrders.predicate"
           },
-          "code": "kc.smt_unsupported",
-          "reason": "Its predicate \"isOrders\" is not translated. This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
-          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "code": "kc.setting_required",
+          "reason": "Part of the transform onlyOrders (org.apache.kafka.connect.transforms.Filter), which is not translated. On a Debezium source, Kafka Connect's converter writes a column's schema default in place of a NULL unless it is a JsonConverter with replace.null.with.default=false, and the Conduit pipeline writes the NULL; key.converter and value.converter are not set that way, so no transform of the chain translates exactly.",
+          "fix": "Set key.converter.replace.null.with.default=false and value.converter.replace.null.with.default=false next to key.converter and value.converter (in the connector config, or in the worker config when the connector inherits the converters) if consumers should see the NULL, then re-run; with another converter, keep this connector on Kafka Connect.",
           "blocking": true
         },
         {
@@ -256,9 +256,9 @@
             "file": "connector.json",
             "pointer": "/config/transforms.onlyOrders.negate"
           },
-          "code": "kc.smt_unsupported",
-          "reason": "Part of the transform onlyOrders (org.apache.kafka.connect.transforms.Filter), which is not translated. Its predicate \"isOrders\" is not translated. This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
-          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "code": "kc.setting_required",
+          "reason": "Part of the transform onlyOrders (org.apache.kafka.connect.transforms.Filter), which is not translated. On a Debezium source, Kafka Connect's converter writes a column's schema default in place of a NULL unless it is a JsonConverter with replace.null.with.default=false, and the Conduit pipeline writes the NULL; key.converter and value.converter are not set that way, so no transform of the chain translates exactly.",
+          "fix": "Set key.converter.replace.null.with.default=false and value.converter.replace.null.with.default=false next to key.converter and value.converter (in the connector config, or in the worker config when the connector inherits the converters) if consumers should see the NULL, then re-run; with another converter, keep this connector on Kafka Connect.",
           "blocking": true
         },
         {
@@ -327,8 +327,8 @@
             "pointer": "/config/predicates.isOrders.type"
           },
           "code": "kc.smt_unsupported",
-          "reason": "This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
-          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "reason": "The predicate is used by onlyOrders, whose chain is not translated.",
+          "fix": "Make every transform of the chain translatable (see the entries of each), or keep this connector on Kafka Connect. With --accept-gaps the pipeline runs without any of the chain's transforms.",
           "blocking": true
         },
         {
@@ -339,8 +339,8 @@
             "pointer": "/config/predicates.isOrders.pattern"
           },
           "code": "kc.smt_unsupported",
-          "reason": "Part of the predicate isOrders, which is not translated. This version of migrate does not translate this transform or predicate yet. Transforms change data, so migrate does not approximate it.",
-          "fix": "Keep this connector on Kafka Connect until a migrate release translates it (SMT compatibility pack, #2960), or replace it by hand with the equivalent processor and remove it from the Kafka Connect config.",
+          "reason": "The predicate is used by onlyOrders, whose chain is not translated.",
+          "fix": "Make every transform of the chain translatable (see the entries of each), or keep this connector on Kafka Connect. With --accept-gaps the pipeline runs without any of the chain's transforms.",
           "blocking": true
         },
         {

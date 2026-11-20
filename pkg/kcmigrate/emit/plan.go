@@ -158,6 +158,11 @@ func (p *Plan) Setting(side, name string) (string, bool) {
 	return v, ok
 }
 
+// SearchPath returns the schema the Postgres source's tables are in when
+// table.include.list translated to bare table names with search_path set
+// to that one schema (pgTables), and "" otherwise.
+func (p *Plan) SearchPath() string { return p.pgURL[pgURLSearchPath] }
+
 // Scope is the class's Kafka Connect connector type, rules.ScopeSource or
 // rules.ScopeSink.
 func (p *Plan) Scope() string { return p.scope }
