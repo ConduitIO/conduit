@@ -1,0 +1,98 @@
+schemaVersion: 1
+provider: anthropic
+model: claude-sonnet-5
+capturedAt: 2026-10-08T02:29:26.365145Z
+requestCount: 28
+totalTokensUsed: 799724
+estimatedCostUSD: 3.9346420799999997
+captureCommand: 'CONDUIT_GENERATE_CAPTURE=1 ANTHROPIC_API_KEY=*** go test -tags=generate_capture -count=1 -timeout 30m -run TestCaptureTranscripts ./cmd/conduit/internal/generate/... # CONDUIT_GENERATE_CAPTURE_PASSES=3 CONDUIT_GENERATE_CAPTURE_MODEL=claude-sonnet-5'
+corpusCommitSha: 8f41580cf45d91223fa4c701234f0c273fe7d1e9
+catalogFingerprint: 186679fe313df6bc14bf8bc7d4e503c83f5f557d652e210635c421b105da7205
+systemPromptSha256: 0901ab74fcb5a210a033e6849d662e6a0806995547c03037a684f3069a70957a
+passes: 3
+medianValidatePassRate: 1
+medianSemanticMatchRate: 0.6785714285714286
+medianValidatePassCount: 28
+medianSemanticMatchCount: 19
+medianSampleSize: 3
+passScores:
+    - pass: 1
+      total: 28
+      validatePassCount: 28
+      validatePassRate: 1
+      semanticMatchCount: 19
+      semanticMatchRate: 0.6785714285714286
+      missingCount: 0
+    - pass: 2
+      total: 28
+      validatePassCount: 28
+      validatePassRate: 1
+      semanticMatchCount: 19
+      semanticMatchRate: 0.6785714285714286
+      missingCount: 0
+    - pass: 3
+      total: 28
+      validatePassCount: 27
+      validatePassRate: 0.9642857142857143
+      semanticMatchCount: 18
+      semanticMatchRate: 0.6428571428571429
+      missingCount: 0
+capturedCount: 28
+missingCount: 0
+requestOutcomes:
+    - requestID: postgres-cdc-to-kafka-filtered
+      captured: true
+    - requestID: postgres-to-s3-json-export
+      captured: true
+    - requestID: kafka-to-postgres-sync
+      captured: true
+    - requestID: kafka-to-s3-archive
+      captured: true
+    - requestID: file-to-kafka-ingest
+      captured: true
+    - requestID: s3-to-postgres-load
+      captured: true
+    - requestID: generator-to-log-smoketest
+      captured: true
+    - requestID: postgres-to-log-debug-tap
+      captured: true
+    - requestID: kafka-to-kafka-retopic
+      captured: true
+    - requestID: file-to-s3-upload
+      captured: true
+    - requestID: s3-to-file-backup
+      captured: true
+    - requestID: postgres-cdc-debezium-unwrap-to-kafka
+      captured: true
+    - requestID: kafka-connect-unwrap-to-postgres
+      captured: true
+    - requestID: postgres-to-s3-mask-pii
+      captured: true
+    - requestID: kafka-to-s3-rename-field
+      captured: true
+    - requestID: file-to-log-tail
+      captured: true
+    - requestID: generator-to-kafka-loadtest
+      captured: true
+    - requestID: postgres-to-postgres-replicate
+      captured: true
+    - requestID: kafka-to-file-export
+      captured: true
+    - requestID: s3-to-kafka-load
+      captured: true
+    - requestID: postgres-to-kafka-filter-and-encode
+      captured: true
+    - requestID: file-to-file-base64-decode
+      captured: true
+    - requestID: kafka-to-s3-split-batches
+      captured: true
+    - requestID: postgres-to-kafka-convert-types
+      captured: true
+    - requestID: generator-to-s3-loadtest
+      captured: true
+    - requestID: kafka-to-postgres-filter-before-upsert
+      captured: true
+    - requestID: s3-to-log-audit
+      captured: true
+    - requestID: postgres-to-kafka-set-derived-field
+      captured: true

@@ -1,0 +1,41 @@
+schemaVersion: 1
+requestID: postgres-to-kafka-convert-types
+provider: anthropic
+model: claude-sonnet-5
+capturedAt: 2026-10-08T02:42:50.831305Z
+corpusPromptSHA256: e529189c941a8ba8bd3be0a7923b2a10c71fe28b035601197a059485d0a1e822
+systemPromptSHA256: 0901ab74fcb5a210a033e6849d662e6a0806995547c03037a684f3069a70957a
+catalogFingerprint: 186679fe313df6bc14bf8bc7d4e503c83f5f557d652e210635c421b105da7205
+turns:
+    - "n": 1
+      userPromptSHA256: e529189c941a8ba8bd3be0a7923b2a10c71fe28b035601197a059485d0a1e822
+      tokensUsed: 6186
+      completionText: |-
+        version: "2.2"
+        pipelines:
+          - id: postgres-orders-to-kafka
+            status: running
+            connectors:
+              - id: source
+                type: source
+                plugin: "builtin:postgres"
+                settings:
+                  url: "TODO"
+                  tables: "orders"
+                  cdcMode: auto
+              - id: destination
+                type: destination
+                plugin: "builtin:kafka"
+                settings:
+                  servers: "localhost:9092"
+                  topics: "orders"
+                  acks: all
+            processors:
+              - id: convert-amount
+                plugin: "field.convert"
+                settings:
+                  field: ".Payload.After.amount"
+                  type: float
+outcome:
+    validatePass: true
+    semanticMatch: true

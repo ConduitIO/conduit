@@ -144,15 +144,18 @@ type Turn struct {
 	CompletionText string `yaml:"completionText"`
 }
 
-// Outcome is a transcript's own scored result, recorded at capture time —
-// what ScoreRun found for this request against Turns' LAST candidate, the
-// day the transcript was captured.
+// Outcome is a transcript's own scored result, recorded at capture time:
+// GENERATE's verdict on its last attempt (buildTranscript in
+// transcript_capture_test.go) — did the last candidate pass validate, and
+// did Generate's prompt-derived intent judge accept it. It is not the corpus
+// verdict (ScoreRun against Request.Expect); the two can disagree, and the
+// replay eval (replay_eval_test.go) reports both.
 type Outcome struct {
 	ValidatePass  bool `yaml:"validatePass"`
 	SemanticMatch bool `yaml:"semanticMatch"`
-	// SemanticIssues carries scoreSemantic's Issues when SemanticMatch is
-	// false — never populated when true, since a passing outcome has nothing
-	// to explain.
+	// SemanticIssues carries the intent judge's Issues when SemanticMatch
+	// is false — never populated when true, since a passing outcome has
+	// nothing to explain.
 	SemanticIssues []string `yaml:"semanticIssues,omitempty"`
 }
 
