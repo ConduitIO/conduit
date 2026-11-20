@@ -375,9 +375,9 @@ to v0.23.
       with the carried schema; `sdk.schema.encode.*.strategy` is opt-in
 - [x] `avro.encode` can register the record's own schema instead of one inferred from values
       (`schema.strategy: fromRecord`, #3340)
-- [ ] **Avro values survive the encode path**, remaining: decimals that do not fit their schema are
-      refused, not rounded (`conduit-commons`#363), and record data stays out of schema and metadata
-      error messages (`conduit-commons`#365, #366)
+- [x] **Avro values survive the encode path**: decimals that do not fit their schema are refused,
+      not rounded (`conduit-commons`#363), and record data stays out of schema and metadata error
+      messages (`conduit-commons`#365, #366); shipped by the `conduit-commons` v0.13.1 bump
 - [x] **Postgres Avro schemas match the table**: nullable columns are `["null", T]`, and
       `json`/`jsonb` keep their exact text with Debezium's `io.debezium.data.Json` name
       (`conduit-connector-postgres` v0.21.0 and v0.21.1, built in; #3348, #3351)

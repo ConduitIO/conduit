@@ -20,10 +20,10 @@ import (
 	"github.com/conduitio/conduit/pkg/foundation/cerrors/conduiterr"
 )
 
-// Error codes of the avro.encode fromRecord schema strategy. Every one of them
-// makes the record an error record, which goes to the DLQ or stops the
-// pipeline according to its dead-letter settings; nothing is acked upstream
-// before that happens.
+// Error codes of avro.encode. All but CodeDecimalNotRepresentable belong to
+// the fromRecord schema strategy. Every one of them makes the record an error
+// record, which goes to the DLQ or stops the pipeline according to its
+// dead-letter settings; nothing is acked upstream before that happens.
 var (
 	// CodeSchemaMismatch is returned by avro.encode with schema.strategy
 	// fromRecord when a value does not fit the schema the record carries
@@ -56,4 +56,16 @@ var (
 	// the subject holds earlier autoRegister versions. Use a new subject, or
 	// change that subject's compatibility setting deliberately.
 	CodeSchemaIncompatible = conduiterr.Register("processor.avro_encode.schema_incompatible", codes.FailedPrecondition)
+
+	// CodeDecimalNotRepresentable is returned by avro.encode with
+	// schema.strategy autoRegister or preRegistered when a decimal value does
+	// not fit the schema's decimal(precision, scale) exactly: more fractional
+	// digits than the scale (autoRegister infers decimal(31,10) for every
+	// decimal), no finite decimal expansion, or more digits than the
+	// precision. The value is never rounded or truncated. The message names
+	// the field and the precision and scale the value needs. Use
+	// schema.strategy fromRecord to keep the decimal type the record carries,
+	// a pre-registered schema with enough digits, or round the value before
+	// avro.encode. With fromRecord the same case is CodeSchemaMismatch.
+	CodeDecimalNotRepresentable = conduiterr.Register("processor.avro_encode.decimal_not_representable", codes.InvalidArgument)
 )
