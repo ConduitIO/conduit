@@ -3069,10 +3069,21 @@ type DeleteConnectorRequest struct {
 	unknownFields protoimpl.UnknownFields
 
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// Delete although the connector's stored settings no longer resolve, so the
-	// plugin's deletion hook (for example dropping a Postgres replication slot)
-	// cannot run and is skipped. Without it such a delete is refused with
-	// connector.delete_hook_unresolvable.
+	// Delete although the plugin's deletion hook (for example dropping a
+	// Postgres replication slot) did not succeed, skipping it and leaving what
+	// it would have released for you to clean up by hand.
+	//
+	// It covers both reasons the hook can fail. The connector's stored settings
+	// no longer resolve, so the hook cannot be built at all, and without force
+	// the delete is refused with connector.delete_hook_unresolvable. Or the hook
+	// ran and failed (the plugin could not be dispensed, or it returned an
+	// error), and without force the delete is refused with
+	// connector.delete_hook_failed.
+	//
+	// force does NOT skip the running check. Deleting a connector that is still
+	// streaming would lose its position, so a forced delete of a running
+	// connector is still refused with connector.running; stop the pipeline
+	// first. See docs/operations/connector-delete-hook.md.
 	Force bool `protobuf:"varint,2,opt,name=force,proto3" json:"force,omitempty"`
 }
 

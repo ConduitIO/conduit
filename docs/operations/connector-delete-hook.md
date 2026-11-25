@@ -1,4 +1,4 @@
-# Deleting a connector whose settings no longer resolve
+# Deleting a connector whose deletion hook does not succeed
 
 When a connector is deleted, Conduit tells its plugin ("deleted" lifecycle event) so it can clean up
 what it created on the other side. The Postgres source drops its replication slot; a slot that is left

@@ -357,7 +357,7 @@
           },
           {
             "name": "force",
-            "description": "Delete although the connector's stored settings no longer resolve, so the\nplugin's deletion hook (for example dropping a Postgres replication slot)\ncannot run and is skipped. Without it such a delete is refused with\nconnector.delete_hook_unresolvable.",
+            "description": "Delete although the plugin's deletion hook (for example dropping a\nPostgres replication slot) did not succeed, skipping it and leaving what\nit would have released for you to clean up by hand.\n\nIt covers both reasons the hook can fail. The connector's stored settings\nno longer resolve, so the hook cannot be built at all, and without force\nthe delete is refused with connector.delete_hook_unresolvable. Or the hook\nran and failed (the plugin could not be dispensed, or it returned an\nerror), and without force the delete is refused with\nconnector.delete_hook_failed.\n\nforce does NOT skip the running check. Deleting a connector that is still\nstreaming would lose its position, so a forced delete of a running\nconnector is still refused with connector.running; stop the pipeline\nfirst. See docs/operations/connector-delete-hook.md.",
             "in": "query",
             "required": false,
             "type": "boolean"
@@ -1966,7 +1966,7 @@
         "NULL_VALUE"
       ],
       "default": "NULL_VALUE",
-      "description": "Represents a JSON `null`.\n\n`NullValue` is a sentinel, using an enum with only one value to represent\nthe null value for the `Value` type union.\n\nA field of type `NullValue` with any value other than `0` is considered\ninvalid. Most ProtoJSON serializers will emit a `Value` with a `null_value`\nset as a JSON `null` regardless of the integer value, and so will round trip\nto a `0` value.\n\n - NULL_VALUE: Null value."
+      "description": "`NullValue` is a singleton enumeration to represent the null value for the\n`Value` type union.\n\nThe JSON representation for `NullValue` is JSON `null`.\n\n - NULL_VALUE: Null value."
     },
     "v1ApplyPipelineRequest": {
       "type": "object",
