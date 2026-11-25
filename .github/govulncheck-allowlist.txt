@@ -53,3 +53,29 @@ GO-2026-5048
 # ---------------------------------------------------------------------------
 # The golang.org/x/crypto/openpgp package is unmaintained, unsafe by design, and has known security issues
 GO-2026-5932
+# ---------------------------------------------------------------------------
+# github.com/gorilla/websocket (1 finding) — NO FIXED RELEASE, not reachable
+# in Conduit's role
+#
+# The advisory is a cryptographically weak PRNG for the WebSocket frame mask
+# key. Per RFC 6455 masking is client-side only: a client MUST mask the frames
+# it sends and a server MUST NOT, so the mask key is generated only when the
+# library acts as a client. Conduit is only ever the server. The non-test uses
+# are pkg/foundation/grpcutil/websocket.go (websocket.Upgrader for the gRPC-web
+# proxy) and pkg/http/apisec/wstoken.go (IsWebSocketUpgrade); there is no
+# websocket.Dialer, DefaultDialer or Dial outside _test.go files. govulncheck
+# reports Read/Write/ReadMessage/WriteMessage/Close as called because they are
+# shared between both roles, and the client-side calls it traces are in the
+# integration tests.
+#
+# There is also nothing to bump to. v1.5.3 (2024-06-14) is the newest tagged
+# version and is what go.mod pins; the only fix the advisory names is the
+# pseudo-version v1.5.4-0.20240701034025-d67f41855da4, an untagged master
+# commit. Pinning a release branch to an untagged commit is worse than
+# accepting a finding that cannot be reached.
+#
+# Re-check when gorilla/websocket tags v1.5.4 or later: bump and delete this
+# block. Re-check this justification if Conduit ever dials a WebSocket.
+# ---------------------------------------------------------------------------
+# Use of a cryptographically weak PRNG for the WebSocket mask key in github.com/gorilla/websocket
+GO-2026-6278
