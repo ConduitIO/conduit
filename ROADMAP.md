@@ -464,8 +464,9 @@ will not make v0.23 moves on to v0.24 in the same way.
       DropHeaders/InsertHeader/HeaderFrom, ReplaceField include, and the schema-carrying sides
       (type-preserving schema derivation). Until then `migrate` reports these as blocking
 - [ ] _Moved from v0.22._ **Debezium-compatible output mode for MySQL**, using the Postgres diff
-      harness from v0.21 (#3075) against real Debezium on the same database (PR #3076 data model +
-      JsonConverter)
+      harness from v0.21 (#3075) against real Debezium on the same database. The Connect model and
+      JsonConverter port it builds on are `debezium.encode` (#3183), not the superseded PR #3076;
+      #3384 tracks the two gaps left in it
 - [ ] _Moved from v0.22._ **Default engine flip and v1 engine deletion**: arch-v2 has been a
       `preview` engine since v0.19; this flips it to the default and removes the v1 engine, gated on
       the cross-engine benchi harness proving parity-or-faster at shipped defaults (PRs
