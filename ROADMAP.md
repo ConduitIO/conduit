@@ -363,12 +363,13 @@ Avro-correctness work that the Debezium-shaped output and a migrated pipeline bo
 rest of part 2 moved to v0.23 and is marked _moved from v0.22_ there. Performance work is arch-v2
 only.
 
-Status (2026-11-24): the scope above is complete on `main`. The 2026-11-21 freeze and 2026-11-23
-cut passed without the branch being cut, so the original 2026-11-25 tag date is gone; the dates are
-dropped rather than reset, because what is left is a sequence and not a schedule. `release/v0.22.x`
-is cut once `GO-2026-6278` is cleared on `main` (#3374), which is what turned `govulncheck` red
-there on 2026-11-24, and the tag follows two consecutive green release-branch nightlies. Items that
-were not finished have already moved to v0.23 and are marked there.
+Status (2026-11-25 UTC): the scope above is complete on `main` and the release line is open.
+`release/v0.22.x` was cut from `main` at `da0fd2d4`, once `GO-2026-6278` was cleared on `main`
+(#3374, which is what turned `govulncheck` red there on 2026-11-24) and the v0.22 upgrade notes
+landed (#3380). The 2026-11-21 freeze and 2026-11-23 cut passed without the branch being cut, so
+the original 2026-11-25 tag date is gone; the dates are dropped rather than reset, because what is
+left is a sequence and not a schedule. The tag follows two consecutive green release-branch
+nightlies. Items that were not finished have already moved to v0.23 and are marked there.
 
 - [x] _Moved from v0.21._ Adaptive source batching by default; design #3293, implemented in #3309
       (merged 2026-11-03, ships in v0.22). No throughput claim without a committed benchi run
