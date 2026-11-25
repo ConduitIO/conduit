@@ -64,3 +64,9 @@ conduit | d938aef0 | bump the Go toolchain to 1.26.11 for GO-2026-6859
 # frames, reachable via huff0.Compress4X). v0.20.x pinned v1.20.0; the fix is in
 # v1.20.2 and main already runs v1.20.3.
 conduit | d938aef0 | bump `github.com/klauspost/compress` to v1.20.3 for GO-2026-6865
+
+# Telemetry — go.opentelemetry.io/otel v1.47.0 for GO-2026-6974
+# (AttributeValueLengthLimit bypassed by U+FFFD runes). v0.20.x pinned v1.45.0;
+# main already ran v1.47.0. Indirect, so this is go.mod/go.sum plus the matching
+# resolution in the storecompat downgrade module.
+conduit | 12e0c324 | bump `go.opentelemetry.io/otel` to v1.47.0 for GO-2026-6974
