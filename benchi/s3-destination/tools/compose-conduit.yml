@@ -1,9 +1,9 @@
-# Conduit under test. The baseline is the v0.20.0 release (builtin:s3 v0.9.4).
+# Conduit under test. The baseline is the v0.21.2 release (builtin:s3 v0.12.0).
 # For a branch, build an image (`docker build -t conduit-bench:<name> .` from a
 # worktree) and point a second tool at it, as ../ack-hot-path does.
 services:
   conduit:
-    image: ghcr.io/conduitio/conduit:v0.20.0
+    image: ghcr.io/conduitio/conduit:v0.21.2
     container_name: benchi-conduit
     networks:
       - benchi
