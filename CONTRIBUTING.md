@@ -49,6 +49,33 @@ and that all the tests still run successfully.
 We would like to ask you to use the provided Git hooks (by running `git config core.hooksPath githooks`),
 which automatically run the tests and the linter when pushing code.
 
+### Merging more than one PR that touches the same file
+
+Two PRs can both be green and still break `main` together. Git merges text, so it reports no conflict
+when one PR changes behaviour that another PR's assertions depend on — and neither PR's CI ever saw
+the other's code. The failure lands on `main`, after both are merged and nobody is watching.
+
+Before merging a batch, intersect their diffs:
+
+```sh
+for n in 3366 3369; do gh pr diff "$n" --name-only; done | sort | uniq -d
+```
+
+Any file in that output means the batch is not independent. Merge the first PR, then **update the
+second branch and re-run its checks against the merged tree** before merging it — a Tier 1 PR also
+needs a fresh sign-off at its new head, since the sign-off names a commit SHA.
+
+After the batch lands, check the merged tip itself rather than trusting the individual runs:
+
+```sh
+git worktree add --detach /tmp/wt-main "$(git rev-parse origin/main)"
+cd /tmp/wt-main && go build ./... && go test -race -count=1 ./pkg/<affected>/...
+```
+
+This is not hypothetical: #3366 and #3369 both touched
+`pkg/orchestrator/connectors_delete_rollback_test.go`, merged cleanly, and left `main` red on a stale
+gomock expectation (fixed in #3371).
+
 ### Resolving ConduitIO modules (fresh connector tags)
 
 `go get github.com/conduitio/*@vX.Y.Z` on a freshly tagged connector fails with
