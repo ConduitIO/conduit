@@ -355,7 +355,7 @@ and two green nightlies on the release branch.
 - [x] Reliability follow-ups, done: `Source.Read` honouring its context (#2949, #2980) and bounded
       status writes on badger (#2964). The rest moved to v0.23
 
-### v0.22 — Correct data on the default path (target 2026-11-25)
+### v0.22 — Correct data on the default path
 
 v0.22 ships on the monthly train with what is ready instead of waiting for the whole Kafka Connect
 part 2 list (decided 2026-11-08; scope set 2026-11-10). It carries the data-integrity and
@@ -363,9 +363,12 @@ Avro-correctness work that the Debezium-shaped output and a migrated pipeline bo
 rest of part 2 moved to v0.23 and is marked _moved from v0.22_ there. Performance work is arch-v2
 only.
 
-Dates: Tier 1 merges on `main` freeze 2026-11-21; `release/v0.22.x` is cut 2026-11-23; the tag
-follows two consecutive green release-branch nightlies, targeting 2026-11-25. Unfinished items move
-to v0.23.
+Status (2026-11-24): the scope above is complete on `main`. The 2026-11-21 freeze and 2026-11-23
+cut passed without the branch being cut, so the original 2026-11-25 tag date is gone; the dates are
+dropped rather than reset, because what is left is a sequence and not a schedule. `release/v0.22.x`
+is cut once `GO-2026-6278` is cleared on `main` (#3374), which is what turned `govulncheck` red
+there on 2026-11-24, and the tag follows two consecutive green release-branch nightlies. Items that
+were not finished have already moved to v0.23 and are marked there.
 
 - [x] _Moved from v0.21._ Adaptive source batching by default; design #3293, implemented in #3309
       (merged 2026-11-03, ships in v0.22). No throughput claim without a committed benchi run
@@ -375,9 +378,10 @@ to v0.23.
       with the carried schema; `sdk.schema.encode.*.strategy` is opt-in
 - [x] `avro.encode` can register the record's own schema instead of one inferred from values
       (`schema.strategy: fromRecord`, #3340)
-- [ ] **Avro values survive the encode path**, remaining: decimals that do not fit their schema are
-      refused, not rounded (`conduit-commons`#363), and record data stays out of schema and metadata
-      error messages (`conduit-commons`#365, #366)
+- [x] **Avro values survive the encode path**: decimals that do not fit their schema are refused,
+      not rounded (`conduit-commons`#363), and record data stays out of schema and metadata error
+      messages (`conduit-commons`#365, #366), shipped in `conduit-commons` v0.13.1 and bumped in
+      #3375
 - [x] **Postgres Avro schemas match the table**: nullable columns are `["null", T]`, and
       `json`/`jsonb` keep their exact text with Debezium's `io.debezium.data.Json` name
       (`conduit-connector-postgres` v0.21.0 and v0.21.1, built in; #3348, #3351)
@@ -389,14 +393,11 @@ to v0.23.
 - [x] `conduit migrate kafka-connect` translates a Debezium Postgres `table.include.list` exactly
       (#3353)
 - [x] Go toolchain 1.26.11 (#3347)
-- [ ] **Kafka Connect SMT compatibility pack, reduced scope** (design #3342). Merged: the translator
+- [x] **Kafka Connect SMT compatibility pack, processors only** (design #3342): the translator
       framework (B3, #3346), the Kafka Connect oracle (B11, #3349), typed values and an explicit
-      `from` copy mode for `field.set` (#3343), `flatten` (#3344) and `field.hoist` (#3345). In
-      progress (B4/B5): `migrate` translators for the SMTs the oracle proves exact: Filter with
-      predicates, RegexRouter, ReplaceField exclude/rename, ExtractField, HoistField, InsertField
-      static/topic, ValueToKey, Flatten and ExtractNewRecordState. Each ships only if it passes the
-      oracle. The rest moved to v0.23
-- [ ] **Debezium-compatible output mode for Postgres: groundwork only in v0.22.** The diff harness
+      `from` copy mode for `field.set` (#3343), `flatten` (#3344) and `field.hoist` (#3345). The
+      `migrate` translators (B4/B5) moved to v0.23
+- [x] **Debezium-compatible output mode for Postgres: groundwork only in v0.22.** The diff harness
       and goldens (#3075) and `debezium.encode` (#3183) are the groundwork; the mode itself ships
       in v0.23
 
@@ -451,6 +452,12 @@ will not make v0.23 moves on to v0.24 in the same way.
       `debezium.encode` (#3183) as a built-in and let the Postgres and Kafka connectors carry its
       output, verified with the diff harness against real Debezium goldens (#3075). The v0.22
       groundwork is in; the MySQL mode below builds on this one
+- [ ] _Moved from v0.22._ **`migrate` translators for the SMT pack (B4/B5)**: the `migrate`
+      translators for the SMTs the oracle proves exact — Filter with predicates, RegexRouter,
+      ReplaceField exclude/rename, ExtractField, HoistField, InsertField static/topic, ValueToKey,
+      Flatten and ExtractNewRecordState. `pkg/kcmigrate/smt` has the framework and the oracle;
+      `Registry.Transforms` is still empty, so every SMT falls through to the placeholder outcome.
+      Each translator ships only if it passes the oracle
 - [ ] _Moved from v0.22._ **Rest of the Kafka Connect SMT pack**: Cast, TimestampConverter,
       TimezoneConverter, ExtractChangedRecordState, EventRouter, PartitionRouting,
       DropHeaders/InsertHeader/HeaderFrom, ReplaceField include, and the schema-carrying sides
