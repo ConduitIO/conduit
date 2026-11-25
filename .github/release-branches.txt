@@ -10,3 +10,4 @@
 # The branch's own copy of each workflow is what runs, so the release branch
 # is tested by the CI definition it ships with.
 release/v0.20.x
+release/v0.22.x
