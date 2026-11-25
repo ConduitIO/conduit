@@ -135,7 +135,46 @@ func mismatchFromCodec(sd opencdc.StructuredData, err error) error {
 			}
 		}
 	}
+	if field == "(record)" {
+		if k, ok := fieldFromCodecPath(sd, msg); ok {
+			field = k
+		}
+	}
 	return mismatch(field, "cannot be encoded with the schema: its value has a different type, is out of range, or is null where the schema does not allow it", err)
+}
+
+// codecFieldMarker precedes a quoted field path in the conduit-commons Avro
+// errors that report the path separately from the codec's own prefix, such as
+// the decimal-does-not-fit refusal added in conduit-commons v0.13.1
+// (ErrDecimalNotRepresentable): "could not marshal into avro: avro decimal
+// value is not representable in its schema: field \"c02_numeric\": ...". The
+// codecMarshalPrefix parse above stops at the first ':' and so reads the
+// sentinel's own text, which is never a key of sd.
+const codecFieldMarker = `field "`
+
+// fieldFromCodecPath returns the top-level field named by a quoted path after
+// codecFieldMarker, and whether it is a key of sd. Only the name is taken: the
+// rest of the codec message is not shown, as it can quote record values, which
+// is also why mismatch makes the cause opaque.
+func fieldFromCodecPath(sd opencdc.StructuredData, msg string) (string, bool) {
+	i := strings.Index(msg, codecFieldMarker)
+	if i < 0 {
+		return "", false
+	}
+	rest := msg[i+len(codecFieldMarker):]
+	end := strings.IndexByte(rest, '"')
+	if end <= 0 {
+		return "", false
+	}
+	// A nested path is reported as a.b or a[0]; sd is keyed by the top level.
+	top := rest[:end]
+	if j := strings.IndexAny(top, ".["); j > 0 {
+		top = top[:j]
+	}
+	if _, ok := sd[top]; !ok {
+		return "", false
+	}
+	return top, true
 }
 
 // codecMarshalPrefix precedes the field path in conduit-commons' Avro marshal
