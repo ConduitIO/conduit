@@ -324,6 +324,7 @@ func (ab actionsBuilder) prepareProcessorActions(oldConfig, newConfig config.Pro
 			cfg:              oldConfig,
 			parent:           parent,
 			processorService: ab.processorService,
+			deleted:          &deletedProcessor{},
 		}}
 	}
 

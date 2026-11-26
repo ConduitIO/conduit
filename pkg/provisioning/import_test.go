@@ -247,6 +247,7 @@ func TestActionBuilder_Build(t *testing.T) {
 				Type: processor.ParentTypeConnector,
 			},
 			processorService: procSrv,
+			deleted:          &deletedProcessor{},
 		},
 		deleteProcessorAction{
 			cfg: oldConfig.Processors[3],
@@ -255,6 +256,7 @@ func TestActionBuilder_Build(t *testing.T) {
 				Type: processor.ParentTypePipeline,
 			},
 			processorService: procSrv,
+			deleted:          &deletedProcessor{},
 		},
 	}
 	wantNewActions := []action{
@@ -810,6 +812,7 @@ func TestActionsBuilder_PrepareProcessorActions_Delete(t *testing.T) {
 		cfg:              oldConfig,
 		parent:           parent,
 		processorService: procSrv,
+		deleted:          &deletedProcessor{},
 	}}
 
 	got := srv.newActionsBuilder().prepareProcessorActions(oldConfig, newConfig, parent)

@@ -945,6 +945,44 @@ func (c *ProcessorServiceMakeRunnableProcessorCall) DoAndReturn(f func(context.C
 	return c
 }
 
+// Restore mocks base method.
+func (m *ProcessorService) Restore(ctx context.Context, instance *processor.Instance) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Restore", ctx, instance)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Restore indicates an expected call of Restore.
+func (mr *ProcessorServiceMockRecorder) Restore(ctx, instance any) *ProcessorServiceRestoreCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Restore", reflect.TypeOf((*ProcessorService)(nil).Restore), ctx, instance)
+	return &ProcessorServiceRestoreCall{Call: call}
+}
+
+// ProcessorServiceRestoreCall wrap *gomock.Call
+type ProcessorServiceRestoreCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *ProcessorServiceRestoreCall) Return(arg0 error) *ProcessorServiceRestoreCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *ProcessorServiceRestoreCall) Do(f func(context.Context, *processor.Instance) error) *ProcessorServiceRestoreCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *ProcessorServiceRestoreCall) DoAndReturn(f func(context.Context, *processor.Instance) error) *ProcessorServiceRestoreCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // UpdateWhileRunning mocks base method.
 func (m *ProcessorService) UpdateWhileRunning(ctx context.Context, id, plugin string, cfg processor.Config) (*processor.Instance, error) {
 	m.ctrl.T.Helper()

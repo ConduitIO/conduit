@@ -634,7 +634,30 @@ func (a deleteConnectorAction) Rollback(ctx context.Context) error {
 	return nil
 }
 
-type deleteProcessorAction createProcessorAction // piggyback on create action and reverse it
+// deleteProcessorAction deletes a processor. Its rollback puts back the
+// instance it deleted (#3370), so it is not the reverse of
+// createProcessorAction: creating the processor again from its config would
+// hand the process a fresh Instance with new CreatedAt/UpdatedAt and new
+// inspectors, dispense the plugin a second time, and write to the store
+// through the transaction the import is about to discard.
+//
+// It mirrors deleteConnectorAction deliberately; keep the two in step.
+type deleteProcessorAction struct {
+	cfg    config.Processor
+	parent processor.Parent
+
+	processorService ProcessorService
+
+	// deleted is shared by every copy of the action (actions are passed by
+	// value): Do records the instance it deleted, Rollback restores it. The
+	// actions builder allocates it.
+	deleted *deletedProcessor
+}
+
+// deletedProcessor holds the instance a deleteProcessorAction deleted.
+type deletedProcessor struct {
+	instance *processor.Instance
+}
 
 func (a deleteProcessorAction) String() string {
 	return fmt.Sprintf("delete processor with ID %v", a.cfg.ID)
@@ -653,9 +676,37 @@ func (a deleteProcessorAction) Describe() Change {
 }
 
 func (a deleteProcessorAction) Do(ctx context.Context) error {
-	return createProcessorAction(a).Rollback(ctx)
+	if a.deleted == nil {
+		// Without the holder Rollback could not restore what Do deletes.
+		return cerrors.Errorf("delete processor %v: action has no rollback state (not built by actionsBuilder)", a.cfg.ID)
+	}
+	instance, err := a.processorService.Get(ctx, a.cfg.ID)
+	if cerrors.Is(err, processor.ErrInstanceNotFound) {
+		// nothing to delete, and so nothing to restore
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err := a.processorService.Delete(ctx, a.cfg.ID); err != nil {
+		return err
+	}
+	a.deleted.instance = instance
+	return nil
 }
 
+// Rollback restores the instance Do deleted. If Do deleted nothing (it
+// failed, or the processor did not exist), there is nothing to restore, and
+// the live processor, if any, is left alone.
 func (a deleteProcessorAction) Rollback(ctx context.Context) error {
-	return createProcessorAction(a).Do(ctx)
+	if a.deleted == nil || a.deleted.instance == nil {
+		return nil
+	}
+	// Invariant 2: the same instance comes back, timestamps and runtime
+	// identity included, rather than a fresh copy built from config.
+	if err := a.processorService.Restore(ctx, a.deleted.instance); err != nil {
+		return cerrors.Errorf("failed to restore processor: %w", err)
+	}
+	a.deleted.instance = nil
+	return nil
 }
