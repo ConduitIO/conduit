@@ -261,9 +261,16 @@ func (p *ProcessorOrchestrator) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
+	// Invariant 2 & 5 (#3370): put back the deleted instance itself rather
+	// than building a fresh one via Create, which loses runtime identity,
+	// re-dispenses the plugin, and writes through a discarded transaction when
+	// txn.Commit fails. ctx carries txn, so Restore only touches memory and
+	// leaves the store to txn.Discard. Restore's error branches (nil instance
+	// or a different instance registered under id) cannot fire into MustExecute
+	// here: proc came from Get above, and mark.acquire holds the pipeline's
+	// mutationMark across the transaction and deferred rollback.
 	r.Append(func() error {
-		_, err = p.processors.Create(ctx, id, proc.Plugin, proc.Parent, proc.Config, processor.ProvisionTypeAPI, proc.Condition)
-		return err
+		return p.processors.Restore(ctx, proc)
 	})
 
 	switch proc.Parent.Type {

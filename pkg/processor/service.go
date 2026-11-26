@@ -344,3 +344,46 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 
 	return nil
 }
+
+// Restore puts back a processor instance that Delete removed. It is the
+// rollback counterpart of Delete (#3370): calling Create on a failed delete
+// builds a fresh Instance (losing runtime identity and re-dispensing the
+// plugin) and always writes to the store.
+//
+// Like connector.Service.Restore, it writes to the store only when ctx carries
+// no transaction. Inside a transaction the caller reverts the store by
+// discarding the transaction; issuing a write once Commit has failed and
+// discarded the transaction fails with ErrDiscardedTxn (or 25P02 on Postgres)
+// and makes rollback.R.MustExecute panic. Without a transaction the delete
+// reached the store, so Restore writes the record back.
+//
+// It returns an error, and changes nothing, for a nil instance or if a
+// different instance is registered under the same ID. Restoring an instance
+// that is already registered is a no-op.
+func (s *Service) Restore(ctx context.Context, instance *Instance) error {
+	if instance == nil {
+		return cerrors.New("can't restore a nil processor instance")
+	}
+	// guard: processor-restore-no-overwrite tests=^TestService_Restore_RefusesToReplace$
+	if current, ok := s.instances[instance.ID]; ok {
+		if current == instance {
+			return nil
+		}
+		return cerrors.Errorf("can't restore processor %v: a different instance with that ID exists", instance.ID)
+	}
+
+	// Invariant 2: memory gets back the instance itself, never a fresh one.
+	s.instances[instance.ID] = instance
+	measure.ProcessorsGauge.WithValues(instance.Plugin).Inc()
+
+	// Invariant 5: the store side of a rolled-back mutation is reverted by
+	// discarding the transaction, never by a second write through it.
+	// guard: processor-restore-no-store-write-in-txn tests=^TestService_Restore_InTransactionDoesNotWrite$
+	if database.TransactionFromContext(ctx) != nil {
+		return nil
+	}
+	if err := s.store.Set(ctx, instance.ID, instance); err != nil {
+		return cerrors.Errorf("could not restore processor instance %v in store: %w", instance.ID, err)
+	}
+	return nil
+}
