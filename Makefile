@@ -45,7 +45,7 @@ release-check:
 # guardmut removes each `// guard:` marked guard in turn and requires the
 # package tests to fail (tools/guardmut, docs/code_guidelines.md "Guard
 # markers"). Survivors fail unless baselined in .github/guardmut-baseline.txt.
-GUARDMUT_DIRS ?= pkg/connector,pkg/lifecycle,pkg/lifecycle-poc
+GUARDMUT_DIRS ?= pkg/connector,pkg/lifecycle,pkg/lifecycle-poc,pkg/processor
 .PHONY: guardmut
 guardmut:
 	cd tools && go run ./guardmut -root .. -dirs $(GUARDMUT_DIRS) \
