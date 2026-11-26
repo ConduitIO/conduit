@@ -18,10 +18,15 @@ import (
 	"context"
 	"testing"
 
+	"github.com/conduitio/conduit-commons/database"
+	"github.com/conduitio/conduit-commons/database/inmemory"
 	"github.com/conduitio/conduit-commons/lang"
 	"github.com/conduitio/conduit/pkg/connector"
+	"github.com/conduitio/conduit/pkg/foundation/log"
 	"github.com/conduitio/conduit/pkg/pipeline"
+	procMock "github.com/conduitio/conduit/pkg/plugin/processor/mock"
 	"github.com/conduitio/conduit/pkg/processor"
+	procSvcMock "github.com/conduitio/conduit/pkg/processor/mock"
 	"github.com/conduitio/conduit/pkg/provisioning/config"
 	"github.com/conduitio/conduit/pkg/provisioning/mock"
 	"github.com/google/uuid"
@@ -593,17 +598,41 @@ func TestDeleteProcessorAction_Do(t *testing.T) {
 		Settings: map[string]string{"foo": "bar"},
 		Workers:  2,
 	}
+	instance := &processor.Instance{ID: haveCfg.ID}
 
 	procSrv := mock.NewProcessorService(ctrl)
+	procSrv.EXPECT().Get(ctx, haveCfg.ID).Return(instance, nil)
 	procSrv.EXPECT().Delete(ctx, haveCfg.ID)
 
 	a := deleteProcessorAction{
 		cfg:              haveCfg,
-		parent:           processor.Parent{}, // only needed for Rollback
 		processorService: procSrv,
+		deleted:          &deletedProcessor{},
 	}
 	err := a.Do(ctx)
 	is.NoErr(err)
+	is.True(a.deleted.instance == instance) // kept for Rollback
+}
+
+func TestDeleteProcessorAction_Do_NotFound(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	haveCfg := config.Processor{ID: uuid.NewString()}
+	procSrv := mock.NewProcessorService(ctrl)
+	procSrv.EXPECT().Get(ctx, haveCfg.ID).Return(nil, processor.ErrInstanceNotFound)
+
+	a := deleteProcessorAction{cfg: haveCfg, processorService: procSrv, deleted: &deletedProcessor{}}
+	is.NoErr(a.Do(ctx))
+	is.True(a.deleted.instance == nil)
+	is.NoErr(a.Rollback(ctx)) // nothing to restore, no call
+}
+
+func TestDeleteProcessorAction_Do_NilHolder(t *testing.T) {
+	is := is.New(t)
+	a := deleteProcessorAction{cfg: config.Processor{ID: uuid.NewString()}}
+	is.True(a.Do(context.Background()) != nil)
 }
 
 func TestDeleteProcessorAction_Rollback(t *testing.T) {
@@ -611,30 +640,181 @@ func TestDeleteProcessorAction_Rollback(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 
-	haveCfg := config.Processor{
-		ID:        uuid.NewString(),
-		Plugin:    "processor-type",
-		Settings:  map[string]string{"foo": "bar"},
-		Workers:   2,
-		Condition: "{{ eq .Metadata.opencdc.version \"v1\" }}",
-	}
-	wantCfg := processor.Config{
-		Settings: haveCfg.Settings,
-		Workers:  haveCfg.Workers,
-	}
-	parent := processor.Parent{
-		ID:   uuid.NewString(),
-		Type: processor.ParentTypePipeline,
-	}
-
+	instance := &processor.Instance{ID: uuid.NewString()}
 	procSrv := mock.NewProcessorService(ctrl)
-	procSrv.EXPECT().Create(ctx, haveCfg.ID, haveCfg.Plugin, parent, wantCfg, processor.ProvisionTypeConfig, haveCfg.Condition)
+	// #3385: the deleted instance is put back, not created again from config.
+	procSrv.EXPECT().Restore(ctx, instance).Return(nil)
 
 	a := deleteProcessorAction{
-		cfg:              haveCfg,
-		parent:           parent,
+		cfg:              config.Processor{ID: instance.ID},
 		processorService: procSrv,
+		deleted:          &deletedProcessor{instance: instance},
 	}
-	err := a.Rollback(ctx)
+	is.NoErr(a.Rollback(ctx))
+	is.NoErr(a.Rollback(ctx)) // a second rollback restores nothing
+}
+
+// TestDeleteProcessorAction_RollbackRestoresInstance is the #3385 end-to-end
+// regression test against processor.Service. Rolling back a deleted processor
+// must put back the exact *processor.Instance that Do deleted (preserving
+// CreatedAt/UpdatedAt and live inspector sessions) and must not re-dispense the
+// processor plugin.
+func TestDeleteProcessorAction_RollbackRestoresInstance(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		txn  bool
+	}{
+		{name: "without transaction", txn: false},
+		{name: "in discarded transaction", txn: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+			ctx := context.Background()
+			logger := log.Nop()
+			db := &inmemory.DB{}
+			ctrl := gomock.NewController(t)
+
+			// Dispense is expected ONCE (initial Create); rollback must NOT re-dispense.
+			sdkProc := procMock.NewProcessor(ctrl)
+			sdkProc.EXPECT().Teardown(gomock.Any()).Return(nil).Times(1)
+			reg := procSvcMock.NewPluginService(ctrl)
+			reg.EXPECT().NewProcessor(gomock.Any(), "test-processor", gomock.Any(), gomock.Any()).Return(sdkProc, nil).Times(1)
+
+			procs := processor.NewService(logger, db, reg)
+			parent := processor.Parent{ID: uuid.NewString(), Type: processor.ParentTypePipeline}
+			cfg := config.Processor{
+				ID:        uuid.NewString(),
+				Plugin:    "test-processor",
+				Settings:  map[string]string{"field": "val"},
+				Workers:   2,
+				Condition: "{{ true }}",
+			}
+			proc, err := procs.Create(
+				ctx,
+				cfg.ID,
+				cfg.Plugin,
+				parent,
+				processor.Config{Settings: cfg.Settings, Workers: cfg.Workers},
+				processor.ProvisionTypeConfig,
+				cfg.Condition,
+			)
+			is.NoErr(err)
+
+			b := actionsBuilder{processorService: procs}
+			actions := b.prepareProcessorActions(cfg, config.Processor{}, parent)
+			is.Equal(len(actions), 1)
+			is.Equal(actions[0].Describe().Code, "provisioning.processor.delete")
+
+			actx := ctx
+			var txn database.Transaction
+			if tc.txn {
+				txn, actx, err = db.NewTransaction(ctx, true)
+				is.NoErr(err)
+			}
+			is.NoErr(actions[0].Do(actx))
+			_, err = procs.Get(ctx, proc.ID)
+			is.True(err != nil) // Do deleted it
+			is.NoErr(actions[0].Rollback(actx))
+			if txn != nil {
+				txn.Discard()
+			}
+
+			got, err := procs.Get(ctx, proc.ID)
+			is.NoErr(err)
+			is.True(got == proc) // Invariant 2: same instance pointer, not a fresh one
+			is.True(got.CreatedAt.Equal(proc.CreatedAt))
+			is.True(got.UpdatedAt.Equal(proc.UpdatedAt))
+
+			// Live inspector stays usable on the restored instance.
+			sess := got.InspectIn(ctx, "prov-session")
+			is.True(sess != nil)
+			got.Close()
+
+			// Memory agrees with what a restart loads from the store.
+			restarted := processor.NewService(logger, db, procSvcMock.NewPluginService(ctrl))
+			is.NoErr(restarted.Init(ctx))
+			stored, err := restarted.Get(ctx, proc.ID)
+			is.NoErr(err)
+			is.Equal(stored.Config, proc.Config)
+			is.Equal(stored.Condition, proc.Condition)
+			is.Equal(stored.ProvisionedBy, processor.ProvisionTypeConfig)
+			is.True(stored.CreatedAt.Equal(proc.CreatedAt))
+			is.True(stored.UpdatedAt.Equal(proc.UpdatedAt))
+		})
+	}
+}
+
+// TestDeleteProcessorAction_RollbackAfterFailedDo verifies that when Do fails
+// before removing anything, Rollback leaves the live processor untouched
+// instead of replacing it.
+func TestDeleteProcessorAction_RollbackAfterFailedDo(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	logger := log.Nop()
+	db := &inmemory.DB{}
+	ctrl := gomock.NewController(t)
+
+	sdkProc := procMock.NewProcessor(ctrl)
+	sdkProc.EXPECT().Teardown(gomock.Any()).Return(nil).Times(1)
+	reg := procSvcMock.NewPluginService(ctrl)
+	reg.EXPECT().NewProcessor(gomock.Any(), "test-processor", gomock.Any(), gomock.Any()).Return(sdkProc, nil).Times(1)
+
+	procs := processor.NewService(logger, db, reg)
+	parent := processor.Parent{ID: uuid.NewString(), Type: processor.ParentTypePipeline}
+	cfg := config.Processor{ID: uuid.NewString(), Plugin: "test-processor", Workers: 1}
+	proc, err := procs.Create(ctx, cfg.ID, cfg.Plugin, parent, processor.Config{Workers: 1}, processor.ProvisionTypeConfig, "")
 	is.NoErr(err)
+
+	procsFailing := processor.NewService(logger, &failingDeleteDB{DB: db}, procSvcMock.NewPluginService(ctrl))
+	is.NoErr(procsFailing.Init(ctx))
+	live, err := procsFailing.Get(ctx, proc.ID)
+	is.NoErr(err)
+
+	b := actionsBuilder{processorService: procsFailing}
+	actions := b.prepareProcessorActions(cfg, config.Processor{}, parent)
+	is.Equal(len(actions), 1)
+
+	is.True(actions[0].Do(ctx) != nil)
+	is.NoErr(actions[0].Rollback(ctx))
+
+	got, err := procsFailing.Get(ctx, proc.ID)
+	is.NoErr(err)
+	is.True(got == live) // not replaced by a fresh instance
+}
+
+func TestDeleteProcessorAction_ErrorBranches(t *testing.T) {
+	ctx := context.Background()
+	wantErr := processor.ErrProcessorRunning
+
+	t.Run("String and Describe", func(t *testing.T) {
+		is := is.New(t)
+		a := deleteProcessorAction{cfg: config.Processor{ID: "proc-1"}}
+		is.Equal(a.String(), "delete processor with ID proc-1")
+		is.Equal(a.Describe(), Change{
+			Resource: ResourceProcessor,
+			ID:       "proc-1",
+			Action:   ChangeActionDelete,
+			Effect:   EffectRestart,
+			Code:     "provisioning.processor.delete",
+		})
+	})
+
+	t.Run("Get error", func(t *testing.T) {
+		is := is.New(t)
+		ctrl := gomock.NewController(t)
+		procSrv := mock.NewProcessorService(ctrl)
+		procSrv.EXPECT().Get(ctx, "proc-1").Return(nil, wantErr)
+		a := deleteProcessorAction{cfg: config.Processor{ID: "proc-1"}, processorService: procSrv, deleted: &deletedProcessor{}}
+		is.True(a.Do(ctx) != nil)
+	})
+
+	t.Run("Restore error", func(t *testing.T) {
+		is := is.New(t)
+		ctrl := gomock.NewController(t)
+		inst := &processor.Instance{ID: "proc-1"}
+		procSrv := mock.NewProcessorService(ctrl)
+		procSrv.EXPECT().Restore(ctx, inst).Return(wantErr)
+		a := deleteProcessorAction{cfg: config.Processor{ID: "proc-1"}, processorService: procSrv, deleted: &deletedProcessor{instance: inst}}
+		is.True(a.Rollback(ctx) != nil)
+	})
 }

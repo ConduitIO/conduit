@@ -241,20 +241,14 @@ func TestActionBuilder_Build(t *testing.T) {
 			deleted:                &deletedConnector{},
 		},
 		deleteProcessorAction{
-			cfg: oldConfig.Connectors[3].Processors[0],
-			parent: processor.Parent{
-				ID:   oldConfig.Connectors[3].ID,
-				Type: processor.ParentTypeConnector,
-			},
+			cfg:              oldConfig.Connectors[3].Processors[0],
 			processorService: procSrv,
+			deleted:          &deletedProcessor{},
 		},
 		deleteProcessorAction{
-			cfg: oldConfig.Processors[3],
-			parent: processor.Parent{
-				ID:   oldConfig.ID,
-				Type: processor.ParentTypePipeline,
-			},
+			cfg:              oldConfig.Processors[3],
 			processorService: procSrv,
+			deleted:          &deletedProcessor{},
 		},
 	}
 	wantNewActions := []action{
@@ -808,8 +802,8 @@ func TestActionsBuilder_PrepareProcessorActions_Delete(t *testing.T) {
 
 	want := []action{deleteProcessorAction{
 		cfg:              oldConfig,
-		parent:           parent,
 		processorService: procSrv,
+		deleted:          &deletedProcessor{},
 	}}
 
 	got := srv.newActionsBuilder().prepareProcessorActions(oldConfig, newConfig, parent)
