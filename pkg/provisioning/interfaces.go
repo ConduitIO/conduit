@@ -73,6 +73,9 @@ type ProcessorService interface {
 	// do not swap) must not block it. See processor.Service.UpdateWhileRunning.
 	UpdateWhileRunning(ctx context.Context, id string, plugin string, cfg processor.Config) (*processor.Instance, error)
 	Delete(ctx context.Context, id string) error
+	// Restore puts back an instance Delete removed (#3370); see
+	// processor.Service.Restore for what it keeps.
+	Restore(ctx context.Context, instance *processor.Instance) error
 }
 
 type ConnectorPluginService interface {

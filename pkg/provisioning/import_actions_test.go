@@ -16,6 +16,7 @@ package provisioning
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/conduitio/conduit-commons/lang"
@@ -594,16 +595,54 @@ func TestDeleteProcessorAction_Do(t *testing.T) {
 		Workers:  2,
 	}
 
+	instance := &processor.Instance{ID: haveCfg.ID}
+
 	procSrv := mock.NewProcessorService(ctrl)
+	procSrv.EXPECT().Get(ctx, haveCfg.ID).Return(instance, nil)
 	procSrv.EXPECT().Delete(ctx, haveCfg.ID)
 
 	a := deleteProcessorAction{
 		cfg:              haveCfg,
 		parent:           processor.Parent{}, // only needed for Rollback
 		processorService: procSrv,
+		deleted:          &deletedProcessor{},
 	}
 	err := a.Do(ctx)
 	is.NoErr(err)
+	is.True(a.deleted.instance == instance) // kept for Rollback
+}
+
+func TestDeleteProcessorAction_Do_NotFound(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	haveCfg := config.Processor{ID: uuid.NewString()}
+	procSrv := mock.NewProcessorService(ctrl)
+	procSrv.EXPECT().Get(ctx, haveCfg.ID).Return(nil, processor.ErrInstanceNotFound)
+
+	a := deleteProcessorAction{cfg: haveCfg, processorService: procSrv, deleted: &deletedProcessor{}}
+	is.NoErr(a.Do(ctx))
+	is.True(a.deleted.instance == nil)
+	is.NoErr(a.Rollback(ctx)) // nothing to restore, no call
+}
+
+// TestDeleteProcessorAction_Do_NoHolder covers an action built by hand rather
+// than by actionsBuilder: without the holder a later Rollback could not
+// restore what Do deleted, so Do refuses up front instead of deleting
+// something it cannot put back.
+func TestDeleteProcessorAction_Do_NoHolder(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+
+	haveCfg := config.Processor{ID: uuid.NewString()}
+	procSrv := mock.NewProcessorService(ctrl) // no calls expected
+
+	a := deleteProcessorAction{cfg: haveCfg, processorService: procSrv}
+	err := a.Do(ctx)
+	is.True(err != nil)
+	is.True(strings.Contains(err.Error(), "no rollback state"))
 }
 
 func TestDeleteProcessorAction_Rollback(t *testing.T) {
@@ -618,23 +657,22 @@ func TestDeleteProcessorAction_Rollback(t *testing.T) {
 		Workers:   2,
 		Condition: "{{ eq .Metadata.opencdc.version \"v1\" }}",
 	}
-	wantCfg := processor.Config{
-		Settings: haveCfg.Settings,
-		Workers:  haveCfg.Workers,
-	}
 	parent := processor.Parent{
 		ID:   uuid.NewString(),
 		Type: processor.ParentTypePipeline,
 	}
+	instance := &processor.Instance{ID: haveCfg.ID}
 
 	procSrv := mock.NewProcessorService(ctrl)
-	procSrv.EXPECT().Create(ctx, haveCfg.ID, haveCfg.Plugin, parent, wantCfg, processor.ProvisionTypeConfig, haveCfg.Condition)
+	// #3370: the deleted instance is put back, not created again from config.
+	procSrv.EXPECT().Restore(ctx, instance).Return(nil)
 
 	a := deleteProcessorAction{
 		cfg:              haveCfg,
 		parent:           parent,
 		processorService: procSrv,
+		deleted:          &deletedProcessor{instance: instance},
 	}
-	err := a.Rollback(ctx)
-	is.NoErr(err)
+	is.NoErr(a.Rollback(ctx))
+	is.NoErr(a.Rollback(ctx)) // a second rollback restores nothing
 }
