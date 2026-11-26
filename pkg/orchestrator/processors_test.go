@@ -814,16 +814,8 @@ func TestProcessorOrchestrator_DeleteOnPipeline_RemoveProcessorFail(t *testing.T
 		Return(nil, wantErr)
 	// rollback
 	procsMock.EXPECT().
-		Create(
-			gomock.AssignableToTypeOf(ctxType),
-			want.ID,
-			want.Plugin,
-			want.Parent,
-			want.Config,
-			processor.ProvisionTypeAPI,
-			want.Condition,
-		).
-		Return(want, nil)
+		Restore(gomock.AssignableToTypeOf(ctxType), want).
+		Return(nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
 	err := orc.Processors.Delete(ctx, want.ID)
@@ -878,16 +870,8 @@ func TestProcessorOrchestrator_DeleteOnConnector_Fail(t *testing.T) {
 		Return(nil, wantErr)
 	// rollback
 	procsMock.EXPECT().
-		Create(
-			gomock.AssignableToTypeOf(ctxType),
-			want.ID,
-			want.Plugin,
-			want.Parent,
-			want.Config,
-			processor.ProvisionTypeAPI,
-			want.Condition,
-		).
-		Return(want, nil)
+		Restore(gomock.AssignableToTypeOf(ctxType), want).
+		Return(nil)
 
 	orc := NewOrchestrator(db, log.Nop(), plsMock, consMock, procsMock, connPluginMock, procPluginMock, lifecycleMock)
 	err := orc.Processors.Delete(ctx, want.ID)

@@ -118,6 +118,7 @@ type ProcessorService interface {
 	MakeRunnableProcessor(ctx context.Context, i *processor.Instance) (*processor.RunnableProcessor, error)
 	Update(ctx context.Context, id string, plugin string, cfg processor.Config) (*processor.Instance, error)
 	Delete(ctx context.Context, id string) error
+	Restore(ctx context.Context, instance *processor.Instance) error
 }
 
 type ConnectorPluginService interface {
