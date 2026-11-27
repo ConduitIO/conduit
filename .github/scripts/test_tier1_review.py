@@ -12,8 +12,11 @@ HEAD = "abcdef0123456789abcdef0123456789abcdef01"
 OLD = "1111111222222233333334444444555555566666"
 
 
-def pr(body="**Risk tier: Tier 1**", labels=(), head=HEAD):
-    return {"body": body, "labels": [{"name": l} for l in labels], "head": {"sha": head}}
+def pr(body="**Risk tier: Tier 1**", labels=(), head=HEAD, login="devarismeroxa"):
+    # Every real PR has an author, and the Tier 1 stamp compares the verdicts'
+    # logins against it, so the default fixture carries one.
+    return {"body": body, "labels": [{"name": l} for l in labels], "head": {"sha": head},
+            "user": {"login": login, "type": "User"}}
 
 
 def c(body, who="devarismeroxa", at="2026-10-21T00:00:00Z", n=[0], assoc="MEMBER", updated=None):
@@ -105,6 +108,18 @@ class Tier1(unittest.TestCase):
         del x["author_association"]
         cs = [x, c(f"Sign-off @ {HEAD[:7]}", at=at(2))]
         self.assertEqual(t.decide(pr(), cs, S)["state"], "failure")
+
+    def test_signer_and_allowlist_matching_ignores_login_case(self):
+        # The signer list and --reviewers are written by hand; the login comes
+        # from the API with its own casing. Matching them case-sensitively made
+        # a valid sign-off invisible (fail closed, so it blocked rather than
+        # passed, but it blocked for no reason).
+        cs = [c(f"Review: approve @ {HEAD[:7]}", "r", at(1)),
+              c(f"Sign-off @ {HEAD[:7]}", "DeVarisMeroxa", at(2))]
+        self.assertEqual(t.decide(pr(), cs, S)["state"], "success")
+        x = c(f"Review: approve @ {HEAD[:7]}", "BotAccount", at(3), assoc="NONE")
+        cs = [x, c(f"Sign-off @ {HEAD[:7]}", at=at(4))]
+        self.assertEqual(t.decide(pr(), cs, S, reviewers={"botaccount"})["state"], "success")
 
     def test_allowlisted_login_counts_without_association(self):
         x = c(f"Review: approve @ {HEAD[:7]}", "bot", at(1), assoc="NONE")
@@ -300,6 +315,112 @@ class BotDeclaration(unittest.TestCase):
             self.assertEqual(t.main([prj, cm]), 0)
             json.dump(pr(body="no tier"), open(prj, "w"))
             self.assertEqual(t.main([prj, cm]), 1)
+
+
+class Certification(unittest.TestCase):
+    """A Tier 1 success names how independent its two verdicts were (#3389).
+
+    With one write account the author, the reviewing session and the signer are
+    the same login. The gate cannot manufacture independence, so the status says
+    which of the verdicts were the author's own instead of reading as peer
+    review that never happened. Pass/fail is unchanged by any of this."""
+
+    AUTHOR = "devarismeroxa"
+
+    def verdicts(self, approver, signer, head=HEAD, **kw):
+        cs = [c(f"Review: approve @ {head[:7]}", approver, at(1)),
+              c(f"Sign-off @ {head[:7]}", signer, at(2))]
+        return t.decide(pr(head=head, **kw), cs, {self.AUTHOR, "other-signer"})
+
+    def test_both_verdicts_from_the_author_are_stamped_self_certified(self):
+        r = self.verdicts(self.AUTHOR, self.AUTHOR)
+        self.assertEqual(r["state"], "success")
+        self.assertEqual(r["description"],
+                         f"Tier 1: self-certified by author {self.AUTHOR} @ {HEAD[:7]}")
+
+    def test_two_independent_verdicts_are_stamped_as_review(self):
+        r = self.verdicts("reviewer", "other-signer")
+        self.assertEqual(r["state"], "success")
+        self.assertEqual(r["description"], f"Tier 1: review approved and signed off @ {HEAD[:7]}")
+        self.assertNotIn("self", r["description"])
+
+    def test_an_independent_approve_with_the_authors_signoff_names_both(self):
+        r = self.verdicts("reviewer", self.AUTHOR)
+        self.assertEqual(r["state"], "success")
+        self.assertEqual(r["description"],
+                         f"Tier 1: approved by reviewer, self-signed by author @ {HEAD[:7]}")
+
+    def test_the_authors_approve_with_an_independent_signoff_names_both(self):
+        r = self.verdicts(self.AUTHOR, "other-signer")
+        self.assertEqual(r["state"], "success")
+        self.assertEqual(r["description"],
+                         f"Tier 1: self-approved by author, signed off by other-signer @ {HEAD[:7]}")
+
+    def test_one_independent_approver_among_several_is_independence(self):
+        # The author approving too does not cancel the other reviewer's approve.
+        cs = [c(f"Review: approve @ {HEAD[:7]}", self.AUTHOR, at(1)),
+              c(f"Review: approve @ {HEAD[:7]}", "reviewer", at(2)),
+              c(f"Sign-off @ {HEAD[:7]}", "other-signer", at(3))]
+        r = t.decide(pr(), cs, {self.AUTHOR, "other-signer"})
+        self.assertEqual(r["description"], f"Tier 1: review approved and signed off @ {HEAD[:7]}")
+
+    def test_the_author_match_ignores_login_case(self):
+        # GitHub logins are case-insensitive, so a differently-cased login is
+        # the same account and must not read as an independent certifier.
+        r = self.verdicts("DeVarisMeroxa", "DEVARISMEROXA")
+        self.assertEqual(r["state"], "success")
+        self.assertEqual(r["description"],
+                         f"Tier 1: self-certified by author {self.AUTHOR} @ {HEAD[:7]}")
+
+    def test_an_unknown_author_does_not_claim_independence(self):
+        # Fail closed on the wording: with no author object the gate cannot show
+        # the verdicts came from anyone else, so it does not say they did.
+        p = pr()
+        del p["user"]
+        cs = [c(f"Review: approve @ {HEAD[:7]}", "reviewer", at(1)),
+              c(f"Sign-off @ {HEAD[:7]}", "devarismeroxa", at(2))]
+        r = t.decide(p, cs, S)
+        self.assertEqual(r["state"], "success")
+        self.assertIn("independence unverified", r["description"])
+
+    def test_a_stale_verdict_is_not_counted_as_a_certifier(self):
+        # The sign-off is at the old head, so it is missing, not a certifier.
+        cs = [c(f"Review: approve @ {HEAD[:7]}", self.AUTHOR, at(1)),
+              c(f"Sign-off @ {OLD[:7]}", self.AUTHOR, at(2))]
+        r = t.decide(pr(), cs, S)
+        self.assertEqual(r["state"], "failure")
+        self.assertIn("Sign-off", r["description"])
+
+    def test_the_stamp_does_not_change_who_passes(self):
+        # Self-certification is still a success: the gate checks the ritual, and
+        # making it fail would block every PR while there is one account.
+        paths = t.tier1_patterns(OWNERS, S)
+        cs = [c(f"Review: approve @ {HEAD[:7]}", self.AUTHOR, at(1)),
+              c(f"Sign-off @ {HEAD[:7]}", self.AUTHOR, at(2))]
+        r = t.decide(pr(body="Risk tier: Tier 3"), cs, S, files=["tools/release.go"],
+                     tier1_paths=paths)
+        self.assertEqual(r["state"], "success")
+        self.assertIn("self-certified by author", r["description"])
+
+    def test_the_stamp_fits_a_github_status_description(self):
+        # GitHub truncates at 140 characters; `detail` carries the whole line.
+        for approver, signer in (("reviewer", "other-signer"), (self.AUTHOR, self.AUTHOR),
+                                 ("reviewer", self.AUTHOR), (self.AUTHOR, "other-signer")):
+            r = self.verdicts(approver, signer)
+            self.assertLessEqual(len(r["description"]), 140)
+            self.assertEqual(r["description"], r["detail"])
+
+    def test_cli_stamps_a_self_certified_pr(self):
+        with tempfile.TemporaryDirectory() as d:
+            prj, cm = os.path.join(d, "p"), os.path.join(d, "c")
+            json.dump(pr(), open(prj, "w"))
+            json.dump([c(f"Review: approve @ {HEAD[:7]}", "devarismeroxa", at(1)),
+                       c(f"Sign-off @ {HEAD[:7]}", "devarismeroxa", at(2))], open(cm, "w"))
+            r = subprocess.run(["python3", os.path.join(HERE, "tier1_review.py"), prj, cm],
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0)
+            self.assertIn("self-certified by author devarismeroxa",
+                          json.loads(r.stdout)["description"])
 
 
 MODS = ["github.com/conduitio/conduit-commons", "github.com/conduitio/conduit-connector-sdk",

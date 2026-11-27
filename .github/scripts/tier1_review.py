@@ -29,7 +29,14 @@ THE RULE (CLAUDE.md, "PR review process"; postmortem action item 9):
     the head, so both go stale.
   * Only comments whose author_association is OWNER, MEMBER or COLLABORATOR
     (or whose login is in --reviewers) count. Anyone else can comment; it is
-    ignored.
+    ignored. Logins are compared case-insensitively, the way GitHub treats
+    them, in --signers, --reviewers and against the PR author.
+  * A Tier 1 success names how independent the two verdicts were. When the
+    approve and the sign-off both come from the PR's own author, the status
+    reads `self-certified by author`, because with one write account there is
+    no independence to claim and a history that claims it anyway is worse than
+    one that admits the gap (#3389). The stamp words the success; it does not
+    change who passes.
   * Per author, only the NEWEST verdict counts, ordered by updated_at (an
     edited comment moves to its edit time; a deleted comment is gone from the
     API). `Review: changes-needed` at ANY earlier head still blocks until that
@@ -118,9 +125,12 @@ def verdicts(comments, trusted_logins=frozenset()):
     changes-needed, signoff. Only comments by a trusted author count; a
     comment without author_association is not trusted (fail closed)."""
     out = []
+    # GitHub logins are case-insensitive, so an allowlisted login must match
+    # whatever casing the API returns; otherwise the allowlist silently misses.
+    allowed = {l.lower() for l in trusted_logins}
     for c in comments:
         author = (c.get("user") or {}).get("login", "")
-        if c.get("author_association") not in TRUSTED and author not in trusted_logins:
+        if c.get("author_association") not in TRUSTED and author.lower() not in allowed:
             continue
         when = (c.get("updated_at") or c.get("created_at") or "", c.get("id", 0))
         body = strip_comments(c.get("body"))
@@ -303,6 +313,35 @@ def floor_reason(files, tier1_paths, patches=None, tier1_mods=()):
     return manifest_floor(manifests, tier1_mods)
 
 
+def certification(author, approvers, signoffs, head):
+    """The Tier 1 success line, naming how independent its verdicts were.
+
+    CLAUDE.md asks for a human reviewing "with fresh context in a separate
+    session from the author". With one write account the author, the reviewing
+    session and the signer are one login, and a second account would buy audit
+    noise rather than a second pair of eyes, so the gate cannot manufacture the
+    independence. It states the truth instead: a Tier 1 history that reads as
+    peer-reviewed when it was not is the thing the postmortem warns against."""
+    sha = head[:7]
+    if not author:
+        # Fail closed on the wording: with no author we cannot show the
+        # verdicts came from anyone else, so we do not say they did.
+        return f"Tier 1: approved and signed off @ {sha} (author unknown, independence unverified)"
+    # Case-insensitively, because GitHub logins are: `DeVarisMeroxa` and
+    # `devarismeroxa` are one account, and the unsafe direction here is reading
+    # the author's own verdict as somebody else's.
+    me = author.lower()
+    others_approved = [a for a in approvers if a.lower() != me]
+    others_signed = [a for a in signoffs if a.lower() != me]
+    if others_approved and others_signed:
+        return f"Tier 1: review approved and signed off @ {sha}"
+    if not others_approved and not others_signed:
+        return f"Tier 1: self-certified by author {author} @ {sha}"
+    if others_approved:
+        return f"Tier 1: approved by {'/'.join(others_approved)}, self-signed by author @ {sha}"
+    return f"Tier 1: self-approved by author, signed off by {'/'.join(others_signed)} @ {sha}"
+
+
 def decide(pr, comments, signers, reviewers=frozenset(), files=(), tier1_paths=(),
            patches=None, tier1_mods=()):
     labels = {l["name"] if isinstance(l, dict) else l for l in pr.get("labels", [])}
@@ -332,17 +371,20 @@ def decide(pr, comments, signers, reviewers=frozenset(), files=(), tier1_paths=(
     if pending:
         return fail(f"Review: changes-needed @ {pending[0][:7]} by {pending[1]} has no later approve", label=True)
     review, sign = newest_per_author(verdicts(comments, trusted))
-    approved = any(k == "approve" and same_sha(s, head) for k, s, _ in review.values())
-    signed = any(same_sha(s, head) for a, (s, _) in sign.items() if a in signers)
+    # The logins, not just a boolean: the success stamp names who certified.
+    approvers = sorted(a for a, (k, s, _) in review.items() if k == "approve" and same_sha(s, head))
+    sign_logins = {x.lower() for x in signers}
+    signoffs = sorted(a for a, (s, _) in sign.items()
+                      if a.lower() in sign_logins and same_sha(s, head))
     missing = []
     why = f" ({floor})" if floor else ""
-    if not approved:
+    if not approvers:
         missing.append(f"`Review: approve @ {head[:7]}`")
-    if not signed:
+    if not signoffs:
         missing.append(f"`Sign-off @ {head[:7]}` from {'/'.join(sorted(signers)) or 'a signer'}")
     if missing:
         return fail("Tier 1" + why + " needs " + " and ".join(missing) + " for the current head")
-    return ok(f"Tier 1: review approved and signed off @ {head[:7]}")
+    return ok(certification((pr.get("user") or {}).get("login", ""), approvers, signoffs, head))
 
 
 def ok(desc):
