@@ -17,6 +17,11 @@
 # decided does not stop the others: it is counted and the job fails at the end,
 # because a backfill that swallows failures is how a PR ends up with no status.
 #
+# It then checks each PR's `tier1-review` statuses came from a run of this
+# workflow (tier1_provenance.sh, #3400). That is the only point in the system
+# that would notice a status this gate did not write, so a suspect finding fails
+# the job as loudly as an undecided PR.
+#
 # Usage: tier1_backfill.sh [PR_NUMBER]    (no argument: every open PR)
 # Env:   GH_TOKEN, REPO, SIGNERS; RUNNER_TEMP, GITHUB_STEP_SUMMARY when run by
 #        Actions.
@@ -41,22 +46,38 @@ else
   fi
 fi
 
-total=0 posted=0 unchanged=0 broke=0
+total=0 fresh=0 changed=0 unchanged=0 broke=0 suspect=0
 for pr in $prs; do
   total=$((total + 1))
-  if out=$("$here/tier1_status.sh" "$pr" 2>&1); then
-    echo "$out"   # it already appended to the step summary; this is the job log
-    case "$out" in
-      *" unchanged: "*) unchanged=$((unchanged + 1)) ;;
-      *) posted=$((posted + 1)) ;;
-    esac
-  else
+  if ! out=$("$here/tier1_status.sh" "$pr" 2>&1); then
     broke=$((broke + 1))
     echo "tier1-review #$pr COULD NOT DECIDE: $out" | tee -a "$summary" >&2
+    continue
   fi
+  echo "$out"   # it already appended to the step summary; this is the job log
+  case "$out" in
+    *" unchanged: "*) unchanged=$((unchanged + 1)) ;;
+    *" changed "*) changed=$((changed + 1)) ;;
+    *) fresh=$((fresh + 1)) ;;
+  esac
+
+  # The head sha and the verdict the gate computed, read off the line above so
+  # provenance repeats none of its API calls. The state lets it tell a stale run
+  # id on a verdict that still matches from one on a verdict it disagrees with.
+  read -r head state <<EOF
+$(printf '%s\n' "$out" | sed -n '1s/^tier1-review #[0-9]* \([0-9a-f]*\) \([a-z]*\) .*/\1 \2/p')
+EOF
+  "$here/tier1_provenance.sh" "$pr" "$head" "$state"
+  case $? in
+    0) ;;
+    2) suspect=$((suspect + 1)) ;;
+    *) echo "tier1-review #$pr: provenance could not be checked" | tee -a "$summary" >&2
+       broke=$((broke + 1)) ;;
+  esac
 done
 
-echo "tier1-review backfill: $total open PR(s), $posted posted, $unchanged unchanged, $broke undecided" \
+echo "tier1-review backfill: $total open PR(s), $fresh new, $changed changed, $unchanged unchanged, $broke undecided, $suspect suspect" \
   | tee -a "$summary"
-# Undecided PRs are the whole point of this job, so they turn it red.
-[ "$broke" -eq 0 ]
+# Undecided PRs are the whole point of this job, and a status this gate did not
+# write is the thing #3400 exists for. Either turns it red.
+[ "$broke" -eq 0 ] && [ "$suspect" -eq 0 ]
