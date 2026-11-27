@@ -79,13 +79,26 @@ jobs:
           cosign version
           syft version
 
+      # Where this tag sits among the releases. The old inline version took
+      # the second-highest tag in the whole repository, which is only the
+      # previous release when the tag being built is the newest one. Tagging
+      # v0.20.7 after v0.22.0 shipped gave it v0.21.2 — not an ancestor of
+      # v0.20.7 — and the published changelog spanned the wrong range.
+      # MAKE_LATEST feeds .goreleaser.yml's release.make_latest, so a patch on
+      # an older line no longer takes the GitHub release's "latest" flag.
+      - name: Locate this tag among the releases
+        id: position
+        run: |
+          set -euo pipefail
+          git tag --list 'v*' > "$RUNNER_TEMP/tags.txt"
+          python3 .github/scripts/release_tag_position.py \
+            "$GITHUB_REF_NAME" "$RUNNER_TEMP/tags.txt"
+
       - name: Set GORELEASER_PREVIOUS_TAG in actual release
         if: ${{ !contains(github.ref, '-nightly') }}
-        # find previous tag by filtering out nightly tags and choosing the
-        # second to last tag (last one is the current release)
         run: |
-          prev_tag=$(git tag | grep -v "nightly" | sort -r --version-sort | head -n 2 | tail -n 1)
-          echo "GORELEASER_PREVIOUS_TAG=$prev_tag" >> "$GITHUB_ENV"
+          echo "GORELEASER_PREVIOUS_TAG=${{ steps.position.outputs.previous_tag }}" >> "$GITHUB_ENV"
+          echo "MAKE_LATEST=${{ steps.position.outputs.is_highest }}" >> "$GITHUB_ENV"
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
@@ -121,6 +134,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The tag list is what decides whether `latest` moves to this tag.
+          # Without full history `git tag --list` is empty here.
+          fetch-depth: 0
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
@@ -135,17 +152,38 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Same question as in the release job, asked again because the jobs do
+      # not share a filesystem. `latest` must not follow a patch cut on an
+      # older release line (the 2026-11-27 incident: v0.20.7 took `latest`
+      # from v0.22.0, so `docker pull conduit:latest` served the v0.20 line).
+      - name: Locate this tag among the releases
+        id: position
+        run: |
+          set -euo pipefail
+          git tag --list 'v*' > "$RUNNER_TEMP/tags.txt"
+          python3 .github/scripts/release_tag_position.py \
+            "$GITHUB_REF_NAME" "$RUNNER_TEMP/tags.txt"
+
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5.7.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # Makes no sense to have an image with tag v0, hence the check in the last line.
+          # latest=false turns OFF metadata-action's default `latest=auto`,
+          # which tags `latest` for ANY non-prerelease semver tag. The action
+          # cannot see the registry, so "auto" means "this is a stable tag",
+          # never "this is the newest version" — which is how v0.20.7 took
+          # `latest` from v0.22.0. `latest` is now an explicit entry below,
+          # conditioned like every other one.
+          flavor: |
+            latest=false
+          # Makes no sense to have an image with tag v0, hence the check in the v{{major}} line.
           tags: |
             type=semver,pattern={{raw}}
             type=raw,value=latest-nightly,enable=${{ contains(github.ref, '-nightly')  }}
             type=semver,pattern=v{{major}}.{{minor}},enable=${{ !contains(github.ref, '-nightly') }}
             type=semver,pattern=v{{major}},enable=${{ !contains(github.ref, '-nightly') && !startsWith(github.ref, 'refs/tags/v0.') }}
+            type=raw,value=latest,enable=${{ !contains(github.ref, '-nightly') && steps.position.outputs.is_highest == 'true' }}
           labels: |
             maintainer=ConduitIO
             org.opencontainers.image.title=Conduit
