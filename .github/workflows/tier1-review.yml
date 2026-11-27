@@ -23,7 +23,11 @@ name: tier1-review
 # What it trusts: verdict comments only from OWNER, MEMBER or COLLABORATOR
 # (author_association), the newest verdict per author, and a path floor: a PR
 # touching a CODEOWNERS path owned by the signers alone is Tier 1 whatever it
-# declares.
+# declares. Dependency manifests are the exception: a `go.mod` or `go.sum`
+# change is Tier 1 only when it moves a module in .github/tier1-modules.txt,
+# because every Go bump touches `go.mod` and the file is the wrong granularity
+# (#3389). Both files come from the default-branch checkout, so a PR cannot
+# shrink the list that judges it.
 #
 # KNOWN LIMIT: a required status context can be set by ANY workflow in this
 # repository that has `statuses: write`, so a PR that adds such a workflow could
@@ -91,6 +95,7 @@ jobs:
           rc=0
           python3 .github/scripts/tier1_review.py "$RUNNER_TEMP/pr.json" "$RUNNER_TEMP/comments.json" \
             --signers "$SIGNERS" --files "$RUNNER_TEMP/files.json" --codeowners .github/CODEOWNERS \
+            --tier1-modules .github/tier1-modules.txt \
             > "$RUNNER_TEMP/verdict.json" || rc=$?
           # A script that crashed printed no verdict: fail closed with a reason.
           if ! jq -e '(.state | type == "string") and (.description | type == "string")' "$RUNNER_TEMP/verdict.json" >/dev/null 2>&1; then
@@ -98,7 +103,10 @@ jobs:
           fi
           state=$(jq -r .state "$RUNNER_TEMP/verdict.json")
           desc=$(jq -r .description "$RUNNER_TEMP/verdict.json")
-          echo "tier1-review: $state: $desc" | tee -a "$GITHUB_STEP_SUMMARY"
+          # The status description is capped at 140 characters; the summary
+          # gets the whole reason.
+          echo "tier1-review: $state: $(jq -r '.detail // .description' "$RUNNER_TEMP/verdict.json")" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
 
           gh api -X POST "repos/$REPO/statuses/$sha" \
             -f state="$state" -f context=tier1-review -f description="$desc" \
