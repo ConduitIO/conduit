@@ -35,6 +35,12 @@ name: tier1-review
 # module or a Tier 1 path still needs an approve and a sign-off at its current
 # head — and a Dependabot rebase moves that head.
 #
+# The Tier 1 success line names how independent the verdicts were. When the
+# approve and the sign-off both come from the PR's own author it reads
+# `self-certified by author <login>`, because with one write account there is no
+# independence to claim; a second account would add audit noise, not a second
+# pair of eyes (#3389). This wording only: a self-certified PR still passes.
+#
 # KNOWN LIMIT: a required status context can be set by ANY workflow in this
 # repository that has `statuses: write`, so a PR that adds such a workflow could
 # post a green `tier1-review`. CODEOWNERS on `.github/` (DeVaris alone) is the
