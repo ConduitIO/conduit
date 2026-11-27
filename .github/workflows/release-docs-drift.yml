@@ -1,0 +1,71 @@
+name: release-docs-drift
+
+# Does `main` still describe a shipped release as unreleased, or has it lost
+# notes the tag has?
+#
+# The tag-time gate (.github/scripts/release_notes_check.py) refuses a tag whose
+# `docs/releases/vX.Y.Z.md` is marked "draft, not yet released". It checks the
+# TAGGED tree, which is right at a tag and blind to what happens to `main`
+# after. Both halves of that blindness have already happened:
+#
+#   * v0.22.0 shipped 2026-11-25 and its finalise commit never landed on `main`,
+#     so for two days `main` said "draft, not yet released" about the current
+#     release;
+#   * v0.20.7's and v0.20.6's notes were written on `release/v0.20.x` and never
+#     landed on `main` at all.
+#
+# Neither is catchable in the `test` job: it uses a shallow checkout with no
+# tags, and the question needs the published release list. So this runs daily
+# and fails loudly, the same way the other nightly drift checks do. A red run
+# here is a bug to fix, not a merge block.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 05:45 UTC, clear of the other scheduled jobs.
+    - cron: '45 5 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  release-docs-drift:
+    name: release-docs-drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Tags, so the "notes exist at the tag but not here" question can be
+          # asked at all. The `test` job's shallow checkout cannot.
+          fetch-depth: 0
+
+      - name: Check script tests
+        working-directory: .github/scripts
+        run: python3 -m unittest -v test_release_docs_drift
+
+      - name: Compare this branch's release notes with the published releases
+        run: |
+          set -euo pipefail
+          # Published, non-pre-release tags. A failed call leaves this empty and
+          # the script exits 2 rather than reporting a clean branch.
+          released=$(gh release list --repo "$REPO" --limit 200 \
+            --json tagName,isPrerelease \
+            --jq '[.[] | select(.isPrerelease == false) | .tagName] | join(",")')
+
+          # Of those, the ones whose notes file exists at their own tag. Only
+          # these are required to have one here, so the 29 releases that predate
+          # the hand-written-notes convention are not reported.
+          tagged=""
+          for tag in ${released//,/ }; do
+            if git cat-file -e "$tag:docs/releases/$tag.md" 2>/dev/null; then
+              tagged="$tagged,$tag"
+            fi
+          done
+
+          python3 .github/scripts/release_docs_drift.py \
+            --released "$released" --tagged-notes "${tagged#,}" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
