@@ -89,12 +89,34 @@ Each session writes to `benchi/archv2-gate/results/<UTC time>-<shape>-<session>/
 ## Running on a dedicated EC2 instance
 
 `aws/` is a separate Go module that runs every session on one on-demand
-instance and leaves the results in a private S3 bucket
-(`cd benchi/archv2-gate/aws && go run . launch|status|cleanup`). The package doc in
+instance and leaves the results in a private S3 bucket. The package doc in
 `aws/main.go` lists what it creates. The instance halts and terminates itself
-at a hard cap, has no ingress, and gets no credentials in user data. A cloud VM
-is virtualized and shares hardware, so its results are an early read, not gate
-evidence, unless the gate's environment rules are met.
+at a hard cap, has no ingress, and gets no credentials in user data.
+
+```bash
+cd benchi/archv2-gate/aws
+go run . launch -manifest run.json -account <aws-account-id> -main-sha $(git rev-parse origin/main)
+go run . status  -manifest run.json      # progress, and the S3 prefix to sync
+go run . cleanup -manifest run.json      # terminates and deletes everything but the bucket
+```
+
+That runs the six gate sessions from one commit: an A/A control for each engine
+on each shape, then the 1x1 and 2x2 A/B sessions. It is about two hours of
+measurement after roughly twenty minutes of bootstrap and image builds.
+
+The default instance type is `c7i.metal-24xl`, one whole physical host. A
+shared instance type has other tenants on the same hardware, which the gate's
+quiesced-hardware rule rules out, so `-fallback-instance-type` is empty by
+default: a metal type the region does not offer fails the launch instead of
+quietly downgrading the evidence. A shared type still runs if you pass one, and
+the manifest then says the session is an early read. Metal costs about five
+times a `c7i.4xlarge` per hour, and `-max-minutes` caps the spend by halting
+the instance.
+
+`-fanout-pr`/`-fanout-sha` add one more session comparing a PR with main, both
+on arch-v2, for measuring a data-path change; `-harness-pr`/`-harness-sha`
+build the harness from a PR instead of from main. Both pairs are optional and
+neither is needed for a gate run.
 
 ## Reading the summary
 
