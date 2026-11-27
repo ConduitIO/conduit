@@ -30,6 +30,11 @@ env:
   GOPRIVATE: github.com/conduitio/*
   GONOSUMDB: github.com/conduitio/*
 
+# Least privilege: declared so this workflow does not inherit the repository's
+# default token scope. It only reads the repository (runs the value-correctness suite).
+permissions:
+  contents: read
+
 jobs:
   value-correctness:
     name: tests/valuecorrectness (race, x3)

@@ -5,9 +5,17 @@ on:
   schedule:
     - cron: '30 10 * * 1'
 
+# Least privilege: nothing at the top, and the one job takes exactly what
+# create-pull-request needs. Declared so this workflow does not inherit the
+# repository's default token scope.
+permissions: {}
+
 jobs:
   update-buf-dependencies:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write       # push the update-buf-dependencies branch (never main)
+      pull-requests: write  # open the PR
     env:
       GITHUB_TOKEN: ${{ github.token }}
     steps:

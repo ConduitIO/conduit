@@ -9,6 +9,11 @@ on:
     paths:
       - 'proto/**'
 
+# Least privilege: declared so this workflow does not inherit the repository's
+# default token scope. It only reads the repository (validates protos with BUF_TOKEN, not with github.token).
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
