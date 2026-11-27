@@ -1,15 +1,23 @@
 # Correct error cause for a degraded pipeline (#1659)
 
+> **Status: implemented.** Option C below shipped in both engines. The
+> suppression is in `pkg/lifecycle/stream/source_acker.go` (lines 88-92, 119,
+> 168) and `pkg/lifecycle-poc/funnel/worker.go` (1277, 1359), both commented
+> `(#1659)`, and `TestServiceLifecycle_PipelineError` is live and passing in
+> `pkg/lifecycle` and `pkg/lifecycle-poc` rather than skipped. This document is
+> kept as the record of why the race happened and what was rejected; it is not
+> waiting on a decision. The "needs sign-off" note it used to carry was stale.
+
 ## Summary
 
 When a source connector errors, a running pipeline can degrade with a useless
 `io.EOF` ("failed to forward ack to source connector") instead of the connector's
 actual error, because the error the user sees is decided by a race between two
-nodes. This is a real observability defect on the data path — the API, UI, and
-logs report the wrong cause — and it is why `TestServiceLifecycle_PipelineError`
-is skipped in both `pkg/lifecycle` and `pkg/lifecycle-poc`. This doc proposes
+nodes. This was a real observability defect on the data path — the API, UI, and
+logs reported the wrong cause — and it was why `TestServiceLifecycle_PipelineError`
+was skipped in both `pkg/lifecycle` and `pkg/lifecycle-poc`. This doc proposed
 making the source connector's real error authoritative, with a fallback, and
-enumerates the failure modes. Tier 1 (data-path error semantics); needs sign-off.
+enumerates the failure modes. Tier 1 (data-path error semantics).
 
 ## Context — how a pipeline's degraded error is chosen
 
@@ -191,7 +199,12 @@ the diff and re-skipping the test.
 
 ## Related
 
-- #1659 — the bug and the two skipped tests.
+- #1659 — the bug and the two tests, which are no longer skipped.
+- Implementation: `pkg/lifecycle/stream/source_acker.go` and
+  `pkg/lifecycle-poc/funnel/worker.go`, both carrying `(#1659)` at the
+  suppression sites, with `TestServiceLifecycle_PipelineError` in
+  `pkg/lifecycle/service_test.go` and `pkg/lifecycle-poc/service_test.go`
+  asserting the degraded cause is the source's real error.
 - `20260706-forceful-stop-test-determinism.md`, `20260706-...` (sibling lifecycle
   correctness work this session).
 - Invariant 3 (at-least-once) governs the acker-suppression failure mode.
