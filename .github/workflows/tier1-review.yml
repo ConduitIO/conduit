@@ -43,10 +43,13 @@ name: tier1-review
 #
 # KNOWN LIMIT: a required status context can be set by ANY workflow in this
 # repository that has `statuses: write`, so a PR that adds such a workflow could
-# post a green `tier1-review`. CODEOWNERS on `.github/` (DeVaris alone) is the
-# control today. The structural fix is a GitHub App that posts a check run, which
-# only that App can write; do that before treating this gate as more than a
-# guard against mistakes.
+# post a green `tier1-review`. CODEOWNERS on `.github/` (DeVaris alone) and the
+# `statuses: write` allowlist in `workflow_permissions_test.go` are the controls
+# today. The required context is pinned to app id 15368, so a status written by
+# a user PAT does not satisfy it — but every workflow token in this repository
+# is that same app, so pinning does not close this. The structural fix is a
+# GitHub App that posts a check run, which only that App can write; do that
+# before treating this gate as more than a guard against mistakes.
 #
 # BACKFILL: the gate only ever ran on an event, so a PR opened before the
 # workflow existed — or whose last run predates a change to the rules — carried
@@ -56,10 +59,17 @@ name: tier1-review
 # fresh one without waiting for a comment. That is the prerequisite for adding
 # this context to main's required checks: requiring a context that some PRs
 # never report would block them permanently with nothing to act on (#3389).
+# A manual backfill on 2026-11-27 brought open PRs with no status from 21 to 0,
+# which is what cleared the way for the line below.
 #
-# STATUS: live, NOT in main's required contexts. Requiring it is DeVaris's
-# decision (postmortem, "Branch protection"): with one account opening every
-# PR, the sign-off comment is only as strong as account separation.
+# STATUS: live and REQUIRED on main since 2026-11-27 (DeVaris's decision,
+# postmortem, "Branch protection"), pinned to app id 15368. With one account
+# opening every PR the sign-off comment is only as strong as account
+# separation, so what the required context buys is narrower than it looks: no
+# PR reaches main without a declared tier, and no Tier 1 PR reaches it without
+# an approve and a sign-off at its current head. It does not prove the two
+# verdicts came from different people; the success line says so when they did
+# not.
 
 on:
   pull_request_target:
