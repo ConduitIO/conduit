@@ -95,3 +95,7 @@ __pycache__/
 
 # Fail files rapid writes to replay a failing property locally.
 **/testdata/rapid/
+
+# Compiled archv2-gate EC2 launcher (build it with `go run`, not `go build`)
+/benchi/archv2-gate/aws/aws
+/archv2-gate
