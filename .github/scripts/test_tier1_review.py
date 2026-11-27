@@ -633,7 +633,12 @@ case "$url" in
       cat "$data/list"; exit 0 ;;
   *"/pulls/"*"/files"*)   cat "$data/$num.files" 2>/dev/null; exit 0 ;;
   *"/issues/"*"/comments"*) cat "$data/$num.comments" 2>/dev/null; exit 0 ;;
+  *"/commits/"*"/statuses"*) cat "$data/poststatuses-$sha" 2>/dev/null; exit 0 ;;
   *"/commits/"*"/status"*) cat "$data/status-$sha" 2>/dev/null; exit 0 ;;
+  *"/actions/runs/"*)
+      id=$(printf '%s' "$url" | sed -nE 's#.*/actions/runs/([0-9]+).*#\1#p')
+      [ -f "$data/run-$id" ] || { echo "gh: no run $id" >&2; exit 1; }
+      cat "$data/run-$id"; exit 0 ;;
   *"/pulls/"*)
       [ -f "$data/$num.json" ] || { echo "gh: no such PR $num" >&2; exit 1; }
       cat "$data/$num.json"; exit 0 ;;
@@ -647,6 +652,12 @@ case "$url" in
         esac
       done
       printf '%s\037%s\n' "$state" "$desc" > "$data/status-$sha"
+      # The status history, newest first, as the statuses endpoint returns it.
+      url_arg=""
+      for a in "$@"; do case "$a" in target_url=*) url_arg="${a#target_url=}" ;; esac; done
+      printf '%s\037%s\n' "$state" "$url_arg" | cat - "$data/poststatuses-$sha" 2>/dev/null \
+        > "$data/poststatuses-$sha.new"
+      mv "$data/poststatuses-$sha.new" "$data/poststatuses-$sha"
       exit 0 ;;
 esac
 printf 'CMD %s\n' "$*" >> "$log"   # gh label create, gh pr edit
@@ -667,11 +678,14 @@ class Shell:
         os.makedirs(self.data)
         os.makedirs(os.path.join(d, "bin"))
         os.makedirs(os.path.join(d, "tmp"))
-        for n in ("tier1_status.sh", "tier1_backfill.sh", "tier1_review.py"):
+        for n in ("tier1_status.sh", "tier1_backfill.sh", "tier1_provenance.sh", "tier1_review.py"):
             if n not in omit:
                 shutil.copy(os.path.join(HERE, n), os.path.join(self.scripts, n))
         for n in ("CODEOWNERS", "tier1-modules.txt"):
             shutil.copy(os.path.join(DOTGITHUB, n), os.path.join(d, ".github", n))
+        # GITHUB_RUN_ID=1 below, so a status this fixture posts names run 1;
+        # provenance has to find it and see the gate's own workflow.
+        self.add_run(1, ".github/workflows/tier1-review.yml")
         gh = os.path.join(d, "bin", "gh")
         with open(gh, "w") as f:
             f.write(GH_FAKE.replace("__DATA__", self.data).replace("__LOG__", self.log))
@@ -690,6 +704,18 @@ class Shell:
                     for x in items:
                         f.write(json.dumps(x) + "\n")
         return head
+
+    def add_run(self, run_id, path):
+        """An Actions run the fake `gh` will answer for; absent means a 404."""
+        with open(os.path.join(self.data, f"run-{run_id}"), "w") as f:
+            f.write(path + "\n")
+
+    def add_status_history(self, head, *posts):
+        """The `tier1-review` posts already at a head, newest first, as
+        (state, target_url) pairs."""
+        with open(os.path.join(self.data, f"poststatuses-{head}"), "w") as f:
+            for state, url in posts:
+                f.write(f"{state}\x1f{url}\n")
 
     def open_prs(self, *numbers):
         with open(os.path.join(self.data, "list"), "w") as f:
@@ -774,7 +800,8 @@ class StatusScript(unittest.TestCase):
             r = sh.run("tier1_status.sh", "7")
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertIn("state=failure", sh.posted())
-            self.assertIn("posted", r.stdout)
+            # Reported as a change, not as a PR the gate had never reached.
+            self.assertIn("changed (was success)", r.stdout)
 
     def test_a_failed_read_posts_nothing_and_fails(self):
         # Judging a PR on the half of it that arrived is worse than not judging
@@ -847,7 +874,7 @@ class Backfill(unittest.TestCase):
             r = sh.run("tier1_backfill.sh")
             self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
             self.assertEqual(sh.posted().count("context=tier1-review"), 3)
-            self.assertIn("3 open PR(s), 3 posted, 0 unchanged, 0 undecided", r.stdout)
+            self.assertIn("3 open PR(s), 3 new, 0 changed, 0 unchanged, 0 undecided, 0 suspect", r.stdout)
 
     def test_a_second_run_posts_nothing_new(self):
         with tempfile.TemporaryDirectory() as d:
@@ -858,7 +885,7 @@ class Backfill(unittest.TestCase):
             r = sh.run("tier1_backfill.sh")
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertEqual(sh.posted().count("context=tier1-review"), 1)
-            self.assertIn("1 open PR(s), 0 posted, 1 unchanged, 0 undecided", r.stdout)
+            self.assertIn("1 open PR(s), 0 new, 0 changed, 1 unchanged, 0 undecided, 0 suspect", r.stdout)
 
     def test_one_undecided_pr_does_not_stop_the_others_and_fails_the_job(self):
         with tempfile.TemporaryDirectory() as d:
@@ -870,7 +897,7 @@ class Backfill(unittest.TestCase):
             self.assertEqual(r.returncode, 1)
             self.assertEqual(sh.posted().count("context=tier1-review"), 2)
             self.assertIn("COULD NOT DECIDE", r.stdout + r.stderr)
-            self.assertIn("3 open PR(s), 2 posted, 0 unchanged, 1 undecided", r.stdout)
+            self.assertIn("3 open PR(s), 2 new, 0 changed, 0 unchanged, 1 undecided, 0 suspect", r.stdout)
 
     def test_a_failed_listing_fails_closed(self):
         # Not "no open PRs, nothing to do": that would be a silent green nightly
@@ -893,7 +920,7 @@ class Backfill(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertIn("#12", sh.summary())
             self.assertNotIn("#11", sh.summary())
-            self.assertIn("1 open PR(s), 1 posted", r.stdout)
+            self.assertIn("1 open PR(s), 1 new", r.stdout)
 
     def test_a_dispatch_input_that_is_not_a_number_is_refused(self):
         with tempfile.TemporaryDirectory() as d:
@@ -920,11 +947,146 @@ class Backfill(unittest.TestCase):
             self.assertIn(f"statuses/{new}", sh.posted())
 
 
+@unittest.skipUnless(shutil.which("jq") and shutil.which("bash"), "needs jq and bash")
+class Provenance(unittest.TestCase):
+    """`tier1_provenance.sh`: every `tier1-review` status at a head must have
+    been written by a run of the gate's own workflow (#3400).
+
+    `target_url` is set by whoever posts the status, so it is a claim, not
+    proof — but it is a checkable claim, and the checks below are what a forged
+    status has to survive."""
+
+    GATE = ".github/workflows/tier1-review.yml"
+    RUN = "https://github.com/o/r/actions/runs/"
+
+    def check(self, posts, computed="success", runs=((7001, GATE),), head=None):
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            head = head or sh.add_pr(11)
+            for rid, path in runs:
+                sh.add_run(rid, path)
+            sh.add_status_history(head, *posts)
+            r = sh.run("tier1_provenance.sh", "11", head, computed)
+            return r, sh.summary()
+
+    def test_a_status_from_a_run_of_the_gate_passes(self):
+        r, _ = self.check([("success", self.RUN + "7001")])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("SUSPECT", r.stdout + r.stderr)
+
+    def test_no_statuses_at_all_is_not_a_finding(self):
+        # A PR the gate has not reached yet is the backfill's job, not a forgery.
+        r, _ = self.check([])
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_a_target_url_that_is_not_a_run_of_this_repo_is_suspect(self):
+        for url in ("", "https://example.com/pwned", "https://github.com/o/r/actions/runs/",
+                    "https://github.com/other/repo/actions/runs/7001",
+                    "https://github.com/o/r/actions/runs/abc"):
+            r, summary = self.check([("success", url)])
+            self.assertEqual(r.returncode, 2, f"{url!r}: {r.stdout}{r.stderr}")
+            self.assertIn("SUSPECT", r.stderr + summary)
+
+    def test_a_status_written_by_another_workflow_is_suspect(self):
+        # The shape of the attack: a workflow the PR added posts the context.
+        r, summary = self.check([("success", self.RUN + "9999")],
+                                runs=((9999, ".github/workflows/sneaky.yml"),))
+        self.assertEqual(r.returncode, 2, r.stdout)
+        self.assertIn("sneaky.yml", r.stderr + summary)
+
+    def test_one_run_claiming_two_different_verdicts_is_suspect(self):
+        # The gate posts once per run, so a borrowed run id shows up twice.
+        r, summary = self.check([("success", self.RUN + "7001"), ("failure", self.RUN + "7001")])
+        self.assertEqual(r.returncode, 2, r.stdout)
+        self.assertIn("claimed by both", r.stderr + summary)
+
+    def test_one_run_posting_the_same_verdict_twice_is_not_suspect(self):
+        # A re-run of the same run posts again; identical verdicts are benign.
+        r, _ = self.check([("success", self.RUN + "7001"), ("success", self.RUN + "7001")])
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_a_missing_run_that_agrees_with_the_verdict_is_unverifiable(self):
+        # Actions deletes old run metadata, so a 404 on an old PR is not
+        # evidence of anything when the posted verdict still matches.
+        r, _ = self.check([("success", self.RUN + "4242")], computed="success", runs=())
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("no longer has", r.stdout)
+
+    def test_a_missing_run_that_disagrees_with_the_verdict_is_suspect(self):
+        # A stale run id attached to a verdict the gate does not compute is the
+        # shape of the attack, not an old PR.
+        r, summary = self.check([("success", self.RUN + "4242")], computed="failure", runs=())
+        self.assertEqual(r.returncode, 2, r.stdout)
+        self.assertIn("does not have", r.stderr + summary)
+
+    def test_a_pr_number_that_is_not_a_number_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            sh.add_pr(11)
+            head = sh.add_pr(12)
+            for bad in ("", "11; id", "all"):
+                self.assertEqual(sh.run("tier1_provenance.sh", bad, head, "success").returncode, 1, bad)
+            # And the sha is checked the same way: it reaches an API path.
+            for bad in ("", "deadbee; id", "../../etc", "zz" * 20):
+                self.assertEqual(sh.run("tier1_provenance.sh", "12", bad, "success").returncode, 1, bad)
+
+    def test_a_status_list_the_api_will_not_answer_for_cannot_be_checked(self):
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            head = sh.add_pr(11)
+            # The fake `gh` fails the statuses call when told to.
+            os.remove(os.path.join(sh.d, "bin", "gh"))
+            self.assertEqual(sh.run("tier1_provenance.sh", "11", head, "success").returncode, 1)
+
+    def test_the_status_line_carries_the_full_sha(self):
+        # The backfill reads the sha off that line and looks the status history
+        # up by it. A short sha matched no history and verified nothing, which
+        # is the worst failure available to a detection check: silently green.
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            head = sh.add_pr(11)
+            r = sh.run("tier1_status.sh", "11")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(len(head), 40)
+            self.assertIn(f"#11 {head} ", r.stdout)
+
+    def test_the_backfill_fails_the_job_on_a_suspect_status(self):
+        # Detection that does not turn the nightly red is not detection.
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            head = sh.add_pr(11)
+            sh.add_run(9999, ".github/workflows/sneaky.yml")
+            sh.add_status_history(head, ("success", "https://github.com/o/r/actions/runs/9999"))
+            sh.open_prs(11)
+            r = sh.run("tier1_backfill.sh")
+            self.assertEqual(r.returncode, 1)
+            self.assertIn("SUSPECT", r.stderr + sh.summary())
+            self.assertIn("1 suspect", r.stdout)
+
+    def test_the_backfill_is_green_when_its_own_posts_are_the_history(self):
+        # End to end: the fixture's POST records the status with the run id the
+        # job is running as, and provenance then verifies it.
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            sh.add_pr(11)
+            sh.open_prs(11)
+            r = sh.run("tier1_backfill.sh")
+            self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+            self.assertNotIn("SUSPECT", r.stderr + r.stdout)
+            self.assertIn("0 suspect", r.stdout)
+
+
 class Workflow(unittest.TestCase):
     """The wiring: the two jobs, their triggers, and what they run."""
 
     def setUp(self):
         self.text = open(WORKFLOW).read()
+
+    def test_the_backfill_checks_provenance(self):
+        # The backfill is the only place that would notice a status this gate
+        # did not write (#3400).
+        b = open(os.path.join(HERE, "tier1_backfill.sh")).read()
+        self.assertIn("tier1_provenance.sh", b)
 
     def test_both_jobs_call_the_shared_scripts(self):
         # One script for both paths, so the nightly and the event path cannot

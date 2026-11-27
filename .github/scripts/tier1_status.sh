@@ -38,6 +38,11 @@ gh api "repos/$REPO/pulls/$pr" > "$tmp/pr.json" || exit 1
 gh api --paginate "repos/$REPO/issues/$pr/comments" --jq '.[]' | jq -s . > "$tmp/comments.json" || exit 1
 gh api --paginate "repos/$REPO/pulls/$pr/files" --jq '.[]' | jq -s . > "$tmp/files.json" || exit 1
 
+# The FULL sha, not an abbreviation, in the line this script prints: the
+# backfill reads it off that line and passes it to tier1_provenance.sh, which
+# looks the status history up by sha. A short sha there matched no history and
+# read as "nothing to verify" — a silent pass in the one place that would
+# notice a forged status (#3400).
 sha=$(jq -r '.head.sha // ""' "$tmp/pr.json")
 if [ "${#sha}" -lt 7 ]; then
   echo "tier1-review #$pr: no head sha in the API response" | tee -a "$summary" >&2
@@ -83,12 +88,20 @@ have=$(gh api "repos/$REPO/commits/$sha/status" \
          --jq ".statuses[] | select(.context==\"tier1-review\") | .state + \"$sep\" + .description" \
          2>/dev/null | head -1)
 if [ "$have" = "$state$sep$desc" ]; then
-  echo "tier1-review #$pr ${sha:0:7} $state unchanged: $detail" | tee -a "$summary"
+  echo "tier1-review #$pr $sha $state unchanged: $detail" | tee -a "$summary"
   exit 0
 fi
+
+# `new` (the head had no verdict) and `changed` (it had a different one) are
+# reported apart, because they mean different things: the first is a PR the gate
+# had never reached, the second is a verdict that moved — a rules change, a
+# comment, or something else writing this context (#3400). Lumping them together
+# as "posted" made a disagreement look like routine backfill.
+verb=new
+[ -z "$have" ] || verb="changed (was ${have%%$sep*})"
 
 gh api -X POST "repos/$REPO/statuses/$sha" \
   -f state="$state" -f context=tier1-review -f description="$desc" \
   -f target_url="${GITHUB_SERVER_URL:-https://github.com}/$REPO/actions/runs/${GITHUB_RUN_ID:-0}" \
   >/dev/null || exit 1
-echo "tier1-review #$pr ${sha:0:7} $state posted: $detail" | tee -a "$summary"
+echo "tier1-review #$pr $sha $state $verb: $detail" | tee -a "$summary"
