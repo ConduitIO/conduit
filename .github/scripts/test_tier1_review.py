@@ -613,85 +613,354 @@ class Modules(unittest.TestCase):
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-WORKFLOW = os.path.join(HERE, "..", "workflows", "tier1-review.yml")
+DOTGITHUB = os.path.abspath(os.path.join(HERE, ".."))
+WORKFLOW = os.path.join(DOTGITHUB, "workflows", "tier1-review.yml")
+
+# A fake `gh`: it answers the reads the shell scripts make from files in a
+# directory, and records the writes. Nothing in the gate's shell is exercised by
+# mocking Python, so this is where the posting path gets its coverage.
+GH_FAKE = r"""#!/bin/bash
+data="__DATA__"; log="__LOG__"
+url=""
+for a in "$@"; do case "$a" in repos/*|*/repos/*) url="$a" ;; esac; done
+# `#` as the delimiter: the alternation needs the pipe.
+num=$(printf '%s' "$url" | sed -nE 's#.*/(pulls|issues)/([0-9]+).*#\2#p')
+sha=$(printf '%s' "$url" | sed -nE 's#.*/(commits|statuses)/([0-9a-f]+).*#\2#p')
+case "$url" in
+  *"/pulls?state=open"*)
+      # No list file means the API call failed, not that there are no PRs.
+      [ -f "$data/list" ] || { echo "gh: cannot list pulls" >&2; exit 1; }
+      cat "$data/list"; exit 0 ;;
+  *"/pulls/"*"/files"*)   cat "$data/$num.files" 2>/dev/null; exit 0 ;;
+  *"/issues/"*"/comments"*) cat "$data/$num.comments" 2>/dev/null; exit 0 ;;
+  *"/commits/"*"/status"*) cat "$data/status-$sha" 2>/dev/null; exit 0 ;;
+  *"/pulls/"*)
+      [ -f "$data/$num.json" ] || { echo "gh: no such PR $num" >&2; exit 1; }
+      cat "$data/$num.json"; exit 0 ;;
+  *"/statuses/"*)
+      printf '%s\n' "$*" >> "$log"
+      state=""; desc=""
+      for a in "$@"; do
+        case "$a" in
+          state=*) state="${a#state=}" ;;
+          description=*) desc="${a#description=}" ;;
+        esac
+      done
+      printf '%s\037%s\n' "$state" "$desc" > "$data/status-$sha"
+      exit 0 ;;
+esac
+printf 'CMD %s\n' "$*" >> "$log"   # gh label create, gh pr edit
+exit 0
+"""
+
+
+class Shell:
+    """A throwaway checkout holding the gate's files, a fake `gh` on PATH, and
+    the data that fake answers from."""
+
+    def __init__(self, d, omit=()):
+        self.d = d
+        self.data = os.path.join(d, "data")
+        self.log = os.path.join(d, "posted.txt")
+        self.scripts = os.path.join(d, ".github", "scripts")
+        os.makedirs(self.scripts)
+        os.makedirs(self.data)
+        os.makedirs(os.path.join(d, "bin"))
+        os.makedirs(os.path.join(d, "tmp"))
+        for n in ("tier1_status.sh", "tier1_backfill.sh", "tier1_review.py"):
+            if n not in omit:
+                shutil.copy(os.path.join(HERE, n), os.path.join(self.scripts, n))
+        for n in ("CODEOWNERS", "tier1-modules.txt"):
+            shutil.copy(os.path.join(DOTGITHUB, n), os.path.join(d, ".github", n))
+        gh = os.path.join(d, "bin", "gh")
+        with open(gh, "w") as f:
+            f.write(GH_FAKE.replace("__DATA__", self.data).replace("__LOG__", self.log))
+        os.chmod(gh, 0o755)
+
+    def add_pr(self, n, body="Risk tier: Tier 3", head=None, files=(), comments=()):
+        head = head or (f"{n:07d}" + "abcdef0123456789" * 3)[:40]  # 40 hex chars, as GitHub's are
+        with open(os.path.join(self.data, f"{n}.json"), "w") as f:
+            json.dump({"body": body, "labels": [], "head": {"sha": head},
+                       "user": {"login": "devarismeroxa", "type": "User"}}, f)
+        # The scripts pipe these through `--jq '.[]'`, so the fake answers with
+        # one object per line, as that flag would print.
+        for name, items in (("files", files), ("comments", comments)):
+            if items:
+                with open(os.path.join(self.data, f"{n}.{name}"), "w") as f:
+                    for x in items:
+                        f.write(json.dumps(x) + "\n")
+        return head
+
+    def open_prs(self, *numbers):
+        with open(os.path.join(self.data, "list"), "w") as f:
+            f.write("".join(f"{n}\n" for n in numbers))
+
+    def run(self, script, *args):
+        env = dict(os.environ, PATH=os.path.join(self.d, "bin") + os.pathsep + os.environ["PATH"],
+                   RUNNER_TEMP=os.path.join(self.d, "tmp"),
+                   GITHUB_STEP_SUMMARY=os.path.join(self.d, "summary"),
+                   GITHUB_SERVER_URL="https://github.com", GITHUB_RUN_ID="1",
+                   REPO="o/r", SIGNERS="devarismeroxa")
+        return subprocess.run(["bash", os.path.join(self.scripts, script), *args],
+                              cwd=self.d, env=env, capture_output=True, text=True)
+
+    def posted(self):
+        return open(self.log).read() if os.path.exists(self.log) else ""
+
+    def summary(self):
+        p = os.path.join(self.d, "summary")
+        return open(p).read() if os.path.exists(p) else ""
 
 
 @unittest.skipUnless(shutil.which("jq") and shutil.which("bash"), "needs jq and bash")
-class WorkflowStep(unittest.TestCase):
-    """Runs the workflow's `Decide and post the status` script under `bash -e`
-    with a fake `gh`, as the runner does."""
-
-    def step_script(self):
-        text = open(WORKFLOW).read()
-        m = re.search(r"- name: Decide and post the status\n\s+run: \|\n((?:(?:          .*)?\n)+)", text)
-        self.assertIsNotNone(m, "step not found")
-        return "\n".join(l[10:] for l in m.group(1).splitlines())
-
-    def run_step(self, body, gh_script=None):
-        with tempfile.TemporaryDirectory() as d:
-            bindir, tmp = os.path.join(d, "bin"), os.path.join(d, "tmp")
-            os.makedirs(bindir)
-            os.makedirs(tmp)
-            log = os.path.join(d, "posted.txt")
-            fake = gh_script or f"""#!/bin/bash
-case "$*" in
-  *"/pulls/7/files"*) ;;      # --jq '.[]' of an empty list prints nothing
-  *"/issues/7/comments"*) ;;
-  *"/pulls/7"*) echo '{json.dumps({"body": body, "labels": [], "head": {"sha": HEAD}})}' ;;
-  *"/statuses/"*) echo "$*" >> {log} ;;
-esac
-"""
-            open(os.path.join(bindir, "gh"), "w").write(fake)
-            os.chmod(os.path.join(bindir, "gh"), 0o755)
-            env = dict(os.environ, PATH=bindir + os.pathsep + os.environ["PATH"], RUNNER_TEMP=tmp,
-                       GITHUB_STEP_SUMMARY=os.path.join(d, "summary"), GITHUB_SERVER_URL="https://github.com",
-                       GITHUB_RUN_ID="1", REPO="o/r", PR="7", SIGNERS="devarismeroxa")
-            r = subprocess.run(["bash", "-e", "-c", self.step_script()], cwd=os.path.join(HERE, "..", ".."),
-                               env=env, capture_output=True, text=True)
-            posted = open(log).read() if os.path.exists(log) else ""
-            return r, posted
+class StatusScript(unittest.TestCase):
+    """`tier1_status.sh`: decide ONE PR and post the commit status. The per-PR
+    job and the backfill both call it, so this is the posting path for both."""
 
     def test_failing_verdict_still_posts_a_status_with_a_description(self):
-        r, posted = self.run_step("## Tier and roadmap\n\nTier 2")  # no `Risk tier:` line
-        self.assertIn("state=failure", posted, r.stderr)
-        self.assertIn("context=tier1-review", posted)
-        self.assertIn("Risk tier", posted)  # the description says why
-
-    def test_the_step_passes_the_module_list(self):
-        # Unwired, every dependency bump is Tier 1 (fail closed) instead of
-        # being judged by its modules (#3389).
-        self.assertIn("--tier1-modules .github/tier1-modules.txt", self.step_script())
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            sh.add_pr(7, body="## Tier and roadmap\n\nTier 2")  # no `Risk tier:` line
+            r = sh.run("tier1_status.sh", "7")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("state=failure", sh.posted())
+            self.assertIn("context=tier1-review", sh.posted())
+            self.assertIn("Risk tier", sh.posted())  # the description says why
 
     def test_passing_verdict_posts_success(self):
-        r, posted = self.run_step("Risk tier: Tier 3")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("state=success", posted)
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            sh.add_pr(7)
+            r = sh.run("tier1_status.sh", "7")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("state=success", sh.posted())
+
+    def test_the_script_passes_the_module_list_and_the_default_branch_codeowners(self):
+        # Unwired, every dependency bump is Tier 1 (fail closed) instead of
+        # being judged by its modules (#3389); and CODEOWNERS must come from the
+        # checkout, never from the PR.
+        s = open(os.path.join(HERE, "tier1_status.sh")).read()
+        self.assertIn("--tier1-modules", s)
+        self.assertIn("$root/.github/tier1-modules.txt", s)
+        self.assertIn("$root/.github/CODEOWNERS", s)
+
+    def test_a_tier1_path_is_read_from_the_file_list(self):
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            sh.add_pr(7, body="Risk tier: Tier 3", files=[{"filename": "pkg/connector/x.go"}])
+            sh.run("tier1_status.sh", "7")
+            self.assertIn("state=failure", sh.posted())
+            self.assertIn("Tier+1+path", sh.posted().replace(" ", "+"))
+
+    def test_an_identical_verdict_is_not_reposted(self):
+        # The nightly re-decides every open PR; a duplicate row a day would bury
+        # the entries that mean something.
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            sh.add_pr(7)
+            sh.run("tier1_status.sh", "7")
+            first = sh.posted()
+            r = sh.run("tier1_status.sh", "7")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(sh.posted(), first)  # nothing new was posted
+            self.assertIn("unchanged", r.stdout)
+
+    def test_a_changed_verdict_is_reposted(self):
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            head = sh.add_pr(7)
+            sh.run("tier1_status.sh", "7")
+            sh.add_pr(7, body="Risk tier: Tier 1", head=head)  # now needs a review
+            r = sh.run("tier1_status.sh", "7")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("state=failure", sh.posted())
+            self.assertIn("posted", r.stdout)
+
+    def test_a_failed_read_posts_nothing_and_fails(self):
+        # Judging a PR on the half of it that arrived is worse than not judging
+        # it: the backfill counts this as undecided and goes red.
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)  # PR 7 has no data file, so the fake `gh` fails
+            r = sh.run("tier1_status.sh", "7")
+            self.assertEqual(r.returncode, 1)
+            self.assertEqual(sh.posted(), "")
+
+    def test_a_pr_with_no_head_sha_fails_without_posting(self):
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            with open(os.path.join(sh.data, "7.json"), "w") as f:
+                json.dump({"body": "Risk tier: Tier 3", "labels": [], "head": {}}, f)
+            r = sh.run("tier1_status.sh", "7")
+            self.assertEqual(r.returncode, 1)
+            self.assertEqual(sh.posted(), "")
+            self.assertIn("no head sha", r.stderr + sh.summary())
+
+    def test_a_pr_number_that_is_not_a_number_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            for bad in ("", "7; rm -rf /", "../../etc/passwd", "7a"):
+                r = sh.run("tier1_status.sh", bad)
+                self.assertEqual(r.returncode, 1, bad)
+                self.assertEqual(sh.posted(), "")
 
     def test_script_crash_posts_an_error_status(self):
-        # A script that prints nothing must not leave the PR without a status.
+        # A gate that prints nothing must not leave the PR without a status.
         with tempfile.TemporaryDirectory() as d:
-            script = self.step_script().replace("tier1_review.py", "does_not_exist.py")
-            bindir = os.path.join(d, "bin")
-            os.makedirs(bindir)
-            log = os.path.join(d, "posted.txt")
-            open(os.path.join(bindir, "gh"), "w").write(f"""#!/bin/bash
-case "$*" in
-  *"/pulls/7/files"*) ;;      # --jq '.[]' of an empty list prints nothing
-  *"/issues/7/comments"*) ;;
-  *"/pulls/7"*) echo '{json.dumps({"body": "x", "labels": [], "head": {"sha": HEAD}})}' ;;
-  *"/statuses/"*) echo "$*" >> {log} ;;
-esac
-""")
-            os.chmod(os.path.join(bindir, "gh"), 0o755)
-            os.makedirs(os.path.join(d, "tmp"))
-            env = dict(os.environ, PATH=bindir + os.pathsep + os.environ["PATH"], RUNNER_TEMP=os.path.join(d, "tmp"),
-                       GITHUB_STEP_SUMMARY=os.path.join(d, "s"), GITHUB_SERVER_URL="https://github.com",
-                       GITHUB_RUN_ID="1", REPO="o/r", PR="7", SIGNERS="devarismeroxa")
-            subprocess.run(["bash", "-e", "-c", script], cwd=os.path.join(HERE, "..", ".."), env=env,
-                           capture_output=True, text=True)
-            posted = open(log).read()
-            self.assertIn("state=error", posted)
-            self.assertIn("produced no verdict", posted)
+            sh = Shell(d, omit=("tier1_review.py",))
+            sh.add_pr(7)
+            r = sh.run("tier1_status.sh", "7")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("state=error", sh.posted())
+            self.assertIn("produced+no+verdict", sh.posted().replace(" ", "+"))
+
+    def test_a_changes_needed_verdict_applies_the_label_before_the_repost_check(self):
+        # So a label taken off by hand comes back on the next run even when the
+        # verdict itself has not moved.
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            sh.add_pr(7, body="Risk tier: Tier 1", head=HEAD, comments=[
+                {"id": 1, "body": f"Review: changes-needed @ {HEAD[:7]}",
+                 "created_at": "2026-10-21T00:00:01Z", "updated_at": "2026-10-21T00:00:01Z",
+                 "author_association": "OWNER", "user": {"login": "devarismeroxa"}}])
+            r = sh.run("tier1_status.sh", "7")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("state=failure", sh.posted())
+            self.assertIn("add-label do-not-merge", sh.posted())
+            sh.run("tier1_status.sh", "7")  # unchanged verdict
+            self.assertEqual(sh.posted().count("add-label do-not-merge"), 2)
+            self.assertEqual(sh.posted().count("state=failure"), 1)
+
+
+@unittest.skipUnless(shutil.which("jq") and shutil.which("bash"), "needs jq and bash")
+class Backfill(unittest.TestCase):
+    """`tier1_backfill.sh`: every open PR gets a verdict, so none sits with no
+    `tier1-review` status at all — the prerequisite for requiring the context
+    (#3389). It also re-decides a rebased head without waiting for a comment."""
+
+    def test_every_open_pr_gets_a_status(self):
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            sh.add_pr(11)
+            sh.add_pr(12, body="fixes a thing")  # no declaration: a failing verdict
+            sh.add_pr(13)
+            sh.open_prs(11, 12, 13)
+            r = sh.run("tier1_backfill.sh")
+            self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+            self.assertEqual(sh.posted().count("context=tier1-review"), 3)
+            self.assertIn("3 open PR(s), 3 posted, 0 unchanged, 0 undecided", r.stdout)
+
+    def test_a_second_run_posts_nothing_new(self):
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            sh.add_pr(11)
+            sh.open_prs(11)
+            sh.run("tier1_backfill.sh")
+            r = sh.run("tier1_backfill.sh")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(sh.posted().count("context=tier1-review"), 1)
+            self.assertIn("1 open PR(s), 0 posted, 1 unchanged, 0 undecided", r.stdout)
+
+    def test_one_undecided_pr_does_not_stop_the_others_and_fails_the_job(self):
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            sh.add_pr(11)
+            sh.add_pr(13)
+            sh.open_prs(11, 12, 13)  # 12 has no data: the fake `gh` fails on it
+            r = sh.run("tier1_backfill.sh")
+            self.assertEqual(r.returncode, 1)
+            self.assertEqual(sh.posted().count("context=tier1-review"), 2)
+            self.assertIn("COULD NOT DECIDE", r.stdout + r.stderr)
+            self.assertIn("3 open PR(s), 2 posted, 0 unchanged, 1 undecided", r.stdout)
+
+    def test_a_failed_listing_fails_closed(self):
+        # Not "no open PRs, nothing to do": that would be a silent green nightly
+        # while every PR went unjudged.
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            sh.add_pr(11)
+            r = sh.run("tier1_backfill.sh")  # no list file
+            self.assertEqual(r.returncode, 1)
+            self.assertEqual(sh.posted(), "")
+            self.assertIn("cannot list the open PRs", r.stderr + sh.summary())
+
+    def test_an_explicit_pr_number_decides_only_that_one(self):
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            sh.add_pr(11)
+            sh.add_pr(12)
+            sh.open_prs(11, 12)
+            r = sh.run("tier1_backfill.sh", "12")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("#12", sh.summary())
+            self.assertNotIn("#11", sh.summary())
+            self.assertIn("1 open PR(s), 1 posted", r.stdout)
+
+    def test_a_dispatch_input_that_is_not_a_number_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            sh.add_pr(11)
+            sh.open_prs(11)
+            for bad in ("12; touch /tmp/pwned", "--repo other/repo", "all"):
+                r = sh.run("tier1_backfill.sh", bad)
+                self.assertEqual(r.returncode, 1, bad)
+                self.assertEqual(sh.posted(), "")
+
+    def test_a_rebased_head_gets_a_fresh_verdict(self):
+        # The verdict is pinned to the head sha, so a rebase stales it. Before
+        # the backfill, the new head carried no status until something commented.
+        with tempfile.TemporaryDirectory() as d:
+            sh = Shell(d)
+            old = sh.add_pr(11, body="Risk tier: Tier 1")
+            sh.open_prs(11)
+            sh.run("tier1_backfill.sh")
+            self.assertIn(f"statuses/{old}", sh.posted())
+            new = "b" * 40
+            sh.add_pr(11, body="Risk tier: Tier 1", head=new)
+            sh.run("tier1_backfill.sh")
+            self.assertIn(f"statuses/{new}", sh.posted())
+
+
+class Workflow(unittest.TestCase):
+    """The wiring: the two jobs, their triggers, and what they run."""
+
+    def setUp(self):
+        self.text = open(WORKFLOW).read()
+
+    def test_both_jobs_call_the_shared_scripts(self):
+        # One script for both paths, so the nightly and the event path cannot
+        # drift into judging the same PR by different rules.
+        self.assertIn('run: .github/scripts/tier1_status.sh "$PR"', self.text)
+        self.assertIn('run: .github/scripts/tier1_backfill.sh "$ONLY_PR"', self.text)
+
+    def test_the_backfill_is_scheduled_and_dispatchable(self):
+        self.assertRegex(self.text, r"schedule:\n(\s*#.*\n)*\s*- cron: '[\d*/ ,-]+'")
+        self.assertIn("workflow_dispatch:", self.text)
+
+    def test_the_backfill_never_runs_on_a_pr_event(self):
+        # Otherwise every push would re-decide every open PR.
+        m = re.search(r"\n  backfill:\n(.*?)(?=\n  \w|\Z)", self.text, re.S)
+        self.assertIsNotNone(m)
+        self.assertIn("github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'",
+                      m.group(1))
+        # And the per-PR job does not run on the schedule.
+        per = re.search(r"\n  tier1-review:\n(.*?)(?=\n  backfill:)", self.text, re.S)
+        self.assertIn("github.event_name == 'pull_request_target' || github.event.issue.pull_request",
+                      per.group(1))
+
+    def test_both_jobs_check_out_the_default_branch(self):
+        # The rules that judge a PR are the merged ones, never a branch's
+        # proposal — including on a dispatch from another ref.
+        self.assertEqual(self.text.count("ref: ${{ github.event.repository.default_branch }}"), 2)
+
+    def test_the_dispatch_input_does_not_reach_a_command_line(self):
+        # It is outside input: it goes through the environment, and the script
+        # checks it is a number.
+        self.assertIn("ONLY_PR: ${{ inputs.pr }}", self.text)
+        self.assertNotIn("${{ inputs.pr }}\"", self.text)
+        self.assertNotIn("tier1_backfill.sh ${{", self.text)
+
+    def test_both_jobs_run_the_gate_tests_first(self):
+        self.assertEqual(self.text.count("python3 -m unittest -v test_tier1_review"), 2)
 
 
 if __name__ == "__main__":
