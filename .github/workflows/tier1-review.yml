@@ -29,6 +29,12 @@ name: tier1-review
 # (#3389). Both files come from the default-branch checkout, so a PR cannot
 # shrink the list that judges it.
 #
+# A GitHub App's PR (Dependabot, github-actions) writes its body from a fixed
+# template and cannot add a `Risk tier:` line, so it is read as Tier 3 when it
+# declares nothing. Both floors still apply on top, so an App's bump of a Tier 1
+# module or a Tier 1 path still needs an approve and a sign-off at its current
+# head — and a Dependabot rebase moves that head.
+#
 # KNOWN LIMIT: a required status context can be set by ANY workflow in this
 # repository that has `statuses: write`, so a PR that adds such a workflow could
 # post a green `tier1-review`. CODEOWNERS on `.github/` (DeVaris alone) is the

@@ -206,6 +206,102 @@ class Tier1(unittest.TestCase):
             self.assertIn("Risk tier", v["description"])
 
 
+def bot_pr(body="", login="dependabot[bot]", type="Bot", labels=(), head=HEAD):
+    p = pr(body=body, labels=labels, head=head)
+    p["user"] = {"login": login, "type": type}
+    return p
+
+
+class BotDeclaration(unittest.TestCase):
+    """A GitHub App writes its body from a fixed template and cannot add a
+    `Risk tier:` line, so the declaration was a gate no bot PR could ever pass
+    (#3389). An App author with no declaration is read as Tier 3 — and the path
+    and module floors still apply, so exempting the declaration does not exempt
+    the tier."""
+
+    def tier(self, p, files=(), patches=None):
+        paths = t.tier1_patterns(OWNERS, S)
+        return t.decide(p, [], S, files=files, tier1_paths=paths, patches=patches, tier1_mods=MODS)
+
+    def test_a_bot_pr_with_no_declaration_is_tier3(self):
+        r = self.tier(bot_pr())
+        self.assertEqual(r["state"], "success")
+        # Named in the description, so the history separates a tier a bot was
+        # given from one a human declared.
+        self.assertIn("bot default", r["description"])
+
+    def test_a_human_pr_with_no_declaration_still_fails(self):
+        r = self.tier(pr(body="fixes a bug"))
+        self.assertEqual(r["state"], "failure")
+        self.assertIn("Risk tier", r["description"])
+
+    def test_the_api_type_and_the_login_suffix_both_identify_a_bot(self):
+        self.assertTrue(t.is_bot({"login": "dependabot[bot]", "type": "Bot"}))
+        self.assertTrue(t.is_bot({"login": "github-actions[bot]", "type": "User"}))  # suffix alone
+        self.assertTrue(t.is_bot({"login": "renovate", "type": "Bot"}))  # type alone
+        self.assertFalse(t.is_bot({"login": "notabot", "type": "User"}))
+        self.assertFalse(t.is_bot({"login": "devarismeroxa", "type": "User"}))
+        # A missing or empty user object is not a bot: the declaration stays
+        # required rather than being waived by malformed input.
+        self.assertFalse(t.is_bot({}))
+        self.assertFalse(t.is_bot(None))
+        self.assertEqual(self.tier(pr(body="no tier here"))["state"], "failure")
+
+    def test_the_path_floor_still_reaches_a_bot_pr(self):
+        r = self.tier(bot_pr(), files=["tools/release.go"])
+        self.assertEqual(r["state"], "failure")
+        self.assertIn("touches a Tier 1 path", r["description"])
+
+    def test_the_module_floor_still_reaches_a_bot_pr(self):
+        # The #3338 shape: a bot bump of a module that serializes store entries.
+        r = self.tier(bot_pr(), files=["go.mod"], patches=bump())
+        self.assertEqual(r["state"], "failure")
+        self.assertIn("module github.com/conduitio/conduit-commons", r["description"])
+        # And the #3337 shape: a bump of a module that is not on the list.
+        p = bump(module="github.com/prometheus/client_golang", old="v1.23.0", new="v1.24.0")
+        self.assertEqual(self.tier(bot_pr(), files=["go.mod"], patches=p)["state"], "success")
+
+    def test_a_bot_pr_that_moves_the_go_directive_is_tier1(self):
+        # #3329 arrived as a sigstore-go bump that also moved `go 1.26.11` to
+        # `go 1.27.0`.
+        p = {"go.mod": hunk("-go 1.26.11", "+go 1.27.0")}
+        r = self.tier(bot_pr(), files=["go.mod"], patches=p)
+        self.assertEqual(r["state"], "failure")
+        self.assertIn("`go` directive", r["description"])
+
+    def test_a_declaration_in_a_bot_body_still_counts(self):
+        # The exemption is a default, not an override: a body or label that
+        # raises the tier is still read.
+        self.assertEqual(self.tier(bot_pr(body="Risk tier: Tier 1"))["state"], "failure")
+        self.assertEqual(self.tier(bot_pr(labels=("tier-1",)))["state"], "failure")
+
+    def test_do_not_merge_still_blocks_a_bot_pr(self):
+        self.assertEqual(self.tier(bot_pr(labels=("do-not-merge",)))["state"], "failure")
+
+    def test_a_signed_off_bot_pr_passes(self):
+        # A Tier 1 bot bump is not unmergeable, it needs the verdict at its
+        # current head — which a Dependabot rebase moves.
+        paths = t.tier1_patterns(OWNERS, S)
+        cs = [c(f"Review: approve @ {HEAD[:7]}", "r", at(1)), c(f"Sign-off @ {HEAD[:7]}", at=at(2))]
+        r = t.decide(bot_pr(), cs, S, files=["go.mod"], tier1_paths=paths,
+                     patches=bump(), tier1_mods=MODS)
+        self.assertEqual(r["state"], "success")
+        self.assertIn("signed off", r["description"])
+        # After a rebase the verdict is stale again.
+        r = t.decide(bot_pr(head=OLD), cs, S, files=["go.mod"], tier1_paths=paths,
+                     patches=bump(), tier1_mods=MODS)
+        self.assertEqual(r["state"], "failure")
+
+    def test_cli_reads_the_author_from_the_pr_json(self):
+        with tempfile.TemporaryDirectory() as d:
+            prj, cm = os.path.join(d, "p"), os.path.join(d, "c")
+            json.dump([], open(cm, "w"))
+            json.dump(bot_pr(), open(prj, "w"))
+            self.assertEqual(t.main([prj, cm]), 0)
+            json.dump(pr(body="no tier"), open(prj, "w"))
+            self.assertEqual(t.main([prj, cm]), 1)
+
+
 MODS = ["github.com/conduitio/conduit-commons", "github.com/conduitio/conduit-connector-sdk",
         "github.com/conduitio/conduit-commons/paramgen"]
 OWNERS = ("*  @org/team @devarismeroxa\n/tools/ @devarismeroxa\n/tests/upgrade/ @devarismeroxa\n"

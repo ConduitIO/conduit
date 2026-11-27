@@ -6,6 +6,11 @@ THE RULE (CLAUDE.md, "PR review process"; postmortem action item 9):
   * Every PR declares a risk tier in its body: `Risk tier: Tier 1|2|3`
     (HTML comments are ignored, so the template's own placeholder text does
     not count). No declaration fails.
+  * Except a GitHub App's PR (Dependabot, github-actions): an App writes a body
+    from a fixed template and cannot add the line, so the declaration is not a
+    gate it can pass and every bot PR failed on it. An App author with no
+    declaration is read as Tier 3. The floors below still apply and still raise
+    it to Tier 1, so exempting the DECLARATION does not exempt the TIER (#3389).
   * A PR that touches a Tier 1 path (CODEOWNERS entries owned by the signers
     alone) is Tier 1 whatever it declares: the declaration can raise the tier,
     never lower it below the paths.
@@ -75,6 +80,18 @@ BLOCK_LABEL = "do-not-merge"
 
 class GateError(Exception):
     pass
+
+
+BOT_SUFFIX = "[bot]"
+
+
+def is_bot(user):
+    """Whether a GitHub App opened this PR. `type` is the API's own answer; the
+    `[bot]` login suffix is the fallback and cannot be forged, because a human
+    login holds no brackets. A missing user object is not a bot (fail closed:
+    the declaration stays required)."""
+    user = user or {}
+    return user.get("type") == "Bot" or (user.get("login") or "").endswith(BOT_SUFFIX)
 
 
 def declared_tier(body, labels):
@@ -295,13 +312,21 @@ def decide(pr, comments, signers, reviewers=frozenset(), files=(), tier1_paths=(
     if BLOCK_LABEL in labels:
         return fail(f"labelled {BLOCK_LABEL}")
     tier = declared_tier(pr.get("body"), labels)
+    bot = tier is None and is_bot(pr.get("user"))
+    if bot:
+        # An App cannot write the line, so failing on it only ever blocked the
+        # dependency queue. Tier 3 is what it gets for free; the floors below
+        # still raise it (#3389).
+        tier = 3
     if tier is None:
         return fail("no `Risk tier: Tier 1|2|3` line in the PR body")
     floor = floor_reason(files, tier1_paths, patches, tier1_mods)
     if floor:
         tier = 1
     if tier != 1:
-        return ok(f"Tier {tier}: no Tier 1 review required")
+        # Named, so the status history separates a tier a bot was given from one
+        # a human declared.
+        return ok(f"Tier {tier}{' (bot default)' if bot else ''}: no Tier 1 review required")
     trusted = set(reviewers) | set(signers)
     pending = unresolved_changes_needed(comments, trusted)
     if pending:
