@@ -48,6 +48,15 @@ name: tier1-review
 # only that App can write; do that before treating this gate as more than a
 # guard against mistakes.
 #
+# BACKFILL: the gate only ever ran on an event, so a PR opened before the
+# workflow existed — or whose last run predates a change to the rules — carried
+# NO `tier1-review` status at all, and an absent status is not a failing one.
+# The nightly `backfill` job re-decides every open PR with the same script, so
+# no open PR sits without a verdict and a rebase that moves the head gets a
+# fresh one without waiting for a comment. That is the prerequisite for adding
+# this context to main's required checks: requiring a context that some PRs
+# never report would block them permanently with nothing to act on (#3389).
+#
 # STATUS: live, NOT in main's required contexts. Requiring it is DeVaris's
 # decision (postmortem, "Branch protection"): with one account opening every
 # PR, the sign-off comment is only as strong as account separation.
@@ -57,6 +66,15 @@ on:
     types: [opened, synchronize, reopened, edited, labeled, unlabeled, ready_for_review]
   issue_comment:
     types: [created, edited, deleted]
+  schedule:
+    # 04:45 UTC, clear of the other nightlies.
+    - cron: '45 4 * * *'
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: One PR number to re-decide; empty for every open PR
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -65,7 +83,9 @@ permissions:
   issues: write # apply the do-not-merge label
 
 concurrency:
-  group: tier1-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  # One backfill at a time, and one run per PR. Cancelling a backfill midway is
+  # safe: it re-decides from scratch and never posts a verdict it did not reach.
+  group: tier1-review-${{ github.event.pull_request.number || github.event.issue.number || 'backfill' }}
   cancel-in-progress: true
 
 jobs:
@@ -88,45 +108,38 @@ jobs:
         working-directory: .github/scripts
         run: python3 -m unittest -v test_tier1_review
 
+      # The decide-and-post logic lives in the script so the backfill job below
+      # runs exactly the same rules; it fetches the PR fresh from the API rather
+      # than reading the event, so a re-run after an edit or a deleted comment
+      # sees the current state.
       - name: Decide and post the status
-        run: |
-          set -uo pipefail
-          # Fetched fresh from the API, not from the event, so a re-run after
-          # an edit or a deleted comment sees the current state.
-          gh api "repos/$REPO/pulls/$PR" > "$RUNNER_TEMP/pr.json"
-          gh api --paginate "repos/$REPO/issues/$PR/comments" --jq '.[]' | jq -s . > "$RUNNER_TEMP/comments.json"
-          gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[]' | jq -s . > "$RUNNER_TEMP/files.json"
-          sha=$(jq -r .head.sha "$RUNNER_TEMP/pr.json")
+        run: .github/scripts/tier1_status.sh "$PR"
 
-          # CODEOWNERS comes from the default branch checkout, so a PR cannot
-          # shrink the Tier 1 path list that judges it.
-          # The script exits 1 for every verdict but success (it prints the
-          # verdict first). Steps run under `bash -e`, so an unguarded exit
-          # status aborted the step before the status was posted, and a failing
-          # PR showed a red check with no description.
-          rc=0
-          python3 .github/scripts/tier1_review.py "$RUNNER_TEMP/pr.json" "$RUNNER_TEMP/comments.json" \
-            --signers "$SIGNERS" --files "$RUNNER_TEMP/files.json" --codeowners .github/CODEOWNERS \
-            --tier1-modules .github/tier1-modules.txt \
-            > "$RUNNER_TEMP/verdict.json" || rc=$?
-          # A script that crashed printed no verdict: fail closed with a reason.
-          if ! jq -e '(.state | type == "string") and (.description | type == "string")' "$RUNNER_TEMP/verdict.json" >/dev/null 2>&1; then
-            jq -n --arg d "tier1_review.py produced no verdict (exit $rc)" '{state: "error", description: $d, label: false}' > "$RUNNER_TEMP/verdict.json"
-          fi
-          state=$(jq -r .state "$RUNNER_TEMP/verdict.json")
-          desc=$(jq -r .description "$RUNNER_TEMP/verdict.json")
-          # The status description is capped at 140 characters; the summary
-          # gets the whole reason.
-          echo "tier1-review: $state: $(jq -r '.detail // .description' "$RUNNER_TEMP/verdict.json")" \
-            | tee -a "$GITHUB_STEP_SUMMARY"
+  backfill:
+    name: tier1-review backfill
+    # Never on a PR event: the job above already covers one PR, and a backfill
+    # triggered by a PR would re-decide every open PR on every push.
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      SIGNERS: devarismeroxa
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The default branch even on a dispatch from another ref: the rules
+          # that judge a PR are the merged ones, never a branch's proposal.
+          ref: ${{ github.event.repository.default_branch }}
 
-          gh api -X POST "repos/$REPO/statuses/$sha" \
-            -f state="$state" -f context=tier1-review -f description="$desc" \
-            -f target_url="$GITHUB_SERVER_URL/$REPO/actions/runs/$GITHUB_RUN_ID"
+      - name: Gate script tests
+        working-directory: .github/scripts
+        run: python3 -m unittest -v test_tier1_review
 
-          # A changes-needed record also applies do-not-merge, which the script
-          # rejects on its own; an approve does not remove it (a human decides).
-          if [ "$(jq -r .label "$RUNNER_TEMP/verdict.json")" = "true" ]; then
-            gh label create do-not-merge --color B60205 --description "A review finding is open" -R "$REPO" 2>/dev/null || true
-            gh pr edit "$PR" -R "$REPO" --add-label do-not-merge || true
-          fi
+      # The input goes through the environment, not the command line: it is
+      # outside input, and the script checks it is a number.
+      - name: Post a verdict on every open PR
+        env:
+          ONLY_PR: ${{ inputs.pr }}
+        run: .github/scripts/tier1_backfill.sh "$ONLY_PR"
