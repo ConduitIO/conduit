@@ -75,6 +75,12 @@ changelog:
 release:
   prerelease: auto
   mode: append
+  # Set by release.yml from .github/scripts/release_tag_position.py: true only
+  # when this tag is the greatest stable version. GoReleaser defaults this to
+  # true, which is how v0.20.7 — a patch on an older line, tagged after
+  # v0.22.0 — became the repository's "latest" release. Defaults to false when
+  # the variable is absent, matching the script's fail-closed stance.
+  make_latest: '{{ if index .Env "MAKE_LATEST" }}{{ .Env.MAKE_LATEST }}{{ else }}false{{ end }}'
   footer: |
     ## Release Artifacts
 
