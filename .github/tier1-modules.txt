@@ -1,0 +1,58 @@
+# Modules whose version changes make a PR Tier 1 (#3389).
+#
+# `tier1-review` takes its Tier 1 floor from the CODEOWNERS paths a PR touches,
+# but a dependency manifest is the wrong granularity for that rule. Every Go
+# bump touches `go.mod`, so owning the file made every bump Tier 1 and put the
+# whole dependency queue behind a human sign-off. The module is the right
+# granularity: a change to a `go.mod` or `go.sum` anywhere in the repository is
+# Tier 1 only when it moves one of the modules below. Every other path still
+# takes its tier from CODEOWNERS, and `/go.mod` stays there as the ownership
+# record.
+#
+# A dependency bump genuinely can be a data-path change: #3208 was a
+# conduit-connector-sdk bump whose entire purpose was fixing a source `Run`
+# `tomb.Go` race. The test for a line here is whether a wrong version of the
+# module could drop, duplicate, reorder or corrupt a record, or change a
+# serialized format.
+#
+# One module path per line; `#` starts a comment. A line matches that module and
+# everything under it, so `github.com/conduitio/conduit-commons` covers
+# `.../conduit-commons/v2` and `.../conduit-commons/paramgen`; major-version
+# suffixes need no separate line.
+#
+# What the gate treats as Tier 1 without consulting this list: a change to the
+# `go`, `toolchain` or `module` directive, a manifest whose diff the API did not
+# return, and any manifest line the parser cannot classify. It fails closed, so
+# an unreadable or unwired list makes every bump Tier 1 rather than none of
+# them. See .github/scripts/tier1_review.py.
+#
+# Adding a line is cheap. Removing one is weakening a gate, and this file lives
+# under /.github/, which DeVaris owns.
+
+# The engine's own contracts: records, positions, the plugin protocol, the SDKs.
+github.com/conduitio/conduit-commons
+github.com/conduitio/conduit-connector-protocol
+github.com/conduitio/conduit-connector-sdk
+github.com/conduitio/conduit-processor-sdk
+
+# Built-in connectors. Records flow through these inside the shipped binary.
+github.com/conduitio/conduit-connector-file
+github.com/conduitio/conduit-connector-generator
+github.com/conduitio/conduit-connector-kafka
+github.com/conduitio/conduit-connector-log
+github.com/conduitio/conduit-connector-postgres
+github.com/conduitio/conduit-connector-s3
+
+# Schema and serialization: the wire formats and the registry client.
+github.com/conduitio/conduit-schema-registry
+github.com/iskorotkov/avro
+github.com/hamba/avro
+github.com/twmb/franz-go
+
+# Serialized state. goccy/go-json encodes the store entries (pkg/pipeline/store.go
+# and its neighbours); badger is the embedded KV store's on-disk format.
+github.com/goccy/go-json
+github.com/dgraph-io/badger
+
+# Pipeline configuration is a public contract and this parser defines it.
+github.com/conduitio/yaml

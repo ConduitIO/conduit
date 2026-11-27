@@ -9,6 +9,13 @@ THE RULE (CLAUDE.md, "PR review process"; postmortem action item 9):
   * A PR that touches a Tier 1 path (CODEOWNERS entries owned by the signers
     alone) is Tier 1 whatever it declares: the declaration can raise the tier,
     never lower it below the paths.
+  * A dependency manifest (`go.mod`, `go.sum`, at any depth) is the exception:
+    it takes its tier from the MODULES it moves, listed in
+    .github/tier1-modules.txt, not from the directory it sits in. Every Go bump
+    touches `go.mod`, so the file was the wrong granularity (#3389). Tier 1
+    without consulting the list: the `go`, `toolchain` or `module` directive, a
+    manifest the API returned no diff for, and any line the parser cannot
+    classify.
   * Tier 2 and 3 pass (apart from the `do-not-merge` label, which always fails).
   * Tier 1 passes only if, for the CURRENT head commit, there is
       `Review: approve @ <sha>`   (a trusted commenter: the reviewing session), and
@@ -39,8 +46,9 @@ Until then CODEOWNERS on `.github/` (owned by DeVaris alone) is the control.
 FAILS CLOSED: malformed input is an error status, never success.
 
 Usage: tier1_review.py PR_JSON COMMENTS_JSON [--signers a,b] [--reviewers a,b]
-       [--files FILES_JSON --codeowners CODEOWNERS]
-Prints a JSON object {state, description, label} and exits 0 only on success.
+       [--files FILES_JSON --codeowners CODEOWNERS --tier1-modules MODULES]
+Prints a JSON object {state, description, detail, label} and exits 0 only on
+success. `description` is capped at GitHub's 140 characters; `detail` is not.
 """
 
 import argparse
@@ -155,10 +163,131 @@ def touches(pattern, path):
 
 
 def touches_tier1(files, patterns):
-    return any(touches(p, f) for f in files for p in patterns)
+    """The path floor. Dependency manifests are excluded: they are judged by the
+    modules they move (manifest_floor), not by the directory they sit in, so
+    `tools/go.mod` does not inherit Tier 1 from CODEOWNERS' `/tools/`."""
+    return any(touches(p, f) for f in files if not is_dep_manifest(f) for p in patterns)
 
 
-def decide(pr, comments, signers, reviewers=frozenset(), files=(), tier1_paths=()):
+MANIFESTS = ("go.mod", "go.sum")
+
+
+def is_manifest(path):
+    """A Go dependency manifest at any depth: `go.mod`, `tools/go.sum`."""
+    return path.rsplit("/", 1)[-1] in MANIFESTS
+
+
+def is_dep_manifest(path):
+    """A manifest that declares what the build depends on, so the module floor
+    judges it. A manifest under `testdata/` is golden fixture content, not a
+    dependency of this build: it keeps taking its tier from its path, like every
+    other file in that tree."""
+    return is_manifest(path) and "testdata" not in path.split("/")[:-1]
+
+
+class ManifestFloor(Exception):
+    """A manifest change that is Tier 1 without consulting the module list."""
+
+
+def tier1_modules(text):
+    """Module paths from .github/tier1-modules.txt, comments and blanks dropped."""
+    out = []
+    for raw in (text or "").splitlines():
+        line = raw.split("#", 1)[0].strip().rstrip("/")
+        if line:
+            out.append(line)
+    return out
+
+
+def module_hit(module, patterns):
+    """The list entry covering this module path, or None. An entry covers the
+    module and everything under it, so `.../conduit-commons` covers
+    `.../conduit-commons/v2` and no major-version lines are needed."""
+    m = module.lower()
+    return next((p for p in patterns if m == p.lower() or m.startswith(p.lower() + "/")), None)
+
+
+# A module path: a host with a dot in it, then at least one element. A version
+# (`v1.2.3`, `v1.2.3/go.mod`) has no dot-then-letters before its first slash, so
+# it cannot match; neither can a base64 hash (no `.` in that alphabet).
+MODULE_PATH = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._~-]*\.[A-Za-z]{2,}(?:/[^\s/]+)+$")
+# go.mod directives that introduce entries. The entry itself carries the module.
+ENTRY_DIRECTIVES = ("require", "replace", "exclude", "retract", "tool", "godebug", "ignore")
+# Directives whose change is Tier 1 on its own: the runtime under the whole data
+# path, and this module's own identity.
+SELF_TIER1 = {"go": "`go` directive", "toolchain": "`toolchain` directive", "module": "`module` directive"}
+
+
+def manifest_modules(name, patch):
+    """Module paths whose entries a manifest diff adds or removes.
+
+    Raises ManifestFloor for a change that is Tier 1 by itself: a missing diff,
+    a `go`/`toolchain`/`module` directive, or a line it cannot classify. The
+    caller turns that into the floor, so an unreadable manifest never passes as
+    Tier 3."""
+    if patch is None:
+        raise ManifestFloor(f"no diff for {name}")
+    mods = set()
+    for raw in patch.splitlines():
+        if raw[:1] not in ("+", "-") or raw[:3] in ("+++", "---"):
+            continue
+        line = raw[1:].split("//", 1)[0].strip()
+        if not line or line == ")":
+            continue
+        tokens = line.rstrip("(").split()
+        if not tokens:
+            continue
+        if tokens[0] in SELF_TIER1:
+            raise ManifestFloor(f"{name} changes the {SELF_TIER1[tokens[0]]}")
+        if tokens[0] in ENTRY_DIRECTIVES:
+            tokens = tokens[1:]
+        if not tokens:
+            continue  # a block opener: `require (`
+        found = [x for x in tokens if MODULE_PATH.match(x)]
+        if not found:
+            raise ManifestFloor(f"unclassifiable line in {name}: {line[:40]}")
+        mods.update(found)
+    return mods
+
+
+def manifest_floor(manifests, modules):
+    """Why the dependency-manifest changes make this PR Tier 1, or "".
+
+    `manifests` is (filename, patch or None) per changed manifest."""
+    if not manifests:
+        return ""
+    if not modules:
+        # Fail closed: an empty or unwired list makes every bump Tier 1 rather
+        # than none of them.
+        return "no Tier 1 module list"
+    hits = []
+    for name, patch in manifests:
+        try:
+            mods = manifest_modules(name, patch)
+        except ManifestFloor as e:
+            return str(e)
+        hits += [m for m in sorted(mods) if module_hit(m, modules) and m not in hits]
+    if not hits:
+        return ""
+    more = f" +{len(hits) - 1} more" if len(hits) > 1 else ""
+    return f"module {hits[0]}{more}"
+
+
+def floor_reason(files, tier1_paths, patches=None, tier1_mods=()):
+    """Why this PR is Tier 1 by its files alone, or "". Two independent floors:
+    the CODEOWNERS paths, and the modules the dependency manifests move."""
+    if touches_tier1(files, tier1_paths):
+        return "touches a Tier 1 path"
+    seen, manifests = set(), []
+    for f in files:
+        if is_dep_manifest(f) and f not in seen:
+            seen.add(f)
+            manifests.append((f, (patches or {}).get(f)))
+    return manifest_floor(manifests, tier1_mods)
+
+
+def decide(pr, comments, signers, reviewers=frozenset(), files=(), tier1_paths=(),
+           patches=None, tier1_mods=()):
     labels = {l["name"] if isinstance(l, dict) else l for l in pr.get("labels", [])}
     head = (pr.get("head") or {}).get("sha", "")
     if len(head) < 7:
@@ -168,7 +297,7 @@ def decide(pr, comments, signers, reviewers=frozenset(), files=(), tier1_paths=(
     tier = declared_tier(pr.get("body"), labels)
     if tier is None:
         return fail("no `Risk tier: Tier 1|2|3` line in the PR body")
-    floor = touches_tier1(files, tier1_paths)
+    floor = floor_reason(files, tier1_paths, patches, tier1_mods)
     if floor:
         tier = 1
     if tier != 1:
@@ -181,7 +310,7 @@ def decide(pr, comments, signers, reviewers=frozenset(), files=(), tier1_paths=(
     approved = any(k == "approve" and same_sha(s, head) for k, s, _ in review.values())
     signed = any(same_sha(s, head) for a, (s, _) in sign.items() if a in signers)
     missing = []
-    why = " (touches a Tier 1 path)" if floor else ""
+    why = f" ({floor})" if floor else ""
     if not approved:
         missing.append(f"`Review: approve @ {head[:7]}`")
     if not signed:
@@ -192,11 +321,13 @@ def decide(pr, comments, signers, reviewers=frozenset(), files=(), tier1_paths=(
 
 
 def ok(desc):
-    return {"state": "success", "description": desc[:140], "label": False}
+    return {"state": "success", "description": desc[:140], "detail": desc, "label": False}
 
 
 def fail(desc, label=False):
-    return {"state": "failure", "description": desc[:140], "label": label}
+    # GitHub truncates a status description at 140 characters, which a long
+    # module path can reach; `detail` keeps the whole line for the step summary.
+    return {"state": "failure", "description": desc[:140], "detail": desc, "label": label}
 
 
 def main(argv=None):
@@ -207,6 +338,7 @@ def main(argv=None):
     ap.add_argument("--reviewers", default="", help="extra logins whose verdicts count")
     ap.add_argument("--files", help="JSON list of the PR's changed files (GitHub pulls/N/files)")
     ap.add_argument("--codeowners", help="CODEOWNERS file from the default branch")
+    ap.add_argument("--tier1-modules", help="module paths whose bumps are Tier 1 (#3389)")
     a = ap.parse_args(argv)
     try:
         with open(a.pr) as f:
@@ -217,15 +349,23 @@ def main(argv=None):
             raise GateError("unexpected JSON shape")
         signers = {s.strip() for s in a.signers.split(",") if s.strip()}
         reviewers = {s.strip() for s in a.reviewers.split(",") if s.strip()}
-        files, paths = [], []
+        files, paths, patches, mods = [], [], {}, []
         if a.files:
             with open(a.files) as f:
-                # A rename out of a Tier 1 path touches that path too.
-                files = [n for x in json.load(f) for n in (x["filename"], x.get("previous_filename")) if n]
+                changed = json.load(f)
+            # A rename out of a Tier 1 path touches that path too.
+            files = [n for x in changed for n in (x["filename"], x.get("previous_filename")) if n]
+            # `patch` is absent for a diff the API will not render, which
+            # manifest_modules treats as the Tier 1 floor.
+            patches = {x["filename"]: x["patch"] for x in changed
+                       if is_dep_manifest(x["filename"]) and x.get("patch")}
         if a.codeowners:
             with open(a.codeowners) as f:
                 paths = tier1_patterns(f.read(), signers)
-        res = decide(pr, comments, signers, reviewers, files, paths)
+        if a.tier1_modules:
+            with open(a.tier1_modules) as f:
+                mods = tier1_modules(f.read())
+        res = decide(pr, comments, signers, reviewers, files, paths, patches, mods)
     except (OSError, ValueError, KeyError, TypeError, GateError) as e:
         res = {"state": "error", "description": f"cannot decide: {e}"[:140], "label": False}
     print(json.dumps(res))
