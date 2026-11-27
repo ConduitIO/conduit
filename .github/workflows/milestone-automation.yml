@@ -5,6 +5,11 @@ on:
     - cron: '0 * * * 6'
   workflow_dispatch:
 
+# Least privilege: declared so this workflow does not inherit the repository's
+# default token scope. It only reads the repository (moves milestones with the PROJECT_AUTOMATION token, not with github.token).
+permissions:
+  contents: read
+
 jobs:
   milestones:
     uses: ConduitIO/automation/.github/workflows/roadmap-milestones.yml@main

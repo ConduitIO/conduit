@@ -11,6 +11,11 @@ env:
   GOPRIVATE: github.com/conduitio/*
   GONOSUMDB: github.com/conduitio/*
 
+# Least privilege: declared so this workflow does not inherit the repository's
+# default token scope. It only reads the repository (regenerates and diffs; BUF_TOKEN does the registry read).
+permissions:
+  contents: read
+
 jobs:
   validate-generated-files:
     runs-on: ubuntu-latest
