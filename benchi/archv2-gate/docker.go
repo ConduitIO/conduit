@@ -29,6 +29,9 @@ import (
 const (
 	containerName = "archv2-gate-conduit"
 	volumeName    = "archv2-gate-sink"
+	// sinkMount is where the sink volume is mounted in the container. Every
+	// shape's pipeline.yml writes its sinks under this directory.
+	sinkMount = "/sink"
 	// sinkReadyTimeout bounds how long a run waits for every sink file to
 	// exist and hold at least one record before giving up.
 	sinkReadyTimeout = 90 * time.Second
@@ -48,6 +51,60 @@ func (d docker) cmd(ctx context.Context, args ...string) (string, error) {
 	return stdout.String(), nil
 }
 
+// combined runs a command and returns stdout and stderr together, in the
+// order they were written.
+func combined(ctx context.Context, name string, args ...string) (string, error) {
+	c := exec.CommandContext(ctx, name, args...)
+	var both bytes.Buffer
+	c.Stdout, c.Stderr = &both, &both
+	err := c.Run()
+	return both.String(), err
+}
+
+// containerLogs returns the tail of the container's output. It must read
+// stdout AND stderr: Conduit writes its startup errors to stderr, and reading
+// only stdout showed the ASCII banner and nothing else, which is how a
+// failing gate run on 2026-11-27 reported no cause at all.
+func (d docker) containerLogs(ctx context.Context) string {
+	out, _ := combined(ctx, "docker", "logs", "--tail", "30", containerName)
+	return out
+}
+
+// runArgs builds the `docker run` command line for one run. Extracted so the
+// flags both arms get, and the single flag they differ by, are testable
+// without Docker.
+func runArgs(image string, cfg config, spec runSpec) []string {
+	args := []string{
+		"run", "-d", "--name", containerName,
+		"-v", volumeName + ":" + sinkMount,
+		"-v", cfg.pipelineFile + ":/app/pipelines/pipeline.yml:ro",
+	}
+	if cfg.CPUs != "" {
+		args = append(args, "--cpus", cfg.CPUs)
+	}
+	args = append(args, image, "/app/conduit", "run", "--log.level", "error",
+		// The image sets CONDUIT_API_HTTP_ADDRESS and
+		// CONDUIT_API_GRPC_ADDRESS to 0.0.0.0 so a published port is
+		// reachable. Conduit refuses to start on a non-loopback bind with no
+		// API token (`code: api.token_required`), and the harness never talks
+		// to the API, so these two flags put the addresses back to the
+		// binary's own defaults. Without them every run of every arm exits
+		// during startup.
+		"--api.http.address", "127.0.0.1:8080",
+		"--api.grpc.address", "127.0.0.1:8084",
+		// builtin:file may only write inside --connectors.file.allowed-dirs,
+		// which defaults to /app/files. The sink volume is mounted at /sink,
+		// so without this the destination connector refuses every path with
+		// "the path is outside every allowed directory" and no records reach
+		// a sink. Both arms get it; it widens where the file connector may
+		// write and changes nothing about the engine or the pipeline.
+		"--connectors.file.allowed-dirs", sinkMount)
+	if spec.Engine == engineV2 {
+		args = append(args, "--preview.pipeline-arch-v2")
+	}
+	return args
+}
+
 // preflight checks the image exists and starts from a clean container and
 // sink volume.
 func (d docker) preflight(ctx context.Context) error {
@@ -57,6 +114,31 @@ func (d docker) preflight(ctx context.Context) error {
 	d.cleanup()
 	if _, err := d.cmd(ctx, "volume", "create", volumeName); err != nil {
 		return err
+	}
+	return d.giveSinkVolumeToTheImageUser(ctx)
+}
+
+// giveSinkVolumeToTheImageUser makes the sink volume writable by the user the
+// image runs as. Docker creates a named volume whose mount point does not
+// exist in the image as root-owned and mode 0755, and the Conduit image runs
+// as uid 10001, so the file destination cannot create its sink file at all:
+// "open /sink/sink-1.jsonl: permission denied", on every arm of every round.
+// The chown runs in a throwaway container from the same image, so it needs no
+// other image and no root on the host. Running Conduit itself as root would
+// also work and is not done: the measured process should be the one the image
+// ships.
+func (d docker) giveSinkVolumeToTheImageUser(ctx context.Context) error {
+	user, err := d.cmd(ctx, "image", "inspect", "-f", "{{.Config.User}}", d.image)
+	if err != nil {
+		return err
+	}
+	u := strings.TrimSpace(user)
+	if u == "" || u == "0" || u == "0:0" || u == "root" || u == "root:root" {
+		return nil // already runs as root; the volume is root-owned
+	}
+	if _, err := d.cmd(ctx, "run", "--rm", "-u", "0:0",
+		"-v", volumeName+":"+sinkMount, "--entrypoint", "chown", d.image, u, sinkMount); err != nil {
+		return cerrors.Errorf("could not give %s in the sink volume to %s: %w", sinkMount, u, err)
 	}
 	return nil
 }
@@ -90,19 +172,7 @@ func (d docker) measure(ctx context.Context, cfg config, spec runSpec) (runResul
 	res := runResult{runSpec: spec, Started: time.Now().UTC(), HostLoad: hostLoad(ctx)}
 
 	_, _ = d.cmd(ctx, "rm", "-f", containerName)
-	args := []string{
-		"run", "-d", "--name", containerName,
-		"-v", volumeName + ":/sink",
-		"-v", cfg.pipelineFile + ":/app/pipelines/pipeline.yml:ro",
-	}
-	if cfg.CPUs != "" {
-		args = append(args, "--cpus", cfg.CPUs)
-	}
-	args = append(args, d.image, "/app/conduit", "run", "--log.level", "error")
-	if spec.Engine == engineV2 {
-		args = append(args, "--preview.pipeline-arch-v2")
-	}
-	if _, err := d.cmd(ctx, args...); err != nil {
+	if _, err := d.cmd(ctx, runArgs(d.image, cfg, spec)...); err != nil {
 		return res, err
 	}
 	defer func() {
@@ -169,8 +239,8 @@ func (d docker) waitForSinks(ctx context.Context, sinks []string) error {
 			return nil
 		}
 		if time.Now().After(deadline) {
-			logs, _ := d.cmd(ctx, "logs", "--tail", "30", containerName)
-			return cerrors.Errorf("sinks %v not written within %s; last conduit logs:\n%s", sinks, sinkReadyTimeout, logs)
+			return cerrors.Errorf("sinks %v not written within %s; last conduit logs:\n%s",
+				sinks, sinkReadyTimeout, d.containerLogs(ctx))
 		}
 		if err := sleep(ctx, 500*time.Millisecond); err != nil {
 			return err
@@ -184,8 +254,7 @@ func (d docker) assertRunning(ctx context.Context) error {
 		return err
 	}
 	if strings.TrimSpace(out) != "true" {
-		logs, _ := d.cmd(ctx, "logs", "--tail", "30", containerName)
-		return cerrors.Errorf("conduit container is not running; last logs:\n%s", logs)
+		return cerrors.Errorf("conduit container is not running; last logs:\n%s", d.containerLogs(ctx))
 	}
 	return nil
 }
