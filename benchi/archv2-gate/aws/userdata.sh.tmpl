@@ -65,22 +65,26 @@ status "docker $(docker version --format '{{"{{"}}.Server.Version{{"}}"}}') and 
 
 git clone -q https://github.com/ConduitIO/conduit.git "$W/conduit" || fail "git clone"
 cd "$W/conduit" || fail "cd clone"
-git fetch -q origin "+refs/pull/${FANOUT_PR}/head:refs/remotes/pr/${FANOUT_PR}" \
-  "+refs/pull/${HARNESS_PR}/head:refs/remotes/pr/${HARNESS_PR}" || fail "fetch PR refs"
-for sha in "$MAIN_SHA" "$FANOUT_SHA" "$HARNESS_SHA"; do
+{{if .FanoutPR}}git fetch -q origin "+refs/pull/${FANOUT_PR}/head:refs/remotes/pr/${FANOUT_PR}" || fail "fetch fanout PR ref"
+{{end}}{{if .HarnessPR}}git fetch -q origin "+refs/pull/${HARNESS_PR}/head:refs/remotes/pr/${HARNESS_PR}" || fail "fetch harness PR ref"
+{{end}}for sha in "$MAIN_SHA"{{if .FanoutSHA}} "$FANOUT_SHA"{{end}}{{if .HarnessSHA}} "$HARNESS_SHA"{{end}}; do
   git cat-file -e "${sha}^{commit}" || fail "commit $sha not found"
 done
 git worktree add -q --detach "$W/src-main" "$MAIN_SHA" || fail "worktree main"
-git worktree add -q --detach "$W/src-fanout" "$FANOUT_SHA" || fail "worktree fanout"
-git worktree add -q --detach "$W/src-harness" "$HARNESS_SHA" || fail "worktree harness"
-
+{{if .FanoutSHA}}git worktree add -q --detach "$W/src-fanout" "$FANOUT_SHA" || fail "worktree fanout"
+{{end}}# The harness lives on main, so it builds from the main worktree unless a PR
+# carrying a different copy of it was named.
+HARNESS_SRC=$W/src-main
+{{if .HarnessSHA}}git worktree add -q --detach "$W/src-harness" "$HARNESS_SHA" || fail "worktree harness"
+HARNESS_SRC=$W/src-harness
+{{end}}
 status "building images"
 docker build -q --label "org.opencontainers.image.revision=$MAIN_SHA" \
   -t conduit-bench:main "$W/src-main" || fail "docker build main"
-docker build -q --label "org.opencontainers.image.revision=$FANOUT_SHA" \
+{{if .FanoutSHA}}docker build -q --label "org.opencontainers.image.revision=$FANOUT_SHA" \
   -t conduit-bench:pr${FANOUT_PR} "$W/src-fanout" || fail "docker build pr${FANOUT_PR}"
-
-# Fan-out before/after session. The harness compares two engines on ONE image
+{{end}}
+{{if .FanoutSHA}}# PR-against-main session. The harness compares two engines on ONE image
 # (arms "v1-a", "v2", "v1-b"; v2 adds --preview.pipeline-arch-v2). This image
 # routes its v1 arms to main's binary with arch-v2 forced on, and its v2 arm
 # to the PR's binary, so an "ab" session measures v2-main, v2-PR, v2-main per
@@ -103,10 +107,17 @@ RUN chmod 0755 /app/conduit
 WRAPDF
 docker build -q --label "org.opencontainers.image.revision=main ${MAIN_SHA} (v1 arms, arch-v2 forced) vs pr${FANOUT_PR} ${FANOUT_SHA} (v2 arm)" \
   -t conduit-bench:fanout "$W/fanout-wrap" || fail "docker build fanout wrapper"
-
-cd "$W/src-harness" || fail "cd harness"
+{{end}}
+cd "$HARNESS_SRC" || fail "cd harness source"
 go build -o "$W/archv2-gate" ./benchi/archv2-gate || fail "build harness"
 status "images and harness built"
+
+# The gate asks for CPU frequency scaling pinned where the platform allows it.
+# A virtualized instance has no cpufreq tree, so this writes nothing there;
+# environment.txt below records the governor the session actually ran with.
+for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+  [ -w "$g" ] && echo performance > "$g"
+done 2>/dev/null
 
 {
   echo "## instance"
@@ -115,13 +126,15 @@ status "images and harness built"
     echo "$k: $(curl -fsS -H "X-aws-ec2-metadata-token: $TOK" "http://169.254.169.254/latest/meta-data/$k")"
   done
   echo "## commits"
-  echo "main: $MAIN_SHA"; echo "fanout pr${FANOUT_PR}: $FANOUT_SHA"; echo "harness pr${HARNESS_PR}: $HARNESS_SHA"
+  echo "main: $MAIN_SHA"
+{{if .FanoutSHA}}  echo "fanout pr${FANOUT_PR}: $FANOUT_SHA"
+{{end}}  echo "harness: ${HARNESS_SHA:-$MAIN_SHA} (${HARNESS_PR:+pr}${HARNESS_PR:-on main})"
   echo "## binaries (sha256)"
-  for img in main pr${FANOUT_PR}; do
+  for img in main{{if .FanoutSHA}} pr${FANOUT_PR}{{end}}; do
     echo "$img: $(docker run --rm --entrypoint sha256sum conduit-bench:$img /app/conduit)"
   done
-  docker run --rm --entrypoint sha256sum conduit-bench:fanout /app/conduit-main /app/conduit-pr
-  echo "## images"; docker images --no-trunc
+{{if .FanoutSHA}}  docker run --rm --entrypoint sha256sum conduit-bench:fanout /app/conduit-main /app/conduit-pr
+{{end}}  echo "## images"; docker images --no-trunc
   echo "## uname"; uname -a
   echo "## os"; cat /etc/os-release
   echo "## lscpu"; lscpu
@@ -167,7 +180,7 @@ session 03-2x2-aa-v1 conduit-bench:main 2x2 aa-v1
 session 04-2x2-aa-v2 conduit-bench:main 2x2 aa-v2
 session 05-1x1-ab-main conduit-bench:main 1x1 ab
 session 06-2x2-ab-main conduit-bench:main 2x2 ab
-cat > "$OUT/results/07-2x2-fanout-README.txt" <<NOTE
+{{if .FanoutSHA}}cat > "$OUT/results/07-2x2-fanout-README.txt" <<NOTE
 Session 07 runs the harness's "ab" session on conduit-bench:fanout. In that
 session the arm labels mean:
   v1-a, v1-b = arch-v2 on main ${MAIN_SHA} (A/A control pair)
@@ -176,7 +189,7 @@ No v1 engine runs in this session. The summary's "A/B (v2 vs v1)" section is
 the PR's fan-out change against main, both on arch-v2.
 NOTE
 session 07-2x2-fanout conduit-bench:fanout 2x2 ab
-
+{{end}}
 finish
 SCRIPT
 chmod 0755 /opt/archv2-bench.sh

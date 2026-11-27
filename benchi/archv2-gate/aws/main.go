@@ -18,8 +18,15 @@
 // It is a separate module so the AWS SDK's EC2, IAM and SSM clients stay out
 // of Conduit's go.mod.
 //
+//	go run . launch  -manifest m.json -account <id> -main-sha <sha>
+//
+// The harness and both engines come from -main-sha. -fanout-pr/-fanout-sha add
+// one more session comparing that PR with main, both on arch-v2; -harness-pr/
+// -harness-sha build the harness from a PR instead of from main. Both pairs
+// are optional.
+//
 //	go run . launch  -manifest m.json -account <id> -main-sha <sha> \
-//	                 -fanout-pr 2946 -fanout-sha <sha> -harness-pr 2956 -harness-sha <sha>
+//	                 -fanout-pr 1234 -fanout-sha <sha>
 //	go run . status  -manifest m.json
 //	go run . cleanup -manifest m.json [-delete-bucket]
 //
@@ -71,6 +78,12 @@ import (
 var userDataTmpl string
 
 const (
+	// defaultGoVersion must track the root module's go directive: the harness
+	// is built from a checkout of this repository, so an older toolchain here
+	// either downloads one silently or fails the build.
+	// TestDefaultGoVersionMatchesRootModule pins it.
+	defaultGoVersion = "1.26.11"
+
 	amiParameter   = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
 	ssmCorePolicy  = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 	tagPurpose     = "archv2-gate-early"
@@ -81,6 +94,24 @@ var (
 	shaRe   = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	digitRe = regexp.MustCompile(`^[0-9]+$`)
 )
+
+// prPair checks one optional -<x>-pr/-<x>-sha pair: both empty, or both set
+// and well formed.
+func prPair(prFlag, shaFlag, pr, sha string) error {
+	if (pr == "") != (sha == "") {
+		return fmt.Errorf("-%s and -%s go together: pass both or neither", prFlag, shaFlag)
+	}
+	if pr == "" {
+		return nil
+	}
+	if !digitRe.MatchString(pr) {
+		return fmt.Errorf("-%s must be a PR number, got %q", prFlag, pr)
+	}
+	if !shaRe.MatchString(sha) {
+		return fmt.Errorf("-%s must be a full 40-character lowercase commit SHA, got %q", shaFlag, sha)
+	}
+	return nil
+}
 
 // manifest records every resource launch created. It is rewritten after each
 // creation so a failed launch still leaves a complete list for cleanup.
@@ -186,33 +217,38 @@ func launch(ctx context.Context, args []string) error {
 	manifestPath := fs.String("manifest", "", "path of the manifest JSON to write (required)")
 	region := fs.String("region", "us-west-1", "AWS region")
 	account := fs.String("account", "", "expected AWS account ID; launch refuses to run in any other (required)")
-	instanceType := fs.String("instance-type", "c7i.4xlarge", "instance type")
-	fallbackType := fs.String("fallback-instance-type", "c6i.4xlarge", "instance type used if -instance-type is not offered in the region")
-	volumeGB := fs.Int("volume-gb", 80, "root gp3 volume size")
+	instanceType := fs.String("instance-type", "c7i.metal-24xl", "instance type; a .metal type is one whole physical host, which is what the gate's quiesced-hardware rule asks for. A shared type still runs, and makes the session an early read")
+	fallbackType := fs.String("fallback-instance-type", "", "instance type to use if -instance-type is not offered in the region; empty means fail instead, so a metal run is never quietly downgraded to shared hardware")
+	volumeGB := fs.Int("volume-gb", 200, "root gp3 volume size; a faster host writes more sink bytes inside the same 60s window")
 	volumeMBps := fs.Int("volume-throughput", 1000, "root gp3 throughput, MB/s; the sinks write tens of MB/s each")
 	volumeIOPS := fs.Int("volume-iops", 4000, "root gp3 IOPS (1000 MB/s needs at least 4000)")
 	maxMinutes := fs.Int("max-minutes", 360, "hard runtime cap; the instance halts (and terminates) after this")
 	rounds := fs.Int("rounds", 5, "rounds per harness session")
 	mainSHA := fs.String("main-sha", "", "main commit both v1 and v2 arms are built from (required)")
-	fanoutPR := fs.String("fanout-pr", "", "PR number of the fan-out change (required)")
-	fanoutSHA := fs.String("fanout-sha", "", "head commit of -fanout-pr (required)")
-	harnessPR := fs.String("harness-pr", "", "PR number carrying the harness (required)")
-	harnessSHA := fs.String("harness-sha", "", "commit of the harness to build (required)")
-	goVersion := fs.String("go-version", "1.25.14", "Go toolchain for the harness build (the images build in Docker)")
+	fanoutPR := fs.String("fanout-pr", "", "optional: PR number to measure against main on arch-v2, as an extra session")
+	fanoutSHA := fs.String("fanout-sha", "", "head commit of -fanout-pr")
+	harnessPR := fs.String("harness-pr", "", "optional: PR carrying the harness to build; empty builds the harness from -main-sha")
+	harnessSHA := fs.String("harness-sha", "", "commit of the harness to build, inside -harness-pr")
+	goVersion := fs.String("go-version", defaultGoVersion, "Go toolchain for the harness build (the images build in Docker)")
 	_ = fs.Parse(args)
 
 	if *manifestPath == "" || *account == "" {
 		return errors.New("-manifest and -account are required")
 	}
-	for name, v := range map[string]string{"main-sha": *mainSHA, "fanout-sha": *fanoutSHA, "harness-sha": *harnessSHA} {
-		if !shaRe.MatchString(v) {
-			return fmt.Errorf("-%s must be a full 40-character lowercase commit SHA, got %q", name, v)
-		}
+	if !shaRe.MatchString(*mainSHA) {
+		return fmt.Errorf("-main-sha must be a full 40-character lowercase commit SHA, got %q", *mainSHA)
 	}
-	for name, v := range map[string]string{"fanout-pr": *fanoutPR, "harness-pr": *harnessPR} {
-		if !digitRe.MatchString(v) {
-			return fmt.Errorf("-%s must be a PR number, got %q", name, v)
-		}
+	// The gate sessions need neither PR: the harness landed on main in #2956,
+	// and the fan-out change it was built beside merged as #2946, so naming
+	// that PR now compares main with main. Both pairs stay available for
+	// measuring some later PR, and each is all-or-nothing: a SHA with no PR
+	// number cannot be fetched, and a PR number with no SHA does not say
+	// which commit to build.
+	if err := prPair("fanout-pr", "fanout-sha", *fanoutPR, *fanoutSHA); err != nil {
+		return err
+	}
+	if err := prPair("harness-pr", "harness-sha", *harnessPR, *harnessSHA); err != nil {
+		return err
 	}
 	if _, err := os.Stat(*manifestPath); err == nil {
 		return fmt.Errorf("manifest %s already exists; run cleanup on it or pick another path", *manifestPath)
@@ -298,6 +334,9 @@ func placeInstance(ctx context.Context, c clients, m *manifest, want, fallback s
 	m.InstanceType = it
 	if it != want {
 		m.InstanceTypeNote = fmt.Sprintf("%s is not offered in %s; fell back to %s", want, m.Region, it)
+		if strings.Contains(want, ".metal") && !strings.Contains(it, ".metal") {
+			m.InstanceTypeNote += ": shared hardware, so this session is an early read, not gate evidence"
+		}
 		logf("NOTE: %s", m.InstanceTypeNote)
 	}
 	vpcs, err := c.ec2.DescribeVpcs(ctx, &ec2.DescribeVpcsInput{
@@ -519,6 +558,9 @@ func logf(format string, a ...any) { fmt.Fprintf(os.Stderr, format+"\n", a...) }
 
 func pickInstanceType(ctx context.Context, c *ec2.Client, want, fallback string) (string, map[string]bool, error) {
 	for _, t := range []string{want, fallback} {
+		if t == "" {
+			continue
+		}
 		out, err := c.DescribeInstanceTypeOfferings(ctx, &ec2.DescribeInstanceTypeOfferingsInput{
 			LocationType: ec2types.LocationTypeAvailabilityZone,
 			Filters:      []ec2types.Filter{{Name: aws.String("instance-type"), Values: []string{t}}},
@@ -533,6 +575,9 @@ func pickInstanceType(ctx context.Context, c *ec2.Client, want, fallback string)
 			}
 			return t, azs, nil
 		}
+	}
+	if fallback == "" {
+		return "", nil, fmt.Errorf("%s is not offered in this region and no -fallback-instance-type was given", want)
 	}
 	return "", nil, fmt.Errorf("neither %s nor %s is offered in this region", want, fallback)
 }
