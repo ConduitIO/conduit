@@ -1,0 +1,95 @@
+schemaVersion: 1
+requestID: postgres-to-s3-json-export
+provider: anthropic
+model: claude-sonnet-5
+capturedAt: 2026-10-08T02:39:55.491993Z
+corpusPromptSHA256: d7b656fd956a33065189eeac636a02c3a9d9d4843c76858ffbd7bf064a010765
+systemPromptSHA256: 0901ab74fcb5a210a033e6849d662e6a0806995547c03037a684f3069a70957a
+catalogFingerprint: 186679fe313df6bc14bf8bc7d4e503c83f5f557d652e210635c421b105da7205
+turns:
+    - "n": 1
+      userPromptSHA256: d7b656fd956a33065189eeac636a02c3a9d9d4843c76858ffbd7bf064a010765
+      tokensUsed: 5728
+      completionText: |-
+        ```yaml
+        version: "2.2"
+        pipelines:
+          - id: postgres-to-s3-export
+            status: running
+            connectors:
+              - id: source
+                type: source
+                plugin: "builtin:postgres"
+                settings:
+                  url: "postgresql://TODO:TODO@localhost:5432/TODO"
+                  tables: "customers"
+                  cdcMode: auto
+              - id: destination
+                type: destination
+                plugin: "builtin:s3"
+                settings:
+                  aws.accessKeyId: TODO
+                  aws.secretAccessKey: TODO
+                  aws.region: us-east-1
+                  aws.bucket: TODO
+                  format: json
+                  prefix: customers/
+        ```
+    - "n": 2
+      userPromptSHA256: bea9276107a5de945e15f3880a37f329031e96c8d04353435783c2b2efa1df40
+      tokensUsed: 6049
+      completionText: |-
+        version: "2.2"
+        pipelines:
+          - id: postgres-to-s3-customers
+            status: running
+            connectors:
+              - id: source
+                type: source
+                plugin: "builtin:postgres"
+                settings:
+                  url: "TODO"
+                  tables: "customers"
+              - id: destination
+                type: destination
+                plugin: "builtin:s3"
+                settings:
+                  aws.accessKeyId: "TODO"
+                  aws.secretAccessKey: "TODO"
+                  aws.region: "TODO"
+                  aws.bucket: "TODO"
+                  format: json
+                  sdk.record.format: opencdc/json
+    - "n": 3
+      userPromptSHA256: bea9276107a5de945e15f3880a37f329031e96c8d04353435783c2b2efa1df40
+      tokensUsed: 6918
+      completionText: |-
+        version: "2.2"
+        pipelines:
+          - id: postgres-to-s3-customers
+            status: running
+            connectors:
+              - id: source
+                type: source
+                plugin: "builtin:postgres"
+                settings:
+                  url: "postgresql://TODO:TODO@localhost:5432/mydb"
+                  tables: "customers"
+            processors:
+              - id: json-encode
+                plugin: "builtin:json.encode"
+                settings:
+                  field: .Payload.After
+              - id: destination
+                type: destination
+                plugin: "builtin:s3"
+                settings:
+                  aws.accessKeyId: TODO
+                  aws.secretAccessKey: TODO
+                  aws.region: us-east-1
+                  aws.bucket: my-customer-export-bucket
+                  format: json
+                  sdk.record.format: opencdc/json
+outcome:
+    validatePass: false
+    semanticMatch: false

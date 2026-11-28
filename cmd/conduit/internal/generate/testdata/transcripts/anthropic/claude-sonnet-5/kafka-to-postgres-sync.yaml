@@ -1,0 +1,36 @@
+schemaVersion: 1
+requestID: kafka-to-postgres-sync
+provider: anthropic
+model: claude-sonnet-5
+capturedAt: 2026-10-08T02:39:57.561472Z
+corpusPromptSHA256: 9840f81f76e678b1f08bef8f84aad200687c8cfefaec918134a0799addb23504
+systemPromptSHA256: 0901ab74fcb5a210a033e6849d662e6a0806995547c03037a684f3069a70957a
+catalogFingerprint: 186679fe313df6bc14bf8bc7d4e503c83f5f557d652e210635c421b105da7205
+turns:
+    - "n": 1
+      userPromptSHA256: 9840f81f76e678b1f08bef8f84aad200687c8cfefaec918134a0799addb23504
+      tokensUsed: 5672
+      completionText: |-
+        ```yaml
+        version: "2.2"
+        pipelines:
+          - id: kafka-to-postgres
+            status: running
+            connectors:
+              - id: source
+                type: source
+                plugin: "builtin:kafka"
+                settings:
+                  servers: localhost:9092
+                  topics: events
+                  groupID: conduit-events-group
+              - id: destination
+                type: destination
+                plugin: "builtin:postgres"
+                settings:
+                  url: postgres://user:TODO@localhost:5432/mydb
+                  table: events
+        ```
+outcome:
+    validatePass: true
+    semanticMatch: true
