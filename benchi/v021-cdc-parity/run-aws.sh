@@ -23,11 +23,16 @@
 #
 # Requires: aws CLI + terraform + go (loader cross-compile), AWS creds.
 #
-# Env (forwarded to run.sh on the instance): TABLES (default 1; sweep 1, 2, 4),
+# Env: every tunable run.sh reads is forwarded to it on the instance. The list is
+# DERIVED from run.sh (see forward_env below), so a tunable added there cannot be
+# silently dropped here. The ones you are most likely to set:
+# TABLES (default 1; sweep 1, 2, 4),
 # CONDUIT_BATCH_SIZE (default "default" = no sdk.batch.* = shipped defaults; an
 # integer is a TUNED run), CONDUIT_BATCH_DELAY (default 100ms), PG_DEST_URL_EXTRA
 # (default empty), CONDUIT_ENGINE (classic|v2), CONDUIT_LOG_ARGS (empty = shipped
-# info logging), CONDUIT_AVRO (default = shipped; false = TUNED), LOADER_RATE (default 20000), LOADER_SLOT_TIMEOUT (default
+# info logging), CONDUIT_AVRO (default = shipped; false = TUNED), LOADER_RATE (default 20000), LOADER_WRITERS (default 1 — one connection caps
+# the loader near 39.1k ops/s; raise it until the measured loader-ceiling clears 3x
+# the fastest arm, and measure the ceiling in the same session), LOADER_SLOT_TIMEOUT (default
 # 600s), RUN_LABEL, CONDUIT_REF (pin a commit SHA for a published result),
 # SSH_KEY (default outside the repo), SSH_CIDR (default: this machine's /32).
 set -euo pipefail
@@ -64,8 +69,45 @@ SSH_KEY=${SSH_KEY:-$HOME/.ssh/conduit-bench-$(terraform -chdir=terraform workspa
 SSH_OPTS=(-i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
 
 # 1. Cross-compile the loader (runs inside an alpine container → linux/amd64).
-echo "==> building loader for linux/amd64"
-(cd loader && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o loader-linux-amd64 .)
+if [ -n "${DRY_RUN:-}" ]; then
+  echo "==> skipping loader build (DRY_RUN)"
+else
+  echo "==> building loader for linux/amd64"
+  (cd loader && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o loader-linux-amd64 .)
+fi
+
+# Tunables run.sh reads that are internal to one run and must NOT be forwarded:
+# the benchi binary path, the results directory and the sampler PIDs are all
+# properties of the machine the run happens on, not of the run.
+RUN_SH_INTERNAL=(BENCHI OUT IOSTAT_PID VMSTAT_PID)
+
+# Build the env assignments for the remote run.sh by reading run.sh's own
+# ${VAR:-default} references, so this script cannot forward a stale list.
+#
+# It did once: #3414 added LOADER_WRITERS to run.sh, this script kept forwarding
+# a fixed list without it, and an AWS run would then have measured with one
+# writer — the 39.1k cap — no matter what the caller asked for, which is the
+# exact defect that made the earlier parity numbers inadmissible.
+forward_env() {
+  local v out=()
+  while read -r v; do
+    case " ${RUN_SH_INTERNAL[*]} " in *" $v "*) continue ;; esac
+    [ -n "${!v+x}" ] || continue
+    out+=("$v=$(printf '%q' "${!v}")")
+  done < <(grep -ohE '\$\{[A-Z_]+:-' run.sh | sed -E 's/^\$\{//; s/:-$//' | sort -u)
+  printf '%s' "${out[*]}"
+}
+
+REMOTE_ENV="$(forward_env)"
+
+# DRY_RUN prints what would run on the instance and provisions nothing. It is
+# what scripts/test-run-aws-forwarding.sh asserts against.
+if [ -n "${DRY_RUN:-}" ]; then
+  echo "DRY_RUN rounds=$ROUNDS arms=${REST[*]}"
+  echo "DRY_RUN conduit_ref=$CONDUIT_REF"
+  echo "DRY_RUN remote: $REMOTE_ENV bash run.sh $ROUNDS ${REST[*]}"
+  exit 0
+fi
 
 # 2. Provision. SSH is opened to this machine's /32 only (override with SSH_CIDR).
 if [ -z "${SSH_CIDR:-}" ]; then
@@ -109,9 +151,9 @@ rsync -az -e "ssh ${SSH_OPTS[*]}" \
   ./ "ubuntu@$IP:~/conduit/benchi/v021-cdc-parity/"
 
 # 5. Put the linux loader in place and run.
-echo "==> running benchmark (rounds=$ROUNDS arms=${REST[*]} tables=$TABLES batch=$CONDUIT_BATCH_SIZE)"
+echo "==> running benchmark (rounds=$ROUNDS arms=${REST[*]} tables=$TABLES batch=$CONDUIT_BATCH_SIZE writers=${LOADER_WRITERS:-1})"
 ssh "${SSH_OPTS[@]}" "ubuntu@$IP" \
-  "cd ~/conduit/benchi/v021-cdc-parity && mv -f loader/loader-linux-amd64 loader/loader && chmod +x loader/loader && TABLES=$TABLES CONDUIT_BATCH_SIZE=$CONDUIT_BATCH_SIZE CONDUIT_BATCH_DELAY=$CONDUIT_BATCH_DELAY LOADER_SLOT_TIMEOUT=$LOADER_SLOT_TIMEOUT LOADER_RATE=$LOADER_RATE RUN_LABEL='$RUN_LABEL' CONDUIT_ENGINE='$CONDUIT_ENGINE' CONDUIT_LOG_ARGS='$CONDUIT_LOG_ARGS' CONDUIT_AVRO='$CONDUIT_AVRO' PG_DEST_URL_EXTRA='$PG_DEST_URL_EXTRA' bash run.sh $ROUNDS ${REST[*]}"
+  "cd ~/conduit/benchi/v021-cdc-parity && mv -f loader/loader-linux-amd64 loader/loader && chmod +x loader/loader && $REMOTE_ENV bash run.sh $ROUNDS ${REST[*]}"
 
 # 6. Collect results.
 echo "==> collecting results to ./results-aws/"
