@@ -318,8 +318,8 @@ and two green nightlies on the release branch.
 #### Engine
 
 - [x] arch-v2 grows into the single engine: staged design and ADR (#2971), destination-write
-      batching and read-ahead (#3201, #3210). The gate evidence for the default flip is v0.23;
-      the flip itself and the deletion of the v1 engine are v0.24
+      batching and read-ahead (#3201, #3210). The gate evidence and the flip itself, with the
+      deletion of the v1 engine, are v0.23
 - [x] Groundwork: a simulated-connector test kit, `make bench-engine`, and a per-PR benchmark comment
 - [x] The guarantees page and the life-of-a-record guide (#3194)
 
@@ -467,14 +467,28 @@ will not make v0.23 moves on to v0.24 in the same way.
       harness from v0.21 (#3075) against real Debezium on the same database. The Connect model and
       JsonConverter port it builds on are `debezium.encode` (#3183), not the superseded PR #3076;
       #3384 tracks the two gaps left in it
-- [ ] **arch-v2 gate evidence** (the flip itself moved to v0.24, below): produce the measurement
-      the [graduation gate](docs/architecture-decision-records/20261006-archv2-graduation-gate.md)
-      asks for and that nothing has produced yet. The cross-engine harness landed in #2956. The
+- [ ] **Default engine flip and v1 engine deletion**: arch-v2 has been a `preview` engine since
+      v0.19; this makes it the default and removes the v1 engine. The throughput criterion of the
+      [graduation gate](docs/architecture-decision-records/20261006-archv2-graduation-gate.md) is
+      **met**: on a dedicated `c7i.metal-24xl` with CPU steal at zero, arch-v2's median is +97.4%
+      at 1x1 against an A/A floor of 2.2% and +42.6% at 2x2 against 1.6%, with four A/A control
+      sessions reproducing both arms to within a percent
+      (`benchi/archv2-gate/results/20261127-metal-c7i24xl/`). What the flip still needs is the
+      gate's other criteria, none of which are performance: recovery parity with v1, the chaos
+      bar, Tier 1 sign-off, and the remaining criteria of
+      [20260704](docs/architecture-decision-records/20260704-pipeline-architecture-v2.md). Known
+      blockers to clear: #2990 (SIGTERM hangs on a stalled arch-v2 pipeline) and #3235
+      (`validate` and `doctor` miss arch-v2). **This is also the precondition for every
+      comparison against Kafka Connect**: the shipped engine default is v1 today, which runs at
+      roughly half arch-v2's 1x1 rate, so any "Conduit at shipped defaults" claim measured before
+      the flip measures v1 and would have to be withdrawn
+- [ ] **arch-v2 gate evidence, the rest of it**: the cross-engine harness landed in #2956 and the
+      gate run is done (above). The
       superlinear fan-out cost the ADR's decision 2 blocks on is fixed: `BenchmarkEngineFanOut`
       per-record cost is now sub-proportional to destination count (1.0x / 2.04x / 2.59x at 1, 2
       and 4 destinations, against 1.0x / 5.2x / 8.9x in the ADR), so a 2x2 session measures the
-      engine rather than the clone defect. What remains: a gate run on quiesced hardware with its
-      results committed; a scheduled cross-engine run, so a regression is caught between releases
+      engine rather than the clone defect. What remains: a scheduled cross-engine run, so a
+      regression is caught between releases
       instead of at the next flip attempt; migration-shaped benchmarks beside the 1x1 and 2x2
       shapes, so the Kafka Connect and Debezium parity work is measured on the pipelines people
       actually migrate; and confirm-or-kill for the stop-and-wait diagnosis behind #2978,
@@ -562,19 +576,6 @@ will not make v0.23 moves on to v0.24 in the same way.
 - [ ] **Partition-claims protocol** shipped in the connector protocol
 - [ ] **Protocol v2 removed**, no earlier than this release (announce v0.21 → warn v0.23 → remove
       v0.24)
-- [ ] **Default engine flip and v1 engine deletion**: arch-v2 has been a `preview` engine since
-      v0.19; this flips it to the default and removes the v1 engine. _Moved from v0.23._ It is
-      gated on the v0.23 measurement meeting the
-      [graduation gate](docs/architecture-decision-records/20261006-archv2-graduation-gate.md):
-      median throughput on 1x1 and 2x2 at default config no lower than v1's by more than the A/A
-      noise floor measured in the same session, recovery parity, a green chaos suite, Tier 1
-      human sign-off, and every remaining criterion of
-      [20260704](docs/architecture-decision-records/20260704-pipeline-architecture-v2.md).
-      Committing the flip to the same release as the measurement it depends on would decide the
-      gate before measuring it, which is the thing that ADR exists to prevent; its decision 4
-      already says graduation moves to the next release when the evidence is not ready, and a
-      no-go is a legitimate outcome. Until the gate is met, arch-v2 stays opt-in behind
-      `--preview.pipeline-arch-v2` and remains the only engine that runs record fan-out pipelines
 - [ ] **Replay and backfill as first-class verbs**: `conduit pipeline replay --from <position>`,
       snapshot re-runs, offset inspection and reset in CLI and UI
 - [ ] `conduit connector generate --from-openapi <spec>` — connector scaffolding from API specs
