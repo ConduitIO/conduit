@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/foundation/cerrors"
@@ -37,14 +38,47 @@ func cerrorsIs(err, target error) bool { return cerrors.Is(err, target) }
 
 // Shape builds record i of source srcID. Positions must be unique per source;
 // the presets below use "<srcID>/<i>".
+//
+// A custom Shape must set the metadata a production record carries, which is
+// what the presets do and what ShapeMetadata returns: opencdc.readAt and
+// conduit.source.connector.id. Both engines read opencdc.readAt once per
+// record on the ack path (funnel.Worker.updateTimer on arch-v2,
+// stream.SourceNode.registerMetricStatusHandler on v1), so a shape that omits
+// it does not measure or exercise the path a real pipeline takes.
 type Shape func(srcID string, i int) opencdc.Record
+
+// shapeReadAt is the opencdc.readAt value the preset shapes stamp: a unix
+// timestamp in nanoseconds, the format connector.Source.sanitizeRecord writes
+// in production.
+//
+// It is captured once per process rather than per record on purpose. In
+// production one clock read is amortised over a whole Read batch
+// (sanitizeRecord takes `now` from its caller), so reading the clock per record
+// here would charge the engine a cost it does not pay - the same class of
+// measurement error that omitting the field altogether caused. A benchmark
+// therefore sees a readAt that is seconds to minutes old, which only shifts the
+// latency a metrics timer reports; what the engine does with the field - look
+// it up and parse it, once per record, on the ack path - is identical to
+// production.
+var shapeReadAt = strconv.FormatInt(time.Now().UnixNano(), 10)
+
+// ShapeMetadata returns the metadata a record read from source srcID carries in
+// production: opencdc.readAt and conduit.source.connector.id, the two keys
+// connector.Source.sanitizeRecord guarantees. Custom shapes should start from
+// this rather than building a map by hand.
+func ShapeMetadata(srcID string) opencdc.Metadata {
+	return opencdc.Metadata{
+		opencdc.MetadataReadAt:                   shapeReadAt,
+		opencdc.MetadataConduitSourceConnectorID: srcID,
+	}
+}
 
 // StructuredShape is a small structured record, the default.
 func StructuredShape(srcID string, i int) opencdc.Record {
 	return opencdc.Record{
 		Position:  Position(srcID, i),
 		Operation: opencdc.OperationCreate,
-		Metadata:  opencdc.Metadata{opencdc.MetadataConduitSourceConnectorID: srcID},
+		Metadata:  ShapeMetadata(srcID),
 		Key:       opencdc.RawData(strconv.Itoa(i)),
 		Payload: opencdc.Change{
 			After: opencdc.StructuredData{"id": i, "name": "enginetest-record"},
@@ -59,7 +93,7 @@ func RawShape(size int) Shape {
 		return opencdc.Record{
 			Position:  Position(srcID, i),
 			Operation: opencdc.OperationCreate,
-			Metadata:  opencdc.Metadata{opencdc.MetadataConduitSourceConnectorID: srcID},
+			Metadata:  ShapeMetadata(srcID),
 			Key:       opencdc.RawData(strconv.Itoa(i)),
 			Payload:   opencdc.Change{After: opencdc.RawData(body)},
 		}

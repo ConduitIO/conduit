@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1375,16 +1376,66 @@ func isClosedSourceStream(err error) bool {
 	return cerrors.Is(err, io.EOF)
 }
 
+// updateTimer reports each record's end-to-end latency on the pipeline timer.
+// It runs once per record on the ack path, so what it costs per record matters.
+//
+// It reads opencdc.readAt out of the metadata map directly instead of calling
+// Metadata.GetReadAt. GetReadAt reports a missing or empty key by building an
+// error with fmt.Errorf, and this caller always discards that error in favour
+// of the fallback below, so on records without the key the allocation was pure
+// overhead - 44.6% of all objects allocated in the engine benchmark kit, whose
+// fake records omitted the key. Conduit's own sources always set it
+// (connector.Source.sanitizeRecord), so production never hit the allocation,
+// but the benchmark that gates engine performance spent most of its signal on
+// it. conduit-commons' Metadata.LookupReadAt is the shared form of this read
+// and replaces the lookup and parse here on the next commons bump
+// (ConduitIO/conduit-commons#371).
+//
+// The parse is done once per distinct value rather than once per record.
+// connector.Source stamps a whole Read response with one timestamp, so every
+// record of a batch normally carries the same string and one strconv.ParseInt
+// covers the batch. A string comparison guards the cache, so a batch with
+// connector-set, differing timestamps is still correct - it just parses as
+// often as the values change.
+//
+// This is a metrics path only: it reads record metadata and never touches a
+// position, an ack or a record's contents.
 func (w *Worker) updateTimer(records []opencdc.Record) {
+	var (
+		cachedRaw    string
+		cachedReadAt time.Time
+	)
 	for _, rec := range records {
-		readAt, err := rec.Metadata.GetReadAt()
-		if err != nil {
-			// If the record metadata has changed and does not include ReadAt
-			// fallback to the time the worker received the record.
-			readAt = time.Unix(0, w.lastReadAt.Load())
+		raw := rec.Metadata[opencdc.MetadataReadAt]
+		// Cases are evaluated in order, so the empty case is matched before
+		// the cache and an empty cachedRaw can never match a record.
+		switch raw {
+		case "":
+			// The record metadata does not include ReadAt: fall back to the
+			// time the worker received the record.
+			w.timer.UpdateSince(w.fallbackReadAt())
+		case cachedRaw:
+			w.timer.UpdateSince(cachedReadAt)
+		default:
+			unixNano, err := strconv.ParseInt(raw, 10, 64)
+			if err != nil {
+				// Present but not a unix timestamp in nanoseconds. Same
+				// fallback as a missing key, and deliberately not cached: the
+				// cache holds parsed values only.
+				w.timer.UpdateSince(w.fallbackReadAt())
+				continue
+			}
+			cachedRaw, cachedReadAt = raw, time.Unix(0, unixNano)
+			w.timer.UpdateSince(cachedReadAt)
 		}
-		w.timer.UpdateSince(readAt)
 	}
+}
+
+// fallbackReadAt is the readAt updateTimer uses for a record whose metadata
+// carries no usable opencdc.readAt: the time the worker last read a batch from
+// the source.
+func (w *Worker) fallbackReadAt() time.Time {
+	return time.Unix(0, w.lastReadAt.Load())
 }
 
 // TaskNode represents a task in the pipeline. It contains the task itself and
