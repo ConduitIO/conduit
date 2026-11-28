@@ -10,8 +10,11 @@ It exists because every earlier v1-vs-v2 number was retracted
 ([`benchi/METHODOLOGY.md`](../METHODOLOGY.md), #2748). The method below is that
 document's "what actually works" list, made into a program.
 
-**No v1-vs-v2 result has been produced with this harness yet.** The gate is
-decided at the v0.21 midpoint, on quiesced hardware. A laptop run is useful for
+A gate run exists: 2026-11-27 on a dedicated `c7i.metal-24xl` built from
+`80c8e679`, reporting arch-v2 **+97.4%** on 1x1 against an A/A floor of ±2.2%
+and **+42.6%** on 2x2 against ±1.6%, with CPU steal at zero throughout. See
+[`results/README.md`](results/README.md) for the environment evidence and for
+what those numbers do and do not settle. A laptop run remains useful for
 checking the harness and for seeing how wide the A/A floor is on that machine,
 nothing more.
 
