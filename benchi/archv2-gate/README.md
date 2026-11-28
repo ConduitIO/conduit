@@ -46,7 +46,30 @@ nothing more.
 | --- | --- | --- | --- |
 | `1x1` | 1 x 1 | default (`sdk.batch.size` unset, batches of one) | yes |
 | `2x2` | 2 x 2 | default | yes |
+| `4x4` | 4 x 4 | default | yes |
 | `2x2-batched` | 2 x 2 | `sdk.batch.size=100`, `sdk.batch.delay=10ms` | no, context only |
+| `1x1-srcbatch100` | 1 x 1 | source `sdk.batch.size=100`, `delay=10ms` | no |
+| `1x1-destbatch` | 1 x 1 | destination `sdk.batch.size=100`, `delay=10ms` | no |
+| `2x2-destbatch` | 2 x 2 | destination batching | no |
+| `4x4-destbatch` | 4 x 4 | destination batching | no |
+
+`4x4` is the hardest shape here: every record from four sources reaches all four
+sinks, so it is where arch-v2's fan-out cost shows. It is an engine-vs-engine
+question only — Kafka Connect has no fan-out primitive, so a 4x4 result is never
+comparable against it.
+
+The three `-destbatch` shapes set `sdk.batch.size` on the DESTINATION, which
+arch-v2 on `main` refuses at start with
+`pipeline.archv2_destination_batching_unsupported` (#2987). They are here for
+the engine matrix tooling, which reports such an arm as skipped rather than
+measuring it; that tooling (`matrix/`, and the `-arm`/`-env` flags it needs) is
+not on `main` yet — see #3067. Running a `-destbatch` shape with the plain
+`-session` flag will simply fail at pipeline start.
+
+`1x1-srcbatch100` is "Alternative A" from the staged-engine discussion (#2971):
+change nothing in the engine, only have the SDK hand it batches of 100. It is
+the shape behind the +308.7% figure in
+`docs/design-documents/20261027-default-source-batching.md`.
 
 Sources are `builtin:generator` (structured, `id` int and `name` string, no rate
 limit). In 2x2 every record reaches both sinks; the reported rate is records per

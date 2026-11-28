@@ -81,7 +81,7 @@ func TestUserData(t *testing.T) {
 			if !strings.Contains(s, "docker version --format '{{.Server.Version}}'") {
 				t.Fatal("docker format string was not escaped through the template")
 			}
-			// The six gate sessions run in both shapes.
+			// The nine gate sessions run in both shapes.
 			for _, want := range []string{
 				"session 01-1x1-aa-v1 conduit-bench:main 1x1 aa-v1",
 				"session 02-1x1-aa-v2 conduit-bench:main 1x1 aa-v2",
@@ -89,6 +89,9 @@ func TestUserData(t *testing.T) {
 				"session 04-2x2-aa-v2 conduit-bench:main 2x2 aa-v2",
 				"session 05-1x1-ab-main conduit-bench:main 1x1 ab",
 				"session 06-2x2-ab-main conduit-bench:main 2x2 ab",
+				"session 07-4x4-aa-v1 conduit-bench:main 4x4 aa-v1",
+				"session 08-4x4-aa-v2 conduit-bench:main 4x4 aa-v2",
+				"session 09-4x4-ab-main conduit-bench:main 4x4 ab",
 			} {
 				if !strings.Contains(s, want) {
 					t.Errorf("rendered script is missing %q", want)
@@ -113,7 +116,7 @@ func TestUserDataWithoutPRsTouchesNoPR(t *testing.T) {
 	s := render(t, gateData())
 	for _, unwanted := range []string{
 		"refs/pull", "src-fanout", "conduit-bench:fanout", "conduit-bench:pr",
-		"07-2x2-fanout", "fanout-wrap", "src-harness",
+		"10-2x2-fanout", "fanout-wrap", "src-harness",
 	} {
 		if strings.Contains(s, unwanted) {
 			t.Errorf("a gate run should not mention %q", unwanted)
@@ -139,7 +142,7 @@ func TestUserDataWithPRsKeepsBothExtras(t *testing.T) {
 		`git worktree add -q --detach "$W/src-fanout"`,
 		`git worktree add -q --detach "$W/src-harness"`,
 		"-t conduit-bench:fanout",
-		"session 07-2x2-fanout conduit-bench:fanout 2x2 ab",
+		"session 10-2x2-fanout conduit-bench:fanout 2x2 ab",
 		"HARNESS_SRC=$W/src-harness",
 	} {
 		if !strings.Contains(s, want) {

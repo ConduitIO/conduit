@@ -180,15 +180,22 @@ session 03-2x2-aa-v1 conduit-bench:main 2x2 aa-v1
 session 04-2x2-aa-v2 conduit-bench:main 2x2 aa-v2
 session 05-1x1-ab-main conduit-bench:main 1x1 ab
 session 06-2x2-ab-main conduit-bench:main 2x2 ab
-{{if .FanoutSHA}}cat > "$OUT/results/07-2x2-fanout-README.txt" <<NOTE
-Session 07 runs the harness's "ab" session on conduit-bench:fanout. In that
+# 4x4 is the hardest shape in the gate: every record from four sources reaches
+# all four sinks, so it is where arch-v2's fan-out cost shows. Kafka Connect has
+# no fan-out primitive, so this shape is an engine-vs-engine question only and
+# is never comparable against it.
+session 07-4x4-aa-v1 conduit-bench:main 4x4 aa-v1
+session 08-4x4-aa-v2 conduit-bench:main 4x4 aa-v2
+session 09-4x4-ab-main conduit-bench:main 4x4 ab
+{{if .FanoutSHA}}cat > "$OUT/results/10-2x2-fanout-README.txt" <<NOTE
+Session 10 runs the harness's "ab" session on conduit-bench:fanout. In that
 session the arm labels mean:
   v1-a, v1-b = arch-v2 on main ${MAIN_SHA} (A/A control pair)
   v2         = arch-v2 on pr${FANOUT_PR} ${FANOUT_SHA}
 No v1 engine runs in this session. The summary's "A/B (v2 vs v1)" section is
 the PR's fan-out change against main, both on arch-v2.
 NOTE
-session 07-2x2-fanout conduit-bench:fanout 2x2 ab
+session 10-2x2-fanout conduit-bench:fanout 2x2 ab
 {{end}}
 finish
 SCRIPT

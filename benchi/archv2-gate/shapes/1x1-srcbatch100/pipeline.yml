@@ -1,0 +1,28 @@
+# archv2-gate shape 1x1-srcbatch100: the 1x1 shape with source batching on
+# (sdk.batch.size=100, sdk.batch.delay=10ms). Not part of the gate.
+#
+# This is "Alternative A" from the staged-engine design discussion (#2971):
+# change nothing in the engine, only have the connector SDK hand it batches of
+# 100. Run it as an extra arm beside the default 1x1 arm of the same engine
+# (-arm v2-altA=v2@1x1-srcbatch100) so the two share one interleaved session.
+version: "2.2"
+pipelines:
+  - id: archv2-gate
+    status: running
+    name: archv2-gate
+    connectors:
+      - id: src-1
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+          sdk.batch.size: "100"
+          sdk.batch.delay: "10ms"
+      - id: sink-1
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: /sink/sink-1.jsonl
