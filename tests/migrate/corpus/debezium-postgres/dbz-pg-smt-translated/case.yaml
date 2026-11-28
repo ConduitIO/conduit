@@ -1,0 +1,46 @@
+schemaVersion: 1
+id: dbz-pg-smt-translated
+family: debezium-postgres
+description: >-
+  A Debezium Postgres connector whose SMT chain translates: RegexRouter on the
+  Debezium topic, ExtractNewRecordState (tombstone mode), a Filter that drops
+  tombstones (deletes after the unwrap), and ReplaceField exclude and rename
+  on one table only, through a TopicNameMatches predicate on the rewritten
+  topic. The converters keep NULLs, every SMT sets
+  replace.null.with.default=false, and the processors land on the source
+  with the topic expression on the Kafka destination. The pipeline still
+  stops on the connector's other blockers (topic.prefix, the converters and
+  the Debezium output mode).
+provenance:
+  source: synthetic
+  ref: written for the SMT translators (design 20261110-kafka-connect-smt-pack.md, B4)
+  license: Apache-2.0
+sanitized: {scrubbed: true, check: scrub-v1}
+upstream: {debezium: "3.7.0.Final", connect: "4.2"}
+command: {args: [migrate, kafka-connect, input/connector.json]}
+expect:
+  exitCode: 2
+  notes: [kc.output_shape_differs]
+  entries:
+    - {key: transforms, status: translated, blocking: false}
+    - {key: transforms.route.type, status: translated, blocking: false}
+    - {key: transforms.route.regex, status: translated, blocking: false}
+    - {key: transforms.route.replacement, status: translated, blocking: false}
+    - {key: transforms.unwrap.type, status: translated, blocking: false}
+    - {key: transforms.unwrap.replace.null.with.default, status: translated, blocking: false}
+    - {key: transforms.dropDeletes.type, status: translated, blocking: false}
+    - {key: transforms.dropDeletes.predicate, status: translated, blocking: false}
+    - {key: transforms.trim.type, status: translated, blocking: false}
+    - {key: transforms.trim.exclude, status: translated, blocking: false}
+    - {key: transforms.trim.renames, status: translated, blocking: false}
+    - {key: predicates, status: translated, blocking: false}
+    - {key: predicates.isTombstone.type, status: translated, blocking: false}
+    - {key: predicates.isOrders.pattern, status: translated, blocking: false}
+    - {key: topic.prefix, status: unsupported, blocking: true, code: kc.target_capability_missing}
+covers:
+  - class: io.debezium.connector.postgresql.PostgresConnector
+    keys: [database.hostname, table.include.list, topic.prefix, key.converter, value.converter]
+emits:
+  - {plugin: builtin:postgres, role: source}
+  - {plugin: builtin:kafka, role: destination}
+run: {tier: offline}

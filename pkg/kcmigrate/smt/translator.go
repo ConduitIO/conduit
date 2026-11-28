@@ -68,6 +68,10 @@ type Result struct {
 	// read Chain.Unwrapped to apply the after-unwrap rules. A second unwrap
 	// point in one chain is refused.
 	Unwraps bool
+	// DropsDeletes marks an unwrap point that drops deletes
+	// (ExtractNewRecordState in drop mode): after it, no record of the chain
+	// is a delete, so a later RecordIsTombstone matches nothing.
+	DropsDeletes bool
 }
 
 // Path is a record reference, such as .Payload.After.id, .Key or
@@ -118,6 +122,17 @@ type Processor struct {
 	// a schema extracted from the reshaped data as a new version of the
 	// source's subject (design, "Schema metadata after reshaping").
 	Reshapes Side
+	// NeedsDecoded is the side whose fields the processor's Condition reads.
+	// A source that attaches a schema (builtin:postgres always does) hands
+	// the chain that side as raw encoded bytes, and the engine evaluates a
+	// condition on the record as it is, before the processor decodes it, so
+	// a condition that tests a field sees no structured data and is false.
+	// Before such a processor the chain removes the side's schema subject and
+	// version under the SMT's own predicate only, not the processor's
+	// condition: the first processor to drop them decodes the side for every
+	// processor after it, so the condition then sees the fields. The record
+	// leaves as structured data without a schema, as it does for Reshapes.
+	NeedsDecoded Side
 }
 
 // Refusal says why an SMT, or one of its keys, is not translated. Every
@@ -137,14 +152,6 @@ type Refusal struct {
 type Registry struct {
 	Transforms map[string]Translator
 	Predicates map[string]PredicateTranslator
-}
-
-// Builtin returns the translators this version ships. It has none yet: a
-// translator is added together with the Kafka Connect oracle output that
-// proves it exact (design, "Tests"), so until then every SMT class is
-// refused with its reason from the smt data.
-func Builtin() *Registry {
-	return &Registry{Transforms: map[string]Translator{}, Predicates: map[string]PredicateTranslator{}}
 }
 
 // Side is the part of a record an SMT operates on, from its class suffix.
@@ -195,9 +202,11 @@ type Option struct {
 }
 
 // Value returns the option's value, trimmed as Kafka Connect's
-// ConfigDef.parseType trims string values. Translators compare it or copy
-// it into a processor setting; it never reaches the report.
-func (o Option) Value() string { return strings.TrimSpace(o.value.Reveal()) }
+// ConfigDef.parseType trims string values: with Java's String.trim, which
+// strips the characters up to U+0020 and keeps U+0085 and U+00A0.
+// Translators compare it or copy it into a processor setting; it never
+// reaches the report.
+func (o Option) Value() string { return javaTrim(o.value.Reveal()) }
 
 // SMT is one transform of a chain, as a translator sees it.
 type SMT struct {
@@ -253,11 +262,12 @@ func findOption(opts []Option, name string) (string, bool) {
 // Chain is the state a translator reads: the connector the chain runs on
 // and the topic expression at the translator's position.
 type Chain struct {
-	env       Env
-	data      *Data
-	topic     string
-	known     bool
-	unwrapped bool
+	env            Env
+	data           *Data
+	topic          string
+	known          bool
+	unwrapped      bool
+	deletesDropped bool
 }
 
 // Scope is rules.ScopeSource or rules.ScopeSink: whether the chain runs in
@@ -292,7 +302,7 @@ func SchemaRefusal() *Refusal {
 	return &Refusal{
 		Code:   kcmigrate.CodeSMTUnsupported.Reason(),
 		Reason: "A schema-carrying converter needs a type-preserving schema for the reshaped data; Conduit would register one with widened types, so this is refused until v0.23.",
-		Fix:    "Keep this connector on Kafka Connect until v0.23.",
+		Fix:    fixUntilV023,
 	}
 }
 
@@ -324,6 +334,20 @@ func (c *Chain) Capability(role string) Capability {
 // topic must refuse when it is unknown.
 func (c *Chain) Topic() (string, bool) { return c.topic, c.known }
 
+// TopicRefusal is the refusal of an SMT that reads or writes the topic
+// where Topic reports it unknown.
+func (c *Chain) TopicRefusal() *Refusal {
+	if c.env.TopicRefusal != nil {
+		r := *c.env.TopicRefusal
+		return &r
+	}
+	return &Refusal{
+		Code:   kcmigrate.CodeSMTUnsupported.Reason(),
+		Reason: "migrate does not know the Kafka Connect topic of this connector's records, and this transform reads or writes it.",
+		Fix:    "Keep this connector on Kafka Connect, or remove the transform and route the records with the destination's topic setting.",
+	}
+}
+
 // SetTopic replaces the topic expression for the transforms after this
 // one, as RegexRouter does. It takes effect only if the translator's result
 // is not a refusal.
@@ -332,6 +356,14 @@ func (c *Chain) SetTopic(expr string) { c.topic, c.known = expr, expr != "" }
 // Unwrapped reports whether an earlier SMT of the chain was an unwrap point
 // (Result.Unwraps): the value is the row, not the Debezium envelope.
 func (c *Chain) Unwrapped() bool { return c.unwrapped }
+
+// DeletesDropped reports whether an earlier unwrap point dropped every
+// delete (Result.DropsDeletes).
+func (c *Chain) DeletesDropped() bool { return c.deletesDropped }
+
+// MirrorMetadata reports whether the pipeline's Kafka source runs with
+// emitMirrorMetadata (Env.MirrorMetadata).
+func (c *Chain) MirrorMetadata() bool { return c.env.MirrorMetadata }
 
 // NilGuard returns a condition pipeline that is false only when the side
 // holds a nil interface (a delete's .Payload.After, a tombstone's key or
@@ -382,6 +414,20 @@ func FieldPresent(s Side, name string) string {
 	return `and (eq (printf "%T" ` + s.Field() + `) "opencdc.StructuredData") (hasKey ` + s.Field() + ` ` + strconv.Quote(name) + `)`
 }
 
+// FieldPresentAt is FieldPresent for a record reference other than a
+// side's, such as .Payload.Before: the same condition with the reference
+// replaced. A name that holds the side's reference text cannot be
+// substituted safely and gives a condition that is never true.
+func FieldPresentAt(field, name string) string {
+	switch {
+	case field == "":
+		return ""
+	case strings.Contains(name, AfterImage):
+		return condFalse
+	}
+	return strings.ReplaceAll(FieldPresent(SideValue, name), AfterImage, field)
+}
+
 // FailRecord returns an error processor that fails every record matching
 // cond, with a fixed message (no record value), for a record Kafka Connect
 // fails too: the record goes to the DLQ or halts the pipeline per
@@ -401,6 +447,9 @@ func FailRecord(cond, message string) Processor {
 func RegexRoute(pattern, replacement, t string) string {
 	return "ternary (regexReplaceAll `^(?:" + pattern + ")` (" + t + ") `" + replacement + "`) (" + t + ") (regexMatch `^(?:" + pattern + ")$` (" + t + "))"
 }
+
+// condFalse is the condition pipeline that is never true.
+const condFalse = "false"
 
 // Not negates a condition pipeline.
 func Not(cond string) string { return "not (" + cond + ")" }

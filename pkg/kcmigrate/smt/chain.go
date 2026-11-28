@@ -71,6 +71,19 @@ type Env struct {
 	// DebeziumOutput is true when the pipeline writes Debezium-compatible
 	// output (decision 5: SMTs that reshape the envelope are refused then).
 	DebeziumOutput bool
+	// MirrorMetadata is true when the pipeline's Kafka source runs with
+	// emitMirrorMetadata, which leaves out the kafka.header.* entries of
+	// headers that are not UTF-8 (HasHeaderKey is refused then).
+	MirrorMetadata bool
+	// TopicRefusal says why Topic is empty, for the SMTs that read or write
+	// the topic; nil gives a generic refusal.
+	TopicRefusal *Refusal
+	// Refusal, when set, refuses every SMT of the chain that has a
+	// translator: a property of the connector outside the transforms keys
+	// that every translation depends on does not hold, such as a Debezium
+	// source whose converters write a column's default in place of a NULL.
+	// A class without a translator keeps its own refusal.
+	Refusal *Refusal
 }
 
 // Shape is what a record side is known to hold.
@@ -173,7 +186,8 @@ type link struct {
 	reason    string
 	reads     []Path
 	writes    []Path
-	emitted   []int // indexes into a.out.Processors
+	predReads []Path // what the predicate reads at this link's position
+	emitted   []int  // indexes into a.out.Processors
 }
 
 type predState struct {
@@ -182,13 +196,10 @@ type predState struct {
 	typeKey   int
 	options   []int
 	pred      *Predicate
-	cond      string
-	reads     []Path
-	refusal   *Refusal
+	refusal   *Refusal // the first refusal, from grouping or from a use
 	refusedAt int
 	unknown   []int
 	used      []string // aliases of the transforms that name it, in chain order
-	done      bool
 }
 
 func (a *applier) run() error {
@@ -336,7 +347,7 @@ func (a *applier) groupPredicates(pkeys []int, listRead bool) {
 		if others := nested[al]; len(others) > 0 {
 			why := nestedReason(keyPredicates, al, others)
 			a.predErrs = append(a.predErrs, strings.TrimSuffix(why, "."))
-			p.done, p.refusedAt = true, p.typeKey
+			p.refusedAt = p.typeKey
 			p.refusal = &Refusal{Code: kcmigrate.CodeSMTUnsupported.Reason(), Reason: why, Fix: "Rename the predicates so that no alias is a dotted prefix of another, then re-run."}
 		}
 	}
@@ -516,6 +527,10 @@ func (a *applier) translate(l *link) error {
 		l.refuse(a.data.refusal(base), l.typeKey)
 		return nil
 	}
+	if a.env.Refusal != nil {
+		l.refuse(*a.env.Refusal, l.typeKey)
+		return nil
+	}
 	c := a.chain // a translator's topic change takes effect only if it is not refused
 	res, err := tr(&c, t)
 	if err != nil {
@@ -550,6 +565,7 @@ func (a *applier) translate(l *link) error {
 		return nil
 	}
 	c.unwrapped = c.unwrapped || res.Unwraps
+	c.deletesDropped = c.deletesDropped || res.DropsDeletes
 	if len(res.Processors) == 0 && t.Predicate != "" && !res.UsesPredicate {
 		// The predicate would become the condition of the SMT's processors,
 		// and there are none: a predicated no-op or a topic rewrite cannot
@@ -563,7 +579,7 @@ func (a *applier) translate(l *link) error {
 	}
 	l.procs, l.reason, l.reads, l.writes = res.Processors, res.Reason, res.Reads, res.Writes
 	if res.UsesPredicate {
-		l.reads = append(l.reads, a.preds[t.Predicate].reads...)
+		l.reads = append(l.reads, l.predReads...)
 	}
 	a.chain = c
 	return nil
@@ -689,8 +705,11 @@ func keysOf(ds []rules.Decision, idx []int) string {
 	return strings.Join(ks, ", ")
 }
 
-// usePredicate translates the predicate l names (once per predicate) and
-// returns a refusal for l if it cannot be used.
+// usePredicate translates the predicate l names at l's position in the
+// chain and returns a refusal for l if it cannot be used. A predicate is
+// translated for every transform that names it, because what it reads can
+// differ by position: the topic after a RegexRouter, whether a delete is a
+// tombstone after an unwrap point.
 func (a *applier) usePredicate(l *link) (*Refusal, error) {
 	name := javaTrim(a.ds[l.predKey].KV.Value.Reveal())
 	l.smt.Predicate = name
@@ -709,86 +728,95 @@ func (a *applier) usePredicate(l *link) (*Refusal, error) {
 			Fix:    "Define the predicate in predicates, or remove transforms." + l.alias + ".predicate, then re-run.",
 		}, nil
 	}
-	if !p.done {
-		p.done = true
-		if err := a.translatePredicate(p); err != nil {
+	why := p.refusal // refused already: grouped with a dotted-prefix alias, or at an earlier use
+	var cond string
+	if why == nil {
+		var reads []Path
+		var err error
+		cond, reads, why, err = a.translatePredicate(p)
+		if err != nil {
 			return nil, err
 		}
+		l.predReads = reads
 	}
-	if p.refusal != nil {
+	if why != nil {
 		return &Refusal{
 			Code:   kcmigrate.CodeSMTUnsupported.Reason(),
-			Reason: fmt.Sprintf("Its predicate %q is not translated. %s", name, p.refusal.Reason),
-			Fix:    p.refusal.Fix,
+			Reason: fmt.Sprintf("Its predicate %q is not translated. %s", name, why.Reason),
+			Fix:    why.Fix,
 		}, nil
 	}
-	l.smt.PredicateCondition = p.cond
+	l.smt.PredicateCondition = cond
 	if l.smt.Negate {
-		l.smt.PredicateCondition = Not(p.cond)
+		l.smt.PredicateCondition = Not(cond)
 	}
 	return nil, nil
 }
 
-func (a *applier) translatePredicate(p *predState) error {
+// translatePredicate translates p with the chain state at the transform
+// that names it, and returns its condition and what it reads, or its
+// refusal. The first refusal is kept on p for the predicate's own entries.
+func (a *applier) translatePredicate(p *predState) (string, []Path, *Refusal, error) {
+	refuse := func(r Refusal, at int) (string, []Path, *Refusal, error) {
+		if p.refusal == nil {
+			p.refusal, p.refusedAt = &r, at
+		}
+		return "", nil, &r, nil
+	}
 	if p.typeKey < 0 {
-		p.refusal = &Refusal{
+		return refuse(Refusal{
 			Code: kcmigrate.CodeSMTUnsupported.Reason(), Reason: "predicates." + p.alias + ".type is not set.",
 			Fix: "Set the predicate class, then re-run.",
-		}
-		return nil
+		}, -1)
 	}
 	for _, i := range p.keys {
 		if rules.IsReference(a.ds[i].KV.Value.Reveal()) {
-			r := referenceRefusal()
-			p.refusal, p.refusedAt = &r, i
-			return nil
+			return refuse(referenceRefusal(), i)
 		}
 	}
 	class := javaTrim(a.ds[p.typeKey].KV.Value.Reveal())
 	base, _ := splitClass(class)
-	p.pred = &Predicate{Alias: p.alias, Class: class, Base: base}
 	prefix := prefixPredicates + p.alias + "."
-	for _, i := range p.options {
-		p.pred.options = append(p.pred.options, a.option(i, prefix))
+	if p.pred == nil {
+		p.pred = &Predicate{Alias: p.alias, Class: class, Base: base}
+		for _, i := range p.options {
+			p.pred.options = append(p.pred.options, a.option(i, prefix))
+		}
 	}
 	tr, ok := a.reg.Predicates[base]
 	if !ok {
-		r := a.data.refusal(base)
-		p.refusal, p.refusedAt = &r, p.typeKey
-		return nil
+		return refuse(a.data.refusal(base), p.typeKey)
 	}
 	c := a.chain
 	res, err := tr(&c, p.pred)
 	switch {
 	case err != nil:
-		return cerrors.Errorf("predicate %s (%s): %w", p.alias, class, err)
+		return "", nil, nil, cerrors.Errorf("predicate %s (%s): %w", p.alias, class, err)
 	case res.Refusal != nil:
 		if err := res.Refusal.validate(); err != nil {
-			return cerrors.Errorf("predicate %s: %w", p.alias, err)
+			return "", nil, nil, cerrors.Errorf("predicate %s: %w", p.alias, err)
 		}
-		r := *res.Refusal
-		p.refusal, p.refusedAt = &r, p.typeKey
-		if r.Option != "" {
-			if at := a.optionKey(p.options, prefix, r.Option); at >= 0 {
-				p.refusedAt = at
+		at := p.typeKey
+		if res.Refusal.Option != "" {
+			if i := a.optionKey(p.options, prefix, res.Refusal.Option); i >= 0 {
+				at = i
 			}
 		}
+		return refuse(*res.Refusal, at)
 	case res.Condition == "":
-		return cerrors.Errorf("predicate %s: the %s translator returned no condition and no refusal", p.alias, base)
-	default:
-		p.unknown = unclaimed(a.ds, p.options, prefix, res.Claimed)
-		if len(p.unknown) > 0 {
-			p.refusal = &Refusal{
-				Code:   kcmigrate.CodeSMTUnsupported.Reason(),
-				Reason: "it has settings the " + base + " translator does not know: " + keysOf(a.ds, p.unknown) + ".",
-				Fix:    "Remove the unknown settings if Kafka Connect ignores them, or keep this connector on Kafka Connect.",
-			}
-			p.refusedAt = p.unknown[0]
-			return nil
-		}
-		p.cond, p.reads = res.Condition, res.Reads
+		return "", nil, nil, cerrors.Errorf("predicate %s: the %s translator returned no condition and no refusal", p.alias, base)
 	}
-	return nil
+	if unknown := unclaimed(a.ds, p.options, prefix, res.Claimed); len(unknown) > 0 {
+		if p.refusal == nil {
+			p.unknown = unknown
+		}
+		return refuse(Refusal{
+			Code:   kcmigrate.CodeSMTUnsupported.Reason(),
+			Reason: "it has settings the " + base + " translator does not know: " + keysOf(a.ds, unknown) + ".",
+			Fix:    "Remove the unknown settings if Kafka Connect ignores them, or keep this connector on Kafka Connect.",
+		}, unknown[0])
+	}
+	return res.Condition, res.Reads, nil, nil
 }
 
 func (a *applier) refusedAliases() []string {
@@ -820,10 +848,7 @@ func (a *applier) emit() {
 	for _, l := range a.links {
 		var pred string
 		if l.smt.Predicate != "" {
-			pred = a.preds[l.smt.Predicate].cond
-			if l.smt.Negate {
-				pred = Not(pred)
-			}
+			pred = l.smt.PredicateCondition // negated already when negate=true
 		}
 		for j, p := range l.procs {
 			id := processorIDPrefix + idUnsafe.ReplaceAllString(l.alias, "_")
@@ -831,14 +856,23 @@ func (a *applier) emit() {
 				id += fmt.Sprintf("-%d", j+1)
 			}
 			cond := Template(And(pred, p.Condition))
-			if p.Reshapes != SideNone && !excluded[p.Reshapes][cond] && !excluded[p.Reshapes][""] {
-				if excluded[p.Reshapes] == nil {
-					excluded[p.Reshapes] = map[string]bool{}
+			// The schema keys go under the condition the processor runs
+			// under, or, for a processor whose condition reads fields of the
+			// side, under the predicate alone (see Processor.NeedsDecoded).
+			side, exCond := p.Reshapes, cond
+			if p.NeedsDecoded != SideNone {
+				side, exCond = p.NeedsDecoded, Template(pred)
+			}
+			// An earlier removal under the predicate alone also covers every
+			// condition that implies it.
+			if side != SideNone && !excluded[side][exCond] && !excluded[side][""] && !excluded[side][Template(pred)] {
+				if excluded[side] == nil {
+					excluded[side] = map[string]bool{}
 				}
-				excluded[p.Reshapes][cond] = true
+				excluded[side][exCond] = true
 				a.append(Emitted{
-					ID: uniq(processorIDPrefix + "schema-" + string(p.Reshapes)), Plugin: "field.exclude",
-					Condition: cond, Settings: map[string]string{"fields": schemaFields(p.Reshapes)},
+					ID: uniq(processorIDPrefix + "schema-" + string(side)), Plugin: "field.exclude",
+					Condition: exCond, Settings: map[string]string{"fields": schemaFields(side)},
 				})
 			}
 			l.emitted = append(l.emitted, a.append(Emitted{ID: uniq(id), Plugin: p.Plugin, Condition: cond, Settings: p.Settings}))

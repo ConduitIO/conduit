@@ -1,0 +1,504 @@
+{
+  "reportVersion": 1,
+  "generator": {
+    "conduit": "<VERSION>",
+    "rules": [
+      {
+        "class": "(shared)",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "kafka",
+          "version": "4.2"
+        }
+      },
+      {
+        "class": "io.debezium.connector.postgresql.PostgresConnector",
+        "rulesVersion": 1,
+        "upstream": {
+          "name": "debezium",
+          "version": "3.7.0.Final"
+        }
+      }
+    ]
+  },
+  "summary": {
+    "connectors": 1,
+    "keys": 33,
+    "translated": 26,
+    "approximated": 0,
+    "unsupported": 7,
+    "blocking": 5
+  },
+  "connectors": [
+    {
+      "name": "orders-cdc",
+      "class": "io.debezium.connector.postgresql.PostgresConnector",
+      "role": "source",
+      "pipeline": "pipelines/orders-cdc.yaml",
+      "pipelineStatus": "stopped",
+      "target": {
+        "source": "builtin:postgres",
+        "destination": "builtin:kafka"
+      },
+      "entries": [
+        {
+          "key": "connector.class",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/connector.class"
+          },
+          "reason": "Selects the rule file and the Conduit plugins.",
+          "blocking": false
+        },
+        {
+          "key": "tasks.max",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/tasks.max"
+          },
+          "reason": "One task, one reader.",
+          "blocking": false
+        },
+        {
+          "key": "plugin.name",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/plugin.name"
+          },
+          "reason": "Conduit decodes the pgoutput plugin natively.",
+          "blocking": false
+        },
+        {
+          "key": "database.hostname",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/database.hostname"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/url"
+          },
+          "reason": "Becomes part of the source connection string.",
+          "blocking": false
+        },
+        {
+          "key": "database.port",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/database.port"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/url"
+          },
+          "reason": "Becomes part of the source connection string.",
+          "blocking": false
+        },
+        {
+          "key": "database.user",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/database.user"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/url"
+          },
+          "reason": "Becomes part of the source connection string.",
+          "blocking": false
+        },
+        {
+          "key": "database.password",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/database.password"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/url",
+            "env": "KC_ORDERS_CDC_DATABASE_PASSWORD"
+          },
+          "reason": "Becomes part of the source connection string, as a variable.",
+          "blocking": false,
+          "secret": true
+        },
+        {
+          "key": "database.dbname",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/database.dbname"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/url"
+          },
+          "reason": "Becomes part of the source connection string.",
+          "blocking": false
+        },
+        {
+          "key": "topic.prefix",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/topic.prefix"
+          },
+          "code": "kc.target_capability_missing",
+          "reason": "topic.prefix becomes debezium.topic.prefix, which requires the Debezium-compatible output mode (debezium.enabled on builtin:postgres); that setting is not in the released connector.",
+          "fix": "Keep this connector on Kafka Connect until #3032 ships the Debezium output mode, or accept the difference with --accept-gaps.",
+          "blocking": true
+        },
+        {
+          "key": "table.include.list",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/table.include.list"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/settings/tables"
+          },
+          "reason": "Every entry is in schema public: the source reads the tables by their bare names, which become opencdc.collection, and url sets search_path=public so that no same-name table of another schema is read in their place. Debezium matches case-insensitively and the source reads the lowercase table only, so a table whose name differs only in case (created with a quoted name) is not read. A connection pooler must pass search_path to the server: one that ignores it (PgBouncer ignore_startup_parameters) makes the server's search_path apply.",
+          "blocking": false
+        },
+        {
+          "key": "key.converter",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/key.converter"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "This converter is not translated by this version of migrate; the wire format of keys would differ.",
+          "fix": "Keep this connector on Kafka Connect until migrate translates the converter.",
+          "blocking": true
+        },
+        {
+          "key": "key.converter.schemas.enable",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/key.converter.schemas.enable"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A converter setting; the converter itself is reported on key.converter.",
+          "fix": "None beyond the key.converter entry.",
+          "blocking": false
+        },
+        {
+          "key": "key.converter.replace.null.with.default",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/key.converter.replace.null.with.default"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A converter setting; the converter itself is reported on key.converter.",
+          "fix": "None beyond the key.converter entry.",
+          "blocking": false
+        },
+        {
+          "key": "value.converter",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/value.converter"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "This converter is not translated by this version of migrate; the wire format of values would differ.",
+          "fix": "Keep this connector on Kafka Connect until migrate translates the converter.",
+          "blocking": true
+        },
+        {
+          "key": "value.converter.schemas.enable",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/value.converter.schemas.enable"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A converter setting; the converter itself is reported on value.converter.",
+          "fix": "None beyond the value.converter entry.",
+          "blocking": false
+        },
+        {
+          "key": "value.converter.replace.null.with.default",
+          "status": "unsupported",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/value.converter.replace.null.with.default"
+          },
+          "code": "kc.key_unsupported",
+          "reason": "A converter setting; the converter itself is reported on value.converter.",
+          "fix": "None beyond the value.converter entry.",
+          "blocking": false
+        },
+        {
+          "key": "transforms",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/processors/0"
+          },
+          "reason": "The chain route, unwrap, dropDeletes, trim is translated to 9 processor(s) on the source connector, in transforms order.",
+          "blocking": false
+        },
+        {
+          "key": "transforms.route.type",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.route.type"
+          },
+          "reason": "Rewrites the topic the destination writes to, as Kafka Connect's matches() then replaceFirst() does.",
+          "blocking": false
+        },
+        {
+          "key": "transforms.route.regex",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.route.regex"
+          },
+          "reason": "Rewrites the topic the destination writes to, as Kafka Connect's matches() then replaceFirst() does.",
+          "blocking": false
+        },
+        {
+          "key": "transforms.route.replacement",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.route.replacement"
+          },
+          "reason": "Rewrites the topic the destination writes to, as Kafka Connect's matches() then replaceFirst() does.",
+          "blocking": false
+        },
+        {
+          "key": "transforms.unwrap.type",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.unwrap.type"
+          },
+          "reason": "No processor: the Conduit Postgres source already emits the row, and a delete's after-image is nil, as Kafka Connect's value is null in tombstone mode.",
+          "blocking": false
+        },
+        {
+          "key": "transforms.unwrap.replace.null.with.default",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.unwrap.replace.null.with.default"
+          },
+          "reason": "No processor: the Conduit Postgres source already emits the row, and a delete's after-image is nil, as Kafka Connect's value is null in tombstone mode.",
+          "blocking": false
+        },
+        {
+          "key": "transforms.dropDeletes.type",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.dropDeletes.type"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/processors/0"
+          },
+          "reason": "Translated to the filter processor smt-dropDeletes.",
+          "blocking": false
+        },
+        {
+          "key": "transforms.dropDeletes.predicate",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.dropDeletes.predicate"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/processors/0"
+          },
+          "reason": "Becomes the condition of the transform's processors.",
+          "blocking": false
+        },
+        {
+          "key": "transforms.trim.type",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.trim.type"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/processors/2"
+          },
+          "reason": "Translated to 5 processors, the first smt-trim-1 (field.exclude).",
+          "blocking": false
+        },
+        {
+          "key": "transforms.trim.exclude",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.trim.exclude"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/processors/2"
+          },
+          "reason": "Translated to 5 processors, the first smt-trim-1 (field.exclude).",
+          "blocking": false
+        },
+        {
+          "key": "transforms.trim.renames",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.trim.renames"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/processors/6"
+          },
+          "reason": "Translated to 5 processors, the first smt-trim-1 (field.exclude).",
+          "blocking": false
+        },
+        {
+          "key": "transforms.trim.replace.null.with.default",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.trim.replace.null.with.default"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/processors/2"
+          },
+          "reason": "Translated to 5 processors, the first smt-trim-1 (field.exclude).",
+          "blocking": false
+        },
+        {
+          "key": "transforms.trim.predicate",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/transforms.trim.predicate"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/processors/2"
+          },
+          "reason": "Becomes the condition of the transform's processors.",
+          "blocking": false
+        },
+        {
+          "key": "predicates",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/predicates"
+          },
+          "reason": "Each predicate becomes the condition of the processors of the transforms that name it.",
+          "blocking": false
+        },
+        {
+          "key": "predicates.isTombstone.type",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/predicates.isTombstone.type"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/processors/0"
+          },
+          "reason": "Becomes part of the condition of the processors of dropDeletes.",
+          "blocking": false
+        },
+        {
+          "key": "predicates.isOrders.type",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/predicates.isOrders.type"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/processors/2"
+          },
+          "reason": "Becomes part of the condition of the processors of trim.",
+          "blocking": false
+        },
+        {
+          "key": "predicates.isOrders.pattern",
+          "status": "translated",
+          "origin": {
+            "file": "connector.json",
+            "pointer": "/config/predicates.isOrders.pattern"
+          },
+          "target": {
+            "configPath": "/pipelines/0/connectors/0/processors/2"
+          },
+          "reason": "Becomes part of the condition of the processors of trim.",
+          "blocking": false
+        }
+      ],
+      "notes": [
+        {
+          "code": "kc.output_shape_differs",
+          "reason": "Debezium-compatible output mode is not available. The released builtin:postgres source has no debezium.enabled setting and the debezium.encode processor has not landed, so the pipeline emits OpenCDC-shaped records, not the Debezium envelope (before/after structs, source, op, ts_ms) or its topic naming. Consumers of the Debezium envelope break.",
+          "fix": "Keep this connector on Kafka Connect until the Debezium output mode ships (#3032), or accept the difference with --accept-gaps.",
+          "blocking": true,
+          "rule": "debezium-postgres/notes/kc.output_shape_differs"
+        },
+        {
+          "code": "kc.setting_required",
+          "reason": "The builtin:kafka destination requires servers, and no key of the Kafka Connect config sets it; the pipeline references ${KC_ORDERS_CDC_DESTINATION_SERVERS} instead.",
+          "fix": "Set KC_ORDERS_CDC_DESTINATION_SERVERS in the environment (see secrets.env.template), or pass the worker file with --worker if it holds bootstrap.servers.",
+          "blocking": true,
+          "rule": "required/destination/servers"
+        },
+        {
+          "code": "kc.secret_plaintext",
+          "reason": "The input holds at least one secret as a literal value. Where migrate used the setting it wrote a variable reference instead (a dropped setting has no variable), but the input file itself contains the secret.",
+          "fix": "Fill the variables in secrets.env.template from your secret store, and replace the literal in the Kafka Connect config with a config-provider reference.",
+          "blocking": false,
+          "rule": "secrets"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "Kafka Connect does not retry a failed operation by default (errors.retry.timeout=0). Conduit restarts a failed pipeline through pipeline recovery, so a transient failure that stopped the connector may not stop the pipeline.",
+          "blocking": false,
+          "rule": "shared/defaults/errors.retry.timeout"
+        },
+        {
+          "code": "kc.default_differs",
+          "reason": "Kafka Connect's default header converter types header values; Conduit carries headers as metadata strings.",
+          "blocking": false,
+          "rule": "shared/defaults/header.converter"
+        }
+      ],
+      "transforms": [
+        {
+          "alias": "route",
+          "class": "org.apache.kafka.connect.transforms.RegexRouter",
+          "status": "translated"
+        },
+        {
+          "alias": "unwrap",
+          "class": "io.debezium.transforms.ExtractNewRecordState",
+          "status": "translated"
+        },
+        {
+          "alias": "dropDeletes",
+          "class": "org.apache.kafka.connect.transforms.Filter",
+          "status": "translated",
+          "processor": "filter"
+        },
+        {
+          "alias": "trim",
+          "class": "org.apache.kafka.connect.transforms.ReplaceField$Value",
+          "status": "translated",
+          "processor": "field.exclude"
+        }
+      ]
+    }
+  ],
+  "acceptedGaps": []
+}

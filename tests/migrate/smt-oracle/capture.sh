@@ -308,6 +308,11 @@ fi
 conduit_mod() { go -C "$here/../../.." list -m -f '{{.Version}}' "$1"; }
 postgres_connector=$(conduit_mod github.com/conduitio/conduit-connector-postgres)
 file_connector=$(conduit_mod github.com/conduitio/conduit-connector-file)
+if [[ -n ${SKIP_SOURCE:-} ]]; then
+  # The Conduit fixtures were not re-captured: keep the versions they came from.
+  postgres_connector=$(sed -n 's/.*"postgresConnector": "\([^"]*\)".*/\1/p' "$here/goldens/provenance.json")
+  file_connector=$(sed -n 's/.*"fileConnector": "\([^"]*\)".*/\1/p' "$here/goldens/provenance.json")
+fi
 
 # What the captured files came from. Changing a pin changes this file, so a bump shows up in review.
 cat >"$work/out/provenance.json" <<JSON

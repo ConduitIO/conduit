@@ -20,7 +20,10 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"text/template"
 
+	"github.com/Masterminds/sprig/v3"
+	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/conduitio/conduit/pkg/kcmigrate"
 	"github.com/conduitio/conduit/pkg/kcmigrate/rules"
 	"github.com/conduitio/conduit/pkg/kcmigrate/schema"
@@ -209,6 +212,142 @@ func TestSMT_ConverterDecidesShapeAndSchema(t *testing.T) {
 			}
 			is.Equal(en.Status, kcmigrate.StatusUnsupported)
 			is.True(strings.Contains(en.Reason, tt.want)) // reason
+		})
+	}
+}
+
+// TestSMT_MirrorSourceRawSides: MirrorMaker's SMTs see the replicated
+// bytes, so with ByteArrayConverter the sides are raw and carry no schema
+// and a reshaping SMT that needs a known shape translates; a
+// schema-carrying converter still refuses it (decision 8).
+func TestSMT_MirrorSourceRawSides(t *testing.T) {
+	e, err := rules.Builtin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		name, extra, want string
+	}{
+		{"byte array", "", ""},
+		{"avro value", "value.converter=io.confluent.connect.avro.AvroConverter\n", "schema-carrying converter"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+			cfg := mmBase + "topics=orders\ntransforms=w\ntransforms.w.type=" + smttest.Wrap + "$Value\n" + tt.extra
+			res, err := Run(context.Background(), e, withValidator(Request{
+				Inputs: []kcmigrate.Input{in("mm.properties", cfg)}, ConduitVersion: "v", Translators: smttest.Registry(),
+			}))
+			is.NoErr(err)
+			en := entryFor(res.Report.Connectors[0], "transforms.w.type")
+			if tt.want == "" {
+				is.Equal(en.Status, kcmigrate.StatusTranslated)
+				is.True(strings.Contains(file(res, "pipelines/mm.yaml"), "id: smt-w"))
+				return
+			}
+			is.Equal(en.Status, kcmigrate.StatusUnsupported)
+			is.True(strings.Contains(en.Reason, tt.want)) // reason
+		})
+	}
+}
+
+// dbzBase is a Debezium Postgres connector whose topic and converters let
+// its chain translate.
+const dbzBase = "name=d\nconnector.class=io.debezium.connector.postgresql.PostgresConnector\n" +
+	"database.hostname=pg\ndatabase.dbname=shop\nplugin.name=pgoutput\ntopic.prefix=shop\ntable.include.list=inventory.orders\n" +
+	"key.converter=org.apache.kafka.connect.json.JsonConverter\nkey.converter.schemas.enable=false\nkey.converter.replace.null.with.default=false\n" +
+	"value.converter=org.apache.kafka.connect.json.JsonConverter\nvalue.converter.schemas.enable=false\nvalue.converter.replace.null.with.default=false\n"
+
+const dbzRoute = "transforms=r\ntransforms.r.type=org.apache.kafka.connect.transforms.RegexRouter\ntransforms.r.regex=(.*)\ntransforms.r.replacement=t-$1\n"
+
+func dbzRun(t *testing.T, cfg, worker string) Result {
+	t.Helper()
+	e, err := rules.Builtin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := Request{Inputs: []kcmigrate.Input{in("d.properties", cfg)}, ConduitVersion: "v"}
+	if worker != "" {
+		w := in("worker.properties", worker)
+		req.Worker = &w
+	}
+	res, err := Run(context.Background(), e, withValidator(req))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res
+}
+
+// TestSMT_DebeziumTopic: the topic Debezium names a record's topic with is
+// <topic.prefix>.<schema>.<table>; the expression gives it for a bare
+// collection (a configured table) and for a schema-qualified one (a table a
+// reused publication carries), and is unknown, so a router refuses, when
+// the configuration does not pin the naming.
+func TestSMT_DebeziumTopic(t *testing.T) {
+	is := is.New(t)
+	res := dbzRun(t, dbzBase+dbzRoute, "")
+	rc := res.Report.Connectors[len(res.Report.Connectors)-1]
+	is.Equal(entryFor(rc, "transforms.r.type").Status, kcmigrate.StatusTranslated)
+	var topic string
+	for _, line := range strings.Split(file(res, "pipelines/d.yaml"), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "topic: ") {
+			topic = strings.Trim(strings.TrimPrefix(strings.TrimSpace(line), "topic: "), "'")
+		}
+	}
+	tp, err := template.New("t").Funcs(sprig.FuncMap()).Parse(topic)
+	is.NoErr(err)
+	for coll, want := range map[string]string{"orders": "t-shop.inventory.orders", "other.lines": "t-shop.other.lines"} {
+		var b strings.Builder
+		is.NoErr(tp.Execute(&b, opencdc.Record{Metadata: opencdc.Metadata{"opencdc.collection": coll}}))
+		is.Equal(b.String(), want)
+	}
+
+	for name, tt := range map[string]struct{ cfg, want string }{
+		"legacy name":     {strings.Replace(dbzBase, "topic.prefix=shop", "database.server.name=shop", 1), "database.server.name"},
+		"prefix chars":    {strings.Replace(dbzBase, "topic.prefix=shop", "topic.prefix=sh op!", 1), "characters other than"},
+		"delimiter":       {dbzBase + "topic.delimiter=_\n", "topic.delimiter"},
+		"naming strategy": {dbzBase + "topic.naming.strategy=com.example.Naming\n", "topic.naming.strategy"},
+		"two schemas":     {strings.Replace(dbzBase, "inventory.orders", "inventory.orders,billing.lines", 1), "one schema"},
+	} {
+		res := dbzRun(t, tt.cfg+dbzRoute, "")
+		e := entryFor(res.Report.Connectors[len(res.Report.Connectors)-1], "transforms.r.type")
+		if e.Status != kcmigrate.StatusUnsupported || !strings.Contains(e.Reason, tt.want) {
+			t.Errorf("%s: %s %q", name, e.Status, e.Reason)
+		}
+	}
+}
+
+// TestSMT_DebeziumConverters: a Debezium chain translates only when both
+// converters keep NULLs, set in the layer that sets the converter class
+// (design decision 22).
+func TestSMT_DebeziumConverters(t *testing.T) {
+	const keep = "replace.null.with.default=false\n"
+	noConv := strings.Split(dbzBase, "key.converter=")[0]
+	for _, tt := range []struct {
+		name, cfg, worker string
+		ok                bool
+	}{
+		{"both kept", dbzBase, "", true},
+		{"value at default", strings.Replace(dbzBase, "value.converter."+keep, "", 1), "", false},
+		{"key true", strings.Replace(dbzBase, "key.converter."+keep, "key.converter.replace.null.with.default=true\n", 1), "", false},
+		{"from the worker", noConv, strings.Join(strings.Split(dbzBase, "\n")[7:], "\n"), true},
+		{
+			"worker setting does not reach a connector converter",
+			noConv + "key.converter=org.apache.kafka.connect.json.JsonConverter\nvalue.converter=org.apache.kafka.connect.json.JsonConverter\n",
+			"key.converter." + keep + "value.converter." + keep, false,
+		},
+		{"another converter", strings.Replace(dbzBase, "value.converter=org.apache.kafka.connect.json.JsonConverter", "value.converter=io.confluent.connect.avro.AvroConverter", 1), "", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			is := is.New(t)
+			res := dbzRun(t, tt.cfg+dbzRoute, tt.worker)
+			e := entryFor(res.Report.Connectors[len(res.Report.Connectors)-1], "transforms.r.type")
+			if tt.ok {
+				is.Equal(e.Status, kcmigrate.StatusTranslated)
+				return
+			}
+			is.Equal(e.Code, kcmigrate.CodeSettingRequired.Reason())
+			is.True(e.Blocking)
+			is.True(strings.Contains(e.Fix, "value.converter.replace.null.with.default=false")) // fix
 		})
 	}
 }

@@ -1,0 +1,62 @@
+version: "2.2"
+pipelines:
+  - id: orders-cdc
+    status: stopped
+    description: Migrated from Kafka Connect connector "orders-cdc" (io.debezium.connector.postgresql.PostgresConnector) by conduit <VERSION>; report sha256:<REPORT_SHA256>
+    connectors:
+      - id: source
+        type: source
+        plugin: builtin:postgres
+        settings:
+          tables: orders,order_lines
+          url: host=postgres.internal.example port=5432 user=postgres password=${KC_ORDERS_CDC_DATABASE_PASSWORD} dbname=orders search_path=public
+        processors:
+          - id: smt-dropDeletes
+            plugin: filter
+            condition: '{{ eq (printf "%v" .Operation) "delete" }}'
+          - id: smt-schema-value
+            plugin: field.exclude
+            condition: '{{ and (regexMatch `^(?:cdc\.orders)$` (ternary (regexReplaceAll `^(?:shop\.public\.(.*))` (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection")))) `cdc.${1}`) (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection")))) (regexMatch `^(?:shop\.public\.(.*))$` (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection"))))))) (ne (printf "%T" .Payload.After) "<nil>") }}'
+            settings:
+              fields: .Metadata["opencdc.payload.schema.subject"],.Metadata["opencdc.payload.schema.version"]
+          - id: smt-trim-1
+            plugin: field.exclude
+            condition: '{{ and (regexMatch `^(?:cdc\.orders)$` (ternary (regexReplaceAll `^(?:shop\.public\.(.*))` (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection")))) `cdc.${1}`) (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection")))) (regexMatch `^(?:shop\.public\.(.*))$` (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection"))))))) (ne (printf "%T" .Payload.After) "<nil>") }}'
+            settings:
+              fields: .Payload.After.internal_notes
+          - id: smt-schema-value-2
+            plugin: field.exclude
+            condition: '{{ and (regexMatch `^(?:cdc\.orders)$` (ternary (regexReplaceAll `^(?:shop\.public\.(.*))` (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection")))) `cdc.${1}`) (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection")))) (regexMatch `^(?:shop\.public\.(.*))$` (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection"))))))) (ne (printf "%T" .Payload.Before) "<nil>") }}'
+            settings:
+              fields: .Metadata["opencdc.payload.schema.subject"],.Metadata["opencdc.payload.schema.version"]
+          - id: smt-trim-2
+            plugin: field.exclude
+            condition: '{{ and (regexMatch `^(?:cdc\.orders)$` (ternary (regexReplaceAll `^(?:shop\.public\.(.*))` (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection")))) `cdc.${1}`) (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection")))) (regexMatch `^(?:shop\.public\.(.*))$` (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection"))))))) (ne (printf "%T" .Payload.Before) "<nil>") }}'
+            settings:
+              fields: .Payload.Before.internal_notes
+          - id: smt-schema-value-3
+            plugin: field.exclude
+            condition: '{{ regexMatch `^(?:cdc\.orders)$` (ternary (regexReplaceAll `^(?:shop\.public\.(.*))` (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection")))) `cdc.${1}`) (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection")))) (regexMatch `^(?:shop\.public\.(.*))$` (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection")))))) }}'
+            settings:
+              fields: .Metadata["opencdc.payload.schema.subject"],.Metadata["opencdc.payload.schema.version"]
+          - id: smt-trim-3
+            plugin: error
+            condition: '{{ and (regexMatch `^(?:cdc\.orders)$` (ternary (regexReplaceAll `^(?:shop\.public\.(.*))` (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection")))) `cdc.${1}`) (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection")))) (regexMatch `^(?:shop\.public\.(.*))$` (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection"))))))) (and (eq (printf "%T" .Payload.After) "opencdc.StructuredData") (hasKey .Payload.After "customer_id")) }}'
+            settings:
+              message: 'transform trim (ReplaceField): the rename target customer_id is already a field of the record, which Kafka Connect fails'
+          - id: smt-trim-4
+            plugin: field.rename
+            condition: '{{ and (regexMatch `^(?:cdc\.orders)$` (ternary (regexReplaceAll `^(?:shop\.public\.(.*))` (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection")))) `cdc.${1}`) (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection")))) (regexMatch `^(?:shop\.public\.(.*))$` (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection"))))))) (and (eq (printf "%T" .Payload.After) "opencdc.StructuredData") (hasKey .Payload.After "cust_id")) }}'
+            settings:
+              mapping: .Payload.After.cust_id:customer_id
+          - id: smt-trim-5
+            plugin: field.rename
+            condition: '{{ and (regexMatch `^(?:cdc\.orders)$` (ternary (regexReplaceAll `^(?:shop\.public\.(.*))` (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection")))) `cdc.${1}`) (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection")))) (regexMatch `^(?:shop\.public\.(.*))$` (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection"))))))) (and (ne (printf "%T" .Payload.Before) "<nil>") (and (eq (printf "%T" .Payload.Before) "opencdc.StructuredData") (hasKey .Payload.Before "cust_id")) (not (and (eq (printf "%T" .Payload.Before) "opencdc.StructuredData") (hasKey .Payload.Before "customer_id")))) }}'
+            settings:
+              mapping: .Payload.Before.cust_id:customer_id
+      - id: destination
+        type: destination
+        plugin: builtin:kafka
+        settings:
+          servers: ${KC_ORDERS_CDC_DESTINATION_SERVERS}
+          topic: '{{ ternary (regexReplaceAll `^(?:shop\.public\.(.*))` (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection")))) `cdc.${1}`) (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection")))) (regexMatch `^(?:shop\.public\.(.*))$` (print "shop." (ternary (index .Metadata "opencdc.collection") (print "public." (index .Metadata "opencdc.collection")) (contains "." (index .Metadata "opencdc.collection"))))) }}'
