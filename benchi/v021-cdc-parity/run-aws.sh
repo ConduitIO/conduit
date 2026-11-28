@@ -138,6 +138,35 @@ terraform -chdir=terraform output -raw private_key_pem > "$SSH_KEY"
 chmod 600 "$SSH_KEY"
 echo "==> instance ready at $IP"
 
+# 2b. Wait for the instance to be usable. `terraform apply` returns when EC2
+# reports the instance running, which is ~13 s after creation and well before
+# sshd accepts a connection, let alone before cloud-init has installed Docker,
+# Go and benchi. Without this wait the next step failed with
+# "ssh: connect to host ... port 22: Connection refused" and the run was over
+# before it started. Both waits fail closed: no run on a box that is not ready.
+echo "==> waiting for sshd on $IP"
+ssh_deadline=$((SECONDS + 300))
+until ssh "${SSH_OPTS[@]}" -o ConnectTimeout=5 -o BatchMode=yes "ubuntu@$IP" true 2>/dev/null; do
+  if [ "$SECONDS" -ge "$ssh_deadline" ]; then
+    echo "sshd did not accept a connection within 300s on $IP" >&2
+    exit 1
+  fi
+  sleep 5
+done
+
+echo "==> waiting for cloud-init (Docker, Go, benchi)"
+if ! ssh "${SSH_OPTS[@]}" "ubuntu@$IP" "cloud-init status --wait"; then
+  echo "cloud-init did not finish cleanly; its status and the tail of its log:" >&2
+  ssh "${SSH_OPTS[@]}" "ubuntu@$IP" "cloud-init status --long; sudo tail -40 /var/log/cloud-init-output.log" >&2 || true
+  exit 1
+fi
+
+# The tools the run needs, checked rather than assumed: a cloud-init that exits
+# 0 with a half-installed box would otherwise fail later, inside a round, and
+# look like a benchmark result.
+ssh "${SSH_OPTS[@]}" "ubuntu@$IP" \
+  'set -e; docker --version; go version; benchi --help >/dev/null; echo "instance tools ok"'
+
 # 3. Clone the conduit source (the conduit arm builds its image from it).
 echo "==> cloning conduit @ ${CONDUIT_REF} onto the instance"
 ssh "${SSH_OPTS[@]}" "ubuntu@$IP" \

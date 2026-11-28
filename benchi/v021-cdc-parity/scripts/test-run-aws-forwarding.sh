@@ -64,6 +64,28 @@ if printf '%s' "$bare" | grep -q 'LOADER_WRITERS='; then
   fail "an unset LOADER_WRITERS was forwarded anyway, overriding run.sh's default"
 fi
 
+# The instance must be ready before the first functional ssh. `terraform apply`
+# returns while sshd is still refusing connections, and the clone step then died
+# with "Connection refused" before any round ran. A static order check, because
+# the real thing needs an instance: the sshd wait and the cloud-init wait must
+# both appear before the clone, and the sshd wait must fail closed rather than
+# fall through after its deadline.
+# `|| true`: under `set -o pipefail` a grep that matches nothing fails the
+# assignment and `set -e` would end the test with no message at all.
+clone_line=$(grep -n 'cloning conduit' run-aws.sh | head -1 | cut -d: -f1 || true)
+sshd_line=$(grep -n 'waiting for sshd' run-aws.sh | head -1 | cut -d: -f1 || true)
+init_line=$(grep -n 'waiting for cloud-init' run-aws.sh | head -1 | cut -d: -f1 || true)
+[ -n "$clone_line" ] || fail "cannot find the clone step in run-aws.sh"
+if [ -z "$sshd_line" ] || [ "$sshd_line" -ge "${clone_line:-0}" ]; then
+  fail "run-aws.sh clones before waiting for sshd; the run dies on Connection refused"
+fi
+if [ -z "$init_line" ] || [ "$init_line" -ge "${clone_line:-0}" ]; then
+  fail "run-aws.sh clones before waiting for cloud-init; Docker/Go/benchi may be missing"
+fi
+if ! grep -q 'did not accept a connection within' run-aws.sh; then
+  fail "the sshd wait does not fail closed on timeout"
+fi
+
 if [ "$fails" -ne 0 ]; then
   echo "$fails check(s) failed" >&2
   exit 1
