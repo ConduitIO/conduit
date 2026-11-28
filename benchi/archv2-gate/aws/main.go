@@ -711,8 +711,12 @@ func cleanup(ctx context.Context, args []string) error {
 	}
 	var errs []error
 
-	if err := terminateInstance(ctx, c, m); err != nil {
-		return err
+	// Not fatal: an instance step that cannot finish must not leave the
+	// security group and the role behind it in place. A run of 2026-11-27
+	// did exactly that — the waiter timed out on an instance AWS had already
+	// purged, cleanup returned, and an IAM role with PutObject stayed live.
+	if err := terminateInstance(ctx, c.ec2, m.InstanceID); err != nil {
+		errs = append(errs, err)
 	}
 	if m.SecurityGroupID != "" {
 		// The ENI can outlive the instance by a few seconds.
@@ -758,28 +762,60 @@ func cleanup(ctx context.Context, args []string) error {
 	return errors.Join(errs...)
 }
 
+// instanceAPI is the part of the EC2 client the instance teardown uses. It is
+// an interface so a test can see whether the terminated-waiter was entered at
+// all; the waiter itself needs only DescribeInstances.
+type instanceAPI interface {
+	DescribeInstances(context.Context, *ec2.DescribeInstancesInput, ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error)
+	TerminateInstances(context.Context, *ec2.TerminateInstancesInput, ...func(*ec2.Options)) (*ec2.TerminateInstancesOutput, error)
+}
+
+// instanceState reports the state of the single instance a DescribeInstances
+// answer describes, and whether EC2 described one at all. A nil or empty
+// answer means EC2 has no record of the instance.
+func instanceState(out *ec2.DescribeInstancesOutput) (ec2types.InstanceStateName, bool) {
+	if out == nil {
+		return "", false
+	}
+	for _, r := range out.Reservations {
+		if len(r.Instances) == 0 {
+			continue
+		}
+		if i := r.Instances[0]; i.State != nil {
+			return i.State.Name, true
+		}
+		return "", false
+	}
+	return "", false
+}
+
 // terminateInstance terminates the instance unless it already is, and waits
-// until DescribeInstances reports it terminated.
-func terminateInstance(ctx context.Context, c clients, m *manifest) error {
-	if m.InstanceID == "" {
+// until DescribeInstances reports it terminated. An instance EC2 no longer
+// describes is treated as terminated.
+func terminateInstance(ctx context.Context, api instanceAPI, instanceID string) error {
+	if instanceID == "" {
 		return nil
 	}
-	out, err := c.ec2.DescribeInstances(ctx, &ec2.DescribeInstancesInput{InstanceIds: []string{m.InstanceID}})
-	if err != nil {
+	m := &manifest{InstanceID: instanceID}
+	out, err := api.DescribeInstances(ctx, &ec2.DescribeInstancesInput{InstanceIds: []string{m.InstanceID}})
+	if err != nil && !isCode(err, "InvalidInstanceID.NotFound") {
 		return fmt.Errorf("describe instance: %w", err)
 	}
-	state := ec2types.InstanceStateNameTerminated
-	for _, r := range out.Reservations {
-		for _, i := range r.Instances {
-			state = i.State.Name
-		}
+	state, present := instanceState(out)
+	// An instance EC2 has no record of is gone, and the waiter below can
+	// never confirm it: it reads DescribeInstances too, so it waits out its
+	// full timeout on an empty answer. A self-terminating instance plus the
+	// hour or so EC2 keeps the terminated record is exactly this case.
+	if !present {
+		fmt.Fprintf(os.Stderr, "instance %s no longer exists; treating as terminated\n", m.InstanceID)
+		return nil
 	}
 	if state != ec2types.InstanceStateNameTerminated {
-		if _, err := c.ec2.TerminateInstances(ctx, &ec2.TerminateInstancesInput{InstanceIds: []string{m.InstanceID}}); err != nil {
+		if _, err := api.TerminateInstances(ctx, &ec2.TerminateInstancesInput{InstanceIds: []string{m.InstanceID}}); err != nil {
 			return fmt.Errorf("terminate %s: %w", m.InstanceID, err)
 		}
 	}
-	if err := ec2.NewInstanceTerminatedWaiter(c.ec2).Wait(ctx, &ec2.DescribeInstancesInput{InstanceIds: []string{m.InstanceID}}, 10*time.Minute); err != nil {
+	if err := ec2.NewInstanceTerminatedWaiter(api).Wait(ctx, &ec2.DescribeInstancesInput{InstanceIds: []string{m.InstanceID}}, 10*time.Minute); err != nil {
 		return fmt.Errorf("wait for %s to terminate: %w", m.InstanceID, err)
 	}
 	fmt.Fprintf(os.Stderr, "instance %s is terminated\n", m.InstanceID)
