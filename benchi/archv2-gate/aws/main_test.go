@@ -15,12 +15,18 @@
 package main
 
 import (
+	"context"
+	"errors" //nolint:depguard // separate module; cannot import Conduit cerrors
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
 	"testing"
 	"text/template"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
 
 // gateData is the user data of a gate run: the harness and both engines come
@@ -188,4 +194,124 @@ func between(s, start, end string) string {
 	_, after, _ := strings.Cut(s, start)
 	before, _, _ := strings.Cut(after, end)
 	return before
+}
+
+// TestInstanceStateAbsentMeansGone is the regression test for the teardown of
+// 2026-11-27. The instance had self-terminated and EC2 had purged its record,
+// so DescribeInstances answered with no reservations rather than an error.
+// terminateInstance read that as "terminated" from the zero value, skipped the
+// terminate call correctly, and then waited on an InstanceTerminated waiter
+// that reads the same empty answer — ten minutes, then
+// "exceeded max wait time for InstanceTerminated waiter". cleanup returned on
+// that error and never deleted the security group or the IAM role, which held
+// PutObject on the results prefix, while still reporting nothing was wrong.
+func TestInstanceStateAbsentMeansGone(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		out         *ec2.DescribeInstancesOutput
+		wantState   ec2types.InstanceStateName
+		wantPresent bool
+	}{
+		{name: "nil answer", out: nil},
+		{name: "no reservations", out: &ec2.DescribeInstancesOutput{}},
+		{
+			name: "reservation with no instances",
+			out:  &ec2.DescribeInstancesOutput{Reservations: []ec2types.Reservation{{}}},
+		},
+		{
+			name: "instance with no state",
+			out: &ec2.DescribeInstancesOutput{Reservations: []ec2types.Reservation{
+				{Instances: []ec2types.Instance{{}}},
+			}},
+		},
+		{
+			name: "terminated",
+			out: &ec2.DescribeInstancesOutput{Reservations: []ec2types.Reservation{
+				{Instances: []ec2types.Instance{{State: &ec2types.InstanceState{Name: ec2types.InstanceStateNameTerminated}}}},
+			}},
+			wantState: ec2types.InstanceStateNameTerminated, wantPresent: true,
+		},
+		{
+			name: "running",
+			out: &ec2.DescribeInstancesOutput{Reservations: []ec2types.Reservation{
+				{Instances: []ec2types.Instance{{State: &ec2types.InstanceState{Name: ec2types.InstanceStateNameRunning}}}},
+			}},
+			wantState: ec2types.InstanceStateNameRunning, wantPresent: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			state, present := instanceState(tc.out)
+			if present != tc.wantPresent || state != tc.wantState {
+				t.Fatalf("instanceState = (%q, %v), want (%q, %v)", state, present, tc.wantState, tc.wantPresent)
+			}
+		})
+	}
+}
+
+// fakeEC2 counts the calls the instance teardown makes. It answers only the
+// first describe: the terminated-waiter polls DescribeInstances, so failing
+// every later call makes the waiter give up at once instead of running for its
+// full timeout. Without that, a test asserting the waiter was not entered
+// takes ten minutes to fail, which is a test nobody will keep.
+type fakeEC2 struct {
+	out        *ec2.DescribeInstancesOutput
+	describes  int
+	terminates int
+}
+
+func (f *fakeEC2) DescribeInstances(context.Context, *ec2.DescribeInstancesInput, ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error) {
+	f.describes++
+	if f.describes > 1 {
+		return nil, errors.New("the waiter polled DescribeInstances again")
+	}
+	return f.out, nil
+}
+
+func (f *fakeEC2) TerminateInstances(context.Context, *ec2.TerminateInstancesInput, ...func(*ec2.Options)) (*ec2.TerminateInstancesOutput, error) {
+	f.terminates++
+	return &ec2.TerminateInstancesOutput{}, nil
+}
+
+// TestTerminateInstanceDoesNotWaitOnAnAbsentInstance is the behavioural
+// regression test for the teardown of 2026-11-27. EC2 had purged the
+// self-terminated instance, so DescribeInstances answered with no
+// reservations. The old code read that as "terminated" from a zero value,
+// skipped the terminate call, and then entered the InstanceTerminated waiter,
+// which polls the same empty answer until its timeout:
+// "exceeded max wait time for InstanceTerminated waiter". cleanup returned
+// that error and left the security group and an IAM role holding PutObject in
+// place.
+//
+// The waiter polls DescribeInstances many times over minutes, so one describe
+// and no terminate is the signature of the fixed path. A test that only
+// checked the parse helper did not catch this: removing the early return left
+// it green.
+func TestTerminateInstanceDoesNotWaitOnAnAbsentInstance(t *testing.T) {
+	f := &fakeEC2{out: &ec2.DescribeInstancesOutput{}}
+	start := time.Now()
+	if err := terminateInstance(t.Context(), f, "i-0e6d7f02dc9be21f3"); err != nil {
+		t.Fatalf("an absent instance should be treated as terminated, got %v", err)
+	}
+	if f.describes != 1 {
+		t.Errorf("DescribeInstances called %d times, want 1 — the waiter was entered", f.describes)
+	}
+	if f.terminates != 0 {
+		t.Errorf("TerminateInstances called %d times on an absent instance, want 0", f.terminates)
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Errorf("took %s; the waiter was entered", d)
+	}
+}
+
+// TestTerminateInstanceSkipsEverythingWithoutAnID keeps the no-instance case
+// free of API calls, so a manifest from a launch that failed before
+// RunInstances tears down cleanly.
+func TestTerminateInstanceSkipsEverythingWithoutAnID(t *testing.T) {
+	f := &fakeEC2{out: &ec2.DescribeInstancesOutput{}}
+	if err := terminateInstance(t.Context(), f, ""); err != nil {
+		t.Fatal(err)
+	}
+	if f.describes != 0 || f.terminates != 0 {
+		t.Errorf("made %d describes and %d terminates, want none", f.describes, f.terminates)
+	}
 }
