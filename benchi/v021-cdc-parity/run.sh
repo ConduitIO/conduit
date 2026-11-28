@@ -22,9 +22,21 @@
 #   ARM ...       subset of arms to run (default all twelve: every Conduit arm has an -aa twin).
 #                 conduit conduit-aa connect conduit-pg connect-pg conduit-s3 connect-s3
 #                 conduit-pg-aa conduit-s3-aa conduit-kafka-aa conduit-kafka connect-kafka (redpanda-connect needs an Enterprise
-#                 license and is run only when named explicitly)
+#                 license and is run only when named explicitly; loader-ceiling
+#                 is the loader-only ceiling arm and must be named explicitly
+#                 too, because it is a qualification run, not an arm)
+#
+# The `loader-ceiling` arm is the harness measuring ITSELF: the same loader
+# against the same Postgres with no CDC arm attached, flat out. Its rate is the
+# maximum offered load this box can produce with this LOADER_WRITERS, and
+# README.md ("The ceiling rule") makes a result inadmissible when any arm comes
+# within 5% of it — the harness was then the limiter, not the system under
+# test. Run it in the SAME session, on the SAME box, with the SAME
+# LOADER_WRITERS as the arms it qualifies.
 #
 # Env: BENCHI (benchi binary, default benchi), OUT (results dir), LOADER_RATE,
+# LOADER_WRITERS (loader writer goroutines/connections, default 1 = the
+# historical single-connection loader, which tops out near 39.1k ops/s),
 # TABLES (number of tables/source+destination pairs, default 1; sweep 1, 2, 4),
 # CONDUIT_BATCH_SIZE (sdk.batch.size; "default" = unset = shipped defaults), CONDUIT_BATCH_DELAY
 # (sdk.batch.delay, default 100ms), LOADER_SLOT_TIMEOUT (default 600s — how
@@ -71,6 +83,14 @@ export CONDUIT_BATCH_DELAY=${CONDUIT_BATCH_DELAY:-100ms}
 # run(); the file-sink arms have no slot and write immediately. 600s is generous
 # on purpose: a slow Kafka/Connect/JDBC startup on AWS must not trip it.
 export LOADER_SLOT_TIMEOUT=${LOADER_SLOT_TIMEOUT:-600s}
+# Loader writer goroutines, each on its own connection and owning a disjoint id
+# range per table; one shared token bucket keeps LOADER_RATE the AGGREGATE
+# rate, so this knob changes the loader's CEILING, never the offered load. 1 is
+# the historical single-connection loader (every committed result was measured
+# with it) and tops out near 39.1k ops/s, which is below the capacity of the
+# file and Kafka arms — so any run meant to saturate an arm needs more, and a
+# loader-ceiling run with the same value to prove it.
+export LOADER_WRITERS=${LOADER_WRITERS:-1}
 
 # Regenerate the N-dependent artifacts (pipelines/conduit.yml,
 # pipelines/conduit-pg.yml, pipelines/conduit-s3.yml, pipelines/conduit-kafka.yml,
@@ -119,6 +139,7 @@ echo "==> recording environment"
   echo "arms ${ARMS[*]}"
   echo "rounds $ROUNDS"
   echo "loader_rate ${LOADER_RATE:-20000}"
+  echo "loader_writers $LOADER_WRITERS (1 = the historical single-connection loader; the ceiling is per-writer-count, so a loader-ceiling run qualifies only runs made with the same value)"
   echo "pg_dest_url_extra ${PG_DEST_URL_EXTRA:-<none: shipped default exec mode>}"
   echo "label ${RUN_LABEL:-shipped-defaults}"
   echo "git_dirty_files_outside_benchi $(git -C ../.. status --porcelain -- . ':!benchi' 2>/dev/null | wc -l | tr -d ' ')"
@@ -170,6 +191,15 @@ run() { # tool label
   # count events, not net rows, have no slot to wait for, and pass an empty list,
   # so the loader starts immediately — unchanged.
   local loader_slots=""
+  # The loader-ceiling arm measures the HARNESS, not an arm: it runs flat out
+  # (LOADER_RATE ignored) with no CDC pipeline attached, so its rate is the
+  # maximum offered load this box can produce at this LOADER_WRITERS. Keeping
+  # LOADER_WRITERS as given is the point — a ceiling measured with a different
+  # writer count qualifies nothing (README.md, "The ceiling rule").
+  local loader_unbounded=false
+  if [ "$tool" = "loader-ceiling" ]; then
+    loader_unbounded=true
+  fi
   case "$tool" in
     conduit-pg|conduit-s3|conduit-pg-aa|conduit-s3-aa) loader_slots=$(slot_list conduit_slot) ;;
     connect-pg)                loader_slots=$(slot_list debezium_pg_slot) ;;
@@ -191,23 +221,45 @@ run() { # tool label
       sleep 5
     done ) > "$dir/docker-stats.csv" 2>/dev/null &
   local sampler=$!
+  # WAL pressure on the source database (wal.csv: WAL bytes/s from
+  # pg_current_wal_lsn deltas, per-slot walsender pid/CPU ticks and flush lag).
+  # Diagnostic AND admissibility input: the pipeline's ceiling may be the
+  # source's WAL generation or its logical decoding rather than either CDC
+  # system, and scripts/summarize.py says so instead of reporting a tie.
+  bash scripts/sample-wal.sh "$dir" >/dev/null 2>&1 &
+  local walsampler=$!
+  # The loader's own log, which carries its achieved aggregate rate every 5s
+  # and an UNDERRUN line whenever it could not deliver the offered rate. Kept
+  # per arm because benchi tears the container down at the end of the run.
+  # Wait for the container, then stream once: re-running `docker logs` after it
+  # exits would append the whole log a second time.
+  ( until docker inspect cdcparity-loader >/dev/null 2>&1; do sleep 1; done
+    docker logs -f --tail=all cdcparity-loader 2>&1 ) > "$dir/loader.log" 2>/dev/null &
+  local loaderlog=$!
   if command -v vmstat >/dev/null 2>&1; then vmstat -t 5 > "$dir/vmstat.txt" 2>/dev/null & VMSTAT_PID=$!; fi
   if command -v iostat >/dev/null 2>&1; then iostat -x -t 5 > "$dir/iostat.txt" 2>/dev/null & IOSTAT_PID=$!; fi
   # Bounded: a stuck arm cannot hold the machine (each arm has its own
   # registration/warmup waits, so 900s is generous).
   LOADER_SLOTS="$loader_slots" LOADER_SLOT_TIMEOUT="${LOADER_SLOT_TIMEOUT:-600s}" \
-    LOADER_RATE="${LOADER_RATE:-20000}" \
+    LOADER_RATE="${LOADER_RATE:-20000}" LOADER_UNBOUNDED="$loader_unbounded" \
     with_tty timeout 900 "$BENCHI" -config bench.yml -tool "$tool" -out "$dir" < /dev/null > /dev/null 2>&1 ||
     echo "run $dir exited $?" >&2
-  kill "$sampler" ${VMSTAT_PID:-} ${IOSTAT_PID:-} 2>/dev/null || true
-  wait "$sampler" 2>/dev/null || true
+  kill "$sampler" "$walsampler" "$loaderlog" ${VMSTAT_PID:-} ${IOSTAT_PID:-} 2>/dev/null || true
+  # sample-wal.sh and the loader-log tail each run a child (docker exec/logs);
+  # kill the whole process group so no docker client is left behind between arms.
+  pkill -P "$walsampler" 2>/dev/null || true
+  pkill -P "$loaderlog" 2>/dev/null || true
+  wait "$sampler" "$walsampler" "$loaderlog" 2>/dev/null || true
   VMSTAT_PID=""; IOSTAT_PID=""
   cat /proc/loadavg > "$dir/load-after.txt" 2>/dev/null || uptime > "$dir/load-after.txt"
   local before after tsb tsa srcb srca key
   getv() { grep -o "$1=[0-9]*" "$dir/benchi.log" 2>/dev/null | grep -o '[0-9]*$' | tail -1 || true; }
   before=$(getv ROWS_BEFORE); after=$(getv ROWS_AFTER)
   tsb=$(getv TS_BEFORE_MS); tsa=$(getv TS_AFTER_MS)
-  # Postgres-destination arms count NET live rows; every other arm counts events.
+  # Postgres-destination arms count NET live rows; every other arm counts
+  # events. The loader-ceiling arm has no destination at all: its ROWS_* hooks
+  # read the SOURCE event counter, so rows and src are the same instrument read
+  # a moment apart and its "lag" is meaningless by construction.
   case "$tool" in conduit-pg|connect-pg|conduit-pg-aa) key=SRC_NET ;; *) key=SRC_EVENTS ;; esac
   srcb=$(getv ${key}_BEFORE); srca=$(getv ${key}_AFTER)
   if [ -n "${before:-}" ] && [ -n "${after:-}" ]; then

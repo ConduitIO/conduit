@@ -33,6 +33,19 @@
 # two S3-destination arms are each a PARITY check, not a throughput flip. See
 # README.md and run.sh.
 #
+# CEILING ARM: `loader-ceiling` is the harness measuring itself — the same
+# loader against the same Postgres with NO CDC arm attached, flat out. Its
+# ground truth is the source-side event counter (the same instrument every arm
+# records as SRC_EVENTS), so it yields the maximum offered load this box can
+# produce at this LOADER_WRITERS. A result where any arm comes within 5% of it
+# is INADMISSIBLE: the harness, not the system under test, set the rate. The
+# published 40,000 ops/s saturation phase is exactly that failure — the file and
+# Kafka arms of BOTH systems sat at 39.0-39.1k, which was the one-connection
+# loader's ceiling. The same rule applies to the WAL ceiling that
+# scripts/sample-wal.sh measures: if both engines of a pair sit at the source's
+# WAL rate, the source database set the throughput and no "N% faster" claim is
+# possible in that regime. See README.md, "The ceiling rule".
+#
 # A/A CONTROL: `conduit-aa` is byte-for-byte the same image and pipeline as
 # `conduit` (only the container name differs). The spread between them is the
 # harness's noise floor; an A/B delta smaller than it means nothing. run.sh
@@ -79,6 +92,13 @@ tools:
     compose: ./tools/compose-conduit-kafka-aa.yml
   connect-kafka:
     compose: ./tools/compose-connect-kafka.yml
+  # The harness measuring itself: the loader against Postgres with NO CDC arm
+  # attached, flat out (run.sh sets LOADER_UNBOUNDED for this tool). Its rate is
+  # the maximum offered load this box can produce at this LOADER_WRITERS, and
+  # README.md ("The ceiling rule") makes any arm within 5% of it inadmissible.
+  # Not an arm: never published as a throughput number.
+  loader-ceiling:
+    compose: ./tools/compose-loader-ceiling.yml
 
 metrics:
   # CPU/memory of the DB only — a workload-invariance check, not the metric.
@@ -382,6 +402,34 @@ tests:
             sleep 15
             echo "ROWS_BEFORE=$(count)"
 
+        # loader-ceiling: the harness measuring itself. There is no destination,
+        # so the ground truth is the SOURCE side — the cumulative tuple counters
+        # on bench_source_* — which is the same counter (and the same ~1s
+        # statistics-flush uncertainty) every other arm records as SRC_EVENTS, so
+        # the ceiling and the arms are measured with the same instrument.
+        #
+        # The wait condition is "the counter is MOVING", not "> 0": the loader's
+        # initial fill makes it non-zero before steady state begins, and this arm
+        # must measure steady state like every other.
+        - name: wait-and-count-before-ceiling
+          container: cdcparity-counter
+          tools:
+            - loader-ceiling
+          run: |
+            count() {
+              c=$(PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tAc "SELECT COALESCE(sum(n_tup_ins+n_tup_upd+n_tup_del),0)::bigint FROM pg_stat_user_tables WHERE relname LIKE 'bench_source_%'" 2>/dev/null | tr -d ' ')
+              echo "${c:-0}"
+            }
+            n=0
+            while [ "$n" -lt 180 ]; do
+              a=$(count)
+              sleep 1
+              if [ "$(count)" -gt "$a" ]; then break; fi
+              n=$((n+1))
+            done
+            sleep 15
+            echo "ROWS_BEFORE=$(count)"
+
         # Source-side marker, run AFTER the destination count above. Prints the
         # wall-clock time (ms, Postgres clock) and the source tables' cumulative
         # change counters. The true elapsed window is the TS delta (not a nominal
@@ -404,6 +452,7 @@ tests:
             - conduit-kafka
             - conduit-kafka-aa
             - connect-kafka
+            - loader-ceiling
           run: |
             PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tA -F ' ' -c "SELECT 'TS_BEFORE_MS=' || (extract(epoch from clock_timestamp())*1000)::bigint, 'SRC_EVENTS_BEFORE=' || COALESCE(sum(n_tup_ins+n_tup_upd+n_tup_del),0)::bigint, 'SRC_NET_BEFORE=' || COALESCE(sum(n_tup_ins-n_tup_del),0)::bigint FROM pg_stat_user_tables WHERE relname LIKE 'bench_source_%'"
 
@@ -459,6 +508,18 @@ tests:
           run: |
             echo "ROWS_AFTER=$(/opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 --topic 'cdcparitykafka.public.bench_source_.*' 2>/dev/null | awk -F: '{s += $NF} END {print s+0}')"
 
+        # loader-ceiling: the source-side event counter again (see
+        # wait-and-count-before-ceiling). ROWS_AFTER - ROWS_BEFORE over the real
+        # elapsed window is the maximum offered load this box produced with no
+        # CDC arm attached — the loader's own ceiling.
+        - name: count-after-ceiling
+          container: cdcparity-counter
+          tools:
+            - loader-ceiling
+          run: |
+            c=$(PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tAc "SELECT COALESCE(sum(n_tup_ins+n_tup_upd+n_tup_del),0)::bigint FROM pg_stat_user_tables WHERE relname LIKE 'bench_source_%'" 2>/dev/null | tr -d ' ')
+            echo "ROWS_AFTER=${c:-0}"
+
         # Source-side marker, run AFTER the destination count above. Prints the
         # wall-clock time (ms, Postgres clock) and the source tables' cumulative
         # change counters. The true elapsed window is the TS delta (not a nominal
@@ -481,5 +542,6 @@ tests:
             - conduit-kafka
             - conduit-kafka-aa
             - connect-kafka
+            - loader-ceiling
           run: |
             PGPASSWORD=bench psql -h cdcparity-postgres -U bench -d bench -tA -F ' ' -c "SELECT 'TS_AFTER_MS=' || (extract(epoch from clock_timestamp())*1000)::bigint, 'SRC_EVENTS_AFTER=' || COALESCE(sum(n_tup_ins+n_tup_upd+n_tup_del),0)::bigint, 'SRC_NET_AFTER=' || COALESCE(sum(n_tup_ins-n_tup_del),0)::bigint FROM pg_stat_user_tables WHERE relname LIKE 'bench_source_%'"
