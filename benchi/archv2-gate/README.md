@@ -46,7 +46,45 @@ nothing more.
 | --- | --- | --- | --- |
 | `1x1` | 1 x 1 | default (`sdk.batch.size` unset, batches of one) | yes |
 | `2x2` | 2 x 2 | default | yes |
+| `4x4` | 4 x 4 | default | yes |
 | `2x2-batched` | 2 x 2 | `sdk.batch.size=100`, `sdk.batch.delay=10ms` | no, context only |
+| `1x1-srcbatch100` | 1 x 1 | source `sdk.batch.size=100`, `delay=10ms` | no |
+| `1x1-destbatch` | 1 x 1 | destination `sdk.batch.size=100`, `delay=10ms` | no |
+| `2x2-destbatch` | 2 x 2 | destination batching | no |
+| `4x4-destbatch` | 4 x 4 | destination batching | no |
+
+`4x4` is the hardest shape here: every record from four sources reaches all four
+sinks, so it is where arch-v2's fan-out cost shows. It is an engine-vs-engine
+question only — Kafka Connect has no fan-out primitive, so a 4x4 result is never
+comparable against it.
+
+The three `-destbatch` shapes set `sdk.batch.size` on the DESTINATION, which
+arch-v2 on `main` refuses at start with
+`pipeline.archv2_destination_batching_unsupported` (#2987). They are here for
+the engine matrix tooling, which reports such an arm as skipped rather than
+measuring it; that tooling (`matrix/`, and the `-arm`/`-env` flags it needs) is
+not on `main` yet — see #3067. Running a `-destbatch` shape with the plain
+`-session` flag will simply fail at pipeline start.
+
+`1x1-srcbatch100` sets `sdk.batch.size=100` and `sdk.batch.delay=10ms`
+explicitly. It was "Alternative A" from the staged-engine discussion (#2971)
+and is the shape behind the +308.7% figure in
+`docs/design-documents/20261027-default-source-batching.md`.
+
+**That figure is historical.** It was measured when the SDK's source default was
+0. SDK #433, released in **v0.18.1** and pinned by this repository, made
+`sdk.batch.size=100` with an adaptive drain the DEFAULT, so the +308.7% is
+already realised on `main` for every connector that inherits it — generator,
+kafka and file do; postgres and s3 pin 0 deliberately. Against today's default
+this shape isolates a fixed 10ms delay versus the adaptive drain, which is a
+much smaller question. Do not quote it as "batching on versus off".
+
+A warning the rest of this file now depends on: read a batch default from the
+connector.yaml of the version `go.mod` resolves (`go list -m -f '{{.Dir}}'`),
+not from a sibling checkout. The sibling SDK checkout still carries the old
+`default:"0"` in `source_middleware.go` while the pinned module's
+`source_batch.go` reads `default:"100"`, and reading the wrong one is how three
+separate analyses today concluded that Conduit ships batches of one.
 
 Sources are `builtin:generator` (structured, `id` int and `name` string, no rate
 limit). In 2x2 every record reaches both sinks; the reported rate is records per

@@ -1,8 +1,14 @@
 # archv2-gate shape 1x1: one generator source, one file sink, default config.
 #
-# Default config is the point: sdk.batch.size and sdk.batch.delay are unset, so
-# the connector SDK reads batches of one record. That is what an out-of-the-box
-# pipeline does, and it is the configuration the gate is decided on.
+# Default config is the point: nothing here sets sdk.batch.size or
+# sdk.batch.delay, so each connector's own default applies. For
+# builtin:generator on the SDK this repository pins (v0.18.1) that is
+# sdk.batch.size 100 with an adaptive drain, NOT batches of one — the SDK's
+# source default changed from 0 to 100 in SDK #433, released in v0.18.1.
+# Postgres and S3 pin 0 deliberately; generator, kafka and file inherit 100.
+# Check the pinned connector's connector.yaml before describing this shape's
+# batch size, not the sibling checkout, which may be ahead of or behind what
+# go.mod resolves. This is the configuration the gate is decided on.
 #
 # The sink is builtin:file writing one JSON record plus '\n' per record to the
 # harness's sink volume. The harness counts those newlines; nothing here reads

@@ -1,0 +1,31 @@
+# archv2-gate shape 1x1-destbatch: 1 generator source, 1 file sink, destination batching on.
+#
+# Every record from any source reaches every sink, so each sink counts the same
+# number of records; the harness reports records per second per sink.
+#
+# Destinations set sdk.batch.size=100 and sdk.batch.delay=10ms (the SDK flushes
+# at 100 records or after 10ms), sources stay at the default batch of one. Not
+# part of the gate. arch-v2 on main refuses a destination with sdk.batch.size
+# above 1 at start (pipeline.archv2_destination_batching_unsupported, #2987), so
+# a matrix session reports that arm as skipped instead of measuring it.
+version: "2.2"
+pipelines:
+  - id: archv2-gate
+    status: running
+    name: archv2-gate
+    connectors:
+      - id: src-1
+        type: source
+        plugin: builtin:generator
+        settings:
+          format.type: structured
+          format.options.id: int
+          format.options.name: string
+          operations: create
+      - id: sink-1
+        type: destination
+        plugin: builtin:file
+        settings:
+          path: /sink/sink-1.jsonl
+          sdk.batch.size: "100"
+          sdk.batch.delay: "10ms"
