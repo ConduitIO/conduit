@@ -6,6 +6,26 @@ the classic-engine run in [`results.md`](results.md) as the performance
 reference: the classic engine is being retired, and that run also overrode
 Avro and logging (see its audit note).
 
+> **Withdrawn: the file and Kafka rows of the 40,000 ops/s saturation phase.**
+> They are 39.0-39.1k ops/s for BOTH systems, which was the single-connection
+> loader's own ceiling, not either system's capacity — the harness saturated
+> before the systems under test did, and their real ceilings have never been
+> measured. Under the ceiling rule now in [`README.md`](README.md) those rows
+> are **inadmissible as capacity measurements**; they remain valid only as
+> "sustained 39.1k ops/s with bounded lag". No `loader-ceiling` run exists for
+> that session either, so `scripts/summarize.py` reports the whole phase
+> **UNQUALIFIED**: the ceiling was inferred from the arms topping out, never
+> measured.
+>
+> **Still comparable:** the 20,000 ops/s shipped-defaults phase (every arm at
+> ~20k, half the loader's ceiling, measuring "sustains the offered load" —
+> which is all it ever claimed) and both Postgres-destination phases (14.8k vs
+> 19.1k net rows/s at defaults, 23.4k tuned — all far below the ceiling, so the
+> limiter was the destination, as the bottleneck section shows). Every number
+> here was measured with the one-writer loader, which is still the default
+> (`LOADER_WRITERS=1`) and still produces the identical statement stream, so a
+> rerun at the same offered rate is directly comparable to these tables.
+
 ## Verdict
 
 Arch-v2 at **shipped defaults**, offered load 20,000 ops/s, every Conduit arm
@@ -18,7 +38,9 @@ Kafka Connect (0.77x)**. The cause is the destination's default
 `describe_exec` query mode. With `default_query_exec_mode=cache_statement`
 (tuned, not a default) the same arm reaches 23.4k net rows/s, 1.23x Connect.
 File and Kafka stay at parity at 40k (the loader tops out at about 39.1k
-ops/s, so those two show headroom of at least 39k, not their ceiling).
+ops/s, so those two show headroom of at least 39k, not their ceiling —
+**withdrawn as a capacity measurement**, see the note above and the ceiling
+rule in [`README.md`](README.md)).
 
 ## What was run
 
@@ -165,6 +187,10 @@ above 1.2) is far outside it. It is not a default and must not be quoted as one.
   8 vCPUs.
 - **Parity at 20k and 40k means "sustains the offered load".** The loader
   caps near 39.1k ops/s, so file and Kafka headroom above that is unmeasured.
+  That cap was the single-connection loader's, and it is why the 40k file and
+  Kafka rows are withdrawn (see the note at the top). The loader now takes
+  `LOADER_WRITERS`, and `README.md`'s ceiling rule requires a measured
+  `loader-ceiling` run beside any saturation claim.
 - **S3 is saturated at 20k for both** and has the noisiest A/A (max 3.4%).
 - **Lag is approximate** (`pg_stat_user_tables` flushes about once a second,
   about 20-40k events here): read it for direction only.

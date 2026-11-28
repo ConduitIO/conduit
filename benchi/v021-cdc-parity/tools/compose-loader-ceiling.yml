@@ -1,0 +1,37 @@
+# loader-ceiling arm: the LOADER ITSELF, with no CDC arm attached.
+#
+# This arm exists to measure the harness's own ceiling. The infrastructure
+# compose (postgres + loader + counter) is the same one every other arm gets;
+# the only difference is that no CDC pipeline consumes the WAL, so the measured
+# rate is the maximum offered load the loader and the source database can
+# produce on this box, in this session, with this -writers/-batch/-payload/
+# -tables configuration.
+#
+# Its ground truth is the SOURCE side — the cumulative tuple counters on
+# bench_source_* — which is the same counter every other arm records as
+# SRC_EVENTS, so the ceiling and the arms are measured with the same
+# instrument and the same about-1s statistics-flush uncertainty.
+#
+# run.sh forces LOADER_UNBOUNDED=1 for this arm (flat out, -rate ignored) and
+# keeps LOADER_WRITERS as given, because the ceiling is a property of the
+# writer count: a ceiling measured with 8 writers says nothing about a run made
+# with 1. See ../README.md, "The ceiling rule", for the admissibility rule that
+# consumes this number.
+#
+# The container below is a placeholder: benchi needs a tool to bring up, and
+# this arm's whole point is that there is nothing in the data path. It must not
+# do any work, hold the sink volume or talk to Postgres.
+services:
+  idle:
+    image: alpine:3.20
+    container_name: cdcparity-idle
+    command:
+      - sh
+      - -c
+      - sleep infinity
+    networks:
+      - benchi
+
+networks:
+  benchi:
+    external: true

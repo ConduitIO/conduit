@@ -2,7 +2,10 @@ module github.com/conduitio/conduit/benchi/v021-cdc-parity/loader
 
 go 1.26.11
 
-require github.com/jackc/pgx/v5 v5.9.2
+require (
+	github.com/jackc/pgx/v5 v5.9.2
+	golang.org/x/time v0.16.0
+)
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect

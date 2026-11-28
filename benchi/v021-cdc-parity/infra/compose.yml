@@ -60,6 +60,19 @@ services:
       - postgres://bench:bench@cdcparity-postgres:5432/bench?sslmode=disable
       - -rate
       - "${LOADER_RATE:-20000}"
+      # Writer goroutines, each on its own connection and owning a disjoint id
+      # range per table; one shared token bucket keeps -rate the AGGREGATE
+      # rate. 1 is the historical single-connection loader, whose ceiling is
+      # about 39.1k ops/s — below the capacity of the arms it was used to
+      # measure. Raise it for any run that is meant to saturate an arm, and
+      # re-measure the loader-ceiling arm with the SAME value (see ../README.md,
+      # "The ceiling rule").
+      - -writers
+      - "${LOADER_WRITERS:-1}"
+      # Flat out, ignoring -rate: this is how the loader-ceiling arm MEASURES
+      # the loader's own ceiling. Never set it for an arm whose throughput is
+      # being published.
+      - "-unbounded=${LOADER_UNBOUNDED:-false}"
       - -tables
       - "${TABLES:-1}"
       # Slot-aware wait (see ../loader): the loader polls pg_replication_slots

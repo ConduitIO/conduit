@@ -65,6 +65,14 @@ Each directory's `environment.txt` carries its `label` line.
   S3 arms of both systems already fell behind. 20,000 is sustained by Connect on
   file, Postgres and Kafka, and is near the S3 ceiling of both. The Postgres
   arms count net live rows, so their offered rate is about 12,000 net rows/s.
+  Under the ceiling rule later added to [`README.md`](README.md), these numbers
+  **remain comparable**: 20,000 ops/s is about half the single-connection
+  loader's ~39.1k ceiling, so no arm here is within 5% of the harness, and the
+  phase only ever claimed "sustains the offered load". The 35,000 and 50,000
+  probes were already discarded, for a different defect (backlog drain inside
+  the window). All of it was measured with the one-writer loader, which is still
+  the default (`LOADER_WRITERS=1`) and still produces the identical statement
+  stream.
 - **Method (benchi/METHODOLOGY.md):** ground-truth count at the destination
   (`wc -l`, `SELECT count(*)`, summed MinIO object lines, Kafka end offsets), a
   60 s window after a 15 s post-startup warmup, one discarded warmup round, **5

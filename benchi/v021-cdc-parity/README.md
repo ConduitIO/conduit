@@ -200,6 +200,73 @@ as a separate block. The published run has it **only on the file arm**; the kit 
 also has `conduit-pg-aa`, `conduit-s3-aa` and `conduit-kafka-aa`, so a rerun
 carries a noise floor on every pair.
 
+## The ceiling rule
+
+The A/A floor says how small a difference can mean anything. The ceiling rule
+says how large a number can mean anything.
+
+**A result where any arm is within 5% of the measured loader ceiling or of the
+measured WAL ceiling is inadmissible, because the harness was the limiter.**
+The arm's own capacity is then unmeasured and unknown — the number says what the
+loader or the source database could produce, not what the CDC system could
+capture. `scripts/summarize.py` applies the rule and prints the verdict.
+
+Two ceilings bound what this kit can measure:
+
+- **The loader ceiling** — the maximum offered load the loader and the source
+  database can produce on this box. Measured by the `loader-ceiling` arm: the
+  same loader against the same Postgres with **no CDC arm attached**, flat out
+  (`-unbounded`). Its ground truth is the source-side event counter, the same
+  instrument every other arm records as `SRC_EVENTS`, so the ceiling and the
+  arms are measured with the same instrument and the same ~1 s
+  statistics-flush uncertainty.
+- **The WAL ceiling** — the source database's WAL generation (and its logical
+  decoding) at that offered load, in bytes/s. Measured by
+  `scripts/sample-wal.sh` from `pg_current_wal_lsn()` deltas during every run,
+  alongside per-slot walsender CPU and replication-slot flush lag.
+
+The WAL ceiling matters because the pipeline's limiter may be neither CDC
+system. **If both engines of a pair sit at the WAL ceiling, no "N% faster"
+claim is possible in that regime, and the harness says so rather than reporting
+a tie:** `summarize.py` suppresses the ratio and names the ceiling. Two systems
+pinned to the same external ceiling look equal whatever their real capacities
+are, so a 1.00 ratio there is an artifact, not a finding.
+
+The ceiling is a property of `(LOADER_WRITERS, -batch, -payload, TABLES, box)`.
+A ceiling measured with 8 writers qualifies nothing about a run made with 1.
+**Measure it in the same session, on the same box, with the same
+`LOADER_WRITERS` as the arms it qualifies, and publish it beside every result.**
+With no `loader-ceiling` run in the session, `summarize.py` reports
+**UNQUALIFIED** — not admissible, because nobody knows where the ceiling was.
+
+### Target: at least 3x the fastest arm
+
+The loader has `LOADER_WRITERS` writer goroutines on that many connections,
+sharing one aggregate token bucket (so `LOADER_RATE` is still the total offered
+rate, never multiplied), each owning a **disjoint id range per table** — writer
+_w_ of _W_ owns exactly the ids congruent to _w_ modulo _W_ — so `UPDATE` and
+`DELETE` targeting stays deterministic and the union of the writers' initial
+fills is exactly the id set `[0, -window)` for any _W_. `loader/loader_test.go`
+asserts all of that, including that `LOADER_WRITERS=1` reproduces the
+single-connection loader's statement sequence exactly.
+
+`LOADER_WRITERS=1` is the default and is what every committed result was
+measured with. One connection means one pipelined round trip at a time, which
+caps the loader near **39.1k ops/s** — below the capacity of the file and Kafka
+arms it was used to measure. Aim for a measured ceiling of **at least 3x the
+fastest arm**; raise `LOADER_WRITERS` until the ceiling clears that bar, then
+re-measure. The loader also logs `UNDERRUN` whenever it cannot deliver the
+offered rate, which means the same thing from the other direction.
+
+```bash
+# Measure the ceiling, then the arms, in ONE session with the SAME writer count.
+LOADER_WRITERS=8 RUN_LABEL=ceiling-w8 ./run.sh 3 loader-ceiling
+LOADER_WRITERS=8 LOADER_RATE=200000 RUN_LABEL=saturation-w8 ./run.sh 5 conduit connect conduit-kafka connect-kafka
+
+# Summarise both together so the verdict has a ceiling to work from.
+python3 scripts/summarize.py results/<ceiling-run> results/<saturation-run>
+```
+
 ## The Postgres-destination arms are a parity check
 
 The two Postgres-destination arms exist to measure the real "CDC→Postgres"
@@ -298,6 +365,11 @@ kind:
   latest offsets across `cdcparitykafka.public.bench_source_0` ..
   `cdcparitykafka.public.bench_source_{TABLES-1}` (GetOffsetShell, one partition
   per topic) — the total CDC events delivered to the broker.
+- **`loader-ceiling`** (the harness measuring itself, no CDC arm attached):
+  `ROWS_BEFORE` / `ROWS_AFTER` are the source tables' cumulative tuple counters
+  (`sum(n_tup_ins + n_tup_upd + n_tup_del)` over `bench_source_%`) — the
+  maximum offered load this box produced. Not an arm, never published as a
+  throughput number; see "The ceiling rule".
 
 ```text
 throughput = (ROWS_AFTER - ROWS_BEFORE) / test_duration
@@ -312,6 +384,17 @@ variance over the rounds. The file, Postgres and S3 count hooks run in the
 against the same Postgres / MinIO the arm writes; the Kafka count hooks run in
 the `cdcparity-kafka` broker container, which has `kafka-get-offsets.sh` on its
 classpath.
+
+Alongside every run, `scripts/sample-wal.sh` samples WAL pressure on the source
+database once a second into `<run>/<arm>/wal.csv`: the WAL insert position (WAL
+bytes/s between samples), each replication slot's walsender pid and
+confirmed-flush lag, and per-process CPU ticks from `/proc` inside the Postgres
+container, so per-slot walsender CPU can be attributed. Timestamps come from
+the Postgres clock — the same clock as `TS_BEFORE_MS` / `TS_AFTER_MS` — so
+`summarize.py` restricts the samples to exactly the measured window. The loader's
+own log (its achieved aggregate rate every 5 s, and any `UNDERRUN` line) is
+captured to `<run>/<arm>/loader.log`. None of this is the comparison number; it
+is what decides whether the comparison number is admissible.
 
 ## Reproducing
 
@@ -334,12 +417,21 @@ PG_DEST_URL_EXTRA='&default_query_exec_mode=cache_statement' RUN_LABEL=TUNED-cac
 # diagnostic only: write Conduit CPU/heap profiles to <run>/<arm>/prof/
 PROFILE=1 ./run.sh 0 conduit-pg
 
+# QUALIFICATION: measure the loader's own ceiling (no CDC arm, flat out), then
+# the arms, in one session with the SAME writer count. Required before any
+# saturation claim — see "The ceiling rule".
+LOADER_WRITERS=8 RUN_LABEL=ceiling-w8 ./run.sh 3 loader-ceiling
+LOADER_WRITERS=8 LOADER_RATE=200000 RUN_LABEL=saturation-w8 ./run.sh 5 conduit connect
+python3 scripts/summarize.py results/<ceiling-run> results/<saturation-run>
+
 # dedicated AWS instance (see run-aws.sh)
 LOADER_RATE=20000 SSH_KEY=/path/outside/repo.pem CONDUIT_REF=<sha> TABLES=1 ./run-aws.sh 5 conduit conduit-aa connect conduit-pg connect-pg conduit-s3 connect-s3 conduit-kafka connect-kafka
 ```
 
 `TABLES` (default 1; sweep 1, 2, 4), `CONDUIT_BATCH_SIZE` (default `default` = unset),
-`CONDUIT_BATCH_DELAY` (default 100ms) and `LOADER_SLOT_TIMEOUT` (default 600s,
+`CONDUIT_BATCH_DELAY` (default 100ms), `LOADER_WRITERS` (default 1 — the loader's
+writer goroutines/connections, which set its CEILING, not the offered load; see
+"The ceiling rule") and `LOADER_SLOT_TIMEOUT` (default 600s,
 how long the loader waits for an arm's replication slot(s) before failing) are
 read by `run.sh`, which runs `scripts/generate.sh` to regenerate
 `pipelines/conduit.yml`, `pipelines/conduit-pg.yml`, `pipelines/conduit-s3.yml`,
