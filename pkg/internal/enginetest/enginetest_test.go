@@ -221,3 +221,57 @@ func TestLedger_FailedClosesOnAckBeforeDurable(t *testing.T) {
 		t.Fatal("Failed did not close on an ack before the record was durable")
 	}
 }
+
+// TestShapes_CarryProductionMetadata is the regression test for the defect that
+// halved the sensitivity of `make bench-engine` and the blocking benchi
+// regression gate built on it: the preset shapes set only
+// conduit.source.connector.id, so every record the kit produced was missing
+// opencdc.readAt, which Conduit's own sources always set
+// (connector.Source.sanitizeRecord). Both engines look that key up once per
+// record on the ack path and fall back when it is absent, and the absent-key
+// fallback in conduit-commons' Metadata.GetReadAt builds an error with
+// fmt.Errorf: 44.6% of all objects the kit allocated were that discarded
+// error. The kit measured error formatting production never executes.
+//
+// Any Shape the kit ships must therefore carry the metadata a production record
+// carries, with a readAt that parses.
+func TestShapes_CarryProductionMetadata(t *testing.T) {
+	shapes := map[string]enginetest.Shape{
+		"StructuredShape": enginetest.StructuredShape,
+		"RawShape":        enginetest.RawShape(128),
+	}
+
+	for name, shape := range shapes {
+		t.Run(name, func(t *testing.T) {
+			is := is.New(t)
+			rec := shape("src1", 7)
+
+			is.Equal(rec.Metadata[opencdc.MetadataConduitSourceConnectorID], "src1")
+
+			readAt, err := rec.Metadata.GetReadAt()
+			is.NoErr(err) // every kit record must carry a parseable opencdc.readAt
+			is.True(!readAt.IsZero())
+			// Sanity-check the magnitude: a unix timestamp in nanoseconds, not
+			// seconds or milliseconds. The shapes capture it at process start,
+			// so it is recent but not necessarily now.
+			is.True(readAt.After(time.Now().Add(-time.Hour)))
+			is.True(readAt.Before(time.Now().Add(time.Minute)))
+		})
+	}
+}
+
+// TestSource_RecordsCarryReadAt covers the same property through the fake
+// source, which is how every engine test and benchmark actually gets records.
+func TestSource_RecordsCarryReadAt(t *testing.T) {
+	is := is.New(t)
+	s := enginetest.NewSource(enginetest.SourceConfig{ID: "s", Total: 4, BatchSize: 4})
+	is.NoErr(s.Open(context.Background()))
+
+	recs, err := s.Read(context.Background())
+	is.NoErr(err)
+	is.Equal(len(recs), 4)
+	for _, rec := range recs {
+		_, err := rec.Metadata.GetReadAt()
+		is.NoErr(err)
+	}
+}
