@@ -1,0 +1,156 @@
+## instance
+instance-id: i-00e0c64ea57ef9fbb
+instance-type: c7i.metal-24xl
+ami-id: ami-0365b80399e44652e
+placement/availability-zone: us-west-1a
+## commits
+main: 80c8e679405a0c319167a9ced70f1021a66a5740
+harness: 80c8e679405a0c319167a9ced70f1021a66a5740 (on main)
+## binaries (sha256)
+main: 27c249d201ee0be311f8f4f7248e49925e8d13aa41c733fe88cf6f2d97c8b3ca  /app/conduit
+## images
+REPOSITORY      TAG       IMAGE ID                                                                  CREATED         SIZE
+conduit-bench   main      sha256:a2e823e73d022e1bbd09f8dc591ac0b23f5d926f81f37a245192c4b31a8e0161   8 seconds ago   124MB
+## uname
+Linux ip-172-31-23-2.us-west-1.compute.internal 6.18.62-127.181.amzn2023.x86_64 #2 SMP PREEMPT_DYNAMIC Fri Nov 27 01:40:00 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+## os
+NAME="Amazon Linux"
+VERSION="2023"
+ID="amzn"
+ID_LIKE="fedora"
+VERSION_ID="2023"
+PLATFORM_ID="platform:al2023"
+PRETTY_NAME="Amazon Linux 2023.12.20261127"
+ANSI_COLOR="0;33"
+CPE_NAME="cpe:2.3:o:amazon:amazon_linux:2023"
+HOME_URL="https://aws.amazon.com/linux/amazon-linux-2023/"
+DOCUMENTATION_URL="https://docs.aws.amazon.com/linux/"
+SUPPORT_URL="https://aws.amazon.com/premiumsupport/"
+BUG_REPORT_URL="https://github.com/amazonlinux/amazon-linux-2023"
+VENDOR_NAME="AWS"
+VENDOR_URL="https://aws.amazon.com/"
+SUPPORT_END="2029-06-30"
+## lscpu
+Architecture:                            x86_64
+CPU op-mode(s):                          32-bit, 64-bit
+Address sizes:                           46 bits physical, 57 bits virtual
+Byte Order:                              Little Endian
+CPU(s):                                  96
+On-line CPU(s) list:                     0-95
+Vendor ID:                               GenuineIntel
+BIOS Vendor ID:                          Intel(R) Corporation
+Model name:                              Intel(R) Xeon(R) Platinum 8488C
+BIOS Model name:                         Intel(R) Xeon(R) Platinum 8488C
+CPU family:                              6
+Model:                                   143
+Thread(s) per core:                      2
+Core(s) per socket:                      48
+Socket(s):                               1
+Stepping:                                8
+CPU max MHz:                             3800.0000
+CPU min MHz:                             800.0000
+BogoMIPS:                                4800.00
+Flags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req hfi vnmi avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr ibt amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities
+Virtualization:                          VT-x
+L1d cache:                               2.3 MiB (48 instances)
+L1i cache:                               1.5 MiB (48 instances)
+L2 cache:                                96 MiB (48 instances)
+L3 cache:                                105 MiB (1 instance)
+NUMA node(s):                            1
+NUMA node0 CPU(s):                       0-95
+Vulnerability Gather data sampling:      Not affected
+Vulnerability Ghostwrite:                Not affected
+Vulnerability Indirect target selection: Not affected
+Vulnerability Itlb multihit:             Not affected
+Vulnerability L1tf:                      Not affected
+Vulnerability Mds:                       Not affected
+Vulnerability Meltdown:                  Not affected
+Vulnerability Mmio stale data:           Not affected
+Vulnerability Old microcode:             Not affected
+Vulnerability Reg file data sampling:    Not affected
+Vulnerability Retbleed:                  Not affected
+Vulnerability Spec rstack overflow:      Not affected
+Vulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl
+Vulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization
+Vulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS SW sequence; BHI BHI_DIS_S
+Vulnerability Srbds:                     Not affected
+Vulnerability Tsa:                       Not affected
+Vulnerability Tsx async abort:           Not affected
+Vulnerability Vmscape:                   Mitigation; IBPB before exit to userspace
+## meminfo
+MemTotal:       197650040 kB
+MemFree:        189298448 kB
+MemAvailable:   192783364 kB
+Buffers:            3172 kB
+Cached:          4878896 kB
+## clocksource
+tsc
+## cpufreq governor
+performance
+## disk
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/nvme0n1p1  200G  7.2G  193G   4% /
+NAME          MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+nvme0n1       259:0    0  200G  0 disk 
+├─nvme0n1p1   259:1    0  200G  0 part /
+├─nvme0n1p127 259:2    0    1M  0 part 
+└─nvme0n1p128 259:3    0   10M  0 part /boot/efi
+## docker info
+Client:
+ Version:    25.0.14
+ Context:    default
+ Debug Mode: false
+ Plugins:
+  buildx: Docker Buildx (Docker Inc.)
+    Version:  0.12.2-m.2
+    Path:     /usr/libexec/docker/cli-plugins/docker-buildx
+
+Server:
+ Containers: 0
+  Running: 0
+  Paused: 0
+  Stopped: 0
+ Images: 1
+ Server Version: 25.0.18
+ Storage Driver: overlay2
+  Backing Filesystem: xfs
+  Supports d_type: true
+  Using metacopy: false
+  Native Overlay Diff: true
+  userxattr: false
+ Logging Driver: json-file
+ Cgroup Driver: systemd
+ Cgroup Version: 2
+ Plugins:
+  Volume: local
+  Network: bridge host ipvlan macvlan null overlay
+  Log: awslogs fluentd gcplogs gelf journald json-file local splunk syslog
+ Swarm: inactive
+ Runtimes: io.containerd.runc.v2 runc
+ Default Runtime: runc
+ Init Binary: docker-init
+ containerd version: 
+ runc version: bb14dabeb7185bb72c8c86735d090dcb20f36587
+ init version: de40ad0
+ Security Options:
+  seccomp
+   Profile: builtin
+  cgroupns
+ Kernel Version: 6.18.62-127.181.amzn2023.x86_64
+ Operating System: Amazon Linux 2023.12.20261127
+ OSType: linux
+ Architecture: x86_64
+ CPUs: 96
+ Total Memory: 188.5GiB
+ Name: ip-172-31-23-2.us-west-1.compute.internal
+ ID: e2cf2143-ac36-4a9f-a5ff-d3768380553b
+ Docker Root Dir: /var/lib/docker
+ Debug Mode: false
+ Experimental: false
+ Insecure Registries:
+  ::1/128
+  127.0.0.0/8
+ Live Restore Enabled: false
+
+## go
+go version go1.26.11 linux/amd64

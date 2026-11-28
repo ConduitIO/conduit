@@ -1,0 +1,18 @@
+2026-11-27T22:19:26Z bootstrap start
+2026-11-27T22:20:07Z docker 25.0.18 and go version go1.26.11 linux/amd64 installed
+2026-11-27T22:20:11Z building images
+2026-11-27T22:20:51Z images and harness built
+2026-11-27T22:20:56Z quiet 60s before sessions
+2026-11-27T22:21:57Z session 01-1x1-aa-v1 start (image conduit-bench:main, shape 1x1, session aa-v1, rounds 5)
+2026-11-27T22:36:47Z session 01-1x1-aa-v1 exit 0
+2026-11-27T22:36:48Z session 02-1x1-aa-v2 start (image conduit-bench:main, shape 1x1, session aa-v2, rounds 5)
+2026-11-27T22:52:36Z session 02-1x1-aa-v2 exit 0
+2026-11-27T22:52:38Z session 03-2x2-aa-v1 start (image conduit-bench:main, shape 2x2, session aa-v1, rounds 5)
+2026-11-27T23:07:47Z session 03-2x2-aa-v1 exit 0
+2026-11-27T23:07:49Z session 04-2x2-aa-v2 start (image conduit-bench:main, shape 2x2, session aa-v2, rounds 5)
+2026-11-27T23:23:31Z session 04-2x2-aa-v2 exit 0
+2026-11-27T23:23:33Z session 05-1x1-ab-main start (image conduit-bench:main, shape 1x1, session ab, rounds 5)
+2026-11-27T23:46:15Z session 05-1x1-ab-main exit 0
+2026-11-27T23:46:17Z session 06-2x2-ab-main start (image conduit-bench:main, shape 2x2, session ab, rounds 5)
+2026-11-28T00:09:14Z session 06-2x2-ab-main exit 0
+2026-11-28T00:09:18Z DONE, halting (instance terminates on halt)

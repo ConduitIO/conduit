@@ -1,5 +1,83 @@
 # archv2-gate results
 
+## 2026-11-27, dedicated c7i.metal-24xl — the gate run
+
+The first cross-engine measurement this harness has produced, and the first
+v1-vs-arch-v2 numbers in the project that were not retracted. Six sessions:
+an A/A control for each engine on each shape, then the two A/B sessions that
+carry their own A/A control.
+
+- Machine: one whole physical host, `c7i.metal-24xl` (Intel Xeon Platinum 8488C,
+  96 cores, 188 GiB), Amazon Linux 2023, kernel 6.18, Docker Engine 25.0.18 —
+  no hypervisor between the container and the CPU.
+- **Quiesced, and measured as such:** CPU steal was 0 in all 1,301 `vmstat`
+  samples, the clocksource was `tsc`, the CPU governor was pinned to
+  `performance`, nothing else ran on the host, and load stayed under 3 for the
+  whole session (`vmstat.log`, `loadavg.log`, `environment.txt`).
+- Image: built once from `80c8e679`, the same image for every arm of every
+  session; the only difference between arms is `--preview.pipeline-arch-v2`.
+- 5 rounds per session, 20s warmup discarded, 60s window, records counted as
+  newlines in the sink's byte range. No engine metric is read.
+
+### A/B results
+
+| shape | arch-v2 vs v1, median | per-round deltas | A/A floor, same session | resolvable |
+| --- | --- | --- | --- | --- |
+| 1x1 | **+97.4%** | +97.3%, +95.9%, +96.7%, +96.4%, +98.8% | ±2.2% | yes, 44x the floor |
+| 2x2 | **+42.6%** | +43.2%, +44.3%, +42.4%, +41.3%, +41.7% | ±1.6% | yes, 26x the floor |
+
+Median rates per sink: 1x1 v1 63,055 and arch-v2 124,607 rec/s; 2x2 v1 41,770
+and arch-v2 59,392 rec/s.
+
+### Why this is not one lucky session
+
+The four A/A sessions were run first, before either A/B session, and they
+reproduce the A/B medians to within a percent:
+
+| shape | engine | A/A session median | same engine in the A/B session | A/A floor |
+| --- | --- | --- | --- | --- |
+| 1x1 | v1 | 63,545 | 63,055 | ±1.5% |
+| 1x1 | arch-v2 | 124,870 | 124,607 | ±0.3% |
+| 2x2 | v1 | 41,886 | 41,770 | ±2.1% |
+| 2x2 | arch-v2 | 59,366 | 59,392 | ±0.3% |
+
+Six independent sessions, one machine state, same answer. arch-v2's own
+run-to-run spread is 0.1-0.2% here, against the "double v1's and apparently
+bimodal" spread that #2748 saw on a laptop.
+
+### Against the earlier laptop read
+
+The best previous measurement put arch-v2 at **-25.2%** on 1x1 and was
+explicitly not treated as evidence (#2748). This run is the opposite sign, and
+the difference is not explained by the harness: the method is the same one that
+document prescribed. Two candidates, neither verified here:
+
+- The October read predates the fan-out deep-copy removal (#2946) and arch-v2's
+  destination-write batching and read-ahead (#3201, #3210), all of which are in
+  `80c8e679`.
+- It ran under Docker Desktop in a 16-CPU, 7.7 GB VM on a shared laptop, where
+  the A/A floor for the same shape reached ±104.6% (see the section below).
+
+Separating those would need the laptop session re-run at `80c8e679`. Nothing in
+the gate requires it.
+
+### What this does and does not settle
+
+Met: the graduation gate's throughput criterion — on 1x1 and 2x2 at default
+config, arch-v2's median is not lower than v1's by more than the A/A floor
+measured in the same session. It is higher by 26 to 44 times that floor.
+
+Not settled by this run, and still required by
+[the gate ADR](../../../docs/architecture-decision-records/20261006-archv2-graduation-gate.md)
+and [20260704](../../../docs/architecture-decision-records/20260704-pipeline-architecture-v2.md):
+recovery parity with v1, the chaos-test bar, Tier-1 human sign-off, and the
+remaining 20260704 criteria. Throughput is a rate, not a correctness claim: this
+harness counts records at the sink in a window and never checks that the records
+are the right ones, in order, exactly once. The chaos suite is what does that,
+and it runs both engines.
+
+The 2x2-batched shape was not run; it is context, not part of the gate.
+
 ## 2026-10-08, laptop, A/A only
 
 Four A/A sessions run once to check that the harness works and to see the
