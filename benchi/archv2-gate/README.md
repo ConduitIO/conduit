@@ -66,10 +66,25 @@ measuring it; that tooling (`matrix/`, and the `-arm`/`-env` flags it needs) is
 not on `main` yet — see #3067. Running a `-destbatch` shape with the plain
 `-session` flag will simply fail at pipeline start.
 
-`1x1-srcbatch100` is "Alternative A" from the staged-engine discussion (#2971):
-change nothing in the engine, only have the SDK hand it batches of 100. It is
-the shape behind the +308.7% figure in
+`1x1-srcbatch100` sets `sdk.batch.size=100` and `sdk.batch.delay=10ms`
+explicitly. It was "Alternative A" from the staged-engine discussion (#2971)
+and is the shape behind the +308.7% figure in
 `docs/design-documents/20261027-default-source-batching.md`.
+
+**That figure is historical.** It was measured when the SDK's source default was
+0. SDK #433, released in **v0.18.1** and pinned by this repository, made
+`sdk.batch.size=100` with an adaptive drain the DEFAULT, so the +308.7% is
+already realised on `main` for every connector that inherits it — generator,
+kafka and file do; postgres and s3 pin 0 deliberately. Against today's default
+this shape isolates a fixed 10ms delay versus the adaptive drain, which is a
+much smaller question. Do not quote it as "batching on versus off".
+
+A warning the rest of this file now depends on: read a batch default from the
+connector.yaml of the version `go.mod` resolves (`go list -m -f '{{.Dir}}'`),
+not from a sibling checkout. The sibling SDK checkout still carries the old
+`default:"0"` in `source_middleware.go` while the pinned module's
+`source_batch.go` reads `default:"100"`, and reading the wrong one is how three
+separate analyses today concluded that Conduit ships batches of one.
 
 Sources are `builtin:generator` (structured, `id` int and `name` string, no rate
 limit). In 2x2 every record reaches both sinks; the reported rate is records per

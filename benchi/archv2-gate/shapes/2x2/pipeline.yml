@@ -6,7 +6,9 @@
 # design: v1 fans in and out through FaninNode/FanoutNode, arch-v2 runs one
 # worker per source into a shared destination subtree.
 #
-# Default config: sdk.batch.size and sdk.batch.delay unset (batches of one).
+# Default config: nothing here sets sdk.batch.size or sdk.batch.delay, so the
+# connector's own default applies — 100 with an adaptive drain for
+# builtin:generator on SDK v0.18.1, not batches of one. See the 1x1 shape.
 # Both engines run this file unchanged.
 version: "2.2"
 pipelines:

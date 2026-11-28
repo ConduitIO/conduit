@@ -3,7 +3,9 @@
 # Every record from any source reaches every sink, so each sink counts the same
 # number of records; the harness reports records per second per sink.
 #
-# Default config: sdk.batch.size and sdk.batch.delay unset (batches of one).
+# Default config: nothing here sets sdk.batch.size or sdk.batch.delay, so the
+# connector's own default applies — 100 with an adaptive drain for
+# builtin:generator on SDK v0.18.1, not batches of one. See the 1x1 shape.
 version: "2.2"
 pipelines:
   - id: archv2-gate
